@@ -29,6 +29,19 @@ export function setBaseUrl(url: string | null): void {
   _baseUrl = url ? url.replace(/\/+$/, "") : null;
 }
 
+export function setAuthToken(token: string): void {
+  localStorage.setItem("dgc_token", token);
+}
+
+export function clearAuthToken(): void {
+  localStorage.removeItem("dgc_token");
+}
+
+// Automatically use the token from localStorage on every request
+setAuthTokenGetter(() => {
+  return typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
+});
+
 /**
  * Register a getter that supplies a bearer auth token.  Before every fetch
  * the getter is invoked; when it returns a non-null string, an
