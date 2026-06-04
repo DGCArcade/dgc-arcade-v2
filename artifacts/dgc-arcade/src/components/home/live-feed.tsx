@@ -200,7 +200,18 @@ export function LiveFeed() {
         </TabsContent>
 
         <TabsContent value="race" className="mt-0">
-          <RaceFeed />
+          <div className="p-6 flex flex-col items-center gap-4 text-center">
+            <div className="text-5xl animate-bounce">🏇</div>
+            <div>
+              <h3 className="font-display font-black text-xl uppercase tracking-tight mb-1">DGC Horse Race</h3>
+              <p className="text-sm text-muted-foreground">Pick your horse, place your bet, and watch them race live! First place pays <strong className="text-yellow-400">5.5×</strong>.</p>
+            </div>
+            <RaceFeed />
+            <a href="/race" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-black uppercase tracking-widest text-sm text-black transition-all hover:opacity-90 active:scale-95"
+              style={{ background: "var(--theme-glow)" }}>
+              🏇 Play Horse Race Now
+            </a>
+          </div>
         </TabsContent>
       </Tabs>
     </Card>

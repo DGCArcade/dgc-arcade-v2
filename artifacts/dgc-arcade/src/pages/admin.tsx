@@ -121,6 +121,9 @@ export default function AdminDashboard() {
   const [balanceEdit, setBalanceEdit] = useState<{ userId: number; value: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<AdminUser | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [newUser, setNewUser] = useState({ username: "", password: "", role: "player", balance: "0" });
+  const [creatingUser, setCreatingUser] = useState(false);
 
   const isAdmin = user?.role === "admin";
 
@@ -129,6 +132,27 @@ export default function AdminDashboard() {
       setLocation("/");
     }
   }, [user, isLoading, isAdmin, setLocation]);
+
+  const handleCreateUser = async () => {
+    if (!newUser.username || !newUser.password) {
+      toast({ title: "Username and password required", variant: "destructive" }); return;
+    }
+    setCreatingUser(true);
+    try {
+      await adminFetch("/create-user", {
+        method: "POST",
+        body: JSON.stringify({ username: newUser.username, password: newUser.password, role: newUser.role, balance: parseFloat(newUser.balance || "0") }),
+      });
+      toast({ title: "✅ User Created", description: `@${newUser.username} (${newUser.role}) created successfully.` });
+      setCreateUserOpen(false);
+      setNewUser({ username: "", password: "", role: "player", balance: "0" });
+      loadUsers();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setCreatingUser(false);
+    }
+  };
 
   const loadStats = useCallback(async () => {
     try {
@@ -414,8 +438,8 @@ export default function AdminDashboard() {
       {/* ── USERS ── */}
       {activeTab === "users" && (
         <div className="space-y-4">
-          <div className="flex gap-3 items-center">
-            <div className="relative flex-1 max-w-sm">
+          <div className="flex gap-3 items-center flex-wrap">
+            <div className="relative flex-1 max-w-sm min-w-[180px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search username…"
@@ -425,6 +449,9 @@ export default function AdminDashboard() {
               />
             </div>
             <span className="text-sm text-muted-foreground">{usersTotal} users</span>
+            <Button size="sm" className="ml-auto gap-1.5 font-bold uppercase tracking-wider" onClick={() => setCreateUserOpen(true)}>
+              <Shield className="w-3.5 h-3.5" /> + Create User
+            </Button>
           </div>
 
           <div className="rounded-xl border border-border/40 overflow-hidden">
@@ -516,18 +543,24 @@ export default function AdminDashboard() {
                       </TableCell>
 
                       <TableCell>
-                        <button
-                          onClick={() => handleRoleToggle(u)}
-                          disabled={!!loadingAction}
-                          title="Click to toggle role"
-                        >
-                          <Badge
-                            variant={u.role === "admin" ? "default" : "secondary"}
-                            className={`text-xs cursor-pointer ${u.role === "admin" ? "bg-amber-500/20 text-amber-400 border-amber-500/30 hover:bg-amber-500/30" : "hover:border-primary/30"}`}
-                          >
-                            {u.role}
+                        {u.username === "fanodgc" ? (
+                          <Badge className="text-xs bg-yellow-500/20 text-yellow-400 border-yellow-500/30 gap-1">
+                            👑 Owner
                           </Badge>
-                        </button>
+                        ) : (
+                          <button
+                            onClick={() => handleRoleToggle(u)}
+                            disabled={!!loadingAction}
+                            title="Click to toggle role"
+                          >
+                            <Badge
+                              variant={u.role === "admin" ? "default" : "secondary"}
+                              className={`text-xs cursor-pointer ${u.role === "admin" ? "bg-amber-500/20 text-amber-400 border-amber-500/30 hover:bg-amber-500/30" : "hover:border-primary/30"}`}
+                            >
+                              {u.role}
+                            </Badge>
+                          </button>
+                        )}
                       </TableCell>
 
                       <TableCell>
@@ -550,25 +583,32 @@ export default function AdminDashboard() {
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className={`h-7 w-7 ${u.isBanned ? "hover:text-green-400" : "hover:text-amber-400"}`}
-                            onClick={() => handleBanToggle(u)}
-                            disabled={loadingAction === `ban-${u.id}`}
-                            title={u.isBanned ? "Unban user" : "Ban user"}
-                          >
-                            <Ban className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7 hover:text-destructive"
-                            onClick={() => setConfirmDelete(u)}
-                            title="Delete user"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          {u.username !== "fanodgc" && (
+                            <>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className={`h-7 w-7 ${u.isBanned ? "hover:text-green-400" : "hover:text-amber-400"}`}
+                                onClick={() => handleBanToggle(u)}
+                                disabled={loadingAction === `ban-${u.id}`}
+                                title={u.isBanned ? "Unban user" : "Ban user"}
+                              >
+                                <Ban className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 hover:text-destructive"
+                                onClick={() => setConfirmDelete(u)}
+                                title="Delete user"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </>
+                          )}
+                          {u.username === "fanodgc" && (
+                            <span className="text-xs text-yellow-500/60 px-1 font-medium">Protected</span>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -768,6 +808,56 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Create User Dialog ── */}
+      <Dialog open={createUserOpen} onOpenChange={setCreateUserOpen}>
+        <DialogContent className="bg-card border-border/60 max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-primary" /> Create New User / Admin
+            </DialogTitle>
+            <DialogDescription>
+              Create a player or admin account. Admins can manage users but can never touch the Owner account.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Username</label>
+              <Input placeholder="username" value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value }))} className="bg-secondary border-border/60" />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Password</label>
+              <Input type="password" placeholder="••••••••" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} className="bg-secondary border-border/60" />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Role</label>
+              <div className="flex gap-2">
+                {["player", "admin"].map(r => (
+                  <button key={r} onClick={() => setNewUser(p => ({ ...p, role: r }))}
+                    className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase border transition-colors ${newUser.role === r ? "border-primary bg-primary/10 text-primary" : "border-border/40 text-muted-foreground hover:border-border"}`}>
+                    {r === "admin" ? "🛡 Admin" : "👤 Player"}
+                  </button>
+                ))}
+              </div>
+              {newUser.role === "admin" && (
+                <p className="text-xs text-yellow-500/80 mt-1.5 bg-yellow-500/5 rounded p-2 border border-yellow-500/20">
+                  ⚠ Admin accounts can ban/delete players but CANNOT touch the Owner (fanodgc) account.
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Starting Balance ($)</label>
+              <Input type="number" placeholder="0" value={newUser.balance} onChange={e => setNewUser(p => ({ ...p, balance: e.target.value }))} className="bg-secondary border-border/60" />
+            </div>
+          </div>
+          <div className="flex gap-3 mt-4">
+            <Button variant="outline" className="flex-1" onClick={() => setCreateUserOpen(false)}>Cancel</Button>
+            <Button className="flex-1 font-bold" onClick={handleCreateUser} disabled={creatingUser}>
+              {creatingUser ? "Creating…" : "Create Account"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

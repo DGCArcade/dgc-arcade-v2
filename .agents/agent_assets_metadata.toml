@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "atdMiOsHMGlH4tYYTl0j0"
+uri = "file://dgc-arcade-deploy.tar.gz"
+type = "unspecified"
+title = "DGC Arcade — Full Source Code (22MB)"

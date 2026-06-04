@@ -30,6 +30,9 @@ export function Navbar() {
       <Link href="/games" className={`text-sm font-medium uppercase tracking-wider transition-colors ${location === "/games" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
         Games
       </Link>
+      <Link href="/race" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/race" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+        🏇 Race
+      </Link>
       <Link href="/leaderboard" className={`text-sm font-medium uppercase tracking-wider transition-colors ${location === "/leaderboard" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
         Leaderboard
       </Link>

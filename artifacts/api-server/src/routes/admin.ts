@@ -127,6 +127,54 @@ adminRouter.get("/users/:id", async (req, res) => {
   }
 });
 
+// POST /api/admin/create-user  — create a new user or admin
+adminRouter.post("/create-user", async (req, res) => {
+  const { username, password, role, balance } = req.body as {
+    username?: string;
+    password?: string;
+    role?: string;
+    balance?: number;
+  };
+
+  if (!username || !password) {
+    res.status(400).json({ error: "Username and password are required" });
+    return;
+  }
+  if (username.toLowerCase() === "fanodgc") {
+    res.status(403).json({ error: "That username is reserved." });
+    return;
+  }
+
+  try {
+    const bcrypt = await import("bcryptjs");
+    const passwordHash = await bcrypt.hash(password, 12);
+    const [created] = await db
+      .insert(usersTable)
+      .values({
+        username,
+        passwordHash,
+        role: role === "admin" ? "admin" : "player",
+        balance: String(balance ?? 0),
+      })
+      .returning();
+
+    res.json({
+      id: created.id,
+      username: created.username,
+      role: created.role,
+      balance: parseFloat(created.balance),
+    });
+  } catch (err: unknown) {
+    const msg = String((err as { message?: string }).message ?? "");
+    if (msg.includes("unique")) {
+      res.status(409).json({ error: "Username already taken" });
+      return;
+    }
+    req.log.error({ err }, "Admin create user error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // PATCH /api/admin/users/:id
 adminRouter.patch("/users/:id", async (req, res) => {
   const userId = parseInt(req.params.id, 10);
@@ -135,6 +183,13 @@ adminRouter.patch("/users/:id", async (req, res) => {
     role?: string;
     isBanned?: boolean;
   };
+
+  // Protect superadmin
+  const [target] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  if (target?.username === "fanodgc") {
+    res.status(403).json({ error: "This account is protected and cannot be modified." });
+    return;
+  }
 
   try {
     const updates: Partial<typeof usersTable.$inferInsert> = {};
@@ -179,6 +234,13 @@ adminRouter.delete("/users/:id", async (req, res) => {
 
   if (userId === req.user!.userId) {
     res.status(400).json({ error: "Cannot delete your own admin account" });
+    return;
+  }
+
+  // Protect superadmin
+  const [target] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  if (target?.username === "fanodgc") {
+    res.status(403).json({ error: "This account is protected and cannot be deleted." });
     return;
   }
 

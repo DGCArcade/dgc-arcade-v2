@@ -245,6 +245,73 @@ function CoverDefault({ slug }: { slug: string }) {
   );
 }
 
+function CoverRace() {
+  return (
+    <svg viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+      <defs>
+        <linearGradient id="race-sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0f172a"/>
+          <stop offset="100%" stopColor="#1e3a5f"/>
+        </linearGradient>
+        <linearGradient id="race-ground" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#15803d"/>
+          <stop offset="100%" stopColor="#166534"/>
+        </linearGradient>
+      </defs>
+      <rect width="200" height="140" fill="url(#race-sky)"/>
+      {/* Ground */}
+      <rect x="0" y="95" width="200" height="45" fill="url(#race-ground)"/>
+      {/* Track lanes */}
+      <rect x="0" y="95" width="200" height="3" fill="#ca8a04" opacity="0.7"/>
+      <rect x="0" y="105" width="200" height="1" fill="white" opacity="0.2" strokeDasharray="8,6"/>
+      <rect x="0" y="115" width="200" height="1" fill="white" opacity="0.2"/>
+      {/* Finish line */}
+      <rect x="170" y="85" width="4" height="50" fill="white" opacity="0.9"/>
+      {[0,1,2,3,4,5].map(i => (
+        <rect key={i} x="170" y={85 + i*8} width="4" height="4"
+          fill={i % 2 === 0 ? "#111" : "white"} opacity="0.9"/>
+      ))}
+      {/* Horse 1 - red, leading */}
+      <g transform="translate(130,90)">
+        <ellipse cx="12" cy="5" rx="14" ry="5" fill="#ef4444"/>
+        <circle cx="24" cy="3" r="4" fill="#ef4444"/>
+        <rect x="2" y="8" width="3" height="8" fill="#ef4444"/>
+        <rect x="8" y="9" width="3" height="7" fill="#ef4444"/>
+        <rect x="15" y="9" width="3" height="7" fill="#ef4444"/>
+        <rect x="21" y="9" width="3" height="7" fill="#ef4444"/>
+        <text x="12" y="3" textAnchor="middle" fontSize="6" fill="white" fontWeight="bold">1</text>
+      </g>
+      {/* Horse 2 - yellow, close second */}
+      <g transform="translate(105,100)">
+        <ellipse cx="12" cy="5" rx="14" ry="5" fill="#f59e0b"/>
+        <circle cx="24" cy="3" r="4" fill="#f59e0b"/>
+        <rect x="2" y="8" width="3" height="8" fill="#f59e0b"/>
+        <rect x="8" y="9" width="3" height="7" fill="#f59e0b"/>
+        <rect x="15" y="9" width="3" height="7" fill="#f59e0b"/>
+        <rect x="21" y="9" width="3" height="7" fill="#f59e0b"/>
+      </g>
+      {/* Horse 3 - purple, third */}
+      <g transform="translate(80,108)">
+        <ellipse cx="12" cy="5" rx="14" ry="5" fill="#8b5cf6"/>
+        <circle cx="24" cy="3" r="4" fill="#8b5cf6"/>
+        <rect x="2" y="8" width="3" height="8" fill="#8b5cf6"/>
+        <rect x="15" y="9" width="3" height="7" fill="#8b5cf6"/>
+      </g>
+      {/* Trophy */}
+      <g transform="translate(150,55)">
+        <rect x="8" y="0" width="14" height="14" rx="2" fill="#ca8a04" opacity="0.9"/>
+        <text x="15" y="11" textAnchor="middle" fontSize="10">🏆</text>
+      </g>
+      {/* Stars */}
+      {[[20,15],[60,8],[100,20],[140,10],[170,25]].map(([x,y],i) => (
+        <circle key={i} cx={x} cy={y} r="1" fill="white" opacity={0.4 + i*0.1}/>
+      ))}
+      {/* 5.5x label */}
+      <text x="100" y="75" textAnchor="middle" fontSize="14" fontWeight="bold" fill="#fbbf24" opacity="0.95">5.5×</text>
+    </svg>
+  );
+}
+
 const COVER_MAP: Record<string, React.ComponentType<{ slug: string }>> = {
   "coinflip":    () => <CoverCoinflip />,
   "coin-flip":   () => <CoverCoinflip />,
@@ -259,6 +326,7 @@ const COVER_MAP: Record<string, React.ComponentType<{ slug: string }>> = {
   "hilo":        () => <CoverHiLo />,
   "hi-lo":       () => <CoverHiLo />,
   "keno":        () => <CoverKeno />,
+  "race":        () => <CoverRace />,
 };
 
 export function GameCard({ game }: { game: Game }) {
