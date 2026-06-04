@@ -11,6 +11,7 @@ import { adminRouter } from "./admin.js";
 import { blackjackRouter } from "./blackjack.js";
 import { minesRouter } from "./mines.js";
 import { dailyBonusRouter } from "./daily-bonus.js";
+import { raceRouter } from "./race.js";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use("/admin", adminRouter);
 router.use("/blackjack", blackjackRouter);
 router.use("/mines", minesRouter);
 router.use("/daily-bonus", dailyBonusRouter);
+router.use("/race", raceRouter);
 
 export default router;

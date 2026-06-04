@@ -11,6 +11,11 @@ import Leaderboard from "@/pages/leaderboard";
 import Profile from "@/pages/profile";
 import Admin from "@/pages/admin";
 import NotFound from "@/pages/not-found";
+import RacePage from "@/pages/race";
+import TermsPage from "@/pages/terms";
+import PrivacyPage from "@/pages/privacy";
+import ResponsibleGamblingPage from "@/pages/responsible-gambling";
+import AmlPage from "@/pages/aml";
 
 const queryClient = new QueryClient();
 
@@ -21,9 +26,14 @@ function Router() {
         <Route path="/" component={Home} />
         <Route path="/games" component={Games} />
         <Route path="/games/:gameId" component={GamePage} />
+        <Route path="/race" component={RacePage} />
         <Route path="/leaderboard" component={Leaderboard} />
         <Route path="/profile" component={Profile} />
         <Route path="/admin" component={Admin} />
+        <Route path="/terms" component={TermsPage} />
+        <Route path="/privacy" component={PrivacyPage} />
+        <Route path="/responsible-gambling" component={ResponsibleGamblingPage} />
+        <Route path="/aml" component={AmlPage} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
