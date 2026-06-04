@@ -1,0 +1,1 @@
+- [DGC Arcade Architecture](dgc-arcade-arch.md) — game slugs in DB, multi-step game routes, theme system, and frontend patterns

@@ -34,7 +34,10 @@
   --font-mono: 'Space Mono', monospace;
 }
 
-:root {
+/* ══════════════════════════════════════════════════════════════
+   THEME: DGC (default — deep navy + gold)
+═══════════════════════════════════════════════════════════════ */
+:root, .theme-dgc {
   --radius: 0.625rem;
   --background: 222 47% 4%;
   --foreground: 210 40% 98%;
@@ -55,8 +58,125 @@
   --border: 222 30% 14%;
   --input: 222 47% 9%;
   --ring: 43 100% 50%;
+  --theme-glow: rgba(255,215,0,0.18);
+  --theme-glow-strong: rgba(255,215,0,0.5);
 }
 
+/* ══════════════════════════════════════════════════════════════
+   THEME: CYBER (matrix green + dark)
+═══════════════════════════════════════════════════════════════ */
+.theme-cyber {
+  --radius: 0.25rem;
+  --background: 140 80% 3%;
+  --foreground: 140 60% 92%;
+  --card: 140 70% 5%;
+  --card-foreground: 140 60% 92%;
+  --popover: 140 70% 5%;
+  --popover-foreground: 140 60% 92%;
+  --primary: 120 100% 50%;
+  --primary-foreground: 140 80% 3%;
+  --secondary: 140 60% 7%;
+  --secondary-foreground: 140 60% 92%;
+  --muted: 140 60% 7%;
+  --muted-foreground: 140 30% 55%;
+  --accent: 140 50% 10%;
+  --accent-foreground: 140 60% 92%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 140 50% 12%;
+  --input: 140 60% 7%;
+  --ring: 120 100% 50%;
+  --theme-glow: rgba(0,255,65,0.15);
+  --theme-glow-strong: rgba(0,255,65,0.45);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   THEME: FUTURISTIC (purple haze)
+═══════════════════════════════════════════════════════════════ */
+.theme-futuristic {
+  --radius: 1rem;
+  --background: 265 60% 4%;
+  --foreground: 270 30% 96%;
+  --card: 265 55% 7%;
+  --card-foreground: 270 30% 96%;
+  --popover: 265 55% 7%;
+  --popover-foreground: 270 30% 96%;
+  --primary: 272 100% 68%;
+  --primary-foreground: 265 60% 4%;
+  --secondary: 265 45% 10%;
+  --secondary-foreground: 270 30% 96%;
+  --muted: 265 45% 10%;
+  --muted-foreground: 265 20% 58%;
+  --accent: 265 40% 14%;
+  --accent-foreground: 270 30% 96%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 265 40% 16%;
+  --input: 265 45% 10%;
+  --ring: 272 100% 68%;
+  --theme-glow: rgba(179,0,255,0.15);
+  --theme-glow-strong: rgba(179,0,255,0.45);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   THEME: BLOOD (crimson night)
+═══════════════════════════════════════════════════════════════ */
+.theme-blood {
+  --radius: 0.5rem;
+  --background: 0 70% 3%;
+  --foreground: 0 20% 95%;
+  --card: 0 60% 5%;
+  --card-foreground: 0 20% 95%;
+  --popover: 0 60% 5%;
+  --popover-foreground: 0 20% 95%;
+  --primary: 0 100% 58%;
+  --primary-foreground: 0 70% 3%;
+  --secondary: 0 50% 8%;
+  --secondary-foreground: 0 20% 95%;
+  --muted: 0 50% 8%;
+  --muted-foreground: 0 20% 55%;
+  --accent: 0 40% 11%;
+  --accent-foreground: 0 20% 95%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 0 40% 14%;
+  --input: 0 50% 8%;
+  --ring: 0 100% 58%;
+  --theme-glow: rgba(255,30,30,0.15);
+  --theme-glow-strong: rgba(255,30,30,0.45);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   THEME: OCEAN (deep teal)
+═══════════════════════════════════════════════════════════════ */
+.theme-ocean {
+  --radius: 0.75rem;
+  --background: 200 80% 3%;
+  --foreground: 195 40% 96%;
+  --card: 200 70% 5%;
+  --card-foreground: 195 40% 96%;
+  --popover: 200 70% 5%;
+  --popover-foreground: 195 40% 96%;
+  --primary: 185 100% 50%;
+  --primary-foreground: 200 80% 3%;
+  --secondary: 200 60% 8%;
+  --secondary-foreground: 195 40% 96%;
+  --muted: 200 60% 8%;
+  --muted-foreground: 200 25% 55%;
+  --accent: 200 50% 11%;
+  --accent-foreground: 195 40% 96%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 200 45% 14%;
+  --input: 200 60% 8%;
+  --ring: 185 100% 50%;
+  --theme-glow: rgba(0,210,220,0.15);
+  --theme-glow-strong: rgba(0,210,220,0.45);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BASE STYLES
+═══════════════════════════════════════════════════════════════ */
 * {
   border-color: hsl(var(--border));
 }
@@ -109,47 +229,44 @@ body {
 .text-glow-shift {
   background: linear-gradient(
     270deg,
-    #FFD700,
+    hsl(var(--primary)),
     #FF8C00,
     #FF1493,
     #B44FFF,
     #00D4FF,
     #00FF87,
-    #FFD700
+    hsl(var(--primary))
   );
   background-size: 400% 400%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: gradient-shift 4s ease infinite;
-  filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.55));
 }
 
 .text-glow-shift-slow {
   background: linear-gradient(
     270deg,
-    #FFD700,
+    hsl(var(--primary)),
     #FF8C00,
     #FF1493,
     #B44FFF,
     #00D4FF,
     #00FF87,
-    #FFD700
+    hsl(var(--primary))
   );
   background-size: 400% 400%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: gradient-shift 7s ease infinite;
-  filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.4));
 }
 
 /* ── Neon glow border ───────────────────────────────────────────── */
 @keyframes border-glow {
-  0%, 100% { box-shadow: 0 0 8px rgba(255,215,0,0.25), inset 0 0 8px rgba(255,215,0,0.05); }
-  50%       { box-shadow: 0 0 20px rgba(255,215,0,0.5), inset 0 0 12px rgba(255,215,0,0.1); }
+  0%, 100% { box-shadow: 0 0 8px var(--theme-glow), inset 0 0 8px var(--theme-glow); }
+  50%       { box-shadow: 0 0 20px var(--theme-glow-strong), inset 0 0 12px var(--theme-glow); }
 }
-
 .glow-border {
   animation: border-glow 3s ease-in-out infinite;
 }
@@ -159,14 +276,14 @@ body {
   transition: box-shadow 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
 }
 .card-hover-glow:hover {
-  box-shadow: 0 0 32px rgba(255,215,0,0.18), 0 8px 32px rgba(0,0,0,0.6);
+  box-shadow: 0 0 32px var(--theme-glow), 0 8px 32px rgba(0,0,0,0.6);
   transform: translateY(-3px);
 }
 
 /* ── Primary button pulse ────────────────────────────────────────── */
 @keyframes btn-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255,215,0,0.4); }
-  50%       { box-shadow: 0 0 0 8px rgba(255,215,0,0); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--theme-glow-strong); }
+  50%       { box-shadow: 0 0 0 8px transparent; }
 }
 .btn-pulse {
   animation: btn-pulse 2.5s ease-in-out infinite;
@@ -184,13 +301,7 @@ body {
 /* ── Number counter glow ─────────────────────────────────────────── */
 .stat-number {
   font-family: var(--font-mono);
-  text-shadow: 0 0 20px rgba(255,215,0,0.6);
-}
-
-/* ── Slot reel spin ──────────────────────────────────────────────── */
-@keyframes reel-blur {
-  0%, 100% { filter: blur(0); }
-  50%       { filter: blur(2px) brightness(1.4); }
+  text-shadow: 0 0 20px var(--theme-glow-strong);
 }
 
 /* ── Crash line pulse ────────────────────────────────────────────── */
@@ -202,6 +313,49 @@ body {
   animation: crash-glow 1s ease-in-out infinite;
 }
 
+/* ── Card flip (blackjack) ───────────────────────────────────────── */
+@keyframes card-deal {
+  0%   { transform: translateY(-40px) rotateY(90deg); opacity: 0; }
+  100% { transform: translateY(0) rotateY(0deg); opacity: 1; }
+}
+.card-deal {
+  animation: card-deal 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+/* ── Mines reveal ────────────────────────────────────────────────── */
+@keyframes gem-reveal {
+  0%   { transform: scale(0.5) rotate(-15deg); opacity: 0; }
+  70%  { transform: scale(1.15) rotate(5deg); }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+.gem-reveal {
+  animation: gem-reveal 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+/* ── Roulette spin ───────────────────────────────────────────────── */
+@keyframes roulette-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(1440deg); }
+}
+.roulette-spinning {
+  animation: roulette-spin 3s cubic-bezier(0.17,0.67,0.35,1) forwards;
+}
+
+/* ── Plinko ball drop ────────────────────────────────────────────── */
+@keyframes plinko-drop {
+  0%   { top: 0; opacity: 1; }
+  100% { top: 85%; opacity: 1; }
+}
+
+/* ── Win flash ───────────────────────────────────────────────────── */
+@keyframes win-flash {
+  0%, 100% { box-shadow: none; }
+  50%       { box-shadow: 0 0 40px var(--theme-glow-strong), inset 0 0 20px var(--theme-glow); }
+}
+.win-flash {
+  animation: win-flash 0.6s ease 2;
+}
+
 /* ── Scrollbar ───────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -210,6 +364,6 @@ body {
 
 /* ── Selection ───────────────────────────────────────────────────── */
 ::selection {
-  background: rgba(255, 215, 0, 0.25);
+  background: var(--theme-glow-strong);
   color: inherit;
 }
