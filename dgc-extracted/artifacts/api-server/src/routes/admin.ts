@@ -283,7 +283,7 @@ adminRouter.patch("/transactions/:id", async (req, res) => {
             network: tx.currency,
             address: tx.address,
             amount: parseFloat(tx.amount),
-            callbackUrl: `${process.env.SITE_URL ?? ""}/api/admin/transactions/${txId}/payout-callback`,
+          
           }),
         });
       } catch {

@@ -45,7 +45,7 @@ raceRouter.post("/run", requireAuth, async (req, res) => {
   if (!racerId || racerId < 1 || racerId > 6) return res.status(400).json({ error: "Invalid racer" });
 
   const [game] = await db.select().from(gamesTable).where(eq(gamesTable.slug, "race")).limit(1);
-  if (!game || !game.isActive) return res.status(400).json({ error: "Race game not available" });
+  if (!game || !game.active) return res.status(400).json({ error: "Race game not available" });
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!user) return res.status(404).json({ error: "User not found" });
@@ -72,7 +72,7 @@ raceRouter.post("/run", requireAuth, async (req, res) => {
     payout: String(payout),
     multiplier: String(multiplier),
     won,
-    result: JSON.stringify({ racerId, winnerRacerId, finishOrder, playerPlace }),
+    meta: { racerId, winnerRacerId, finishOrder, playerPlace },
   });
 
   return res.json({

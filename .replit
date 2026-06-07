@@ -44,4 +44,4 @@ OXAPAY_PAYOUT_KEY = "VPPNCM-CYTJII-5K76HM-FYUZIR"
 
 [nix]
 channel = "stable-25_05"
-packages = ["zip"]
+packages = ["zip", "nano", "dig"]
