@@ -32,7 +32,7 @@ export default function Home() {
   const { isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
 
-  const featuredGames = games?.filter((g) => g.active).slice(0, 3) || [];
+  const featuredGames = Array.isArray(games) ? games.filter((g) => g.active).slice(0, 3) : [];
 
   return (
     <div className="space-y-20 pb-16">
