@@ -10,9 +10,7 @@ export default function Games() {
   });
   const [search, setSearch] = useState("");
 
-  const filteredGames = Array.isArray(games)? games.filter(g => 
-    g.active && g.name.toLowerCase().includes(search.toLowerCase())
-  ) || [];
+  const filteredGames = Array.isArray(games) ? games.filter(g => g.active && g.name.toLowerCase().includes(search.toLowerCase())) : [];
 
   return (
     <div className="space-y-8">
