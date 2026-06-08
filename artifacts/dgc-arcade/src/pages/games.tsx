@@ -10,7 +10,7 @@ export default function Games() {
   });
   const [search, setSearch] = useState("");
 
-  const filteredGames = games?.filter(g => 
+  const filteredGames = Array.isArray(games)? games.filter(g => 
     g.active && g.name.toLowerCase().includes(search.toLowerCase())
   ) || [];
 
