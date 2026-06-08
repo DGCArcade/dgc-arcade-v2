@@ -90,7 +90,7 @@ export function Navbar() {
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 p-0">
                       <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center border border-primary/40 text-primary font-bold text-sm hover:border-primary transition-colors">
-                        {user.username.(user?.username?.[0] || "?").toUpperCase().toUpperCase()}
+                        {(user?.username?.[0] || "?").toUpperCase()}
                       </div>
                     </Button>
                   </DropdownMenuTrigger>
