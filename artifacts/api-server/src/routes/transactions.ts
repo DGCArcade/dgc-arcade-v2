@@ -75,8 +75,9 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       data?: {
         txn_id: string;
         invoice_url: string;
-        wallet_hash: string;
-        qr_code: string;
+        invoice_total_sum: string;
+        wallet_hash?: string;
+        qr_code?: string;
       };
       message?: string;
     };
@@ -86,6 +87,21 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       res.status(500).json({ error: "Payment gateway error: " + (data.message ?? "Unknown error") });
       return;
     }
+    // Fetch transaction details to get wallet address
+    let walletAddress = "";
+    let qrCodeUrl = "";
+    try {
+      const txParams = new URLSearchParams({ api_key: PLISIO_SECRET_KEY });
+      const txRes = await fetch(`${PLISIO_API}/transactions/${data.data.txn_id}?${txParams.toString()}`);
+      const txData = await txRes.json() as { status: string; data?: { wallet_hash?: string; qr_code?: string } };
+      if (txData.status === "success" && txData.data) {
+        walletAddress = txData.data.wallet_hash ?? "";
+        qrCodeUrl = txData.data.qr_code ?? "";
+      }
+    } catch (e) {
+      req.log.warn({ e }, "Could not fetch Plisio transaction details");
+    }
+
     await db.insert(transactionsTable).values({
       userId: req.user!.userId,
       type: "deposit",
@@ -94,13 +110,14 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       status: "pending",
       oxapayTrackId: data.data.txn_id,
       orderId,
-      address: data.data.wallet_hash,
+      address: walletAddress,
     });
     res.json({
       paymentUrl: data.data.invoice_url,
       trackId: data.data.txn_id,
-      address: data.data.wallet_hash,
-      qrCode: data.data.qr_code,
+      address: walletAddress,
+      qrCode: qrCodeUrl,
+      cryptoAmount: data.data.invoice_total_sum,
     });
   } catch (err) {
     req.log.error({ err }, "Initiate deposit error");

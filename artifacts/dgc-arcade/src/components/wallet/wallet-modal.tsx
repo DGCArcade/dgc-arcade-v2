@@ -171,18 +171,41 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                   </Button>
                 </>
               ) : (
-                <div className="space-y-3">
-                  <div className="rounded-xl overflow-hidden border border-border/50" style={{height: "420px"}}>
-                    <iframe
-                      src={depositResult.paymentUrl}
-                      className="w-full h-full"
-                      title="Plisio Payment"
-                      allow="clipboard-write"
-                    />
+                <div className="space-y-4">
+                  {depositResult.qrCode ? (
+                    <div className="flex justify-center">
+                      <img src={depositResult.qrCode} alt="QR Code" className="w-48 h-48 rounded-xl border border-border bg-white p-2" />
+                    </div>
+                  ) : null}
+                  <div className="bg-secondary/40 rounded-xl p-4 border border-border/50 space-y-2">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Send {selectedCurrency.label} to this address</div>
+                    {depositResult.cryptoAmount && (
+                      <div className="text-lg font-black font-mono text-primary">{depositResult.cryptoAmount} {selectedCurrency.value}</div>
+                    )}
+                    {depositResult.address ? (
+                      <>
+                        <div className="font-mono text-xs text-foreground break-all leading-relaxed bg-secondary rounded-lg p-2">{depositResult.address}</div>
+                        <button
+                          className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors font-bold"
+                          onClick={() => { navigator.clipboard.writeText(depositResult.address); setCopied(true); setTimeout(() => setCopied(false), 2000); toast({ title: "Address copied!" }); }}
+                        >
+                          <Copy className="w-3 h-3" /> {copied ? "✓ Copied!" : "Copy Address"}
+                        </button>
+                      </>
+                    ) : (
+                      <div className="text-xs text-muted-foreground">Loading address...</div>
+                    )}
                   </div>
-                  <Button className="w-full" variant="outline" onClick={() => { setDepositResult(null); setPaymentUrl(null); }}>
-                    New Deposit
-                  </Button>
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                    <p className="text-yellow-400 text-xs font-bold uppercase mb-1">Important</p>
+                    <p className="text-xs text-muted-foreground">Only send {selectedCurrency.label} to this address. Sending the wrong coin will result in permanent loss.</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button variant="outline" className="flex-1" onClick={() => window.open(depositResult.paymentUrl, "_blank")}>
+                      <ExternalLink className="w-4 h-4 mr-1.5" />View Invoice
+                    </Button>
+                    <Button className="flex-1" onClick={() => { setDepositResult(null); setPaymentUrl(null); }}>New Deposit</Button>
+                  </div>
                 </div>
               )}
             </TabsContent>
