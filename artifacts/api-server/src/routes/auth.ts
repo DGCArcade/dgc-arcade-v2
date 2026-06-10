@@ -30,6 +30,7 @@ authRouter.post("/register", async (req, res) => {
     return;
   }
   const { username, password } = parsed.data;
+  const deviceFingerprint = (req.headers["x-device-fingerprint"]) || null;
 
   try {
     const existing = await db
@@ -42,11 +43,19 @@ authRouter.post("/register", async (req, res) => {
       res.status(409).json({ error: "Username already taken" });
       return;
     }
+    if (deviceFingerprint) {
+      const deviceExists = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.deviceFingerprint, deviceFingerprint)).limit(1);
+      if (deviceExists.length > 0) {
+        logger.warn({ deviceFingerprint, username }, "Duplicate device blocked");
+        res.status(409).json({ error: "An account already exists on this device." });
+        return;
+      }
+    }
 
     const passwordHash = await bcrypt.hash(password, 12);
     const [user] = await db
       .insert(usersTable)
-      .values({ username, passwordHash, balance: "100" })
+      .values({ username, passwordHash, balance: "100", deviceFingerprint })
       .returning();
 
     const token = signToken({ userId: user.id, username: user.username, role: user.role });

@@ -10,6 +10,29 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthModal } from "@/hooks/use-auth-modal";
 
+// Generate a stable device fingerprint from browser properties
+function getDeviceFingerprint(): string {
+  const key = "dgc_dfp";
+  const existing = localStorage.getItem(key);
+  if (existing) return existing;
+  const raw = [
+    navigator.userAgent,
+    navigator.language,
+    screen.width + "x" + screen.height,
+    screen.colorDepth,
+    new Date().getTimezoneOffset(),
+    navigator.hardwareConcurrency ?? "",
+    navigator.platform ?? "",
+  ].join("|");
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    hash = (Math.imul(31, hash) + raw.charCodeAt(i)) | 0;
+  }
+  const fp = Math.abs(hash).toString(36) + Date.now().toString(36);
+  localStorage.setItem(key, fp);
+  return fp;
+}
+
 const registerSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters").max(24, "Username must be max 24 characters"),
   password: z.string().min(6, "Password must be at least 6 characters"),
@@ -29,22 +52,27 @@ export function RegisterForm() {
     },
   });
 
-  const onSubmit = (values: z.infer<typeof registerSchema>) => {
-    registerMutation.mutate({ data: values }, {
-      onSuccess: (result) => {
-        setAuthToken(result.token);
-        queryClient.setQueryData(getGetMeQueryKey(), result.user);
-        toast({ title: "Account created", description: "Welcome to DGC Arcade." });
-        authModal.close();
-      },
-      onError: (error) => {
-        toast({
-          title: "Registration failed",
-          description: error.data?.error || "An unexpected error occurred",
-          variant: "destructive"
-        });
+  const onSubmit = async (values: z.infer<typeof registerSchema>) => {
+    try {
+      const fp = getDeviceFingerprint();
+      const apiUrl = (import.meta.env.VITE_API_URL ?? "") + "/api/auth/register";
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-device-fingerprint": fp },
+        body: JSON.stringify(values),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        toast({ title: "Registration failed", description: result.error || "An unexpected error occurred", variant: "destructive" });
+        return;
       }
-    });
+      setAuthToken(result.token);
+      queryClient.setQueryData(getGetMeQueryKey(), result.user);
+      toast({ title: "Account created", description: "Welcome to DGC Arcade." });
+      authModal.close();
+    } catch {
+      toast({ title: "Registration failed", description: "Network error. Please try again.", variant: "destructive" });
+    }
   };
 
   return (
