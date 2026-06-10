@@ -53,8 +53,8 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
       onSuccess: (res: any) => {
         setDepositResult({ address: res.address, qrCode: res.qrCode, paymentUrl: res.paymentUrl });
         setPaymentUrl(res.paymentUrl);
-        window.open(res.paymentUrl, "_blank");
-        toast({ title: "Payment Page Opened", description: "Complete your deposit in the Plisio window." });
+        setTimeout(() => { window.location.href = res.paymentUrl; }, 1200);
+        toast({ title: "Invoice Created", description: "Redirecting to payment page..." });
       },
       onError: (err: unknown) => {
         const msg = (err as {data?: {error?: string}})?.data?.error ?? "Error";
@@ -98,7 +98,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md bg-card border-border/60 backdrop-blur-xl p-0 overflow-hidden">
+      <DialogContent className="max-w-md bg-card border-border/60 backdrop-blur-xl p-0 overflow-y-auto max-h-[90vh]">
         {/* Header */}
         <div className="p-6 pb-0 border-b border-border/40">
           <DialogHeader>
@@ -138,7 +138,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                 {CURRENCIES.map(c => (
                   <button
                     key={c.value}
-                    onClick={() => setCurrency(c.value)}
+                    onClick={() => { setCurrency(c.value); setDepositResult(null); setPaymentUrl(null); }}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
                       currency === c.value
                         ? "border-primary bg-primary/10 text-primary"
