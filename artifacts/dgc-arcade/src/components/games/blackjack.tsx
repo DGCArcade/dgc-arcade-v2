@@ -94,7 +94,7 @@ export function Blackjack({ game }: BlackjackProps) {
       try {
         const r = await fetch("/api/blackjack/deal",{method:"POST",headers:authHeaders(),body:JSON.stringify({gameId:game.id,amount})});
         const d = await r.json();
-        if(!r.ok){toast({title:d.error,variant:"destructive"});return;}
+        if(!r.ok){toast({title:`Error ${r.status}: ${d.error??JSON.stringify(d)}`,variant:"destructive"});return;}
         setHandId(d.handId);
         setPlayerHand(d.playerHand);
         setDealerHand(d.dealerHand);
@@ -106,7 +106,7 @@ export function Blackjack({ game }: BlackjackProps) {
         if(d.status==="player_blackjack"){
           toast({title:"BLACKJACK! 🃏",description:`Payout: ${formatCurrency(d.bet*2.5)}`,className:"bg-yellow-500 text-black"});
         }
-      } finally { setLoading(false); }
+      } catch(e:any) { toast({title:`Deal failed: ${e?.message??String(e)}`,variant:"destructive"}); } finally { setLoading(false); }
     });
   };
 
@@ -117,7 +117,7 @@ export function Blackjack({ game }: BlackjackProps) {
     try {
       const r = await fetch("/api/blackjack/action",{method:"POST",headers:authHeaders(),body:JSON.stringify({handId,action:act})});
       const d = await r.json();
-      if(!r.ok){toast({title:d.error,variant:"destructive"});return;}
+      if(!r.ok){toast({title:`Error ${r.status}: ${d.error??JSON.stringify(d)}`,variant:"destructive"});return;}
       setPlayerHand(d.playerHand);
       setDealerHand(d.dealerHand);
       setPlayerTotal(d.playerTotal);
@@ -128,7 +128,7 @@ export function Blackjack({ game }: BlackjackProps) {
       queryClient.invalidateQueries({queryKey:getGetMeQueryKey()});
       if(d.status==="player_wins") toast({title:"You Win! 🎉",description:`+${formatCurrency(d.payout)}`,className:"bg-green-500 text-white"});
       else if(d.status==="push") toast({title:"Push — Tie game",description:"Your bet returned."});
-    } finally { setLoading(false); }
+    } catch(e:any) { toast({title:`Deal failed: ${e?.message??String(e)}`,variant:"destructive"}); } finally { setLoading(false); }
   };
 
   const reset = () => {
