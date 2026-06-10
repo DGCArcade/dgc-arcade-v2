@@ -7,8 +7,6 @@ export const adminRouter = Router();
 
 adminRouter.use(requireAdmin);
 
-const OXAPAY_PAYOUT_KEY = process.env.OXAPAY_PAYOUT_KEY ?? "";
-const OXAPAY_API = "https://api.oxapay.com";
 
 function getSiteUrl(): string {
   if (process.env.SITE_URL) return process.env.SITE_URL;
@@ -343,62 +341,52 @@ adminRouter.patch("/transactions/:id", async (req, res) => {
       }
     }
 
-    // If approving a withdrawal, actually send via OxaPay payout API
-    if (status === "completed" && tx.type === "withdrawal" && OXAPAY_PAYOUT_KEY && tx.address) {
+    // If approving a withdrawal, send via Plisio payout API
+    if (status === "completed" && tx.type === "withdrawal" && tx.address) {
+      const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
+      if (!PLISIO_KEY) {
+        res.status(500).json({ error: "Plisio API key not configured. Payout NOT sent." });
+        return;
+      }
       let payoutResponse: Response;
       try {
-        payoutResponse = await fetch(`${OXAPAY_API}/api/send`, {
+        const params = new URLSearchParams({
+          api_key: PLISIO_KEY,
+          currency: tx.currency ?? "BTC",
+          to: tx.address,
+          amount: tx.amount,
+          type: "cash_out",
+        });
+        payoutResponse = await fetch(`https://plisio.net/api/v1/operations/withdraw?${params.toString()}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            key: OXAPAY_PAYOUT_KEY,
-            currency: tx.currency,
-            network: tx.currency,
-            address: tx.address,
-            amount: parseFloat(tx.amount),
-            callbackUrl: `${getSiteUrl()}/api/admin/payout-callback`,
-          }),
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
       } catch (fetchErr) {
-        req.log.error({ fetchErr, txId }, "OxaPay payout network error");
-        res.status(502).json({
-          error: "Could not reach OxaPay payment gateway. Payout NOT sent. Please try again.",
-        });
+        req.log.error({ fetchErr, txId }, "Plisio payout network error");
+        res.status(502).json({ error: "Could not reach Plisio. Payout NOT sent. Please try again." });
         return;
       }
-
-      interface OxaPaySendResponse {
-        result: number;
-        message: string;
-        trackId?: string;
+      interface PlisioPayoutResponse {
+        status: string;
+        data?: { txn_id?: string; message?: string };
       }
-      const payoutData = (await payoutResponse.json()) as OxaPaySendResponse;
-
-      if (payoutData.result !== 100) {
-        req.log.error({ txId, payoutData }, "OxaPay payout rejected");
-        res.status(502).json({
-          error: `OxaPay payout failed: ${payoutData.message}. Payout NOT sent.`,
-        });
+      const payoutData = (await payoutResponse.json()) as PlisioPayoutResponse;
+      if (payoutData.status !== "success") {
+        req.log.error({ txId, payoutData }, "Plisio payout rejected");
+        res.status(502).json({ error: `Plisio payout failed: ${payoutData.data?.message ?? "Unknown error"}. Payout NOT sent.` });
         return;
       }
-
-      // Payout succeeded — mark complete with OxaPay track ID
+      const plisioTxId = payoutData.data?.txn_id ?? null;
       const [updated] = await db
         .update(transactionsTable)
-        .set({ status: "completed", txHash: payoutData.trackId ?? null })
+        .set({ status: "completed", txHash: plisioTxId })
         .where(eq(transactionsTable.id, txId))
         .returning();
-
-      res.json({
-        id: updated.id,
-        status: updated.status,
-        amount: parseFloat(updated.amount),
-        txHash: updated.txHash,
-      });
+      res.json({ id: updated.id, status: updated.status, amount: parseFloat(updated.amount), txHash: updated.txHash });
       return;
     }
 
-    // Default: update status without OxaPay call
+    // Default: update status without Plisio call
     const [updated] = await db
       .update(transactionsTable)
       .set({ status })
@@ -416,10 +404,78 @@ adminRouter.patch("/transactions/:id", async (req, res) => {
   }
 });
 
-// POST /api/admin/payout-callback — OxaPay payout IPN
+
+// ── OWNER BANK: GET /api/admin/bank/balances — live Plisio balances ──
+adminRouter.get("/bank/balances", async (req, res) => {
+  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
+  if (!PLISIO_KEY) {
+    res.status(500).json({ error: "PLISIO_SECRET_KEY not set" });
+    return;
+  }
+  try {
+    const params = new URLSearchParams({ api_key: PLISIO_KEY });
+    const resp = await fetch(`https://plisio.net/api/v1/balances?${params.toString()}`);
+    const data = await resp.json() as { status: string; data?: Record<string, { balance: string; allowed: number }> };
+    if (data.status !== "success") {
+      res.status(502).json({ error: "Plisio balances fetch failed", detail: data });
+      return;
+    }
+    res.json({ balances: data.data ?? {} });
+  } catch (err) {
+    req.log.error({ err }, "Bank balances error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/admin/bank/invoices — recent Plisio invoices
+adminRouter.get("/bank/invoices", async (req, res) => {
+  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
+  if (!PLISIO_KEY) {
+    res.status(500).json({ error: "PLISIO_SECRET_KEY not set" });
+    return;
+  }
+  try {
+    const page = String(req.query.page ?? 1);
+    const limit = String(req.query.limit ?? 20);
+    const params = new URLSearchParams({ api_key: PLISIO_KEY, page, limit });
+    const resp = await fetch(`https://plisio.net/api/v1/operations?${params.toString()}`);
+    const data = await resp.json() as { status: string; data?: { items?: unknown[]; count?: number } };
+    if (data.status !== "success") {
+      res.status(502).json({ error: "Plisio invoices fetch failed", detail: data });
+      return;
+    }
+    res.json({ invoices: data.data?.items ?? [], total: data.data?.count ?? 0 });
+  } catch (err) {
+    req.log.error({ err }, "Bank invoices error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/admin/bank/pending-withdrawals — our pending withdrawal queue
+adminRouter.get("/bank/pending-withdrawals", async (req, res) => {
+  try {
+    const pending = await db
+      .select()
+      .from(transactionsTable)
+      .where(
+        and(
+          eq(transactionsTable.type, "withdrawal"),
+          eq(transactionsTable.status, "pending")
+        )
+      )
+      .orderBy(desc(transactionsTable.createdAt))
+      .limit(50);
+    res.json({ withdrawals: pending });
+  } catch (err) {
+    req.log.error({ err }, "Pending withdrawals error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/admin/payout-callback — Plisio payout IPN
 adminRouter.post("/payout-callback", async (req, res) => {
   const { trackId, status } = req.body as { trackId?: string; status?: string };
-  req.log.info({ trackId, status }, "OxaPay payout callback received");
+  req.log.info({ trackId, status }, "Plisio payout callback received");
   res.json({ success: true });
 });
 

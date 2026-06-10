@@ -12,7 +12,7 @@ export const transactionsTable = pgTable("transactions", {
   status: text("status").notNull().default("pending"), // pending | completed | failed
   txHash: text("tx_hash"),
   address: text("address"),
-  oxapayTrackId: text("oxapay_track_id"),
+  plisioTrackId: text("plisio_track_id"),
   orderId: text("order_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

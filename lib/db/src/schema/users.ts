@@ -26,6 +26,12 @@ export const usersTable = pgTable("users", {
   geoLat: text("geo_lat"),
   geoLon: text("geo_lon"),
   geoTimezone: text("geo_timezone"),
+  // Wagering & deposit tracking
+  totalDeposited: numeric("total_deposited", { precision: 18, scale: 8 }).notNull().default("0"),
+  totalWageredAmount: numeric("total_wagered_amount", { precision: 18, scale: 8 }).notNull().default("0"),
+  wagerRequirement: numeric("wager_requirement", { precision: 18, scale: 8 }).notNull().default("0"),
+  deviceFingerprint: text("device_fingerprint"),
+  locationVerified: boolean("location_verified").notNull().default(false),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({

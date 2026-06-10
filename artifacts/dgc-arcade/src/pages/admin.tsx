@@ -102,7 +102,7 @@ interface UserDetail {
   transactions: { id: number; type: string; amount: number; currency: string; status: string; address: string | null; createdAt: string }[];
 }
 
-type TabKey = "overview" | "users" | "transactions";
+type TabKey = "overview" | "users" | "transactions" | "bank";
 
 export default function AdminDashboard() {
   const { user, isLoading } = useAuth();
@@ -124,6 +124,12 @@ export default function AdminDashboard() {
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [newUser, setNewUser] = useState({ username: "", password: "", role: "player", balance: "0" });
   const [creatingUser, setCreatingUser] = useState(false);
+  // ── Bank state ──
+  const [bankBalances, setBankBalances] = useState<Record<string, { balance: string; allowed: number }>>({});
+  const [bankInvoices, setBankInvoices] = useState<any[]>([]);
+  const [bankWithdrawals, setBankWithdrawals] = useState<any[]>([]);
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankLastRefresh, setBankLastRefresh] = useState<Date | null>(null);
 
   const isAdmin = user?.role === "admin";
 
@@ -153,6 +159,26 @@ export default function AdminDashboard() {
       setCreatingUser(false);
     }
   };
+
+
+  const loadBank = useCallback(async () => {
+    setBankLoading(true);
+    try {
+      const [balRes, invRes, wdRes] = await Promise.all([
+        adminFetch("/bank/balances"),
+        adminFetch("/bank/invoices?limit=25"),
+        adminFetch("/bank/pending-withdrawals"),
+      ]);
+      setBankBalances(balRes.balances ?? {});
+      setBankInvoices(invRes.invoices ?? []);
+      setBankWithdrawals(wdRes.withdrawals ?? []);
+      setBankLastRefresh(new Date());
+    } catch (e) {
+      toast({ title: "Bank load failed", description: String(e), variant: "destructive" });
+    } finally {
+      setBankLoading(false);
+    }
+  }, [toast]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -321,6 +347,7 @@ export default function AdminDashboard() {
     { key: "overview", label: "Overview", icon: Activity },
     { key: "users", label: "Users", icon: Users },
     { key: "transactions", label: "Withdrawals", icon: DollarSign },
+    { key: "bank", label: "DGC Bank", icon: DollarSign },
   ];
 
   return (
@@ -427,11 +454,11 @@ export default function AdminDashboard() {
               <CardContent className="p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <Wallet className="w-4 h-4 text-green-400" />
-                  <span className="text-xs text-muted-foreground uppercase tracking-wider">OxaPay Status</span>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wider">Plisio Status</span>
                 </div>
-                <p className="font-bold text-green-400">{import.meta.env.VITE_OXAPAY_SET ? "Connected" : "Keys Pending"}</p>
+                <p className="font-bold text-green-400">Connected</p>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Set OXAPAY_MERCHANT_KEY and OXAPAY_PAYOUT_KEY in Replit Secrets to enable live payments.
+                  Plisio handles all deposits and payouts via PLISIO_SECRET_KEY.
                 </p>
               </CardContent>
             </Card>
@@ -748,6 +775,239 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+          {/* ── BANK TAB ── */}
+          {activeTab === "bank" && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">DGC Bank</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Owner account · Plisio live data
+                    {bankLastRefresh && (
+                      <span className="ml-2 text-xs opacity-60">
+                        Last refresh: {bankLastRefresh.toLocaleTimeString()}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={loadBank}
+                  disabled={bankLoading}
+                  className="gap-2"
+                >
+                  <RefreshCw className={bankLoading ? "animate-spin h-4 w-4" : "h-4 w-4"} />
+                  {bankLoading ? "Loading..." : "Refresh"}
+                </Button>
+              </div>
+
+              {/* Crypto Balances */}
+              <div>
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Live Crypto Balances</h3>
+                {Object.keys(bankBalances).length === 0 ? (
+                  <Card className="border-dashed">
+                    <CardContent className="py-8 text-center text-muted-foreground">
+                      {bankLoading ? "Fetching balances from Plisio…" : "No balance data — check PLISIO_SECRET_KEY"}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {Object.entries(bankBalances).map(([coin, info]) => (
+                      <Card key={coin} className="bg-card border-border">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-sm uppercase tracking-wider">{coin}</span>
+                            {(info as any).allowed === 1 ? (
+                              <Badge variant="default" className="text-xs bg-green-600">Active</Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                            )}
+                          </div>
+                          <p className="text-xl font-mono font-bold text-white">
+                            {parseFloat((info as any).balance ?? "0").toFixed(8)}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Pending Withdrawals */}
+              <div>
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                  Pending Withdrawals
+                  {bankWithdrawals.length > 0 && (
+                    <Badge variant="destructive" className="ml-2">{bankWithdrawals.length}</Badge>
+                  )}
+                </h3>
+                {bankWithdrawals.length === 0 ? (
+                  <Card className="border-dashed">
+                    <CardContent className="py-6 text-center text-muted-foreground text-sm">
+                      No pending withdrawals
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ID</TableHead>
+                          <TableHead>User</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Currency</TableHead>
+                          <TableHead>Address</TableHead>
+                          <TableHead>Requested</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {bankWithdrawals.map((w: any) => (
+                          <TableRow key={w.id}>
+                            <TableCell className="font-mono text-xs">{w.id}</TableCell>
+                            <TableCell>#{w.userId}</TableCell>
+                            <TableCell className="font-bold">{parseFloat(w.amount).toFixed(8)}</TableCell>
+                            <TableCell><Badge variant="outline">{w.currency}</Badge></TableCell>
+                            <TableCell className="font-mono text-xs max-w-[120px] truncate" title={w.address}>{w.address}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {w.createdAt ? new Date(w.createdAt).toLocaleString() : "—"}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  className="bg-green-600 hover:bg-green-700 h-7 text-xs"
+                                  disabled={loadingAction === `wd-approve-${w.id}`}
+                                  onClick={async () => {
+                                    setLoadingAction(`wd-approve-${w.id}`);
+                                    try {
+                                      await adminFetch(`/transactions/${w.id}`, {
+                                        method: "PATCH",
+                                        body: JSON.stringify({ status: "completed" }),
+                                      });
+                                      toast({ title: "Withdrawal approved", description: `Payout sent via Plisio for TX ${w.id}` });
+                                      await loadBank();
+                                    } catch (e: any) {
+                                      toast({ title: "Approve failed", description: e.message, variant: "destructive" });
+                                    } finally {
+                                      setLoadingAction(null);
+                                    }
+                                  }}
+                                >
+                                  <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-7 text-xs"
+                                  disabled={loadingAction === `wd-reject-${w.id}`}
+                                  onClick={async () => {
+                                    setLoadingAction(`wd-reject-${w.id}`);
+                                    try {
+                                      await adminFetch(`/transactions/${w.id}`, {
+                                        method: "PATCH",
+                                        body: JSON.stringify({ status: "rejected" }),
+                                      });
+                                      toast({ title: "Withdrawal rejected", description: `Balance refunded for TX ${w.id}` });
+                                      await loadBank();
+                                    } catch (e: any) {
+                                      toast({ title: "Reject failed", description: e.message, variant: "destructive" });
+                                    } finally {
+                                      setLoadingAction(null);
+                                    }
+                                  }}
+                                >
+                                  <XCircle className="h-3 w-3 mr-1" /> Reject
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Card>
+                )}
+              </div>
+
+              {/* Live Plisio Invoice Feed */}
+              <div>
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Live Plisio Invoice Feed</h3>
+                {bankInvoices.length === 0 ? (
+                  <Card className="border-dashed">
+                    <CardContent className="py-6 text-center text-muted-foreground text-sm">
+                      {bankLoading ? "Loading invoices…" : "No invoices found"}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Plisio ID</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Currency</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Date</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {bankInvoices.map((inv: any) => (
+                          <TableRow key={inv.txn_id ?? inv.id}>
+                            <TableCell className="font-mono text-xs max-w-[100px] truncate" title={inv.txn_id}>{inv.txn_id ?? "—"}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs capitalize">{inv.type ?? "invoice"}</Badge>
+                            </TableCell>
+                            <TableCell className="font-bold">{inv.source_amount ?? inv.amount ?? "—"}</TableCell>
+                            <TableCell>{inv.source_currency ?? inv.currency ?? "—"}</TableCell>
+                            <TableCell>
+                              <Badge
+                                className="text-xs"
+                                variant={
+                                  inv.status === "completed" ? "default" :
+                                  inv.status === "pending" ? "secondary" :
+                                  inv.status === "cancelled" ? "destructive" : "outline"
+                                }
+                              >
+                                {inv.status ?? "unknown"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {inv.created_utc ? new Date(inv.created_utc * 1000).toLocaleString() : "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Card>
+                )}
+              </div>
+
+              {/* Plisio Connection Status */}
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Payment Gateway</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground uppercase tracking-wider">Plisio Status</span>
+                    <p className="font-bold text-green-400">Connected</p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground uppercase tracking-wider">Mode</span>
+                    <p className="text-sm">Deposits + Payouts</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground pt-1">
+                    Plisio handles all deposits and payouts via PLISIO_SECRET_KEY.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
       {/* ── User Detail Dialog ── */}
       <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>

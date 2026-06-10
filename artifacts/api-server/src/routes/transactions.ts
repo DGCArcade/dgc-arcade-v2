@@ -123,7 +123,7 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       amount: String(amount),
       currency,
       status: "pending",
-      oxapayTrackId: data.data.txn_id,
+      plisioTrackId: data.data.txn_id,
       orderId,
       address: walletAddress,
     });
@@ -169,7 +169,7 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       res.json({ success: true });
       return;
     }
-    const [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.oxapayTrackId, txn_id)).limit(1);
+    const [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.plisioTrackId, txn_id)).limit(1);
     if (!tx || tx.status === "completed") {
       res.json({ success: true });
       return;

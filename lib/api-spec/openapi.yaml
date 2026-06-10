@@ -286,7 +286,7 @@ paths:
     post:
       operationId: initiateDeposit
       tags: [transactions]
-      summary: Create an OxaPay payment link for a deposit
+      summary: Create an Plisio payment link for a deposit
       requestBody:
         required: true
         content:
@@ -295,7 +295,7 @@ paths:
               $ref: "#/components/schemas/DepositInput"
       responses:
         "200":
-          description: OxaPay checkout URL
+          description: Plisio checkout URL
           content:
             application/json:
               schema:
@@ -309,9 +309,9 @@ paths:
 
   /transactions/deposit/callback:
     post:
-      operationId: oxapayCallback
+      operationId: plisioCallback
       tags: [transactions]
-      summary: OxaPay IPN webhook — credit balance on confirmed payment
+      summary: Plisio IPN webhook — credit balance on confirmed payment
       requestBody:
         required: true
         content:

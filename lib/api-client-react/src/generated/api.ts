@@ -35,7 +35,7 @@ import type {
   ListRecentBetsAllParams,
   ListTransactionsParams,
   LoginInput,
-  OxapayCallbackInput,
+  PlisioCallbackInput,
   PlatformStats,
   RegisterInput,
   SuccessResponse,
@@ -985,7 +985,7 @@ export const getInitiateDepositUrl = () => {
 }
 
 /**
- * @summary Create an OxaPay payment link for a deposit
+ * @summary Create an Plisio payment link for a deposit
  */
 export const initiateDeposit = async (depositInput: DepositInput, options?: RequestInit): Promise<DepositLink> => {
 
@@ -1034,7 +1034,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type InitiateDepositMutationError = ErrorType<ErrorResponse>
 
     /**
- * @summary Create an OxaPay payment link for a deposit
+ * @summary Create an Plisio payment link for a deposit
  */
 export const useInitiateDeposit = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof initiateDeposit>>, TError,{data: BodyType<DepositInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -1047,7 +1047,7 @@ export const useInitiateDeposit = <TError = ErrorType<ErrorResponse>,
       return useMutation(getInitiateDepositMutationOptions(options));
     }
 
-export const getOxapayCallbackUrl = () => {
+export const getPlisioCallbackUrl = () => {
 
 
 
@@ -1056,28 +1056,28 @@ export const getOxapayCallbackUrl = () => {
 }
 
 /**
- * @summary OxaPay IPN webhook — credit balance on confirmed payment
+ * @summary Plisio IPN webhook — credit balance on confirmed payment
  */
-export const oxapayCallback = async (oxapayCallbackInput: OxapayCallbackInput, options?: RequestInit): Promise<SuccessResponse> => {
+export const plisioCallback = async (plisioCallbackInput: PlisioCallbackInput, options?: RequestInit): Promise<SuccessResponse> => {
 
-  return customFetch<SuccessResponse>(getOxapayCallbackUrl(),
+  return customFetch<SuccessResponse>(getPlisioCallbackUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      oxapayCallbackInput,)
+      plisioCallbackInput,)
   }
 );}
 
 
 
 
-export const getOxapayCallbackMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof oxapayCallback>>, TError,{data: BodyType<OxapayCallbackInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof oxapayCallback>>, TError,{data: BodyType<OxapayCallbackInput>}, TContext> => {
+export const getPlisioCallbackMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof plisioCallback>>, TError,{data: BodyType<PlisioCallbackInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof plisioCallback>>, TError,{data: BodyType<PlisioCallbackInput>}, TContext> => {
 
-const mutationKey = ['oxapayCallback'];
+const mutationKey = ['plisioCallback'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1087,10 +1087,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof oxapayCallback>>, {data: BodyType<OxapayCallbackInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof plisioCallback>>, {data: BodyType<PlisioCallbackInput>}> = (props) => {
           const {data} = props ?? {};
 
-          return  oxapayCallback(data,requestOptions)
+          return  plisioCallback(data,requestOptions)
         }
 
 
@@ -1100,22 +1100,22 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type OxapayCallbackMutationResult = NonNullable<Awaited<ReturnType<typeof oxapayCallback>>>
-    export type OxapayCallbackMutationBody = BodyType<OxapayCallbackInput>
-    export type OxapayCallbackMutationError = ErrorType<unknown>
+    export type PlisioCallbackMutationResult = NonNullable<Awaited<ReturnType<typeof plisioCallback>>>
+    export type PlisioCallbackMutationBody = BodyType<PlisioCallbackInput>
+    export type PlisioCallbackMutationError = ErrorType<unknown>
 
     /**
- * @summary OxaPay IPN webhook — credit balance on confirmed payment
+ * @summary Plisio IPN webhook — credit balance on confirmed payment
  */
-export const useOxapayCallback = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof oxapayCallback>>, TError,{data: BodyType<OxapayCallbackInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const usePlisioCallback = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof plisioCallback>>, TError,{data: BodyType<PlisioCallbackInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof oxapayCallback>>,
+        Awaited<ReturnType<typeof plisioCallback>>,
         TError,
-        {data: BodyType<OxapayCallbackInput>},
+        {data: BodyType<PlisioCallbackInput>},
         TContext
       > => {
-      return useMutation(getOxapayCallbackMutationOptions(options));
+      return useMutation(getPlisioCallbackMutationOptions(options));
     }
 
 export const getRequestWithdrawalUrl = () => {

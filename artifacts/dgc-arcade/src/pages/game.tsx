@@ -45,7 +45,7 @@ export default function GamePage() {
     );
   }
 
-  const gameBets = bets?.filter(b => b.gameId === game.id) || [];
+  const gameBets = Array.isArray(bets) ? bets.filter(b => b.gameId === game.id) : [];
 
   function renderGame() {
     if (!game) return null;

@@ -20,6 +20,18 @@ path = "scripts/post-merge.sh"
 timeoutMs = 20000
 
 [[ports]]
+localPort = 4173
+externalPort = 3001
+
+[[ports]]
+localPort = 4174
+externalPort = 3003
+
+[[ports]]
+localPort = 5173
+externalPort = 5173
+
+[[ports]]
 localPort = 8080
 externalPort = 80
 
@@ -44,4 +56,4 @@ OXAPAY_PAYOUT_KEY = "VPPNCM-CYTJII-5K76HM-FYUZIR"
 
 [nix]
 channel = "stable-25_05"
-packages = ["zip", "nano", "dig"]
+packages = ["zip", "nano", "dig", "lsof"]
