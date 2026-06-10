@@ -39,10 +39,18 @@ export default function Home() {
       {/* ── Hero ─────────────────────────────────────────────────── */}
       <section className="relative rounded-2xl overflow-hidden border border-border/40 min-h-[480px] flex items-center bg-secondary/30">
         <div
-          className="absolute inset-0 bg-cover bg-center opacity-12"
+          className="absolute inset-0 opacity-60"
+          style={{
+            background:
+              "radial-gradient(circle at 82% 18%, var(--theme-glow-strong, rgba(255,215,0,0.28)), transparent 55%), radial-gradient(circle at 15% 85%, var(--theme-glow, rgba(255,215,0,0.10)), transparent 50%)",
+          }}
+        />
+        <div
+          className="absolute inset-0 opacity-[0.05] pointer-events-none"
           style={{
             backgroundImage:
-              "url('https://images.unsplash.com/photo-1518611012118-696072aa579a?w=1600&q=60&fit=crop')",
+              "linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)",
+            backgroundSize: "44px 44px",
           }}
         />
         <div className="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-background/30" />
