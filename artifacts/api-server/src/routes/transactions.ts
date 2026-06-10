@@ -3,7 +3,6 @@ import { db, usersTable, transactionsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import {
   InitiateDepositBody,
-  OxapayCallbackBody,
   RequestWithdrawalBody,
   ListTransactionsQueryParams,
 } from "@workspace/api-zod";
@@ -12,15 +11,13 @@ import { v4 as uuidv4 } from "uuid";
 
 export const transactionsRouter = Router();
 
-const OXAPAY_MERCHANT_KEY = process.env.OXAPAY_MERCHANT_KEY ?? "";
-const OXAPAY_PAYOUT_KEY = process.env.OXAPAY_PAYOUT_KEY ?? "";
-const OXAPAY_API = "https://api.oxapay.com";
+const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? "";
+const PLISIO_API = "https://plisio.net/api/v1";
 
 // GET /api/transactions
 transactionsRouter.get("/", requireAuth, async (req, res) => {
   const parsed = ListTransactionsQueryParams.safeParse(req.query);
   const limit = parsed.success ? (parsed.data.limit ?? 20) : 20;
-
   try {
     const rows = await db
       .select()
@@ -28,7 +25,6 @@ transactionsRouter.get("/", requireAuth, async (req, res) => {
       .where(eq(transactionsTable.userId, req.user!.userId))
       .orderBy(desc(transactionsTable.createdAt))
       .limit(limit);
-
     res.json(
       rows.map((t) => ({
         id: t.id,
@@ -57,115 +53,103 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
   }
   const { amount, currency } = parsed.data;
   const orderId = uuidv4();
-
   try {
-    // If OxaPay keys are not set yet, return a placeholder so the UI still works
-    if (!OXAPAY_MERCHANT_KEY) {
-      const trackId = `DEMO-${orderId}`;
-      await db.insert(transactionsTable).values({
-        userId: req.user!.userId,
-        type: "deposit",
-        amount: String(amount),
-        currency,
-        status: "pending",
-        oxapayTrackId: trackId,
-        orderId,
-      });
-      res.json({
-        paymentUrl: `https://oxapay.com/pay/${trackId}`,
-        trackId,
-      });
+    if (!PLISIO_SECRET_KEY) {
+      res.status(500).json({ error: "Payment gateway not configured" });
       return;
     }
-
-    // Real OxaPay request
-    const response = await fetch(`${OXAPAY_API}/merchants/request`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        merchant: OXAPAY_MERCHANT_KEY,
-        amount,
-        currency,
-        orderId,
-        callbackUrl: `${process.env.SITE_URL ?? ""}/api/transactions/deposit/callback`,
-        returnUrl: `${process.env.SITE_URL ?? ""}/profile`,
-      }),
+    const params = new URLSearchParams({
+      api_key: PLISIO_SECRET_KEY,
+      currency: currency.toUpperCase(),
+      amount: String(amount),
+      order_number: orderId,
+      order_name: "DGC Arcade Deposit",
+      callback_url: `${process.env.SITE_URL ?? ""}/api/transactions/deposit/callback`,
+      success_url: `${process.env.SITE_URL ?? ""}/profile`,
+      fail_url: `${process.env.SITE_URL ?? ""}/profile`,
     });
-
-    const data = (await response.json()) as { result: number; message: string; trackId: string; payLink: string };
-
-    if (data.result !== 100) {
-      req.log.error({ data }, "OxaPay deposit error");
-      res.status(500).json({ error: "Payment gateway error: " + data.message });
+    const response = await fetch(`${PLISIO_API}/invoices/new?${params.toString()}`);
+    const data = await response.json() as {
+      status: string;
+      data?: {
+        txn_id: string;
+        invoice_url: string;
+        wallet_hash: string;
+        qr_code: string;
+      };
+      message?: string;
+    };
+    if (data.status !== "success" || !data.data) {
+      req.log.error({ data }, "Plisio deposit error");
+      res.status(500).json({ error: "Payment gateway error: " + (data.message ?? "Unknown error") });
       return;
     }
-
     await db.insert(transactionsTable).values({
       userId: req.user!.userId,
       type: "deposit",
       amount: String(amount),
       currency,
       status: "pending",
-      oxapayTrackId: data.trackId,
+      oxapayTrackId: data.data.txn_id,
       orderId,
+      address: data.data.wallet_hash,
     });
-
-    res.json({ paymentUrl: data.payLink, trackId: data.trackId });
+    res.json({
+      paymentUrl: data.data.invoice_url,
+      trackId: data.data.txn_id,
+      address: data.data.wallet_hash,
+      qrCode: data.data.qr_code,
+    });
   } catch (err) {
     req.log.error({ err }, "Initiate deposit error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// POST /api/transactions/deposit/callback  (OxaPay IPN)
+// POST /api/transactions/deposit/callback (Plisio IPN)
 transactionsRouter.post("/deposit/callback", async (req, res) => {
-  const parsed = OxapayCallbackBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid callback" });
-    return;
-  }
-  const { trackId, status, amount } = parsed.data;
-
-  if (!trackId || status !== "Paid" || !amount) {
-    res.json({ success: true });
-    return;
-  }
-
   try {
-    const [tx] = await db
-      .select()
-      .from(transactionsTable)
-      .where(eq(transactionsTable.oxapayTrackId, trackId))
-      .limit(1);
-
+    const { txn_id, status, source_amount, verify_hash } = req.body as {
+      txn_id?: string;
+      status?: string;
+      source_amount?: string;
+      verify_hash?: string;
+    };
+    if (!txn_id || !status) {
+      res.json({ success: true });
+      return;
+    }
+    if (PLISIO_SECRET_KEY && verify_hash) {
+      const crypto = await import("crypto");
+      const params = { ...req.body };
+      delete params.verify_hash;
+      const sortedParams = Object.keys(params).sort().map((k) => `${k}=${params[k]}`).join("&");
+      const expectedHash = crypto.createHmac("sha1", PLISIO_SECRET_KEY).update(sortedParams).digest("hex");
+      if (expectedHash !== verify_hash) {
+        req.log.warn({ txn_id }, "Plisio callback hash mismatch");
+        res.status(400).json({ error: "Invalid signature" });
+        return;
+      }
+    }
+    if (status !== "completed") {
+      res.json({ success: true });
+      return;
+    }
+    const [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.oxapayTrackId, txn_id)).limit(1);
     if (!tx || tx.status === "completed") {
       res.json({ success: true });
       return;
     }
-
-    // Credit user balance
-    const [user] = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.id, tx.userId))
-      .limit(1);
-
+    const creditAmount = source_amount ? parseFloat(source_amount) : parseFloat(tx.amount);
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, tx.userId)).limit(1);
     if (user) {
-      const newBalance = parseFloat(user.balance) + amount;
-      await db
-        .update(usersTable)
-        .set({ balance: String(newBalance) })
-        .where(eq(usersTable.id, user.id));
+      const newBalance = parseFloat(user.balance) + creditAmount;
+      await db.update(usersTable).set({ balance: String(newBalance) }).where(eq(usersTable.id, user.id));
     }
-
-    await db
-      .update(transactionsTable)
-      .set({ status: "completed", amount: String(amount) })
-      .where(eq(transactionsTable.id, tx.id));
-
+    await db.update(transactionsTable).set({ status: "completed", amount: String(creditAmount) }).where(eq(transactionsTable.id, tx.id));
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "OxaPay callback error");
+    req.log.error({ err }, "Plisio callback error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -178,31 +162,18 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     return;
   }
   const { amount, currency, address } = parsed.data;
-
   try {
-    const [user] = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.id, req.user!.userId))
-      .limit(1);
-
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) {
       res.status(401).json({ error: "User not found" });
       return;
     }
-
     const balance = parseFloat(user.balance);
     if (balance < amount) {
       res.status(400).json({ error: "Insufficient balance" });
       return;
     }
-
-    // Deduct balance immediately (pending review)
-    await db
-      .update(usersTable)
-      .set({ balance: String(balance - amount) })
-      .where(eq(usersTable.id, user.id));
-
+    await db.update(usersTable).set({ balance: String(balance - amount) }).where(eq(usersTable.id, user.id));
     await db.insert(transactionsTable).values({
       userId: user.id,
       type: "withdrawal",
@@ -211,7 +182,25 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       status: "pending",
       address,
     });
-
+    res.json({ success: true, message: "Withdrawal request submitted. Under review." });
+  } catch (err) {
+    req.log.error({ err }, "Withdraw error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+    if (balance < amount) {
+      res.status(400).json({ error: "Insufficient balance" });
+      return;
+    }
+    await db.update(usersTable).set({ balance: String(balance - amount) }).where(eq(usersTable.id, user.id));
+    await db.insert(transactionsTable).values({
+      userId: user.id,
+      type: "withdrawal",
+      amount: String(amount),
+      currency,
+      status: "pending",
+      address,
+    });
     res.json({ success: true, message: "Withdrawal request submitted. Under review." });
   } catch (err) {
     req.log.error({ err }, "Withdraw error");
