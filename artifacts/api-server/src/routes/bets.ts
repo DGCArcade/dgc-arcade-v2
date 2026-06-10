@@ -278,11 +278,13 @@ betsRouter.post("/", requireAuth, async (req, res) => {
     const newBalance = balance - amount + payout;
     const newTotalBets = user.totalBets + 1;
     const newTotalWon = parseFloat(user.totalWon) + (won ? payout : 0);
+    const newTotalWagered = parseFloat(user.totalWageredAmount ?? "0") + amount;
 
     await db.update(usersTable).set({
       balance: String(newBalance),
       totalBets: newTotalBets,
       totalWon: String(newTotalWon),
+      totalWageredAmount: String(newTotalWagered),
     }).where(eq(usersTable.id, user.id));
 
     const [bet] = await db.insert(betsTable).values({

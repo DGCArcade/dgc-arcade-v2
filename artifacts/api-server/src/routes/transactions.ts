@@ -178,7 +178,14 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, tx.userId)).limit(1);
     if (user) {
       const newBalance = parseFloat(user.balance) + creditAmount;
-      await db.update(usersTable).set({ balance: String(newBalance) }).where(eq(usersTable.id, user.id));
+      const newTotalDeposited = parseFloat(user.totalDeposited ?? "0") + creditAmount;
+      const newWagerReq = newTotalDeposited * 0.75;
+      await db.update(usersTable).set({
+        balance: String(newBalance),
+        totalDeposited: String(newTotalDeposited),
+        wagerRequirement: String(newWagerReq),
+        locationVerified: user.locationVerified,
+      }).where(eq(usersTable.id, user.id));
     }
     await db.update(transactionsTable).set({ status: "completed", amount: String(creditAmount) }).where(eq(transactionsTable.id, tx.id));
     res.json({ success: true });
@@ -198,25 +205,89 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
   const { amount, currency, address } = parsed.data;
   try {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-    if (!user) {
-      res.status(401).json({ error: "User not found" });
+    if (!user) { res.status(401).json({ error: "User not found" }); return; }
+
+    // ── FRAUD CHECK 1: Location must be verified ──────────────────
+    if (!user.locationVerified) {
+      res.status(403).json({ error: "Location verification required before withdrawing. Please enable location access and refresh." });
       return;
     }
+
+    // ── FRAUD CHECK 2: 75% wagering requirement ───────────────────
+    const totalDeposited = parseFloat(user.totalDeposited ?? "0");
+    const totalWageredAmount = parseFloat(user.totalWageredAmount ?? "0");
+    const requiredWager = totalDeposited * 0.75;
+    if (totalDeposited > 0 && totalWageredAmount < requiredWager) {
+      const remaining = (requiredWager - totalWageredAmount).toFixed(2);
+      res.status(403).json({
+        error: `Wagering requirement not met. You must wager ${remaining} more before withdrawing.`,
+        required: requiredWager,
+        wagered: totalWageredAmount,
+        remaining: parseFloat(remaining),
+      });
+      return;
+    }
+
+    // ── FRAUD CHECK 3: AI pattern detection ───────────────────────
     const balance = parseFloat(user.balance);
-    if (balance < amount) {
+    const withdrawRatio = amount / (totalDeposited || 1);
+    const timeSinceCreated = Date.now() - new Date(user.createdAt).getTime();
+    const accountAgeHours = timeSinceCreated / (1000 * 60 * 60);
+    const flagReasons: string[] = [];
+
+    // Instant cashout: withdraw >90% of deposit within 2 hours
+    if (withdrawRatio > 0.90 && accountAgeHours < 2) {
+      flagReasons.push("Immediate high-value withdrawal on new account");
+    }
+    // Withdraw almost entire balance right after depositing
+    if (withdrawRatio > 0.95 && totalWageredAmount < totalDeposited * 0.1) {
+      flagReasons.push("Withdrawal exceeds 95% of deposit with minimal play");
+    }
+    // New account large withdrawal
+    if (accountAgeHours < 1 && amount > 100) {
+      flagReasons.push("Large withdrawal within 1 hour of account creation");
+    }
+    // Withdrawal larger than balance
+    if (amount > balance) {
       res.status(400).json({ error: "Insufficient balance" });
       return;
     }
+
+    const fraudScore = flagReasons.length;
+    const autoDecline = fraudScore >= 2 || (withdrawRatio > 0.95 && accountAgeHours < 1);
+
+    if (autoDecline) {
+      // Log the declined attempt but do NOT touch the balance
+      await db.insert(transactionsTable).values({
+        userId: user.id,
+        type: "withdrawal",
+        amount: String(amount),
+        currency,
+        status: "declined",
+        address,
+        metadata: JSON.stringify({ fraudFlags: flagReasons, fraudScore, autoDeclined: true }),
+      });
+      res.status(403).json({ error: "Withdrawal declined. Please contact support if you believe this is an error." });
+      return;
+    }
+
+    // ── PASSED ALL CHECKS: process withdrawal ─────────────────────
+    const status = fraudScore >= 1 ? "flagged" : "pending";
     await db.update(usersTable).set({ balance: String(balance - amount) }).where(eq(usersTable.id, user.id));
     await db.insert(transactionsTable).values({
       userId: user.id,
       type: "withdrawal",
       amount: String(amount),
       currency,
-      status: "pending",
+      status,
       address,
+      metadata: JSON.stringify({ fraudFlags: flagReasons, fraudScore }),
     });
-    res.json({ success: true, message: "Withdrawal request submitted. Under review." });
+
+    const msg = status === "flagged"
+      ? "Withdrawal flagged for manual review. Our team will process it within 24 hours."
+      : "Withdrawal request submitted. Under review.";
+    res.json({ success: true, message: msg, status });
   } catch (err) {
     req.log.error({ err }, "Withdraw error");
     res.status(500).json({ error: "Internal server error" });
