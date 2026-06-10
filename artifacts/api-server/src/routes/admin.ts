@@ -479,6 +479,149 @@ adminRouter.get("/bank/pending-withdrawals", async (req, res) => {
   }
 });
 
+
+// ── OWNER BANK: GET /api/admin/bank/fraud-alerts ─────────────────────────────
+// Real AI fraud detection — scores every pending withdrawal using behavioral rules
+adminRouter.get("/bank/fraud-alerts", async (req, res) => {
+  try {
+    // Step 1 — Pull all pending withdrawals with user info
+    const pending = await db
+      .select({
+        id: transactionsTable.id,
+        userId: transactionsTable.userId,
+        amount: transactionsTable.amount,
+        currency: transactionsTable.currency,
+        type: transactionsTable.type,
+        status: transactionsTable.status,
+        address: transactionsTable.address,
+        createdAt: transactionsTable.createdAt,
+        username: usersTable.username,
+        userCreatedAt: usersTable.createdAt,
+        userBalance: usersTable.balance,
+      })
+      .from(transactionsTable)
+      .leftJoin(usersTable, eq(transactionsTable.userId, usersTable.id))
+      .where(
+        and(
+          eq(transactionsTable.type, "withdrawal"),
+          eq(transactionsTable.status, "pending")
+        )
+      )
+      .orderBy(desc(transactionsTable.createdAt))
+      .limit(50);
+
+    if (pending.length === 0) {
+      res.json({ alerts: [] });
+      return;
+    }
+
+    // Step 2 — For each withdrawal, run AI scoring
+    const alerts = await Promise.all(
+      pending.map(async (tx) => {
+        const flags: string[] = [];
+        let riskScore = 0;
+        const amount = parseFloat(tx.amount ?? "0");
+
+        // ── Rule 1: Large amount ──────────────────────────────────
+        // Flag withdrawals over $500 equivalent
+        if (amount > 500) {
+          flags.push("large_amount");
+          riskScore += amount > 2000 ? 35 : amount > 1000 ? 25 : 15;
+        }
+
+        // ── Rule 2: New account ───────────────────────────────────
+        // Account less than 7 days old making a withdrawal
+        const accountAgeDays = tx.userCreatedAt
+          ? (Date.now() - new Date(tx.userCreatedAt).getTime()) / (1000 * 60 * 60 * 24)
+          : 999;
+        if (accountAgeDays < 7) {
+          flags.push("new_account");
+          riskScore += accountAgeDays < 1 ? 40 : accountAgeDays < 3 ? 30 : 20;
+        }
+
+        // ── Rule 3: Velocity — multiple withdrawals in 24h ────────
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const [{ recentCount }] = await db
+          .select({ recentCount: sql<number>`count(*)` })
+          .from(transactionsTable)
+          .where(
+            and(
+              eq(transactionsTable.userId, tx.userId),
+              eq(transactionsTable.type, "withdrawal"),
+              sql`created_at > ${oneDayAgo.toISOString()}`
+            )
+          );
+        if (Number(recentCount) > 2) {
+          flags.push("velocity");
+          riskScore += Number(recentCount) > 5 ? 35 : Number(recentCount) > 3 ? 25 : 15;
+        }
+
+        // ── Rule 4: Suspicious pattern — big loss then withdraw ───
+        // User lost over $200 in bets in last 6 hours then immediately withdrew
+        const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+        const [{ recentLoss }] = await db
+          .select({ recentLoss: sql<number>`coalesce(sum(amount::numeric), 0)` })
+          .from(betsTable)
+          .where(
+            and(
+              eq(betsTable.userId, tx.userId),
+              eq(betsTable.outcome, "loss"),
+              sql`created_at > ${sixHoursAgo.toISOString()}`
+            )
+          );
+        if (Number(recentLoss) > 200) {
+          flags.push("suspicious_pattern");
+          riskScore += Number(recentLoss) > 1000 ? 30 : Number(recentLoss) > 500 ? 20 : 12;
+        }
+
+        // ── Rule 5: Round number amounts (common in fraud) ────────
+        if (amount > 100 && amount % 100 === 0) {
+          flags.push("round_amount");
+          riskScore += 8;
+        }
+
+        // ── Rule 6: Balance mismatch — withdrawing more than 90% of balance ──
+        const balance = parseFloat(tx.userBalance ?? "0");
+        if (balance > 0 && amount / balance > 0.9) {
+          flags.push("full_balance_withdrawal");
+          riskScore += 15;
+        }
+
+        // Cap at 99
+        riskScore = Math.min(riskScore, 99);
+
+        // Only return if actually flagged (at least 1 rule triggered)
+        if (flags.length === 0) return null;
+
+        return {
+          id: tx.id,
+          userId: tx.userId,
+          username: tx.username ?? `user_${tx.userId}`,
+          amount: tx.amount,
+          currency: tx.currency,
+          type: tx.type,
+          status: tx.status,
+          address: tx.address,
+          riskScore,
+          flags,
+          createdAt: tx.createdAt,
+        };
+      })
+    );
+
+    // Filter out nulls (transactions that passed all checks)
+    const flagged = alerts.filter(Boolean);
+
+    // Sort by risk score descending — highest risk first
+    flagged.sort((a, b) => (b?.riskScore ?? 0) - (a?.riskScore ?? 0));
+
+    res.json({ alerts: flagged });
+  } catch (err) {
+    req.log.error({ err }, "Fraud alerts error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // POST /api/admin/payout-callback — Plisio payout IPN
 adminRouter.post("/payout-callback", async (req, res) => {
   const { trackId, status } = req.body as { trackId?: string; status?: string };
