@@ -370,26 +370,30 @@ export default function AdminDashboard() {
       {/* ── OVERVIEW ── */}
       {activeTab === "overview" && (
         <div className="space-y-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             {[
-              { label: "Total Users", value: stats?.totalUsers ?? "—", icon: Users, color: "text-blue-400" },
-              { label: "Total Bets", value: stats?.totalBets ?? "—", icon: Activity, color: "text-purple-400" },
-              { label: "Total Wagered", value: stats ? formatCurrency(stats.totalWagered) : "—", icon: TrendingUp, color: "text-green-400" },
-              { label: "Biggest Win", value: stats ? formatCurrency(stats.biggestWin) : "—", icon: TrendingUp, color: "text-primary" },
+              { label: "Total Users", value: stats?.totalUsers ?? "—", icon: Users, color: "text-blue-400", bg: "from-blue-500/10 to-transparent" },
+              { label: "Total Bets", value: stats?.totalBets ?? "—", icon: Activity, color: "text-purple-400", bg: "from-purple-500/10 to-transparent" },
+              { label: "Total Wagered", value: stats ? formatCurrency(stats.totalWagered) : "—", icon: TrendingUp, color: "text-green-400", bg: "from-green-500/10 to-transparent" },
+              { label: "Biggest Win", value: stats ? formatCurrency(stats.biggestWin) : "—", icon: TrendingUp, color: "text-primary", bg: "from-primary/10 to-transparent" },
             ].map((s) => (
-              <Card key={s.label} className="bg-secondary/40 border-border/40 card-hover-glow">
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <s.icon className={`w-4 h-4 ${s.color}`} />
-                    <span className="text-xs text-muted-foreground uppercase tracking-wider">{s.label}</span>
+              <Card key={s.label} className="bg-secondary/40 border-border/40 card-hover-glow overflow-hidden">
+                <CardContent className="p-0">
+                  <div className={`bg-gradient-to-br ${s.bg} p-5`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-xs text-muted-foreground uppercase tracking-widest font-bold">{s.label}</span>
+                      <div className={`w-9 h-9 rounded-xl bg-background/40 flex items-center justify-center`}>
+                        <s.icon className={`w-5 h-5 ${s.color}`} />
+                      </div>
+                    </div>
+                    <p className={`font-black leading-none break-all ${String(s.value).length > 10 ? "text-xl" : "text-3xl"} ${s.color}`}>{String(s.value)}</p>
                   </div>
-                  <p className="stat-number text-2xl font-bold">{String(s.value)}</p>
                 </CardContent>
               </Card>
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
             <Card className={`border-border/40 card-hover-glow ${stats && stats.pendingWithdrawals > 0 ? "bg-amber-500/5 border-amber-500/30" : "bg-secondary/40"}`}>
               <CardContent className="p-5">
                 <div className="flex items-center gap-2 mb-3">
