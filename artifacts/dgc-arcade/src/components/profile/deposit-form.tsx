@@ -18,69 +18,85 @@ const CURRENCIES = [
   { value: "BTC", label: "Bitcoin (BTC)" },
   { value: "ETH", label: "Ethereum (ETH)" },
   { value: "LTC", label: "Litecoin (LTC)" },
-  { value: "USDT", label: "Tether (USDT)" },
+  { value: "USDT_TRX", label: "Tether USDT (TRC-20)" },
   { value: "DOGE", label: "Dogecoin (DOGE)" },
+  { value: "SOL", label: "Solana (SOL)" },
 ];
-
 export function DepositForm() {
   const { toast } = useToast();
   const initiateDeposit = useInitiateDeposit();
-  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [depositResult, setDepositResult] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
 
   const form = useForm<z.infer<typeof depositSchema>>({
     resolver: zodResolver(depositSchema),
-    defaultValues: {
-      amount: 50,
-      currency: "USDT",
-    },
+    defaultValues: { amount: 50, currency: "USDT_TRX" },
   });
 
-  const onSubmit = (values: z.infer<typeof depositSchema>) => {
-    initiateDeposit.mutate(
-      { data: values },
-      {
-        onSuccess: (res) => {
-          setPaymentUrl(res.paymentUrl);
-          toast({
-            title: "Deposit Initiated",
-            description: "Please complete the payment in the new window.",
-          });
-          // Open in new tab
-          window.open(res.paymentUrl, '_blank');
-        },
-        onError: (err) => {
-          toast({
-            title: "Deposit Failed",
-            description: err.data?.error || "Could not initiate deposit",
-            variant: "destructive",
-          });
-        }
-      }
-    );
+  const copyAddress = () => {
+    if (depositResult?.address) {
+      navigator.clipboard.writeText(depositResult.address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
-  if (paymentUrl) {
+  const onSubmit = (values: z.infer<typeof depositSchema>) => {
+    initiateDeposit.mutate({ data: values } as any, {
+      onSuccess: (res: any) => {
+        setDepositResult(res);
+        toast({
+          title: "Deposit Address Generated",
+          description: "Send crypto to the address below. Balance updates automatically.",
+        });
+      },
+      onError: (err: any) => {
+        toast({
+          title: "Deposit Failed",
+          description: err?.data?.error || "Could not initiate deposit",
+          variant: "destructive",
+        });
+      },
+    });
+  };
+  if (depositResult) {
     return (
-      <div className="text-center py-8 space-y-4">
-        <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4 border border-primary">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinelinejoin="round" className="text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+      <div className="space-y-4">
+        <div className="text-center">
+          <h3 className="font-bold text-lg uppercase tracking-wider mb-1">Send Payment</h3>
+          <p className="text-muted-foreground text-xs">
+            Send the exact crypto amount to the address below. Your balance updates automatically once confirmed on the blockchain.
+          </p>
         </div>
-        <h3 className="font-display font-bold text-xl uppercase">Processing Deposit</h3>
-        <p className="text-muted-foreground text-sm">
-          Please complete your payment on the OxaPay page. Your balance will update automatically once confirmed.
-        </p>
-        <div className="pt-4 flex gap-4 justify-center">
-          <Button onClick={() => window.open(paymentUrl, '_blank')} variant="outline">
-            Re-open Payment Page
+        {depositResult.qrCode && (
+          <div className="flex justify-center">
+            <img src={depositResult.qrCode} alt="QR Code" className="w-48 h-48 rounded-lg border border-border" />
+          </div>
+        )}
+        <div className="bg-secondary rounded-lg p-3 space-y-1">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Deposit Address</p>
+          <p className="font-mono text-xs break-all text-foreground">{depositResult.address}</p>
+          <Button variant="outline" size="sm" className="w-full mt-2" onClick={copyAddress}>
+            {copied ? "Copied!" : "Copy Address"}
           </Button>
-          <Button onClick={() => setPaymentUrl(null)}>
-            Make Another Deposit
+        </div>
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+          <p className="text-yellow-400 text-xs font-bold uppercase tracking-wider mb-1">Important</p>
+          <p className="text-xs text-muted-foreground">
+            Only send the selected cryptocurrency to this address. Sending the wrong coin will result in permanent loss.
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" className="flex-1" onClick={() => window.open(depositResult.paymentUrl, "_blank")}>
+            View Invoice
+          </Button>
+          <Button className="flex-1" onClick={() => setDepositResult(null)}>
+            New Deposit
           </Button>
         </div>
       </div>
     );
   }
-
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -96,11 +112,17 @@ export function DepositForm() {
                   <Input type="number" step="1" className="pl-8 font-mono bg-secondary" {...field} />
                 </div>
               </FormControl>
+              <div className="flex gap-2 mt-2">
+                {[10, 25, 50, 100, 500].map((amt) => (
+                  <button key={amt} type="button" onClick={() => form.setValue("amount", amt)} className="flex-1 text-xs py-1 rounded bg-secondary border border-border font-mono">
+                    ${amt}
+                  </button>
+                ))}
+              </div>
               <FormMessage />
             </FormItem>
           )}
         />
-        
         <FormField
           control={form.control}
           name="currency"
@@ -114,10 +136,8 @@ export function DepositForm() {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {CURRENCIES.map(c => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label}
-                    </SelectItem>
+                  {CURRENCIES.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -125,13 +145,8 @@ export function DepositForm() {
             </FormItem>
           )}
         />
-        
-        <Button 
-          type="submit" 
-          className="w-full font-bold uppercase tracking-widest h-12"
-          disabled={initiateDeposit.isPending}
-        >
-          {initiateDeposit.isPending ? "Generating Invoice..." : "Proceed to Payment"}
+        <Button type="submit" className="w-full font-bold uppercase tracking-widest h-12" disabled={initiateDeposit.isPending}>
+          {initiateDeposit.isPending ? "Generating Address..." : "Generate Deposit Address"}
         </Button>
       </form>
     </Form>
