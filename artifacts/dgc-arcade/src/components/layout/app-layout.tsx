@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { Link } from "wouter";
 import { Navbar } from "./navbar";
 import { AuthModal } from "@/components/auth/auth-modal";
-import { StarBackground } from "@/components/ui/star-background";
+import GalaxyBackground from "@/components/GalaxyBackground";
 import { LocationGate } from "@/components/ui/location-gate";
 
 interface AppLayoutProps {
@@ -12,15 +12,15 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   return (
     <LocationGate>
-      <div className="min-h-[100dvh] flex flex-col bg-background text-foreground selection:bg-primary/30 relative">
-        <StarBackground />
+      <div className="min-h-[100dvh] flex flex-col bg-transparent text-foreground selection:bg-primary/30 relative">
+        <GalaxyBackground />
         <div className="relative z-10 flex flex-col min-h-[100dvh]">
           <Navbar />
           <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
             {children}
           </main>
 
-          <footer className="border-t border-border/30 mt-auto bg-background/80 backdrop-blur-sm">
+          <footer className="border-t border-border/30 mt-auto bg-black/60 backdrop-blur-md">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
                 <div className="col-span-2 md:col-span-1">
