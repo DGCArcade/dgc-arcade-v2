@@ -392,7 +392,12 @@ export default function AdminDashboard() {
             <p className="text-muted-foreground text-sm">Full platform control · Logged in as {user?.username}</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => { loadStats(); if (activeTab === "users") loadUsers(); if (activeTab === "transactions") loadTransactions(); }}>
+        <Button variant="outline" size="sm" onClick={() => {
+            loadStats();
+            if (activeTab === "users") loadUsers();
+            if (activeTab === "transactions") loadTransactions();
+            if (activeTab === "bank") { loadBank(); loadFraudAlerts(); }
+          }}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
         </Button>
