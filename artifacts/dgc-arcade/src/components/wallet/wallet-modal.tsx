@@ -25,32 +25,7 @@ interface WalletModalProps {
   onClose: () => void;
 }
 
-function QRCodePlaceholder({ value }: { value: string }) {
-  const size = 120;
-  const cells = 10;
-  const cell = size / cells;
-  const hash = value.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="rounded border border-border">
-      <rect width={size} height={size} fill="white" />
-      {Array.from({ length: cells }, (_, r) =>
-        Array.from({ length: cells }, (_, c) => {
-          const val = (hash * (r * cells + c + 1) * 2654435761) >>> 0;
-          const on = val % 3 === 0 || (r < 3 && c < 3) || (r < 3 && c > cells - 4) || (r > cells - 4 && c < 3);
-          return on ? <rect key={`${r}${c}`} x={c * cell} y={r * cell} width={cell} height={cell} fill="#111" /> : null;
-        })
-      )}
-      {/* Corner squares */}
-      {[[0,0],[0,7],[7,0]].map(([r,c],i) => (
-        <g key={i}>
-          <rect x={c*cell} y={r*cell} width={3*cell} height={3*cell} fill="#111"/>
-          <rect x={c*cell+cell*0.5} y={r*cell+cell*0.5} width={2*cell} height={2*cell} fill="white"/>
-          <rect x={c*cell+cell} y={r*cell+cell} width={cell} height={cell} fill="#111"/>
-        </g>
-      ))}
-    </svg>
-  );
-}
+
 
 export function WalletModal({ open, onClose }: WalletModalProps) {
   const { user } = useAuth();
@@ -67,16 +42,18 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const [tipUsername, setTipUsername] = useState("");
   const [tipAmount, setTipAmount] = useState(5);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [depositResult, setDepositResult] = useState<{address: string; qrCode: string; paymentUrl: string} | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const selectedCurrency = CURRENCIES.find(c => c.value === currency) ?? CURRENCIES[0];
-  const fakeAddress = `${currency.toLowerCase()}1${user?.username ?? "wallet"}qpxyz${currency.toLowerCase()}fake${amount}addr`;
+
 
   const handleDeposit = () => {
-    initiateDeposit.mutate({ data: { amount, currency } }, {
-      onSuccess: (res) => {
+    initiateDeposit.mutate({ data: { amount, currency } } as any, {
+      onSuccess: (res: any) => {
+        setDepositResult({ address: res.address, qrCode: res.qrCode, paymentUrl: res.paymentUrl });
         setPaymentUrl(res.paymentUrl);
-        window.open(res.paymentUrl, "_blank");
-        toast({ title: "Deposit Initiated", description: "Complete payment in the new window." });
+        toast({ title: "Deposit Address Generated", description: "Send crypto to the address below." });
       },
       onError: (err: unknown) => {
         const msg = (err as {data?: {error?: string}})?.data?.error ?? "Error";
@@ -173,7 +150,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                 ))}
               </div>
 
-              {!paymentUrl ? (
+              {!depositResult ? (
                 <>
                   <div className="space-y-2">
                     <Label className="text-xs uppercase tracking-wider font-bold">Amount (USD)</Label>
@@ -189,37 +166,36 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                       ))}
                     </div>
                   </div>
-
-                  {/* QR / address preview */}
-                  <div className="bg-secondary/40 rounded-xl p-4 border border-border/50 flex gap-4 items-center">
-                    <QRCodePlaceholder value={fakeAddress} />
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider">Send {selectedCurrency.label}</div>
-                      <div className="font-mono text-xs text-foreground break-all leading-relaxed">{fakeAddress}</div>
-                      <button
-                        className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
-                        onClick={() => { navigator.clipboard.writeText(fakeAddress); toast({ title: "Address copied!" }); }}
-                      >
-                        <Copy className="w-3 h-3" /> Copy address
-                      </button>
-                    </div>
-                  </div>
-
                   <Button className="w-full font-bold uppercase tracking-widest h-11" onClick={handleDeposit} disabled={initiateDeposit.isPending}>
-                    {initiateDeposit.isPending ? "Generating..." : `Deposit ${selectedCurrency.value} via OxaPay`}
+                    {initiateDeposit.isPending ? "Generating Address..." : `Generate ${selectedCurrency.value} Deposit Address`}
                   </Button>
                 </>
               ) : (
-                <div className="text-center space-y-4 py-4">
-                  <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center mx-auto border border-primary">
-                    <span className="text-2xl">✓</span>
+                <div className="space-y-4">
+                  {depositResult.qrCode && (
+                    <div className="flex justify-center">
+                      <img src={depositResult.qrCode} alt="QR Code" className="w-44 h-44 rounded-xl border border-border" />
+                    </div>
+                  )}
+                  <div className="bg-secondary/40 rounded-xl p-4 border border-border/50 space-y-2">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Send {selectedCurrency.label} to this address</div>
+                    <div className="font-mono text-xs text-foreground break-all leading-relaxed">{depositResult.address}</div>
+                    <button
+                      className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
+                      onClick={() => { navigator.clipboard.writeText(depositResult.address); setCopied(true); setTimeout(() => setCopied(false), 2000); toast({ title: "Address copied!" }); }}
+                    >
+                      <Copy className="w-3 h-3" /> {copied ? "Copied!" : "Copy address"}
+                    </button>
                   </div>
-                  <p className="text-sm text-muted-foreground">Payment initiated. Complete it in the OxaPay window.</p>
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                    <p className="text-yellow-400 text-xs font-bold uppercase mb-1">Important</p>
+                    <p className="text-xs text-muted-foreground">Only send {selectedCurrency.label} to this address. Wrong coin = permanent loss.</p>
+                  </div>
                   <div className="flex gap-3">
-                    <Button variant="outline" className="flex-1" onClick={() => window.open(paymentUrl, "_blank")}>
-                      <ExternalLink className="w-4 h-4 mr-1.5" />Re-open
+                    <Button variant="outline" className="flex-1" onClick={() => window.open(depositResult.paymentUrl, "_blank")}>
+                      <ExternalLink className="w-4 h-4 mr-1.5" />View Invoice
                     </Button>
-                    <Button className="flex-1" onClick={() => setPaymentUrl(null)}>New Deposit</Button>
+                    <Button className="flex-1" onClick={() => { setDepositResult(null); setPaymentUrl(null); }}>New Deposit</Button>
                   </div>
                 </div>
               )}
