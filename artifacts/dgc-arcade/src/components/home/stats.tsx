@@ -61,13 +61,13 @@ export function PlatformStats() {
             <stat.icon className={`w-5 h-5 sm:w-6 sm:h-6 ${stat.color}`} />
           </div>
           <div className="min-w-0">
-            <p className="text-xs sm:text-sm text-muted-foreground uppercase tracking-widest font-semibold mb-1 truncate">
+            <p className="text-xs sm:text-sm text-muted-foreground uppercase tracking-widest font-semibold mb-1">
               {stat.label}
             </p>
             {isLoading ? (
               <div className="h-7 w-24 bg-secondary rounded animate-pulse" />
             ) : (
-              <p className={`text-xl sm:text-2xl lg:text-3xl font-black font-mono ${stat.color} leading-none truncate`}>
+              <p className={`font-black font-mono ${stat.color} leading-none break-all ${String(stat.value).length > 9 ? "text-base sm:text-lg" : "text-xl sm:text-2xl lg:text-3xl"}`}>
                 {stat.value}
               </p>
             )}
