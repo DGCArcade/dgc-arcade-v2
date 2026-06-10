@@ -7,6 +7,10 @@ const THEME_SCENES: Record<ThemeId, string[]> = {
   futuristic: ["galaxy", "neptune"],
   blood:      ["mars", "moon"],
   ocean:      ["ocean", "earth"],
+  neon:       ["neptune", "galaxy"],
+  volcanic:   ["mars", "sun"],
+  arctic:     ["moon", "earth"],
+  midnight:   ["galaxy", "moon"],
 };
 
 const ALL_SCENES = ["earth","mars","saturn","sun","moon","neptune","galaxy","ocean"] as const;
@@ -18,6 +22,10 @@ const THEME_COLORS: Record<ThemeId, { shoot: string; nebula: string[]; bg1: stri
   futuristic: { shoot: "275", nebula: ["265","285","310"],bg1:"#080512", bg2:"#040210" },
   blood:      { shoot: "0",   nebula: ["0","15","350"],   bg1:"#0d0202", bg2:"#080101" },
   ocean:      { shoot: "185", nebula: ["185","200","175"],bg1:"#020b0d", bg2:"#010709" },
+  neon:       { shoot: "304", nebula: ["304","285","320"],bg1:"#0d0210", bg2:"#080108" },
+  volcanic:   { shoot: "22",  nebula: ["22","15","30"],   bg1:"#0d0400", bg2:"#080200" },
+  arctic:     { shoot: "198", nebula: ["198","210","190"],bg1:"#020810", bg2:"#010508" },
+  midnight:   { shoot: "240", nebula: ["240","230","250"],bg1:"#050505", bg2:"#020202" },
 };
 
 function pickScene(themeId: ThemeId): Scene {
