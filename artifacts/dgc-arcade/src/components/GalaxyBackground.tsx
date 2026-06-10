@@ -361,7 +361,7 @@ export default function GalaxyBackground() {
         ctx.beginPath();
         ctx.arc(p.px, p.py, p.pr, 0, Math.PI*2);
         ctx.clip();
-        const craters = [[0.2,0.1,0.12],[−0.3,0.3,0.08],[0.1,−0.25,0.15],[−0.15,−0.1,0.06]];
+        const craters = [[0.2,0.1,0.12],[-0.3,0.3,0.08],[0.1,-0.25,0.15],[-0.15,-0.1,0.06]];
         craters.forEach(([cx,cy,cr]) => {
           const cxp = p.px + cx*p.pr;
           const cyp = p.py + cy*p.pr;
