@@ -165,7 +165,6 @@ export default function Profile() {
           </Card>
         </div>
       </div>
-    </div>
 
       {user.username === "fanodgc" && (
         <Card className="bg-card border-border border-yellow-500/30 shadow-[0_0_32px_rgba(255,215,0,0.08)]">
