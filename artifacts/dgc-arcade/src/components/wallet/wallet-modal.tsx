@@ -161,7 +161,15 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                     <Label className="text-xs uppercase tracking-wider font-bold">Amount (USD)</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono">$</span>
-                      <Input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} className="pl-8 font-mono bg-secondary" min={1}/>
+                      <Input type="text" inputMode="decimal" value={amount === 0 ? "" : String(amount)}
+                      onChange={e => {
+                        const v = e.target.value.replace(/[^0-9.]/g, "");
+                        if (v === "" || v === ".") setAmount(0);
+                        else { const n = parseFloat(v); if (!isNaN(n)) setAmount(n); }
+                      }}
+                      onBlur={() => { if (!amount || amount < 1) setAmount(1); }}
+                      placeholder="50"
+                      className="pl-8 font-mono bg-secondary"/>
                     </div>
                     <div className="flex gap-2">
                       {[10,25,50,100,500].map(v => (
@@ -227,7 +235,15 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                 <Label className="text-xs uppercase tracking-wider font-bold">Amount (USD)</Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono">$</span>
-                  <Input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(Number(e.target.value))} className="pl-8 font-mono bg-secondary" min={1}/>
+                  <Input type="text" inputMode="decimal" value={withdrawAmount === 0 ? "" : String(withdrawAmount)}
+                  onChange={e => {
+                    const v = e.target.value.replace(/[^0-9.]/g, "");
+                    if (v === "" || v === ".") setWithdrawAmount(0);
+                    else { const n = parseFloat(v); if (!isNaN(n)) setWithdrawAmount(n); }
+                  }}
+                  onBlur={() => { if (!withdrawAmount || withdrawAmount < 5) setWithdrawAmount(5); }}
+                  placeholder="50"
+                  className="pl-8 font-mono bg-secondary"/>
                 </div>
               </div>
 

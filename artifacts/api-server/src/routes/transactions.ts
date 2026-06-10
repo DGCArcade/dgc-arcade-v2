@@ -14,6 +14,19 @@ export const transactionsRouter = Router();
 const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? "";
 const PLISIO_API = "https://plisio.net/api/v1";
 
+// Map our currency codes to Plisio's exact currency codes
+const PLISIO_CURRENCY_MAP: Record<string, string> = {
+  BTC:      "BTC",
+  ETH:      "ETH",
+  LTC:      "LTC",
+  DOGE:     "DOGE",
+  SOL:      "SOL",
+  BCH:      "BCH",
+  TRX:      "TRX",
+  USDT_TON: "USDT_TON",
+  USDT_TRX: "USDT_TRX",
+};
+
 // GET /api/transactions
 transactionsRouter.get("/", requireAuth, async (req, res) => {
   const parsed = ListTransactionsQueryParams.safeParse(req.query);
@@ -58,9 +71,10 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       res.status(500).json({ error: "Payment gateway not configured" });
       return;
     }
+    const plisioCurrency = PLISIO_CURRENCY_MAP[currency.toUpperCase()] ?? currency.toUpperCase();
     const params = new URLSearchParams({
       api_key: PLISIO_SECRET_KEY,
-      currency: currency.toUpperCase(),
+      currency: plisioCurrency,
       source_amount: String(amount),
       order_number: orderId,
       order_name: "DGC Arcade Deposit",
