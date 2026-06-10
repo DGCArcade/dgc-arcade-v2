@@ -94,12 +94,13 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       const txParams = new URLSearchParams({ api_key: PLISIO_SECRET_KEY });
       const txRes = await fetch(`${PLISIO_API}/transactions/${data.data.txn_id}?${txParams.toString()}`);
       const txData = await txRes.json() as { status: string; data?: { wallet_hash?: string; qr_code?: string } };
+      req.log.info({ tx_response: JSON.stringify(txData).slice(0, 500) }, "Plisio tx detail response");
       if (txData.status === "success" && txData.data) {
         walletAddress = txData.data.wallet_hash ?? "";
         qrCodeUrl = txData.data.qr_code ?? "";
       }
     } catch (e) {
-      req.log.warn({ e }, "Could not fetch Plisio transaction details");
+      req.log.warn({ err: String(e) }, "Could not fetch Plisio transaction details");
     }
 
     await db.insert(transactionsTable).values({
