@@ -64,6 +64,7 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       amount: String(amount),
       order_number: orderId,
       order_name: "DGC Arcade Deposit",
+      source_currency: "USD",
       callback_url: `${process.env.SITE_URL ?? ""}/api/transactions/deposit/callback`,
       success_url: `${process.env.SITE_URL ?? ""}/profile`,
       fail_url: `${process.env.SITE_URL ?? ""}/profile`,
