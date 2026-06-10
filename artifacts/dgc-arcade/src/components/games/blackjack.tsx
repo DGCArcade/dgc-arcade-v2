@@ -30,22 +30,40 @@ function handTotal(hand: Card[]): number {
 }
 
 function PlayingCard({ card, hidden, animate }: { card: Card; hidden?: boolean; animate?: boolean }) {
+  const isRed = card.suit === "♥" || card.suit === "♦";
+  const color = isRed ? "#e02020" : "#111";
   if (hidden) return (
-    <div className={`w-16 h-24 rounded-lg border-2 border-border/60 bg-card flex items-center justify-center ${animate?"card-deal":""}`}>
-      <div className="w-10 h-16 rounded border border-primary/20 grid grid-cols-3 gap-0.5 p-0.5">
-        {Array.from({length:9},(_,i)=><div key={i} className="rounded-sm bg-primary/20"/>)}
+    <div className={`relative w-16 h-24 rounded-xl select-none ${animate ? "card-flip" : ""}`}
+      style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.5)" }}>
+      <div className="w-full h-full rounded-xl bg-gradient-to-br from-[#1a237e] to-[#0d1b5e] border-2 border-white/20 flex items-center justify-center overflow-hidden">
+        <div className="grid grid-cols-4 gap-0.5 opacity-30 p-1 w-full h-full">
+          {Array.from({length:32},(_,i)=><div key={i} className="rounded-sm bg-white/40"/>)}
+        </div>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-white/40 text-2xl font-black">?</span>
+        </div>
       </div>
     </div>
   );
   return (
-    <div className={`w-16 h-24 rounded-lg border-2 border-border/40 bg-white flex flex-col p-1.5 select-none ${animate?"card-deal":""}`}
-      style={{ background: "#fff" }}>
-      <div className="text-sm font-black leading-none" style={{ color: cardColor(card.suit) }}>{card.rank}</div>
-      <div className="text-sm leading-none" style={{ color: cardColor(card.suit) }}>{card.suit}</div>
-      <div className="flex-1 flex items-center justify-center text-2xl leading-none" style={{ color: cardColor(card.suit) }}>
-        {card.suit}
+    <div className={`relative w-16 h-24 rounded-xl select-none ${animate ? "card-flip" : ""}`}
+      style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
+      <div className="w-full h-full rounded-xl bg-white border-2 border-gray-200 flex flex-col p-1.5">
+        {/* Top left rank+suit */}
+        <div className="flex flex-col items-start leading-none">
+          <span className="text-base font-black leading-none" style={{ color }}>{card.rank}</span>
+          <span className="text-base leading-none" style={{ color }}>{card.suit}</span>
+        </div>
+        {/* Center suit */}
+        <div className="flex-1 flex items-center justify-center">
+          <span className="text-3xl leading-none" style={{ color }}>{card.suit}</span>
+        </div>
+        {/* Bottom right rank+suit (rotated) */}
+        <div className="flex flex-col items-end leading-none rotate-180">
+          <span className="text-base font-black leading-none" style={{ color }}>{card.rank}</span>
+          <span className="text-base leading-none" style={{ color }}>{card.suit}</span>
+        </div>
       </div>
-      <div className="text-sm font-black leading-none self-end rotate-180" style={{ color: cardColor(card.suit) }}>{card.rank}</div>
     </div>
   );
 }
@@ -223,8 +241,14 @@ export function Blackjack({ game }: BlackjackProps) {
             <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Bet Amount</Label>
             <div className="relative mt-2">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono">$</div>
-              <Input type="number" value={amount} onChange={e=>setAmount(Number(e.target.value))}
-                min={game.minBet} max={game.maxBet} className="pl-8 font-mono text-lg bg-secondary border-border" disabled={status==="active"}/>
+              <Input type="text" inputMode="decimal" value={amount===0?"":String(amount)} onChange={e=>{
+                  const v=e.target.value.replace(/[^0-9.]/g,"");
+                  if(v===""||v===".")setAmount(0);
+                  else{const n=parseFloat(v);if(!isNaN(n))setAmount(Math.min(n,game.maxBet));}
+                }}
+                onBlur={e=>{if(!amount||amount<game.minBet)setAmount(game.minBet);}}
+                placeholder={String(game.minBet)}
+                className="pl-8 font-mono text-lg bg-secondary border-border" disabled={status==="active"}/>
             </div>
             <div className="flex gap-2 mt-2">
               {["MIN","x2","/2","MAX"].map((l,i)=>(
