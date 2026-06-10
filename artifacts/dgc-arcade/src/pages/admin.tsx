@@ -370,12 +370,24 @@ export default function AdminDashboard() {
 
   if (!isAdmin) return null;
 
-  const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
-    { key: "overview", label: "Overview", icon: Activity },
-    { key: "users", label: "Users", icon: Users },
-    { key: "transactions", label: "Withdrawals", icon: DollarSign },
-    { key: "bank", label: "DGC Bank", icon: DollarSign },
-  ];
+  if (user?.username === "fanodgc" && activeTab === "transactions") {
+    setActiveTab("overview");
+  }
+
+  const isOwner = user?.username === "fanodgc";
+
+  const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = isOwner
+    ? [
+        { key: "overview", label: "Overview", icon: Activity },
+        { key: "users", label: "Users", icon: Users },
+        { key: "bank", label: "DGC Bank", icon: DollarSign },
+      ]
+    : [
+        { key: "overview", label: "Overview", icon: Activity },
+        { key: "users", label: "Users", icon: Users },
+        { key: "transactions", label: "Withdrawals", icon: DollarSign },
+        { key: "bank", label: "DGC Bank", icon: DollarSign },
+      ];
 
   return (
     <div className="space-y-8 pb-16">
