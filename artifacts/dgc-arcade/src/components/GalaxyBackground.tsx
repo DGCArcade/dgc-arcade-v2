@@ -53,6 +53,7 @@ export default function GalaxyBackground() {
     let themeId: ThemeId = getTheme();
     let scene: Scene = pickScene(themeId);
     let scenePos = randomizeScenePos();
+    let targetScenePos = randomizeScenePos();
     let animId: number;
     let t = 0;
 
@@ -128,6 +129,7 @@ export default function GalaxyBackground() {
         themeId = found;
         scene = pickScene(themeId);
         scenePos = randomizeScenePos();
+        targetScenePos = randomizeScenePos();
         rebuildNebulas();
       }
     });
@@ -543,6 +545,15 @@ export default function GalaxyBackground() {
     function drawFrame() {
       const W = canvas!.width, H = canvas!.height;
       t++;
+
+      // ── Slow drift: every ~40s pick a new spot/size, ease toward it ──
+      if (t % 2400 === 0) {
+        targetScenePos = randomizeScenePos();
+      }
+      scenePos.xFrac += (targetScenePos.xFrac - scenePos.xFrac) * 0.004;
+      scenePos.yFrac += (targetScenePos.yFrac - scenePos.yFrac) * 0.004;
+      scenePos.sizeMul += (targetScenePos.sizeMul - scenePos.sizeMul) * 0.004;
+
       const tc = THEME_COLORS[themeId];
 
       ctx.clearRect(0,0,W,H);

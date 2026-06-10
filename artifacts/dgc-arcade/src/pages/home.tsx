@@ -56,22 +56,23 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-background/30" />
         <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-transparent to-transparent" />
 
-        <div className="relative z-10 px-8 md:px-16 py-16 max-w-2xl w-full">
+        <div className="relative z-10 px-6 md:px-16 py-16 w-full flex flex-col items-center text-center">
+          <div className="max-w-2xl w-full flex flex-col items-center">
           <div className="inline-flex items-center gap-2 bg-primary/10 border border-primary/30 rounded-full px-4 py-1.5 mb-8">
             <span className="live-dot w-2 h-2 rounded-full bg-green-400 block" />
-            <span className="text-xs font-bold uppercase tracking-widest text-primary">Live • Different Grind Crew</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-glow-shift">Live • Different Grind Crew</span>
           </div>
 
-          <h1 className="font-display font-black text-5xl md:text-7xl uppercase tracking-tighter leading-[0.9] mb-6">
+          <h1 className="font-display font-black text-4xl sm:text-5xl md:text-7xl uppercase tracking-tighter leading-[0.9] mb-6">
             The Streets<br />
             <span className="text-glow-shift">Always Win</span>
           </h1>
-          <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-lg leading-relaxed">
+          <p className="text-base sm:text-lg md:text-xl text-muted-foreground mb-10 max-w-lg mx-auto leading-relaxed">
             High-stakes crypto gaming built for the Different Grind Crew.
             Provably fair · Instant payouts · No BS.
           </p>
 
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-4 justify-center">
             {!isAuthenticated ? (
               <Button
                 size="lg"
@@ -99,6 +100,7 @@ export default function Home() {
             >
               Leaderboard
             </Button>
+          </div>
           </div>
         </div>
       </section>
