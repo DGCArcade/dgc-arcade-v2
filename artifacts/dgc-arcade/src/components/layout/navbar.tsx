@@ -50,7 +50,7 @@ export function Navbar() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center font-display font-black text-primary-foreground text-xl shadow-[0_0_16px_var(--theme-glow-strong)] group-hover:shadow-[0_0_28px_var(--theme-glow-strong)] transition-shadow duration-300">
+              <div className="logo-glow-shift w-9 h-9 rounded-lg flex items-center justify-center font-display font-black text-primary-foreground text-xl group-hover:shadow-[0_0_28px_var(--theme-glow-strong)] transition-shadow duration-300">
                 D
               </div>
               <span className="font-display font-bold text-xl uppercase tracking-widest hidden sm:inline-block">
