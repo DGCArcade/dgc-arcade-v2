@@ -80,6 +80,7 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       };
       message?: string;
     };
+    req.log.info({ plisio_response: JSON.stringify(data) }, "Plisio raw response");
     if (data.status !== "success" || !data.data) {
       req.log.error({ data }, "Plisio deposit error");
       res.status(500).json({ error: "Payment gateway error: " + (data.message ?? "Unknown error") });
