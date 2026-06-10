@@ -1,0 +1,28 @@
+services:
+  # ── Backend API ──────────────────────────────────────────────────
+  - type: web
+    name: dgc-arcade-api
+    runtime: node
+    rootDir: .
+    buildCommand: npm install -g pnpm && pnpm install && cd artifacts/api-server && pnpm run build
+    startCommand: cd artifacts/api-server && node --enable-source-maps ./dist/index.mjs
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: NODE_ENV
+        value: production
+
+  # ── Frontend ─────────────────────────────────────────────────────
+  - type: web
+    name: dgc-arcade-frontend
+    runtime: node
+    rootDir: .
+    buildCommand: npm install -g pnpm && pnpm install && cd artifacts/dgc-arcade && pnpm run build
+    startCommand: cd artifacts/dgc-arcade && pnpm run serve
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
