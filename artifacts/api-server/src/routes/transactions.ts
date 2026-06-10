@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from "uuid";
 export const transactionsRouter = Router();
 
 const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? "";
-const PLISIO_API = "https://plisio.net/api/v1";
+const PLISIO_API = "https://api.plisio.net/api/v1";
 
 // Map our currency codes to Plisio's exact currency codes
 const PLISIO_CURRENCY_MAP: Record<string, string> = {

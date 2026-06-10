@@ -357,7 +357,7 @@ adminRouter.patch("/transactions/:id", async (req, res) => {
           amount: tx.amount,
           type: "cash_out",
         });
-        payoutResponse = await fetch(`https://plisio.net/api/v1/operations/withdraw?${params.toString()}`, {
+        payoutResponse = await fetch(`https://api.plisio.net/api/v1/operations/withdraw?${params.toString()}`, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
@@ -414,7 +414,7 @@ adminRouter.get("/bank/balances", async (req, res) => {
   }
   try {
     const params = new URLSearchParams({ api_key: PLISIO_KEY });
-    const resp = await fetch(`https://plisio.net/api/v1/balances?${params.toString()}`);
+    const resp = await fetch(`https://api.plisio.net/api/v1/balances?${params.toString()}`);
     const data = await resp.json() as { status: string; data?: Record<string, { balance: string; allowed: number }> };
     if (data.status !== "success") {
       res.status(502).json({ error: "Plisio balances fetch failed", detail: data });
@@ -438,7 +438,7 @@ adminRouter.get("/bank/invoices", async (req, res) => {
     const page = String(req.query.page ?? 1);
     const limit = String(req.query.limit ?? 20);
     const params = new URLSearchParams({ api_key: PLISIO_KEY, page, limit });
-    const resp = await fetch(`https://plisio.net/api/v1/operations?${params.toString()}`);
+    const resp = await fetch(`https://api.plisio.net/api/v1/operations?${params.toString()}`);
     const data = await resp.json() as { status: string; data?: { items?: unknown[]; count?: number } };
     if (data.status !== "success") {
       res.status(502).json({ error: "Plisio invoices fetch failed", detail: data });

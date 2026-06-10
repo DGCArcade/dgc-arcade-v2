@@ -14,7 +14,7 @@ usersRouter.get("/owner/plisio-balance", requireAuth, async (req, res) => {
   try {
     const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? "";
     const params = new URLSearchParams({ api_key: PLISIO_SECRET_KEY });
-    const response = await fetch(`https://plisio.net/api/v1/balances?${params.toString()}`);
+    const response = await fetch(`https://api.plisio.net/api/v1/balances?${params.toString()}`);
     const data = await response.json();
     if (data.status !== "success") {
       res.status(502).json({ error: "Plisio API error", detail: data.data?.message ?? "Unknown" });
