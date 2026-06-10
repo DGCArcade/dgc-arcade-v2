@@ -295,11 +295,11 @@ export default function GalaxyBackground() {
         ctx.clip();
         const spin=t*0.0018;
         const lands=[
-          [0.1,−0.3,0.28,0.22,"#2e7d32"],
-          [−0.35,0.0,0.22,0.32,"#388e3c"],
+          [0.1,-0.3,0.28,0.22,"#2e7d32"],
+          [-0.35,0.0,0.22,0.32,"#388e3c"],
           [0.3,0.25,0.18,0.25,"#1b5e20"],
-          [−0.1,0.35,0.30,0.16,"#33691e"],
-          [0.05,−0.05,0.14,0.18,"#2e7d32"],
+          [-0.1,0.35,0.30,0.16,"#33691e"],
+          [0.05,-0.05,0.14,0.18,"#2e7d32"],
         ];
         lands.forEach(([lx,ly,lw,lh,lc])=>{
           const rx=px+(lx as number)*pr+Math.sin(spin)*pr*0.3;
@@ -457,7 +457,7 @@ export default function GalaxyBackground() {
         ctx.beginPath();
         ctx.arc(px,py,pr,0,Math.PI*2);
         ctx.clip();
-        const craters=[[0.2,−0.15,0.14],[−0.28,0.25,0.10],[0.10,0.30,0.17],[−0.10,−0.10,0.07],[0.35,0.10,0.09],[−0.20,−0.35,0.08]];
+        const craters=[[0.2,-0.15,0.14],[-0.28,0.25,0.10],[0.10,0.30,0.17],[-0.10,-0.10,0.07],[0.35,0.10,0.09],[-0.20,-0.35,0.08]];
         craters.forEach(([cx,cy,cr])=>{
           const cxp=px+(cx as number)*pr;
           const cyp=py+(cy as number)*pr;
