@@ -413,14 +413,21 @@ adminRouter.get("/bank/balances", async (req, res) => {
     return;
   }
   try {
-    const params = new URLSearchParams({ api_key: PLISIO_KEY });
-    const resp = await fetch(`https://api.plisio.net/api/v1/balances?${params.toString()}`);
-    const data = await resp.json() as { status: string; data?: Record<string, { balance: string; allowed: number }> };
-    if (data.status !== "success") {
-      res.status(502).json({ error: "Plisio balances fetch failed", detail: data });
-      return;
-    }
-    res.json({ balances: data.data ?? {} });
+    const currencies = ["BTC","ETH","LTC","DOGE","BCH","XMR","DASH","USDT_TRX","USDT_TON","TRX","TON","SOL"];
+    const balances = {};
+    await Promise.all(
+      currencies.map(async (cur) => {
+        try {
+          const params = new URLSearchParams({ api_key: PLISIO_KEY });
+          const resp = await fetch("https://api.plisio.net/api/v1/currencies/" + cur + "?" + params.toString());
+          const data = await resp.json();
+          if (data.status === "success" && data.data) {
+            balances[cur] = { balance: data.data.balance ?? "0", allowed: data.data.allowed ?? 0 };
+          }
+        } catch (e) { /* skip */ }
+      })
+    );
+    res.json({ balances });
   } catch (err) {
     req.log.error({ err }, "Bank balances error");
     res.status(500).json({ error: "Internal server error" });
