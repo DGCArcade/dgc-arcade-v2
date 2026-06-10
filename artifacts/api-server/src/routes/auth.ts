@@ -30,7 +30,8 @@ authRouter.post("/register", async (req, res) => {
     return;
   }
   const { username, password } = parsed.data;
-  const deviceFingerprint = (req.headers["x-device-fingerprint"]) || null;
+  const rawFp = req.headers["x-device-fingerprint"];
+  const deviceFingerprint = typeof rawFp === "string" ? rawFp : null;
 
   try {
     const existing = await db
