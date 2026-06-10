@@ -130,8 +130,8 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
       <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-primary/5" />
       <div className="relative z-10 max-w-md w-full">
         <div className="text-center mb-8">
-          <div className="w-20 h-20 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center mx-auto mb-4 shadow-[0_0_40px_var(--theme-glow-strong)]">
-            <Globe className="w-10 h-10 text-primary" />
+          <div className="w-20 h-20 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center mx-auto mb-4 location-globe-glow">
+            <Globe className="w-10 h-10 location-globe-icon" />
           </div>
           <div className="flex items-center justify-center gap-2.5 mb-2">
             <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center font-display font-black text-primary-foreground text-xl">
@@ -174,8 +174,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             <Button variant="outline" className="flex-1 gap-2" onClick={handleDecline}>
               <X className="w-4 h-4" /> Decline
             </Button>
-            <Button className="flex-1 gap-2 font-bold" onClick={handleAccept}
-              style={{ background: "var(--theme-glow)" }}>
+            <Button className="flex-1 gap-2 font-bold location-accept-btn" onClick={handleAccept}>
               <MapPin className="w-4 h-4" /> I Accept
             </Button>
           </div>
