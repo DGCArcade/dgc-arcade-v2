@@ -2,15 +2,15 @@ import { useEffect, useRef } from "react";
 import { THEMES, getTheme, ThemeId } from "@/lib/theme";
 
 const THEME_SCENES: Record<ThemeId, string[]> = {
-  dgc:        ["saturn", "sun"],
-  cyber:      ["neptune", "earth"],
-  futuristic: ["galaxy", "neptune"],
-  blood:      ["mars", "moon"],
-  ocean:      ["ocean", "earth"],
-  neon:       ["neptune", "galaxy"],
-  volcanic:   ["mars", "sun"],
-  arctic:     ["moon", "earth"],
-  midnight:   ["galaxy", "moon"],
+  dgc:        ["saturn", "sun", "earth", "neptune", "galaxy"],
+  cyber:      ["neptune", "earth", "galaxy", "moon", "mars"],
+  futuristic: ["galaxy", "neptune", "saturn", "moon", "earth"],
+  blood:      ["mars", "moon", "saturn", "sun", "neptune"],
+  ocean:      ["ocean", "earth", "neptune", "moon", "saturn"],
+  neon:       ["neptune", "galaxy", "earth", "saturn", "moon"],
+  volcanic:   ["mars", "sun", "saturn", "moon", "earth"],
+  arctic:     ["moon", "earth", "ocean", "saturn", "neptune"],
+  midnight:   ["galaxy", "moon", "neptune", "saturn", "mars"],
 };
 
 const ALL_SCENES = ["earth","mars","saturn","sun","moon","neptune","galaxy","ocean"] as const;
@@ -33,6 +33,15 @@ function pickScene(themeId: ThemeId): Scene {
   return options[Math.floor(Math.random() * options.length)] as Scene;
 }
 
+// Random screen position + "distance" (size) for the planet — varies every reload/theme switch
+function randomizeScenePos() {
+  return {
+    xFrac: 0.18 + Math.random() * 0.68,   // 18%–86% across the screen
+    yFrac: 0.06 + Math.random() * 0.40,   // 6%–46% down the screen (upper area)
+    sizeMul: 0.55 + Math.random() * 0.75, // 0.55x–1.3x — smaller = "farther away"
+  };
+}
+
 export default function GalaxyBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -43,6 +52,7 @@ export default function GalaxyBackground() {
 
     let themeId: ThemeId = getTheme();
     let scene: Scene = pickScene(themeId);
+    let scenePos = randomizeScenePos();
     let animId: number;
     let t = 0;
 
@@ -117,6 +127,7 @@ export default function GalaxyBackground() {
       if (found !== themeId) {
         themeId = found;
         scene = pickScene(themeId);
+        scenePos = randomizeScenePos();
         rebuildNebulas();
       }
     });
@@ -126,9 +137,9 @@ export default function GalaxyBackground() {
     function getPlanet() {
       const W = canvas!.width, H = canvas!.height;
       const isMobile = W < 600;
-      const baseSize = Math.min(W, H) * (isMobile ? 0.22 : 0.14);
-      const px = W * (isMobile ? 0.72 : 0.78);
-      const py = H * (isMobile ? 0.18 : 0.20);
+      const baseSize = Math.min(W, H) * (isMobile ? 0.22 : 0.14) * scenePos.sizeMul;
+      const px = W * scenePos.xFrac;
+      const py = H * scenePos.yFrac;
 
       switch(scene) {
         case "earth": return {
@@ -160,9 +171,9 @@ export default function GalaxyBackground() {
           ],
         };
         case "sun": return {
-          px: W * (isMobile ? 0.80 : 0.84),
-          py: H * (isMobile ? 0.16 : 0.14),
-          pr: Math.min(W,H) * (isMobile ? 0.26 : 0.20),
+          px: W * scenePos.xFrac,
+          py: H * scenePos.yFrac * 0.8,
+          pr: Math.min(W,H) * (isMobile ? 0.26 : 0.20) * scenePos.sizeMul,
           type: "sun",
           glow: "#ffaa00", glowSize: 4.2,
           rings: false,
@@ -183,8 +194,9 @@ export default function GalaxyBackground() {
           moons: [{ dist: 1.9, size: 0.11, color: "#8899cc", speed: 0.008, name:"triton" }],
         };
         case "galaxy": return {
-          px: W * 0.5, py: H * 0.42,
-          pr: Math.min(W,H) * (isMobile ? 0.38 : 0.28),
+          px: W * (0.35 + scenePos.xFrac * 0.3),
+          py: H * (0.30 + scenePos.yFrac * 0.4),
+          pr: Math.min(W,H) * (isMobile ? 0.38 : 0.28) * scenePos.sizeMul,
           type: "galaxy",
           glow: "#aa44ff", glowSize: 2.0,
           rings: false,
