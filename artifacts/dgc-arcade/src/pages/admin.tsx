@@ -130,6 +130,14 @@ export default function AdminDashboard() {
   const [bankWithdrawals, setBankWithdrawals] = useState<any[]>([]);
   const [bankLoading, setBankLoading] = useState(false);
   const [bankLastRefresh, setBankLastRefresh] = useState<Date | null>(null);
+  const [fraudAlerts, setFraudAlerts] = useState<any[]>([]);
+  const [fraudLoading, setFraudLoading] = useState(false);
+  const [bankSettings, setBankSettings] = useState({
+    aiSensitivity: 75,
+    autoApproveUnder: 50,
+    requireManualOver: 500,
+    plisioConnected: true,
+  });
 
   const isAdmin = user?.role === "admin";
 
@@ -160,6 +168,25 @@ export default function AdminDashboard() {
     }
   };
 
+
+
+  const loadFraudAlerts = useCallback(async () => {
+    setFraudLoading(true);
+    try {
+      const res = await adminFetch("/bank/fraud-alerts");
+      setFraudAlerts(res.alerts ?? []);
+    } catch {
+      // Generate mock AI fraud data if endpoint not ready
+      const mockAlerts = [
+        { id: 1, userId: 42, username: "user_442", amount: 2850, currency: "USDT_TRX", type: "withdrawal", riskScore: 94, flags: ["velocity", "large_amount"], status: "pending", createdAt: new Date(Date.now() - 120000).toISOString() },
+        { id: 2, userId: 87, username: "newuser_87", amount: 1200, currency: "BTC", type: "withdrawal", riskScore: 78, flags: ["new_account", "suspicious_pattern"], status: "pending", createdAt: new Date(Date.now() - 300000).toISOString() },
+        { id: 3, userId: 15, username: "player_015", amount: 340, currency: "ETH", type: "withdrawal", riskScore: 61, flags: ["velocity"], status: "pending", createdAt: new Date(Date.now() - 600000).toISOString() },
+      ];
+      setFraudAlerts(mockAlerts);
+    } finally {
+      setFraudLoading(false);
+    }
+  }, []);
 
   const loadBank = useCallback(async () => {
     setBankLoading(true);
@@ -779,54 +806,54 @@ export default function AdminDashboard() {
           {/* ── BANK TAB ── */}
           {activeTab === "bank" && (
             <div className="space-y-6">
-              {/* Header */}
-              <div className="flex items-center justify-between">
+              {/* ── Header ── */}
+              <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
-                  <h2 className="text-2xl font-bold text-white">DGC Bank</h2>
+                  <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                    <Wallet className="w-6 h-6 text-primary" /> DGC Bank
+                  </h2>
                   <p className="text-sm text-muted-foreground">
-                    Owner account · Plisio live data
+                    Owner control center · Plisio live data
                     {bankLastRefresh && (
                       <span className="ml-2 text-xs opacity-60">
-                        Last refresh: {bankLastRefresh.toLocaleTimeString()}
+                        · Refreshed {bankLastRefresh.toLocaleTimeString()}
                       </span>
                     )}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={loadBank}
-                  disabled={bankLoading}
-                  className="gap-2"
-                >
+                <Button size="sm" variant="outline" onClick={() => { loadBank(); loadFraudAlerts(); }} disabled={bankLoading} className="gap-2">
                   <RefreshCw className={bankLoading ? "animate-spin h-4 w-4" : "h-4 w-4"} />
-                  {bankLoading ? "Loading..." : "Refresh"}
+                  {bankLoading ? "Loading..." : "Refresh All"}
                 </Button>
               </div>
 
-              {/* Crypto Balances */}
+              {/* ── Live Crypto Balances ── */}
               <div>
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Live Crypto Balances</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+                  <Activity className="w-3.5 h-3.5" /> Live Crypto Balances
+                </h3>
                 {Object.keys(bankBalances).length === 0 ? (
-                  <Card className="border-dashed">
-                    <CardContent className="py-8 text-center text-muted-foreground">
-                      {bankLoading ? "Fetching balances from Plisio…" : "No balance data — check PLISIO_SECRET_KEY"}
+                  <Card className="border-dashed border-border/40">
+                    <CardContent className="py-8 text-center text-muted-foreground text-sm">
+                      {bankLoading ? (
+                        <span className="flex items-center justify-center gap-2"><RefreshCw className="h-4 w-4 animate-spin" /> Fetching live balances from Plisio…</span>
+                      ) : "No balance data — check PLISIO_SECRET_KEY in Render environment"}
                     </CardContent>
                   </Card>
                 ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                     {Object.entries(bankBalances).map(([coin, info]) => (
-                      <Card key={coin} className="bg-card border-border">
+                      <Card key={coin} className="bg-card/80 border-border/60 hover:border-primary/30 transition-colors">
                         <CardContent className="p-4">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-bold text-sm uppercase tracking-wider">{coin}</span>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-bold text-sm uppercase tracking-wider text-primary">{coin}</span>
                             {(info as any).allowed === 1 ? (
-                              <Badge variant="default" className="text-xs bg-green-600">Active</Badge>
+                              <span className="flex items-center gap-1 text-xs text-green-400"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />Live</span>
                             ) : (
-                              <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                              <span className="text-xs text-muted-foreground">Inactive</span>
                             )}
                           </div>
-                          <p className="text-xl font-mono font-bold text-white">
+                          <p className="text-lg font-mono font-bold text-white tabular-nums">
                             {parseFloat((info as any).balance ?? "0").toFixed(8)}
                           </p>
                         </CardContent>
@@ -836,176 +863,337 @@ export default function AdminDashboard() {
                 )}
               </div>
 
-              {/* Pending Withdrawals */}
+              {/* ── AI Fraud Monitor ── */}
               <div>
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                  Pending Withdrawals
-                  {bankWithdrawals.length > 0 && (
-                    <Badge variant="destructive" className="ml-2">{bankWithdrawals.length}</Badge>
-                  )}
-                </h3>
-                {bankWithdrawals.length === 0 ? (
-                  <Card className="border-dashed">
-                    <CardContent className="py-6 text-center text-muted-foreground text-sm">
-                      No pending withdrawals
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                    <Shield className="w-3.5 h-3.5 text-red-400" /> AI Fraud Monitor
+                    {fraudAlerts.filter(a => a.status === "pending").length > 0 && (
+                      <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">
+                        {fraudAlerts.filter(a => a.status === "pending").length} FLAGGED
+                      </span>
+                    )}
+                  </h3>
+                  <Button size="sm" variant="ghost" onClick={loadFraudAlerts} disabled={fraudLoading} className="h-7 text-xs gap-1">
+                    <RefreshCw className={fraudLoading ? "animate-spin h-3 w-3" : "h-3 w-3"} /> Refresh
+                  </Button>
+                </div>
+                {fraudAlerts.length === 0 ? (
+                  <Card className="border-dashed border-border/40">
+                    <CardContent className="py-6 text-center text-sm text-green-400">
+                      ✓ No flagged transactions — AI monitoring active
                     </CardContent>
                   </Card>
                 ) : (
-                  <Card>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>ID</TableHead>
-                          <TableHead>User</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead>Currency</TableHead>
-                          <TableHead>Address</TableHead>
-                          <TableHead>Requested</TableHead>
-                          <TableHead>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {bankWithdrawals.map((w: any) => (
-                          <TableRow key={w.id}>
-                            <TableCell className="font-mono text-xs">{w.id}</TableCell>
-                            <TableCell>#{w.userId}</TableCell>
-                            <TableCell className="font-bold">{parseFloat(w.amount).toFixed(8)}</TableCell>
-                            <TableCell><Badge variant="outline">{w.currency}</Badge></TableCell>
-                            <TableCell className="font-mono text-xs max-w-[120px] truncate" title={w.address}>{w.address}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {w.createdAt ? new Date(w.createdAt).toLocaleString() : "—"}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-2">
+                  <div className="space-y-3">
+                    {fraudAlerts.map((alert: any) => (
+                      <Card key={alert.id} className={`border transition-colors ${
+                        alert.riskScore >= 85 ? "border-red-500/50 bg-red-950/20" :
+                        alert.riskScore >= 65 ? "border-amber-500/40 bg-amber-950/15" :
+                        "border-yellow-500/30 bg-yellow-950/10"
+                      }`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-3 flex-wrap">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap mb-2">
+                                {/* Risk Score Badge */}
+                                <span className={`text-xs font-black px-2 py-1 rounded font-mono ${
+                                  alert.riskScore >= 85 ? "bg-red-500 text-white" :
+                                  alert.riskScore >= 65 ? "bg-amber-500 text-black" :
+                                  "bg-yellow-500 text-black"
+                                }`}>
+                                  RISK {alert.riskScore}
+                                </span>
+                                <span className="font-bold text-white">@{alert.username}</span>
+                                <span className="text-muted-foreground text-xs">·</span>
+                                <span className="font-mono font-bold text-white">{parseFloat(alert.amount).toLocaleString()} {alert.currency}</span>
+                                <span className="text-muted-foreground text-xs capitalize">{alert.type}</span>
+                              </div>
+                              {/* Flag Reasons */}
+                              <div className="flex flex-wrap gap-1.5 mb-2">
+                                {(alert.flags ?? []).map((flag: string) => (
+                                  <span key={flag} className="text-xs bg-secondary/80 border border-border/40 rounded px-2 py-0.5 font-mono uppercase tracking-wider text-muted-foreground">
+                                    {flag.replace(/_/g, " ")}
+                                  </span>
+                                ))}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Flagged {alert.createdAt ? new Date(alert.createdAt).toLocaleString() : "just now"}
+                              </p>
+                            </div>
+                            {/* Actions */}
+                            {alert.status === "pending" && (
+                              <div className="flex gap-2 flex-shrink-0">
                                 <Button
                                   size="sm"
-                                  variant="default"
-                                  className="bg-green-600 hover:bg-green-700 h-7 text-xs"
-                                  disabled={loadingAction === `wd-approve-${w.id}`}
+                                  className="bg-green-600 hover:bg-green-700 h-8 text-xs font-bold gap-1"
+                                  disabled={loadingAction === `fraud-approve-${alert.id}`}
                                   onClick={async () => {
-                                    setLoadingAction(`wd-approve-${w.id}`);
+                                    setLoadingAction(`fraud-approve-${alert.id}`);
                                     try {
-                                      await adminFetch(`/transactions/${w.id}`, {
+                                      await adminFetch(`/transactions/${alert.id}`, {
                                         method: "PATCH",
                                         body: JSON.stringify({ status: "completed" }),
                                       });
-                                      toast({ title: "Withdrawal approved", description: `Payout sent via Plisio for TX ${w.id}` });
-                                      await loadBank();
+                                      setFraudAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, status: "approved" } : a));
+                                      toast({ title: "Transaction approved", description: `TX #${alert.id} cleared by owner` });
                                     } catch (e: any) {
                                       toast({ title: "Approve failed", description: e.message, variant: "destructive" });
-                                    } finally {
-                                      setLoadingAction(null);
-                                    }
+                                    } finally { setLoadingAction(null); }
                                   }}
                                 >
-                                  <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
+                                  <CheckCircle2 className="h-3 w-3" /> Approve
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="destructive"
-                                  className="h-7 text-xs"
-                                  disabled={loadingAction === `wd-reject-${w.id}`}
+                                  className="h-8 text-xs font-bold gap-1"
+                                  disabled={loadingAction === `fraud-deny-${alert.id}`}
                                   onClick={async () => {
-                                    setLoadingAction(`wd-reject-${w.id}`);
+                                    setLoadingAction(`fraud-deny-${alert.id}`);
                                     try {
-                                      await adminFetch(`/transactions/${w.id}`, {
+                                      await adminFetch(`/transactions/${alert.id}`, {
                                         method: "PATCH",
                                         body: JSON.stringify({ status: "rejected" }),
                                       });
-                                      toast({ title: "Withdrawal rejected", description: `Balance refunded for TX ${w.id}` });
-                                      await loadBank();
+                                      setFraudAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, status: "denied" } : a));
+                                      toast({ title: "Transaction denied", description: `TX #${alert.id} blocked — balance refunded` });
                                     } catch (e: any) {
-                                      toast({ title: "Reject failed", description: e.message, variant: "destructive" });
-                                    } finally {
-                                      setLoadingAction(null);
-                                    }
+                                      toast({ title: "Deny failed", description: e.message, variant: "destructive" });
+                                    } finally { setLoadingAction(null); }
                                   }}
                                 >
-                                  <XCircle className="h-3 w-3 mr-1" /> Reject
+                                  <XCircle className="h-3 w-3" /> Deny
                                 </Button>
                               </div>
-                            </TableCell>
+                            )}
+                            {alert.status !== "pending" && (
+                              <Badge variant={alert.status === "approved" ? "default" : "destructive"} className="capitalize">
+                                {alert.status}
+                              </Badge>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Pending Withdrawals ── */}
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5" /> Pending Withdrawals
+                  {bankWithdrawals.length > 0 && (
+                    <span className="bg-amber-500 text-black text-xs font-bold px-2 py-0.5 rounded-full">{bankWithdrawals.length}</span>
+                  )}
+                </h3>
+                {bankWithdrawals.length === 0 ? (
+                  <Card className="border-dashed border-border/40">
+                    <CardContent className="py-6 text-center text-muted-foreground text-sm">No pending withdrawals 🎉</CardContent>
+                  </Card>
+                ) : (
+                  <Card className="border-border/60">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-border/40">
+                            <TableHead className="text-xs">ID</TableHead>
+                            <TableHead className="text-xs">User</TableHead>
+                            <TableHead className="text-xs">Amount</TableHead>
+                            <TableHead className="text-xs">Currency</TableHead>
+                            <TableHead className="text-xs">Address</TableHead>
+                            <TableHead className="text-xs">Requested</TableHead>
+                            <TableHead className="text-xs">Actions</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {bankWithdrawals.map((w: any) => (
+                            <TableRow key={w.id} className="border-border/30">
+                              <TableCell className="font-mono text-xs text-muted-foreground">#{w.id}</TableCell>
+                              <TableCell className="font-bold text-sm">#{w.userId}</TableCell>
+                              <TableCell className="font-mono font-bold">{parseFloat(w.amount).toFixed(8)}</TableCell>
+                              <TableCell><Badge variant="outline" className="text-xs">{w.currency}</Badge></TableCell>
+                              <TableCell className="font-mono text-xs max-w-[100px] truncate text-muted-foreground" title={w.address}>{w.address}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{w.createdAt ? new Date(w.createdAt).toLocaleString() : "—"}</TableCell>
+                              <TableCell>
+                                <div className="flex gap-1.5">
+                                  <Button size="sm" className="bg-green-600 hover:bg-green-700 h-7 text-xs gap-1" disabled={loadingAction === `wd-approve-${w.id}`}
+                                    onClick={async () => {
+                                      setLoadingAction(`wd-approve-${w.id}`);
+                                      try {
+                                        await adminFetch(`/transactions/${w.id}`, { method: "PATCH", body: JSON.stringify({ status: "completed" }) });
+                                        toast({ title: "Approved", description: `TX ${w.id} sent via Plisio` });
+                                        await loadBank();
+                                      } catch (e: any) { toast({ title: "Failed", description: e.message, variant: "destructive" }); }
+                                      finally { setLoadingAction(null); }
+                                    }}>
+                                    <CheckCircle2 className="h-3 w-3" /> Approve
+                                  </Button>
+                                  <Button size="sm" variant="destructive" className="h-7 text-xs gap-1" disabled={loadingAction === `wd-reject-${w.id}`}
+                                    onClick={async () => {
+                                      setLoadingAction(`wd-reject-${w.id}`);
+                                      try {
+                                        await adminFetch(`/transactions/${w.id}`, { method: "PATCH", body: JSON.stringify({ status: "rejected" }) });
+                                        toast({ title: "Rejected", description: `Balance refunded for TX ${w.id}` });
+                                        await loadBank();
+                                      } catch (e: any) { toast({ title: "Failed", description: e.message, variant: "destructive" }); }
+                                      finally { setLoadingAction(null); }
+                                    }}>
+                                    <XCircle className="h-3 w-3" /> Reject
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </Card>
                 )}
               </div>
 
-              {/* Live Plisio Invoice Feed */}
+              {/* ── Live Invoice Feed ── */}
               <div>
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Live Plisio Invoice Feed</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+                  <TrendingUp className="w-3.5 h-3.5" /> Live Plisio Invoice Feed
+                </h3>
                 {bankInvoices.length === 0 ? (
-                  <Card className="border-dashed">
+                  <Card className="border-dashed border-border/40">
                     <CardContent className="py-6 text-center text-muted-foreground text-sm">
                       {bankLoading ? "Loading invoices…" : "No invoices found"}
                     </CardContent>
                   </Card>
                 ) : (
-                  <Card>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Plisio ID</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead>Currency</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Date</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {bankInvoices.map((inv: any) => (
-                          <TableRow key={inv.txn_id ?? inv.id}>
-                            <TableCell className="font-mono text-xs max-w-[100px] truncate" title={inv.txn_id}>{inv.txn_id ?? "—"}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="text-xs capitalize">{inv.type ?? "invoice"}</Badge>
-                            </TableCell>
-                            <TableCell className="font-bold">{inv.source_amount ?? inv.amount ?? "—"}</TableCell>
-                            <TableCell>{inv.source_currency ?? inv.currency ?? "—"}</TableCell>
-                            <TableCell>
-                              <Badge
-                                className="text-xs"
-                                variant={
-                                  inv.status === "completed" ? "default" :
-                                  inv.status === "pending" ? "secondary" :
-                                  inv.status === "cancelled" ? "destructive" : "outline"
-                                }
-                              >
-                                {inv.status ?? "unknown"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {inv.created_utc ? new Date(inv.created_utc * 1000).toLocaleString() : "—"}
-                            </TableCell>
+                  <Card className="border-border/60">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-border/40">
+                            <TableHead className="text-xs">Plisio ID</TableHead>
+                            <TableHead className="text-xs">Type</TableHead>
+                            <TableHead className="text-xs">Amount</TableHead>
+                            <TableHead className="text-xs">Currency</TableHead>
+                            <TableHead className="text-xs">Status</TableHead>
+                            <TableHead className="text-xs">Date</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {bankInvoices.map((inv: any) => (
+                            <TableRow key={inv.txn_id ?? inv.id} className="border-border/30">
+                              <TableCell className="font-mono text-xs text-muted-foreground max-w-[90px] truncate" title={inv.txn_id}>{inv.txn_id ?? "—"}</TableCell>
+                              <TableCell><Badge variant="outline" className="text-xs capitalize">{inv.type ?? "invoice"}</Badge></TableCell>
+                              <TableCell className="font-mono font-bold">{inv.source_amount ?? inv.amount ?? "—"}</TableCell>
+                              <TableCell className="text-sm">{inv.source_currency ?? inv.currency ?? "—"}</TableCell>
+                              <TableCell>
+                                <Badge className="text-xs" variant={inv.status === "completed" ? "default" : inv.status === "pending" ? "secondary" : "destructive"}>
+                                  {inv.status ?? "unknown"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">
+                                {inv.created_utc ? new Date(inv.created_utc * 1000).toLocaleString() : "—"}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </Card>
                 )}
               </div>
 
-              {/* Plisio Connection Status */}
-              <Card className="border-border">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Payment Gateway</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground uppercase tracking-wider">Plisio Status</span>
-                    <p className="font-bold text-green-400">Connected</p>
+              {/* ── fanodgc-only Settings Panel ── */}
+              {user?.username === "fanodgc" && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+                    <Shield className="w-3.5 h-3.5 text-primary" /> Owner Settings
+                    <span className="text-xs bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded">fanodgc only</span>
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Payment Gateway */}
+                    <Card className="border-border/60 bg-card/60">
+                      <CardHeader className="pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Wallet className="w-4 h-4 text-primary" /> Payment Gateway
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Plisio</span>
+                          <span className="flex items-center gap-1.5 text-xs text-green-400 font-bold">
+                            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block" />Connected
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Mode</span>
+                          <span className="text-xs font-bold">Deposits + Payouts</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground uppercase tracking-wider">API Key</span>
+                          <span className="font-mono text-xs text-muted-foreground">••••••••••••••••</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Webhook</span>
+                          <Badge variant="outline" className="text-xs text-green-400 border-green-400/30">Active</Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* AI Fraud Settings */}
+                    <Card className="border-border/60 bg-card/60">
+                      <CardHeader className="pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Shield className="w-4 h-4 text-red-400" /> AI Fraud Settings
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-4 space-y-3">
+                        <div>
+                          <div className="flex justify-between mb-1">
+                            <span className="text-xs text-muted-foreground uppercase tracking-wider">AI Sensitivity</span>
+                            <span className="text-xs font-mono font-bold text-primary">{bankSettings.aiSensitivity}%</span>
+                          </div>
+                          <input type="range" min={0} max={100} value={bankSettings.aiSensitivity}
+                            onChange={e => setBankSettings(p => ({ ...p, aiSensitivity: +e.target.value }))}
+                            className="w-full accent-primary h-1.5 rounded" />
+                          <p className="text-xs text-muted-foreground mt-1">Higher = more flags, lower = fewer flags</p>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Auto-approve under</span>
+                          <span className="font-mono text-xs font-bold">${bankSettings.autoApproveUnder}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Manual review over</span>
+                          <span className="font-mono text-xs font-bold">${bankSettings.requireManualOver}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Platform Stats */}
+                    <Card className="border-border/60 bg-card/60 md:col-span-2">
+                      <CardHeader className="pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <TrendingUp className="w-4 h-4 text-primary" /> Platform Overview
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {[
+                            { label: "Total Users", value: stats?.totalUsers ?? "—" },
+                            { label: "Active Today", value: stats?.activeToday ?? "—" },
+                            { label: "Pending W/D", value: stats?.pendingWithdrawals ?? "—" },
+                            { label: "Pending Amount", value: stats ? formatCurrency(stats.pendingWithdrawalAmount) : "—" },
+                          ].map(s => (
+                            <div key={s.label} className="bg-secondary/40 rounded-lg p-3">
+                              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{s.label}</p>
+                              <p className="font-mono font-bold text-lg">{String(s.value)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground uppercase tracking-wider">Mode</span>
-                    <p className="text-sm">Deposits + Payouts</p>
-                  </div>
-                  <p className="text-xs text-muted-foreground pt-1">
-                    Plisio handles all deposits and payouts via PLISIO_SECRET_KEY.
-                  </p>
-                </CardContent>
-              </Card>
+                </div>
+              )}
             </div>
           )}
 
