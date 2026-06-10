@@ -92,11 +92,11 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
     let qrCodeUrl = "";
     try {
       const txParams = new URLSearchParams({ api_key: PLISIO_SECRET_KEY });
-      const txRes = await fetch(`${PLISIO_API}/transactions/${data.data.txn_id}?${txParams.toString()}`);
-      const txData = await txRes.json() as { status: string; data?: { wallet_hash?: string; qr_code?: string } };
+      const txRes = await fetch(`${PLISIO_API}/operations/${data.data.txn_id}?${txParams.toString()}`);
+      const txData = await txRes.json() as { status: string; data?: { wallet_hash?: string; qr_code?: string; source_address?: string; address?: string } };
       req.log.info({ tx_response: JSON.stringify(txData).slice(0, 500) }, "Plisio tx detail response");
       if (txData.status === "success" && txData.data) {
-        walletAddress = txData.data.wallet_hash ?? "";
+        walletAddress = txData.data.wallet_hash ?? txData.data.source_address ?? txData.data.address ?? "";
         qrCodeUrl = txData.data.qr_code ?? "";
       }
     } catch (e) {
