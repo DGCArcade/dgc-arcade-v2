@@ -188,22 +188,3 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-    if (balance < amount) {
-      res.status(400).json({ error: "Insufficient balance" });
-      return;
-    }
-    await db.update(usersTable).set({ balance: String(balance - amount) }).where(eq(usersTable.id, user.id));
-    await db.insert(transactionsTable).values({
-      userId: user.id,
-      type: "withdrawal",
-      amount: String(amount),
-      currency,
-      status: "pending",
-      address,
-    });
-    res.json({ success: true, message: "Withdrawal request submitted. Under review." });
-  } catch (err) {
-    req.log.error({ err }, "Withdraw error");
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
