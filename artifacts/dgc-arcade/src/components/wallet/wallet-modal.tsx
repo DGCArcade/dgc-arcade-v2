@@ -13,11 +13,15 @@ import { formatCurrency } from "@/lib/format";
 import { Copy, ExternalLink, QrCode, Send, ShoppingCart, Wallet, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 
 const CURRENCIES = [
-  { value: "BTC",  label: "Bitcoin",  symbol: "₿", color: "#F7931A" },
-  { value: "ETH",  label: "Ethereum", symbol: "Ξ", color: "#627EEA" },
-  { value: "LTC",  label: "Litecoin", symbol: "Ł", color: "#A5A5A5" },
-  { value: "USDT", label: "Tether",   symbol: "₮", color: "#26A17B" },
-  { value: "DOGE", label: "Dogecoin", symbol: "Ð", color: "#C2A633" },
+  { value: "BTC",      label: "Bitcoin",      symbol: "₿", color: "#F7931A" },
+  { value: "ETH",      label: "Ethereum",     symbol: "Ξ", color: "#627EEA" },
+  { value: "LTC",      label: "Litecoin",     symbol: "Ł", color: "#A5A5A5" },
+  { value: "USDT_TON", label: "USDT (TON)",   symbol: "₮", color: "#26A17B" },
+  { value: "USDT_TRX", label: "USDT (TRC-20)",symbol: "₮", color: "#50AF95" },
+  { value: "DOGE",     label: "Dogecoin",     symbol: "Ð", color: "#C2A633" },
+  { value: "SOL",      label: "Solana",       symbol: "◎", color: "#9945FF" },
+  { value: "TRX",      label: "Tron",         symbol: "T", color: "#FF0013" },
+  { value: "BCH",      label: "Bitcoin Cash", symbol: "Ƀ", color: "#8DC351" },
 ];
 
 interface WalletModalProps {
@@ -34,11 +38,11 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const initiateDeposit = useInitiateDeposit();
   const requestWithdrawal = useRequestWithdrawal();
 
-  const [currency, setCurrency] = useState("USDT");
+  const [currency, setCurrency] = useState("BTC");
   const [amount, setAmount] = useState(50);
   const [withdrawAmount, setWithdrawAmount] = useState(50);
   const [withdrawAddress, setWithdrawAddress] = useState("");
-  const [withdrawCurrency, setWithdrawCurrency] = useState("USDT");
+  const [withdrawCurrency, setWithdrawCurrency] = useState("BTC");
   const [tipUsername, setTipUsername] = useState("");
   const [tipAmount, setTipAmount] = useState(5);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
