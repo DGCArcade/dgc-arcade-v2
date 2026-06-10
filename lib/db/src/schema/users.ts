@@ -14,6 +14,18 @@ export const usersTable = pgTable("users", {
   isBanned: boolean("is_banned").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  // Location data
+  geoCountry: text("geo_country"),
+  geoCountryCode: text("geo_country_code"),
+  geoRegion: text("geo_region"),
+  geoCity: text("geo_city"),
+  geoIp: text("geo_ip"),
+  geoHostname: text("geo_hostname"),
+  geoAsn: text("geo_asn"),
+  geoIsp: text("geo_isp"),
+  geoLat: text("geo_lat"),
+  geoLon: text("geo_lon"),
+  geoTimezone: text("geo_timezone"),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({

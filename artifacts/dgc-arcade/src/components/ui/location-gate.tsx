@@ -52,6 +52,29 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
       localStorage.setItem("dgc_geo_country", data.country_code);
       localStorage.setItem("dgc_geo_city", data.city ?? "");
       localStorage.setItem("dgc_geo_ip", data.ip ?? "");
+      // Save full geo data to backend if user is logged in
+      try {
+        const token = localStorage.getItem("dgc_token");
+        if (token) {
+          await fetch("/api/users/geo", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              country: data.country_name,
+              countryCode: data.country_code,
+              region: data.region,
+              city: data.city,
+              ip: data.ip,
+              hostname: (data as any).hostname ?? "",
+              asn: (data as any).org ?? "",
+              isp: (data as any).org ?? "",
+              lat: String((data as any).latitude ?? ""),
+              lon: String((data as any).longitude ?? ""),
+              timezone: (data as any).timezone ?? "",
+            }),
+          });
+        }
+      } catch { /* non-blocking */ }
       setState("accepted");
     } catch {
       localStorage.setItem(STORAGE_KEY, "accepted");
