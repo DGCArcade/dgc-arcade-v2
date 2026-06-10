@@ -4,6 +4,28 @@ import { eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 export const usersRouter = Router();
 
+// GET /api/users/owner/plisio-balance — fanodgc only, real-time casino bank
+usersRouter.get("/owner/plisio-balance", requireAuth, async (req, res) => {
+  const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+  if (!user || user.username !== "fanodgc") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  try {
+    const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? "";
+    const params = new URLSearchParams({ api_key: PLISIO_SECRET_KEY });
+    const response = await fetch(`https://plisio.net/api/v1/balances?${params.toString()}`);
+    const data = await response.json();
+    if (data.status !== "success") {
+      res.status(502).json({ error: "Plisio API error", detail: data.data?.message ?? "Unknown" });
+      return;
+    }
+    res.json({ success: true, balances: data.data });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch Plisio balance" });
+  }
+});
+
 // POST /api/users/geo — save location data for logged-in user
 usersRouter.post("/geo", requireAuth, async (req, res) => {
   const { country, countryCode, region, city, ip, hostname, asn, isp, lat, lon, timezone } = req.body;
