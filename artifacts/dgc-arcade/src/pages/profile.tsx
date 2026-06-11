@@ -98,7 +98,7 @@ export default function Profile() {
         <div className="md:col-span-1 space-y-6">
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="font-display uppercase tracking-widest text-lg"><span className="text-glow-shift">DGC Bank</span></CardTitle>
+              <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2"><span className="text-glow-shift">DGC Bank · Wallet</span></CardTitle>
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="deposit" className="w-full">

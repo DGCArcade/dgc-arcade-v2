@@ -13,16 +13,28 @@ usersRouter.get("/owner/plisio-balance", requireAuth, async (req, res) => {
   }
   try {
     const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? "";
-    const params = new URLSearchParams({ api_key: PLISIO_SECRET_KEY });
-    const response = await fetch(`https://api.plisio.net/api/v1/balances?${params.toString()}`);
-    const data = await response.json();
-    if (data.status !== "success") {
-      res.status(502).json({ error: "Plisio API error", detail: data.data?.message ?? "Unknown" });
+    if (!PLISIO_SECRET_KEY) {
+      res.status(500).json({ error: "PLISIO_SECRET_KEY not configured" });
       return;
     }
-    res.json({ success: true, balances: data.data });
+    // Plisio has no /balances bulk endpoint — query each currency individually
+    const COINS = ["BTC", "ETH", "LTC", "DOGE", "SOL", "BCH", "TRX", "TON", "USDT_TRX", "USDT_TON", "XMR", "DASH"];
+    const balances: Record<string, string> = {};
+    await Promise.all(
+      COINS.map(async (coin) => {
+        try {
+          const params = new URLSearchParams({ api_key: PLISIO_SECRET_KEY });
+          const resp = await fetch(`https://api.plisio.net/api/v1/currencies/${coin}?${params.toString()}`);
+          const data = await resp.json();
+          if (data.status === "success" && data.data) {
+            balances[coin] = data.data.balance ?? "0";
+          }
+        } catch { /* skip failed coins */ }
+      })
+    );
+    res.json({ success: true, balances });
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch Plisio balance" });
+    res.status(500).json({ error: "Failed to fetch Plisio balances" });
   }
 });
 
