@@ -23,6 +23,9 @@ const PLISIO_CURRENCY_MAP: Record<string, string> = {
   SOL:      "SOL",
   BCH:      "BCH",
   TRX:      "TRX",
+  XMR:      "XMR",
+  DASH:     "DASH",
+  TON:      "TON",
   USDT_TON: "USDT_TON",
   USDT_TRX: "USDT_TRX",
 };
@@ -98,7 +101,9 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
     req.log.info({ plisio_response: JSON.stringify(data) }, "Plisio raw response");
     if (data.status !== "success" || !data.data) {
       req.log.error({ data }, "Plisio deposit error");
-      res.status(500).json({ error: "Payment gateway error: " + (data.message ?? "Unknown error") });
+      const errMsg = data.data?.message ?? data.message ?? (typeof data.data === "string" ? data.data : "Unknown error");
+      req.log.error({ plisio_full: JSON.stringify(data) }, "Plisio deposit full error");
+      res.status(500).json({ error: "Payment gateway error: " + errMsg });
       return;
     }
     // Fetch transaction details to get wallet address
