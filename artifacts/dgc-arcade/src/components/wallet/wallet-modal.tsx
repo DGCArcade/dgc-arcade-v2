@@ -13,15 +13,18 @@ import { formatCurrency } from "@/lib/format";
 import { Copy, ExternalLink, QrCode, Send, ShoppingCart, Wallet, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 
 const CURRENCIES = [
-  { value: "BTC",      label: "Bitcoin",      symbol: "₿", color: "#F7931A" },
-  { value: "ETH",      label: "Ethereum",     symbol: "Ξ", color: "#627EEA" },
-  { value: "LTC",      label: "Litecoin",     symbol: "Ł", color: "#A5A5A5" },
-  { value: "USDT_TON", label: "USDT (TON)",   symbol: "₮", color: "#26A17B" },
-  { value: "USDT_TRX", label: "USDT (TRC-20)",symbol: "₮", color: "#50AF95" },
-  { value: "DOGE",     label: "Dogecoin",     symbol: "Ð", color: "#C2A633" },
-  { value: "SOL",      label: "Solana",       symbol: "◎", color: "#9945FF" },
-  { value: "TRX",      label: "Tron",         symbol: "T", color: "#FF0013" },
-  { value: "BCH",      label: "Bitcoin Cash", symbol: "Ƀ", color: "#8DC351" },
+  { value: "BTC",      label: "Bitcoin",           symbol: "₿",  color: "#F7931A", network: "" },
+  { value: "ETH",      label: "Ethereum",           symbol: "Ξ",  color: "#627EEA", network: "" },
+  { value: "LTC",      label: "Litecoin",           symbol: "Ł",  color: "#BFBBBB", network: "" },
+  { value: "USDT_TRX", label: "Tether USDT",        symbol: "₮",  color: "#26A17B", network: "TRC-20" },
+  { value: "USDT_TON", label: "Tether USDT",        symbol: "₮",  color: "#0098EA", network: "TON" },
+  { value: "SOL",      label: "Solana",             symbol: "◎",  color: "#9945FF", network: "" },
+  { value: "DOGE",     label: "Dogecoin",           symbol: "Ð",  color: "#C2A633", network: "" },
+  { value: "TRX",      label: "Tron",               symbol: "⚡", color: "#FF0013", network: "" },
+  { value: "TON",      label: "Toncoin",            symbol: "💎", color: "#0098EA", network: "" },
+  { value: "BCH",      label: "Bitcoin Cash",       symbol: "Ƀ",  color: "#8DC351", network: "" },
+  { value: "XMR",      label: "Monero",             symbol: "ɱ",  color: "#FF6600", network: "" },
+  { value: "DASH",     label: "Dash",               symbol: "D",  color: "#008CE7", network: "" },
 ];
 
 interface WalletModalProps {
@@ -57,8 +60,11 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
       onSuccess: (res: any) => {
         setDepositResult({ address: res.address, qrCode: res.qrCode, paymentUrl: res.paymentUrl });
         setPaymentUrl(res.paymentUrl);
-        setTimeout(() => { window.location.href = res.paymentUrl; }, 1200);
-        toast({ title: "Invoice Created", description: "Redirecting to payment page..." });
+        // White-label: show address on-page. Only open Plisio if no address returned
+        if (!res?.address && res?.paymentUrl) {
+          window.open(res.paymentUrl, "_blank", "noopener,noreferrer");
+        }
+        toast({ title: "Deposit Address Ready", description: "Send crypto to the address shown. Balance updates automatically." });
       },
       onError: (err: unknown) => {
         const msg = (err as {data?: {error?: string}})?.data?.error ?? "Error";
@@ -143,14 +149,15 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                   <button
                     key={c.value}
                     onClick={() => { setCurrency(c.value); setDepositResult(null); setPaymentUrl(null); }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
                       currency === c.value
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-border/50 bg-secondary/40 text-muted-foreground hover:border-primary/40"
                     }`}
                   >
-                    <span style={{ color: c.color }}>{c.symbol}</span>
-                    {c.value}
+                    <span style={{ color: c.color }} className="text-sm">{c.symbol}</span>
+                    <span>{c.label === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
+                    {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground">{c.network}</span>}
                   </button>
                 ))}
               </div>
@@ -184,35 +191,36 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                   </Button>
                 </>
               ) : (
-                <div className="space-y-4 text-center py-2">
-                  <div className="w-16 h-16 rounded-full bg-green-500/20 border-2 border-green-500/50 flex items-center justify-center mx-auto">
-                    <span className="text-3xl">✓</span>
+                <div className="space-y-4 py-2">
+                  <div className="text-center">
+                    <h3 className="font-black text-lg uppercase tracking-wider mb-1">Send Payment</h3>
+                    <p className="text-xs text-muted-foreground">Send <span className="text-primary font-bold">{formatCurrency(amount)}</span> worth of <span className="text-primary font-bold">{selectedCurrency.label}</span> to this address.</p>
                   </div>
-                  <div>
-                    <h3 className="font-black text-lg uppercase tracking-wider mb-1">Invoice Created</h3>
-                    <p className="text-sm text-muted-foreground">Your payment page has opened in a new tab. Complete your deposit there.</p>
+                  {depositResult.qrCode && (
+                    <div className="flex justify-center">
+                      <img src={depositResult.qrCode} alt="QR Code" className="w-40 h-40 rounded-lg border border-border bg-white p-1" />
+                    </div>
+                  )}
+                  <div className="bg-secondary/60 rounded-xl p-3 border border-border/50 space-y-2">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Deposit Address</p>
+                    <p className="font-mono text-xs break-all text-foreground leading-relaxed">{depositResult.address || "Address loading..."}</p>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(depositResult.address); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                      className="w-full text-xs py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary font-bold hover:bg-primary/20 transition-colors"
+                    >
+                      {copied ? "✓ Copied!" : "Copy Address"}
+                    </button>
                   </div>
-                  <div className="bg-secondary/40 rounded-xl p-4 border border-border/50 text-left space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Amount</span>
-                      <span className="font-bold font-mono text-primary">{formatCurrency(amount)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Currency</span>
-                      <span className="font-bold">{selectedCurrency.label}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Status</span>
-                      <span className="font-bold text-yellow-400">Awaiting Payment</span>
-                    </div>
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                    <p className="text-yellow-400 text-xs font-bold uppercase mb-1">Important</p>
+                    <p className="text-xs text-muted-foreground">Only send <span className="font-bold">{selectedCurrency.label}</span> to this address. Wrong coin = permanent loss.</p>
                   </div>
-                  <div className="flex gap-3">
-                    <Button variant="outline" className="flex-1" onClick={() => window.open(depositResult.paymentUrl, "_blank")}>
-                      <ExternalLink className="w-4 h-4 mr-1.5" />Reopen Payment Page
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => window.open(depositResult.paymentUrl, "_blank")}>
+                      <ExternalLink className="w-3 h-3 mr-1" />View Invoice
                     </Button>
-                    <Button className="flex-1" onClick={() => { setDepositResult(null); setPaymentUrl(null); }}>New Deposit</Button>
+                    <Button size="sm" className="flex-1 text-xs" onClick={() => { setDepositResult(null); setPaymentUrl(null); }}>New Deposit</Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">Your balance will update automatically once payment is confirmed on the blockchain.</p>
                 </div>
               )}
             </TabsContent>
@@ -222,11 +230,13 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
               <div className="flex gap-2 flex-wrap">
                 {CURRENCIES.map(c => (
                   <button key={c.value} onClick={() => setWithdrawCurrency(c.value)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
                       withdrawCurrency === c.value ? "border-primary bg-primary/10 text-primary" : "border-border/50 bg-secondary/40 text-muted-foreground hover:border-primary/40"
                     }`}
                   >
-                    <span style={{ color: c.color }}>{c.symbol}</span>{c.value}
+                    <span style={{ color: c.color }} className="text-sm">{c.symbol}</span>
+                    <span>{c.label === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
+                    {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground">{c.network}</span>}
                   </button>
                 ))}
               </div>
@@ -297,7 +307,16 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                 <Label className="text-xs uppercase tracking-wider font-bold">Amount</Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono">$</span>
-                  <Input type="number" value={tipAmount} onChange={e => setTipAmount(Number(e.target.value))} className="pl-8 font-mono bg-secondary" min={1}/>
+                  <Input type="text" inputMode="decimal"
+                    value={tipAmount === 0 ? "" : String(tipAmount)}
+                    onChange={e => {
+                      const v = e.target.value.replace(/[^0-9.]/g, "");
+                      if (v === "" || v === ".") setTipAmount(0);
+                      else { const n = parseFloat(v); if (!isNaN(n)) setTipAmount(n); }
+                    }}
+                    onBlur={() => { if (!tipAmount || tipAmount < 1) setTipAmount(1); }}
+                    placeholder="5"
+                    className="pl-8 font-mono bg-secondary"/>
                 </div>
                 <div className="flex gap-2">
                   {[1,5,10,25].map(v => (
