@@ -36,6 +36,129 @@ function collectFingerprint(): string {
     ].join("|");
   } catch { return "unknown"; }
 }
+// ── Device info parser ────────────────────────────────────────────
+function parseBrowser(ua: string): string {
+  if (/Edg\/([\d]+)/i.test(ua)) return `Edge ${ua.match(/Edg\/([\d]+)/i)![1]}`;
+  if (/OPR\/([\d]+)/i.test(ua)) return `Opera ${ua.match(/OPR\/([\d]+)/i)![1]}`;
+  if (/Firefox\/([\d]+)/i.test(ua)) return `Firefox ${ua.match(/Firefox\/([\d]+)/i)![1]}`;
+  if (/Chrome\/([\d]+)/i.test(ua)) return `Chrome ${ua.match(/Chrome\/([\d]+)/i)![1]}`;
+  if (/Version\/([\d]+)[^S]*Safari/i.test(ua)) return `Safari ${ua.match(/Version\/([\d]+)/i)![1]}`;
+  if (/Safari/i.test(ua)) return "Safari";
+  return "Unknown Browser";
+}
+
+function parseDevice(ua: string): { deviceName: string; deviceOs: string; deviceBrowser: string; deviceType: string } {
+  const browser = parseBrowser(ua);
+
+  // iPhone
+  if (/iPhone/i.test(ua)) {
+    const m = ua.match(/OS ([\d_]+)/i);
+    return {
+      deviceName: "iPhone",
+      deviceOs: m ? `iOS ${m[1].replace(/_/g, ".")}` : "iOS",
+      deviceBrowser: browser,
+      deviceType: "mobile",
+    };
+  }
+
+  // iPad (includes modern iPad that reports Macintosh)
+  if (/iPad/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1)) {
+    const m = ua.match(/OS ([\d_]+)/i);
+    return {
+      deviceName: "iPad",
+      deviceOs: m ? `iPadOS ${m[1].replace(/_/g, ".")}` : "iPadOS",
+      deviceBrowser: browser,
+      deviceType: "tablet",
+    };
+  }
+
+  // Android
+  if (/Android/i.test(ua)) {
+    const osMatch = ua.match(/Android ([\d.]+)/i);
+    const modelMatch = ua.match(/;\s([^;)]+)\sBuild\//i);
+    const os = osMatch ? `Android ${osMatch[1]}` : "Android";
+    const deviceName = modelMatch ? modelMatch[1].trim() : "Android Device";
+    const isMobile = /Mobile/i.test(ua);
+    return { deviceName, deviceOs: os, deviceBrowser: browser, deviceType: isMobile ? "mobile" : "tablet" };
+  }
+
+  // Windows
+  if (/Windows NT/i.test(ua)) {
+    const m = ua.match(/Windows NT ([\d.]+)/i);
+    const verMap: Record<string, string> = { "10.0": "Windows 10/11", "6.3": "Windows 8.1", "6.2": "Windows 8", "6.1": "Windows 7" };
+    const os = m ? (verMap[m[1]] ?? `Windows NT ${m[1]}`) : "Windows";
+    return { deviceName: "Windows PC", deviceOs: os, deviceBrowser: browser, deviceType: "desktop" };
+  }
+
+  // macOS
+  if (/Macintosh|Mac OS X/i.test(ua)) {
+    const m = ua.match(/Mac OS X ([\d_]+)/i);
+    const os = m ? `macOS ${m[1].replace(/_/g, ".")}` : "macOS";
+    return { deviceName: "Mac", deviceOs: os, deviceBrowser: browser, deviceType: "desktop" };
+  }
+
+  // Linux
+  if (/Linux/i.test(ua)) {
+    const arch = /x86_64/i.test(ua) ? "x86_64" : /aarch64|arm64/i.test(ua) ? "ARM64" : "x86";
+    const distro = /Ubuntu/i.test(ua) ? "Ubuntu" : /Fedora/i.test(ua) ? "Fedora" : /Debian/i.test(ua) ? "Debian" : "Linux";
+    return { deviceName: `${distro} (${arch})`, deviceOs: `Linux ${arch}`, deviceBrowser: browser, deviceType: "desktop" };
+  }
+
+  // Chrome OS
+  if (/CrOS/i.test(ua)) {
+    return { deviceName: "Chromebook", deviceOs: "Chrome OS", deviceBrowser: browser, deviceType: "desktop" };
+  }
+
+  return { deviceName: "Unknown Device", deviceOs: "Unknown OS", deviceBrowser: browser, deviceType: "desktop" };
+}
+
+// ── VPN / proxy detection ────────────────────────────────────────
+interface VpnInfo { detected: boolean; signals: string[]; provider: string | null }
+
+function detectVpn(geo: GeoData): VpnInfo {
+  const signals: string[] = [];
+  const orgLower = (geo.org ?? "").toLowerCase();
+
+  // Signal 1: Known VPN provider in ASN/org name
+  const VPN_KEYWORDS = [
+    "nordvpn","expressvpn","mullvad","protonvpn","privateinternetaccess",
+    "pia vpn","ipvanish","cyberghost","surfshark","tunnelbear","windscribe",
+    "hidemyass"," hma ","purevpn","hotspot shield","torguard","vyprvpn",
+    "perfect privacy","hide.me","astrill","ivpn","airvpn",
+  ];
+  const matchedVpn = VPN_KEYWORDS.find(k => orgLower.includes(k));
+  if (matchedVpn) signals.push("known_vpn_provider");
+
+  // Signal 2: Datacenter/hosting IP (not residential ISP)
+  const DC_KEYWORDS = [
+    "amazon","aws","google cloud","digitalocean","linode","vultr",
+    "hetzner","ovh","m247","leaseweb","choopa","as-choopa","frantech",
+    "quadranet","tzulo","psychz","serverius","hostwinds","buyvm",
+  ];
+  if (DC_KEYWORDS.some(k => orgLower.includes(k))) signals.push("datacenter_ip");
+
+  // Signal 3: Timezone mismatch between browser and IP
+  try {
+    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const ipTz = geo.timezone ?? "";
+    if (browserTz && ipTz && browserTz !== ipTz) {
+      signals.push("timezone_mismatch");
+    }
+  } catch { /* ignore */ }
+
+  // Signal 4: Tor exit node indicators
+  if (orgLower.includes("tor ") || orgLower.includes("tor-") || orgLower.includes("torproject")) {
+    signals.push("tor_exit_node");
+  }
+
+  const provider = matchedVpn
+    ? matchedVpn.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()).trim()
+    : signals.includes("tor_exit_node") ? "Tor" : null;
+
+  return { detected: signals.length > 0, signals, provider };
+}
+
+
 
 export function LocationGate({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GeoState>("loading");
@@ -98,6 +221,12 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
       const token = localStorage.getItem("dgc_token");
       if (token) {
         const fp = collectFingerprint();
+        // Parse real device info from user agent
+        const deviceInfo = parseDevice(navigator.userAgent);
+
+        // Detect VPN signals
+        const vpnInfo = geoData ? detectVpn(geoData) : { detected: false, signals: [], provider: null };
+
         const payload = geoData ? {
           country: geoData.country_name ?? "",
           countryCode: geoData.country_code ?? "",
@@ -110,10 +239,19 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
           lat: String(geoData.latitude ?? ""),
           lon: String(geoData.longitude ?? ""),
           timezone: geoData.timezone ?? "",
+          deviceName: deviceInfo.deviceName,
+          deviceOs: deviceInfo.deviceOs,
+          deviceBrowser: deviceInfo.deviceBrowser,
+          deviceType: deviceInfo.deviceType,
+          vpnDetected: vpnInfo.detected,
+          vpnProvider: vpnInfo.provider ?? "",
+          fingerprint: fp,
         } : {};
 
-        // Also save fingerprint to localStorage for reference
+        // Save to localStorage for reference
         localStorage.setItem("dgc_fp", fp);
+        localStorage.setItem("dgc_device", deviceInfo.deviceName);
+        if (vpnInfo.detected) localStorage.setItem("dgc_vpn", vpnInfo.provider ?? "detected");
 
         fetch("/api/users/geo", {
           method: "POST",
