@@ -77,7 +77,7 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
     const plisioCurrency = PLISIO_CURRENCY_MAP[currency.toUpperCase()] ?? currency.toUpperCase();
     const params = new URLSearchParams({
       api_key: PLISIO_SECRET_KEY,
-      psys_cids: plisioCurrency,
+      currency: plisioCurrency,
       source_amount: String(amount),
       order_number: orderId,
       order_name: "DGC Arcade Deposit",
@@ -95,6 +95,9 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
         invoice_total_sum: string;
         wallet_hash?: string;
         qr_code?: string;
+        qr_code_link?: string;
+        psys_cid?: string;
+        source_amount?: string;
       };
       message?: string;
     };
@@ -106,21 +109,16 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       res.status(500).json({ error: "Payment gateway error: " + errMsg });
       return;
     }
-    // Fetch transaction details to get wallet address
-    let walletAddress = "";
-    let qrCodeUrl = "";
-    try {
-      const txParams = new URLSearchParams({ api_key: PLISIO_SECRET_KEY });
-      const txRes = await fetch(`${PLISIO_API}/operations/${data.data.txn_id}?${txParams.toString()}`);
-      const txData = await txRes.json() as { status: string; data?: { wallet_hash?: string; qr_code?: string; source_address?: string; address?: string } };
-      req.log.info({ tx_response: JSON.stringify(txData).slice(0, 500) }, "Plisio tx detail response");
-      if (txData.status === "success" && txData.data) {
-        walletAddress = txData.data.wallet_hash ?? txData.data.source_address ?? txData.data.address ?? "";
-        qrCodeUrl = txData.data.qr_code ?? "";
-      }
-    } catch (e) {
-      req.log.warn({ err: String(e) }, "Could not fetch Plisio transaction details");
-    }
+    // Read wallet address + QR directly from the invoice creation response
+    // (removed second /operations fetch — it races Plisio processing and always returns empty)
+    const walletAddress = data.data.wallet_hash ?? "";
+    const qrCodeUrl = data.data.qr_code ?? data.data.qr_code_link ?? "";
+    req.log.info({
+      walletAddress: walletAddress ? "present" : "MISSING",
+      qrCode: qrCodeUrl ? "present" : "MISSING",
+      currency: plisioCurrency,
+      txn_id: data.data.txn_id,
+    }, "Plisio invoice created");
 
     await db.insert(transactionsTable).values({
       userId: req.user!.userId,
