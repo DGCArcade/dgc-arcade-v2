@@ -41,10 +41,18 @@ export default function Profile() {
       const apiUrl = (import.meta.env.VITE_API_URL ?? "") + "/api/users/owner/plisio-balance";
       const res = await fetch(apiUrl, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      if (!res.ok) { setPlisioError(data.error ?? "Failed to load"); return; }
+      if (!res.ok) {
+        const detail = data.detail ? ` (${data.detail})` : "";
+        setPlisioError((data.error ?? "Failed to load") + detail);
+        return;
+      }
+      if (!data.balances || Object.keys(data.balances).length === 0) {
+        setPlisioError("No balances returned — your Plisio account may need the Balance API enabled. Go to Plisio → API Settings → enable Balance access.");
+        return;
+      }
       setPlisioBalances(data.balances);
       setLastRefresh(new Date());
-    } catch { setPlisioError("Network error"); }
+    } catch (e: any) { setPlisioError("Network error: " + (e?.message ?? "unknown")); }
     finally { setPlisioLoading(false); }
   }, [user?.username]);
 

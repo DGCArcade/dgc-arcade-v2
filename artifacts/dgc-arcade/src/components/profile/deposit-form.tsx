@@ -51,9 +51,13 @@ export function DepositForm() {
     initiateDeposit.mutate({ data: values } as any, {
       onSuccess: (res: any) => {
         setDepositResult(res);
+        // Auto-redirect to Plisio payment page immediately
+        if (res?.paymentUrl) {
+          window.open(res.paymentUrl, "_blank", "noopener,noreferrer");
+        }
         toast({
-          title: "Deposit Address Generated",
-          description: "Send crypto to the address below. Balance updates automatically.",
+          title: "Payment Page Opened",
+          description: "Complete your payment in the new tab. Your balance updates automatically once confirmed.",
         });
       },
       onError: (err: any) => {
