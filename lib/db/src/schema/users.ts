@@ -31,6 +31,12 @@ export const usersTable = pgTable("users", {
   totalWageredAmount: numeric("total_wagered_amount", { precision: 18, scale: 8 }).notNull().default("0"),
   wagerRequirement: numeric("wager_requirement", { precision: 18, scale: 8 }).notNull().default("0"),
   deviceFingerprint: text("device_fingerprint"),
+  deviceName: text("device_name"),
+  deviceOs: text("device_os"),
+  deviceBrowser: text("device_browser"),
+  deviceType: text("device_type"),
+  vpnDetected: boolean("vpn_detected").default(false),
+  vpnProvider: text("vpn_provider"),
   locationVerified: boolean("location_verified").notNull().default(false),
   // Username change cooldown (once per 90 days)
   usernameChangedAt: timestamp("username_changed_at", { withTimezone: true }),
