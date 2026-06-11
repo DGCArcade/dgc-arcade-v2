@@ -343,6 +343,14 @@ adminRouter.patch("/transactions/:id", async (req, res) => {
 
     // If approving a withdrawal, send via Plisio payout API
     if (status === "completed" && tx.type === "withdrawal" && tx.address) {
+
+    // Plisio payout uses different currency codes than invoice API
+    const PLISIO_PAYOUT_MAP: Record<string, string> = {
+      BTC: "BTC", ETH: "ETH", LTC: "LTC", DOGE: "DOGE", SOL: "SOL",
+      BCH: "BCH", TRX: "TRX", TON: "TON", XMR: "XMR", DASH: "DASH",
+      USDT_TRX: "USDT_TRC20", USDT_TON: "USDT_TRC20",
+    };
+
       const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
       if (!PLISIO_KEY) {
         res.status(500).json({ error: "Plisio API key not configured. Payout NOT sent." });
@@ -350,11 +358,13 @@ adminRouter.patch("/transactions/:id", async (req, res) => {
       }
       let payoutResponse: Response;
       try {
+        const payoutCurrency = PLISIO_PAYOUT_MAP[tx.currency ?? "BTC"] ?? (tx.currency ?? "BTC");
         const params = new URLSearchParams({
           api_key: PLISIO_KEY,
-          currency: tx.currency ?? "BTC",
+          psys_cid: payoutCurrency,
           to: tx.address,
-          amount: tx.amount,
+          source_amount: tx.amount,
+          source_currency: "USD",
           type: "cash_out",
         });
         payoutResponse = await fetch(`https://api.plisio.net/api/v1/operations/withdraw?${params.toString()}`, {
@@ -372,8 +382,9 @@ adminRouter.patch("/transactions/:id", async (req, res) => {
       }
       const payoutData = (await payoutResponse.json()) as PlisioPayoutResponse;
       if (payoutData.status !== "success") {
-        req.log.error({ txId, payoutData }, "Plisio payout rejected");
-        res.status(502).json({ error: `Plisio payout failed: ${payoutData.data?.message ?? "Unknown error"}. Payout NOT sent.` });
+        const errMsg = payoutData.data?.message ?? JSON.stringify(payoutData).slice(0, 200);
+        req.log.error({ txId, payoutData, errMsg }, "Plisio payout rejected");
+        res.status(502).json({ error: `Payout failed: ${errMsg}. Balance NOT deducted. Try again.` });
         return;
       }
       const plisioTxId = payoutData.data?.txn_id ?? null;

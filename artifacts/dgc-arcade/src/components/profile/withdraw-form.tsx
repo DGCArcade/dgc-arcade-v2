@@ -17,18 +17,18 @@ const withdrawSchema = z.object({
 });
 
 const CURRENCIES = [
-  { value: "BTC",      label: "Bitcoin (BTC)" },
-  { value: "ETH",      label: "Ethereum (ETH)" },
-  { value: "LTC",      label: "Litecoin (LTC)" },
-  { value: "USDT_TRX", label: "Tether USDT (TRC-20)" },
-  { value: "USDT_TON", label: "Tether USDT (TON)" },
-  { value: "SOL",      label: "Solana (SOL)" },
-  { value: "DOGE",     label: "Dogecoin (DOGE)" },
-  { value: "TRX",      label: "Tron (TRX)" },
-  { value: "TON",      label: "Toncoin (TON)" },
-  { value: "BCH",      label: "Bitcoin Cash (BCH)" },
-  { value: "XMR",      label: "Monero (XMR)" },
-  { value: "DASH",     label: "Dash (DASH)" },
+  { value: "BTC",      label: "₿ Bitcoin (BTC)" },
+  { value: "ETH",      label: "Ξ Ethereum (ETH)" },
+  { value: "LTC",      label: "Ł Litecoin (LTC)" },
+  { value: "USDT_TRX", label: "₮ Tether USDT · TRC-20" },
+  { value: "USDT_TON", label: "₮ Tether USDT · TON" },
+  { value: "SOL",      label: "◎ Solana (SOL)" },
+  { value: "DOGE",     label: "Ð Dogecoin (DOGE)" },
+  { value: "TRX",      label: "⚡ Tron (TRX)" },
+  { value: "TON",      label: "💎 Toncoin (TON)" },
+  { value: "BCH",      label: "Ƀ Bitcoin Cash (BCH)" },
+  { value: "XMR",      label: "ɱ Monero (XMR)" },
+  { value: "DASH",     label: "D Dash (DASH)" },
 ];
 
 export function WithdrawForm() {
