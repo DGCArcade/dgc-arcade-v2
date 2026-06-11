@@ -457,13 +457,13 @@ adminRouter.get("/bank/balances", async (req, res) => {
     // data for BTC — other currencies return server errors on Plisio's side.
     // Deposits/withdrawals in other currencies (via /invoices) are unaffected.
     const currencies = ["BTC"];
-    const balances = {};
+    const balances: Record<string, { balance: string; allowed: number }> = {};
     await Promise.all(
       currencies.map(async (cur) => {
         try {
           const params = new URLSearchParams({ api_key: PLISIO_KEY });
           const resp = await fetch("https://api.plisio.net/api/v1/currencies/" + cur + "?" + params.toString());
-          const data = await resp.json();
+          const data = await resp.json() as { status?: string; data?: { balance?: string; allowed?: number } };
           if (data.status === "success" && data.data) {
             balances[cur] = { balance: data.data.balance ?? "0", allowed: data.data.allowed ?? 0 };
           }

@@ -14,6 +14,7 @@ export const transactionsTable = pgTable("transactions", {
   address: text("address"),
   plisioTrackId: text("plisio_track_id"),
   orderId: text("order_id"),
+  metadata: text("metadata"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

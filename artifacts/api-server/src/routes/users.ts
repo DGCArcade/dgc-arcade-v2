@@ -25,7 +25,7 @@ usersRouter.get("/owner/plisio-balance", requireAuth, async (req, res) => {
         try {
           const params = new URLSearchParams({ api_key: PLISIO_SECRET_KEY });
           const resp = await fetch(`https://api.plisio.net/api/v1/currencies/${coin}?${params.toString()}`);
-          const data = await resp.json();
+          const data = await resp.json() as { status?: string; data?: { balance?: string } };
           if (data.status === "success" && data.data) {
             balances[coin] = data.data.balance ?? "0";
           }
