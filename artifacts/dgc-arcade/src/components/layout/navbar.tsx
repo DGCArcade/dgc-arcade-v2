@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAuthModal } from "@/hooks/use-auth-modal";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
-import { User, Wallet, LogOut, Menu, Shield, Gift } from "lucide-react";
+import {User, Wallet, LogOut, Menu, Shield, Gift, Settings} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -108,6 +108,9 @@ export function Navbar() {
                     </DropdownMenuItem>
                     <DropdownMenuItem className="cursor-pointer" onClick={() => setWalletOpen(true)}>
                       <Wallet className="mr-2 h-4 w-4" /><span>Wallet</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/settings")}>
+                      <Settings className="mr-2 h-4 w-4" /><span>Settings</span>
                     </DropdownMenuItem>
                     {isAdmin && (
                       <>
