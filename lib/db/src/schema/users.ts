@@ -32,6 +32,10 @@ export const usersTable = pgTable("users", {
   wagerRequirement: numeric("wager_requirement", { precision: 18, scale: 8 }).notNull().default("0"),
   deviceFingerprint: text("device_fingerprint"),
   locationVerified: boolean("location_verified").notNull().default(false),
+  // Username change cooldown (once per 90 days)
+  usernameChangedAt: timestamp("username_changed_at", { withTimezone: true }),
+  // Soft-delete: requested date, data kept 1 year
+  deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({
