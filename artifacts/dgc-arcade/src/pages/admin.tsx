@@ -88,6 +88,10 @@ interface AdminTx {
 
 interface AdminStats {
   totalUsers: number;
+  activeToday: number;
+  totalDeposited: number;
+  totalWithdrawn: number;
+  newUsersToday: number;
   totalBets: number;
   totalWagered: number;
   biggestWin: number;
@@ -1260,8 +1264,12 @@ export default function AdminDashboard() {
                           {[
                             { label: "Total Users", value: stats?.totalUsers ?? "—" },
                             { label: "Active Today", value: stats?.activeToday ?? "—" },
+                            { label: "New Today", value: stats?.newUsersToday ?? "—" },
                             { label: "Pending W/D", value: stats?.pendingWithdrawals ?? "—" },
                             { label: "Pending Amount", value: stats ? formatCurrency(stats.pendingWithdrawalAmount) : "—" },
+                            { label: "Total Deposited", value: stats ? formatCurrency(stats.totalDeposited) : "—" },
+                            { label: "Total Withdrawn", value: stats ? formatCurrency(stats.totalWithdrawn) : "—" },
+                            { label: "Banned Users", value: stats?.bannedUsers ?? "—" },
                           ].map(s => (
                             <div key={s.label} className="bg-secondary/40 rounded-lg p-3">
                               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{s.label}</p>
