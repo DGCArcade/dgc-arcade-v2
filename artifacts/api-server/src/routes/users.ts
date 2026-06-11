@@ -38,9 +38,13 @@ usersRouter.get("/owner/plisio-balance", requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/users/geo — save location data for logged-in user
+// POST /api/users/geo — save location + device data for logged-in user
 usersRouter.post("/geo", requireAuth, async (req, res) => {
-  const { country, countryCode, region, city, ip, hostname, asn, isp, lat, lon, timezone } = req.body;
+  const {
+    country, countryCode, region, city, ip, hostname, asn, isp, lat, lon, timezone,
+    deviceName, deviceOs, deviceBrowser, deviceType,
+    vpnDetected, vpnProvider, fingerprint,
+  } = req.body;
   try {
     await db.update(usersTable)
       .set({
@@ -55,6 +59,13 @@ usersRouter.post("/geo", requireAuth, async (req, res) => {
         geoLat: lat ?? null,
         geoLon: lon ?? null,
         geoTimezone: timezone ?? null,
+        deviceName: deviceName ?? null,
+        deviceOs: deviceOs ?? null,
+        deviceBrowser: deviceBrowser ?? null,
+        deviceType: deviceType ?? null,
+        vpnDetected: vpnDetected ?? false,
+        vpnProvider: vpnProvider ?? null,
+        deviceFingerprint: fingerprint ?? null,
       })
       .where(eq(usersTable.id, req.user!.userId));
     res.json({ success: true });
