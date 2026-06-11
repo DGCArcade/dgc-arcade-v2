@@ -56,7 +56,7 @@ authRouter.post("/register", async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const [user] = await db
       .insert(usersTable)
-      .values({ username, passwordHash, balance: "100", deviceFingerprint })
+      .values({ username, passwordHash, balance: "100", wagerRequirement: "100", deviceFingerprint })
       .returning();
 
     const token = signToken({ userId: user.id, username: user.username, role: user.role });

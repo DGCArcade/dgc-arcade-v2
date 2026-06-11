@@ -179,7 +179,7 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     if (user) {
       const newBalance = parseFloat(user.balance) + creditAmount;
       const newTotalDeposited = parseFloat(user.totalDeposited ?? "0") + creditAmount;
-      const newWagerReq = newTotalDeposited * 0.75;
+      const newWagerReq = newTotalDeposited * 1.0;
       await db.update(usersTable).set({
         balance: String(newBalance),
         totalDeposited: String(newTotalDeposited),
@@ -216,7 +216,7 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     // ── FRAUD CHECK 2: 75% wagering requirement ───────────────────
     const totalDeposited = parseFloat(user.totalDeposited ?? "0");
     const totalWageredAmount = parseFloat(user.totalWageredAmount ?? "0");
-    const requiredWager = totalDeposited * 0.75;
+    const requiredWager = totalDeposited * 1.0;
     if (totalDeposited > 0 && totalWageredAmount < requiredWager) {
       const remaining = (requiredWager - totalWageredAmount).toFixed(2);
       res.status(403).json({
@@ -240,7 +240,7 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       flagReasons.push("Immediate high-value withdrawal on new account");
     }
     // Withdraw almost entire balance right after depositing
-    if (withdrawRatio > 0.95 && totalWageredAmount < totalDeposited * 0.1) {
+    if (withdrawRatio > 0.95 && totalWageredAmount < totalDeposited * 1.0) {
       flagReasons.push("Withdrawal exceeds 95% of deposit with minimal play");
     }
     // New account large withdrawal

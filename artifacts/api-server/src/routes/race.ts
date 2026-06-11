@@ -38,7 +38,7 @@ raceRouter.get("/racers", (_req, res) => {
 });
 
 raceRouter.post("/run", requireAuth, async (req, res) => {
-  const userId = (req as any).userId as number;
+  const userId = req.user!.userId as number;
   const { betAmount, racerId } = req.body as { betAmount: number; racerId: number };
 
   if (!betAmount || betAmount <= 0) return res.status(400).json({ error: "Invalid bet amount" });
