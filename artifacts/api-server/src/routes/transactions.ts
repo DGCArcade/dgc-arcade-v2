@@ -210,6 +210,15 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(401).json({ error: "User not found" }); return; }
 
+    // Block withdrawals for creator and tester accounts — enforced at backend level
+    if (user.withdrawalsEnabled === false) {
+      res.status(403).json({
+        error: "Withdrawals are not available for this account type.",
+        detail: "This account uses promotional credits. Contact DGC Arcade support."
+      });
+      return;
+    }
+
     // ── FRAUD CHECK 1: Location must be verified ──────────────────
     if (!user.locationVerified) {
       res.status(403).json({ error: "Location verification required before withdrawing. Please enable location access and refresh." });

@@ -42,6 +42,28 @@ export const usersTable = pgTable("users", {
   usernameChangedAt: timestamp("username_changed_at", { withTimezone: true }),
   // Soft-delete: requested date, data kept 1 year
   deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
+
+  // ── Account type system ────────────────────────────────────────
+  // "normal"  = regular player — real deposits, can withdraw
+  // "creator" = streamer/influencer — house promo credits, no withdrawal
+  // "tester"  = QA/staff — no deposits, no withdrawal
+  // Only the owner (fanodgc) can change this field
+  accountType: text("account_type").notNull().default("normal"),
+
+  // Promotional/house-issued credits — completely separate from real balance
+  // Cannot be withdrawn under any circumstances
+  promoBalance: numeric("promo_balance", { precision: 18, scale: 8 }).notNull().default("0"),
+
+  // Hard withdrawal gate — false for creator and tester accounts
+  withdrawalsEnabled: boolean("withdrawals_enabled").notNull().default(true),
+
+  // DGC Bank PIN — 5 to 15 digits, auto-generated when admin account is created
+  // Hashed in database — owner can view it ONCE, cannot change it
+  dgcBankPin: text("dgc_bank_pin"),
+
+  // Tracks whether the owner has already viewed this admin PIN
+  // Once true, PIN is hidden from owner view forever
+  dgcBankPinRevealed: boolean("dgc_bank_pin_revealed").notNull().default(false),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({
@@ -53,3 +75,5 @@ export const insertUserSchema = createInsertSchema(usersTable).omit({
 });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof usersTable.$inferSelect;
+
+

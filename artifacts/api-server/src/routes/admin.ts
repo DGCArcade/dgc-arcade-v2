@@ -1,4 +1,5 @@
 import { Router } from "express";
+import crypto from "crypto";
 import { db, usersTable, betsTable, transactionsTable, platformSettingsTable } from "@workspace/db";
 import { eq, desc, ilike, and, sql } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/auth.js";
@@ -878,3 +879,155 @@ adminRouter.get("/stats", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// ── ACCOUNT TYPE SYSTEM ───────────────────────────────────────────────────────
+
+// PATCH /api/admin/users/:id/account-type
+// Only the owner (fanodgc / role=owner) can set account types and promo balance
+// When promoting to admin role, auto-generates a one-time-viewable DGC Bank PIN
+adminRouter.patch("/users/:id/account-type", async (req, res) => {
+  // Verify caller is owner
+  const [caller] = await db.select({ role: usersTable.role, username: usersTable.username })
+    .from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+  if (!caller || caller.role !== "owner") {
+    res.status(403).json({ error: "Only the platform owner can change account types" });
+    return;
+  }
+
+  const targetId = parseInt(req.params.id);
+  if (isNaN(targetId)) { res.status(400).json({ error: "Invalid user ID" }); return; }
+
+  const { accountType, promoBalance, role } = req.body as {
+    accountType?: "normal" | "creator" | "tester";
+    promoBalance?: number;
+    role?: "player" | "admin";
+  };
+
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId)).limit(1);
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+
+  // Prevent changing owner account
+  if (target.role === "owner") {
+    res.status(403).json({ error: "Cannot modify the owner account" });
+    return;
+  }
+
+  const updates: Record<string, any> = {};
+  let plainPin: string | null = null;
+
+  // Set account type and withdrawal eligibility
+  if (accountType) {
+    updates.accountType = accountType;
+    // creator and tester accounts cannot withdraw
+    updates.withdrawalsEnabled = accountType === "normal";
+  }
+
+  // Set promo balance (house credits)
+  if (typeof promoBalance === "number" && promoBalance >= 0) {
+    updates.promoBalance = String(promoBalance);
+    // When giving promo balance, add it to display balance too
+    updates.balance = String(promoBalance);
+  }
+
+  // Promote to admin — auto-generate PIN
+  if (role === "admin" && target.role !== "admin") {
+    updates.role = "admin";
+    // Generate a secure random 10-digit PIN
+    plainPin = String(crypto.randomInt(1000000000, 9999999999));
+    // Hash it — stored as SHA-256 with user ID as salt
+    const pinHash = crypto.createHash("sha256")
+      .update(plainPin + ":" + targetId)
+      .digest("hex");
+    updates.dgcBankPin = pinHash;
+    updates.dgcBankPinRevealed = false;
+  }
+
+  // Demote from admin back to player
+  if (role === "player" && target.role === "admin") {
+    updates.role = "player";
+    updates.dgcBankPin = null;
+    updates.dgcBankPinRevealed = false;
+  }
+
+  await db.update(usersTable).set(updates).where(eq(usersTable.id, targetId));
+
+  res.json({
+    success: true,
+    updated: { ...updates, dgcBankPin: undefined }, // never return hash
+    // Return plaintext PIN exactly once — owner must note it down
+    ...(plainPin ? { newAdminPin: plainPin, pinWarning: "Save this PIN now. It will never be shown again." } : {}),
+  });
+});
+
+// GET /api/admin/users/:id/reveal-pin
+// Owner only — reveals the plain PIN once, then marks it as revealed forever
+adminRouter.get("/users/:id/reveal-pin", async (req, res) => {
+  const [caller] = await db.select({ role: usersTable.role })
+    .from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+  if (!caller || caller.role !== "owner") {
+    res.status(403).json({ error: "Only the owner can reveal admin PINs" });
+    return;
+  }
+
+  const targetId = parseInt(req.params.id);
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId)).limit(1);
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+  if (!target.dgcBankPin) { res.status(404).json({ error: "No PIN set for this user" }); return; }
+  if (target.dgcBankPinRevealed) {
+    res.status(410).json({ error: "PIN has already been revealed and cannot be shown again. Reset by demoting and re-promoting the admin." });
+    return;
+  }
+
+  // Mark as revealed — this is irreversible
+  await db.update(usersTable)
+    .set({ dgcBankPinRevealed: true })
+    .where(eq(usersTable.id, targetId));
+
+  res.json({
+    success: true,
+    warning: "This PIN will never be shown again. Write it down now.",
+    // We cannot return the plaintext here — it was only available at creation
+    // The owner must use the PIN shown at promotion time
+    message: "PIN was shown at the time of admin promotion. This endpoint only confirms the PIN exists. To reset: demote the admin to player, then re-promote to generate a new PIN.",
+  });
+});
+
+// POST /api/admin/verify-bank-pin
+// Admin verifies their DGC Bank PIN to access the bank section
+adminRouter.post("/verify-bank-pin", async (req, res) => {
+  const { pin } = req.body as { pin?: string };
+  if (!pin || pin.length < 5 || pin.length > 15) {
+    res.status(400).json({ error: "PIN must be 5 to 15 digits" });
+    return;
+  }
+
+  const [user] = await db.select({
+    id: usersTable.id,
+    dgcBankPin: usersTable.dgcBankPin,
+    role: usersTable.role,
+  }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+
+  if (!user) { res.status(401).json({ error: "User not found" }); return; }
+  if (!user.dgcBankPin) { res.status(403).json({ error: "No DGC Bank PIN set for your account" }); return; }
+
+  // Verify PIN — hash the input and compare
+  const inputHash = crypto.createHash("sha256")
+    .update(pin + ":" + user.id)
+    .digest("hex");
+
+  if (inputHash !== user.dgcBankPin) {
+    res.status(401).json({ error: "Incorrect PIN" });
+    return;
+  }
+
+  // Issue a short-lived bank session token (valid 30 minutes)
+  const sessionToken = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+  // Store token temporarily in memory (simple approach — good enough for admin panel)
+  if (!(global as any).__bankSessions) (global as any).__bankSessions = {};
+  (global as any).__bankSessions[sessionToken] = { userId: user.id, expiresAt };
+
+  res.json({ success: true, sessionToken, expiresAt });
+});
+
