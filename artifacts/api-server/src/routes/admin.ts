@@ -380,7 +380,36 @@ adminRouter.patch("/transactions/:id", async (req, res) => {
         status: string;
         data?: { txn_id?: string; message?: string };
       }
-      const payoutData = (await payoutResponse.json()) as PlisioPayoutResponse;
+      const rawText = await payoutResponse.text();
+
+      req.log.error(
+        {
+          txId,
+          status: payoutResponse.status,
+          body: rawText.slice(0, 2000),
+        },
+        "PLISIO RAW RESPONSE",
+      );
+
+      let payoutData: PlisioPayoutResponse;
+
+      try {
+        payoutData = JSON.parse(rawText);
+      } catch {
+        req.log.error(
+          {
+            txId,
+            rawText,
+          },
+          "PLISIO RETURNED NON JSON",
+        );
+
+        res.status(502).json({
+          error: "Plisio returned invalid response",
+        });
+
+        return;
+      }
       if (payoutData.status !== "success") {
         const errMsg = payoutData.data?.message ?? JSON.stringify(payoutData).slice(0, 200);
         req.log.error({ txId, payoutData, errMsg }, "Plisio payout rejected");
