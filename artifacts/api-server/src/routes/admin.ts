@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, usersTable, betsTable, transactionsTable } from "@workspace/db";
+import { db, usersTable, betsTable, transactionsTable, platformSettingsTable } from "@workspace/db";
 import { eq, desc, ilike, and, sql } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/auth.js";
 
@@ -480,10 +480,78 @@ adminRouter.get("/bank/pending-withdrawals", async (req, res) => {
 });
 
 
+
+// ── Default platform settings ──
+const DEFAULT_SETTINGS = {
+  aiSensitivity: 75,
+  autoApproveUnder: 50,
+  requireManualOver: 500,
+};
+
+async function getPlatformSettings() {
+  const rows = await db.select().from(platformSettingsTable);
+  const settings: Record<string, number> = { ...DEFAULT_SETTINGS };
+  for (const row of rows) {
+    if (row.key in settings) {
+      const num = parseFloat(row.value);
+      if (!isNaN(num)) settings[row.key as keyof typeof DEFAULT_SETTINGS] = num;
+    }
+  }
+  return settings as typeof DEFAULT_SETTINGS;
+}
+
+// GET /api/admin/bank/settings — fanodgc only
+adminRouter.get("/bank/settings", async (req, res) => {
+  const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+  if (!user || user.username !== "fanodgc") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  try {
+    const settings = await getPlatformSettings();
+    res.json({ settings });
+  } catch (err) {
+    req.log.error({ err }, "Get bank settings error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// PUT /api/admin/bank/settings — fanodgc only
+adminRouter.put("/bank/settings", async (req, res) => {
+  const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+  if (!user || user.username !== "fanodgc") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  try {
+    const { aiSensitivity, autoApproveUnder, requireManualOver } = req.body as Record<string, number>;
+    const updates: Record<string, number> = {};
+    if (typeof aiSensitivity === "number" && aiSensitivity >= 0 && aiSensitivity <= 100) updates.aiSensitivity = aiSensitivity;
+    if (typeof autoApproveUnder === "number" && autoApproveUnder >= 0) updates.autoApproveUnder = autoApproveUnder;
+    if (typeof requireManualOver === "number" && requireManualOver >= 0) updates.requireManualOver = requireManualOver;
+
+    for (const [key, value] of Object.entries(updates)) {
+      await db.insert(platformSettingsTable)
+        .values({ key, value: String(value) })
+        .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value: String(value) } });
+    }
+
+    const settings = await getPlatformSettings();
+    res.json({ success: true, settings });
+  } catch (err) {
+    req.log.error({ err }, "Update bank settings error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ── OWNER BANK: GET /api/admin/bank/fraud-alerts ─────────────────────────────
 // Real AI fraud detection — scores every pending withdrawal using behavioral rules
 adminRouter.get("/bank/fraud-alerts", async (req, res) => {
   try {
+    const settings = await getPlatformSettings();
+    // Sensitivity 0-100 maps to a multiplier of 0.5x - 1.5x on raw risk scores
+    const sensitivityMultiplier = 0.5 + (settings.aiSensitivity / 100);
+
     // Step 1 — Pull all pending withdrawals with user info
     const pending = await db
       .select({
@@ -587,8 +655,21 @@ adminRouter.get("/bank/fraud-alerts", async (req, res) => {
           riskScore += 15;
         }
 
-        // Cap at 99
-        riskScore = Math.min(riskScore, 99);
+        // Apply AI sensitivity multiplier, then cap at 99
+        riskScore = Math.min(Math.round(riskScore * sensitivityMultiplier), 99);
+
+        // Auto-approve very small amounts under the configured threshold,
+        // unless they're already high risk
+        if (amount <= settings.autoApproveUnder && riskScore < 50) {
+          return null;
+        }
+
+        // Amounts over the manual-review threshold are always flagged,
+        // even if no rules triggered (minimum baseline risk)
+        if (amount > settings.requireManualOver && flags.length === 0) {
+          flags.push("manual_review_threshold");
+          riskScore = Math.max(riskScore, Math.round(20 * sensitivityMultiplier));
+        }
 
         // Only return if actually flagged (at least 1 rule triggered)
         if (flags.length === 0) return null;
