@@ -90,7 +90,7 @@ export default function Profile() {
         <div className="md:col-span-1 space-y-6">
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="font-display uppercase tracking-widest text-lg">Cashier</CardTitle>
+              <CardTitle className="font-display uppercase tracking-widest text-lg"><span className="text-glow-shift">DGC Bank</span></CardTitle>
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="deposit" className="w-full">
@@ -136,7 +136,7 @@ export default function Profile() {
                   No transactions found.
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-[520px] overflow-y-auto pr-2 rounded-lg border border-primary/10 shadow-[0_0_24px_var(--theme-glow)] p-1">
                   {transactions.map(tx => (
                     <div key={tx.id} className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-secondary/30 hover:bg-secondary/60 transition-colors">
                       <div className="flex items-center gap-3">
