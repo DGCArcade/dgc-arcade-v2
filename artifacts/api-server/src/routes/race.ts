@@ -7,12 +7,12 @@ import { createHash } from "crypto";
 export const raceRouter = Router();
 
 const RACERS = [
-  { id: 1, name: "Blaze",    emoji: "🐎", color: "#ef4444" },
-  { id: 2, name: "Thunder",  emoji: "🐎", color: "#f59e0b" },
-  { id: 3, name: "Shadow",   emoji: "🐎", color: "#8b5cf6" },
-  { id: 4, name: "Storm",    emoji: "🐎", color: "#06b6d4" },
-  { id: 5, name: "Bolt",     emoji: "🐎", color: "#22c55e" },
-  { id: 6, name: "Phantom",  emoji: "🐎", color: "#ec4899" },
+  { id: 1, name: "Blaze", emoji: "🐎", color: "#ef4444" },
+  { id: 2, name: "Thunder", emoji: "🐎", color: "#f59e0b" },
+  { id: 3, name: "Shadow", emoji: "🐎", color: "#8b5cf6" },
+  { id: 4, name: "Storm", emoji: "🐎", color: "#06b6d4" },
+  { id: 5, name: "Bolt", emoji: "🐎", color: "#22c55e" },
+  { id: 6, name: "Phantom", emoji: "🐎", color: "#ec4899" },
 ];
 
 function seedRandom(seed: string, max: number): number {
@@ -28,7 +28,9 @@ function generateRacePositions(seed: string): number[] {
     const idx = seedRandom(s + i, available.length);
     positions.push(available[idx]);
     available.splice(idx, 1);
-    s = createHash("sha256").update(s + i).digest("hex");
+    s = createHash("sha256")
+      .update(s + i)
+      .digest("hex");
   }
   return positions;
 }
@@ -38,18 +40,33 @@ raceRouter.get("/racers", (_req, res) => {
 });
 
 raceRouter.post("/run", requireAuth, async (req, res) => {
-  const userId = req.user!.userId as number;
-  const { betAmount, racerId } = req.body as { betAmount: number; racerId: number };
+  const userId = req.user!.userId;
+  const { betAmount, racerId } = req.body as {
+    betAmount: number;
+    racerId: number;
+  };
 
-  if (!betAmount || betAmount <= 0) return res.status(400).json({ error: "Invalid bet amount" });
-  if (!racerId || racerId < 1 || racerId > 6) return res.status(400).json({ error: "Invalid racer" });
+  if (!betAmount || betAmount <= 0)
+    return res.status(400).json({ error: "Invalid bet amount" });
+  if (!racerId || racerId < 1 || racerId > 6)
+    return res.status(400).json({ error: "Invalid racer" });
 
-  const [game] = await db.select().from(gamesTable).where(eq(gamesTable.slug, "race")).limit(1);
-  if (!game || !game.active) return res.status(400).json({ error: "Race game not available" });
+  const [game] = await db
+    .select()
+    .from(gamesTable)
+    .where(eq(gamesTable.slug, "race"))
+    .limit(1);
+  if (!game || !game.active)
+    return res.status(400).json({ error: "Race game not available" });
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
   if (!user) return res.status(404).json({ error: "User not found" });
-  if (Number(user.balance) < betAmount) return res.status(400).json({ error: "Insufficient balance" });
+  if (Number(user.balance) < betAmount)
+    return res.status(400).json({ error: "Insufficient balance" });
 
   const seed = `${userId}:${Date.now()}:${Math.random()}`;
   const finishOrder = generateRacePositions(seed);
@@ -61,8 +78,13 @@ raceRouter.post("/run", requireAuth, async (req, res) => {
   const payout = won ? betAmount * multiplier : 0;
   const profit = payout - betAmount;
 
-  await db.update(usersTable)
-    .set({ balance: String(Number(user.balance) - betAmount + payout) })
+  const newRaceWagered = parseFloat(user.totalWageredAmount ?? "0") + betAmount;
+  await db
+    .update(usersTable)
+    .set({
+      balance: String(Number(user.balance) - betAmount + payout),
+      totalWageredAmount: String(newRaceWagered),
+    })
     .where(eq(usersTable.id, userId));
 
   await db.insert(betsTable).values({

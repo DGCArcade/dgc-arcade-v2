@@ -45,10 +45,19 @@ authRouter.post("/register", async (req, res) => {
       return;
     }
     if (deviceFingerprint) {
-      const deviceExists = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.deviceFingerprint, deviceFingerprint)).limit(1);
+      const deviceExists = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(eq(usersTable.deviceFingerprint, deviceFingerprint))
+        .limit(1);
       if (deviceExists.length > 0) {
-        logger.warn({ deviceFingerprint, username }, "Duplicate device blocked");
-        res.status(409).json({ error: "An account already exists on this device." });
+        logger.warn(
+          { deviceFingerprint, username },
+          "Duplicate device blocked",
+        );
+        res
+          .status(409)
+          .json({ error: "An account already exists on this device." });
         return;
       }
     }
@@ -56,10 +65,20 @@ authRouter.post("/register", async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const [user] = await db
       .insert(usersTable)
-      .values({ username, passwordHash, balance: "100", wagerRequirement: "100", deviceFingerprint })
+      .values({
+        username,
+        passwordHash,
+        balance: "100",
+        wagerRequirement: "100",
+        deviceFingerprint,
+      })
       .returning();
 
-    const token = signToken({ userId: user.id, username: user.username, role: user.role });
+    const token = signToken({
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+    });
 
     res.status(201).json({ user: formatUser(user), token });
   } catch (err) {
@@ -96,11 +115,17 @@ authRouter.post("/login", async (req, res) => {
     }
 
     if (user.isBanned) {
-      res.status(403).json({ error: "Your account has been suspended. Contact support." });
+      res
+        .status(403)
+        .json({ error: "Your account has been suspended. Contact support." });
       return;
     }
 
-    const token = signToken({ userId: user.id, username: user.username, role: user.role });
+    const token = signToken({
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+    });
 
     res.json({ user: formatUser(user), token });
   } catch (err) {
