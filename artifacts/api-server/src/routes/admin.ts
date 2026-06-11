@@ -747,6 +747,28 @@ adminRouter.get("/stats", async (req, res) => {
       .from(usersTable)
       .where(eq(usersTable.isBanned, true));
 
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const [{ activeToday }] = await db
+      .select({ activeToday: sql<number>`count(distinct user_id)` })
+      .from(betsTable)
+      .where(sql`created_at > ${oneDayAgo}`);
+
+    const [{ totalDeposited }] = await db
+      .select({ totalDeposited: sql<number>`coalesce(sum(amount::numeric), 0)` })
+      .from(transactionsTable)
+      .where(and(eq(transactionsTable.type, "deposit"), eq(transactionsTable.status, "completed")));
+
+    const [{ totalWithdrawn }] = await db
+      .select({ totalWithdrawn: sql<number>`coalesce(sum(amount::numeric), 0)` })
+      .from(transactionsTable)
+      .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "completed")));
+
+    const [{ newUsersToday }] = await db
+      .select({ newUsersToday: sql<number>`count(*)` })
+      .from(usersTable)
+      .where(sql`created_at > ${oneDayAgo}`);
+
     res.json({
       totalUsers: Number(totalUsers),
       totalBets: Number(totalBets),
@@ -755,6 +777,10 @@ adminRouter.get("/stats", async (req, res) => {
       pendingWithdrawals: Number(pendingWithdrawals),
       pendingWithdrawalAmount: Number(pendingWithdrawalAmount),
       bannedUsers: Number(bannedUsers),
+      activeToday: Number(activeToday),
+      totalDeposited: Number(totalDeposited),
+      totalWithdrawn: Number(totalWithdrawn),
+      newUsersToday: Number(newUsersToday),
     });
   } catch (err) {
     req.log.error({ err }, "Admin stats error");
