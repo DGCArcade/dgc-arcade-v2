@@ -636,7 +636,7 @@ adminRouter.get("/bank/fraud-alerts", async (req, res) => {
           .where(
             and(
               eq(betsTable.userId, tx.userId),
-              eq(betsTable.outcome, "loss"),
+              eq(betsTable.won, false),
               sql`created_at > ${sixHoursAgo.toISOString()}`
             )
           );
@@ -702,6 +702,57 @@ adminRouter.get("/bank/fraud-alerts", async (req, res) => {
     res.json({ alerts: flagged });
   } catch (err) {
     req.log.error({ err }, "Fraud alerts error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+// POST /api/admin/tip — any logged-in user can tip another user
+adminRouter.post("/tip", async (req, res) => {
+  const { toUsername, amount } = req.body as { toUsername?: string; amount?: number };
+  if (!toUsername || !amount || amount <= 0) {
+    res.status(400).json({ error: "Username and a positive amount are required" });
+    return;
+  }
+  if (amount > 10000) {
+    res.status(400).json({ error: "Tip amount too large" });
+    return;
+  }
+  try {
+    // Get sender
+    const [sender] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+    if (!sender) { res.status(401).json({ error: "Sender not found" }); return; }
+    if (parseFloat(sender.balance) < amount) {
+      res.status(400).json({ error: "Insufficient balance" });
+      return;
+    }
+    // Get recipient
+    const [recipient] = await db.select().from(usersTable).where(eq(usersTable.username, toUsername)).limit(1);
+    if (!recipient) { res.status(404).json({ error: "User not found: " + toUsername }); return; }
+    if (recipient.id === sender.id) { res.status(400).json({ error: "Cannot tip yourself" }); return; }
+
+    // Deduct from sender, add to recipient
+    const newSenderBalance = parseFloat(sender.balance) - amount;
+    const newRecipientBalance = parseFloat(recipient.balance) + amount;
+
+    await db.update(usersTable).set({ balance: String(newSenderBalance) }).where(eq(usersTable.id, sender.id));
+    await db.update(usersTable).set({ balance: String(newRecipientBalance) }).where(eq(usersTable.id, recipient.id));
+
+    // Log as transactions for both users
+    await db.insert(transactionsTable).values({
+      userId: sender.id, type: "tip_sent", amount: String(amount),
+      currency: "USD", status: "completed",
+      metadata: JSON.stringify({ toUsername: recipient.username }),
+    });
+    await db.insert(transactionsTable).values({
+      userId: recipient.id, type: "tip_received", amount: String(amount),
+      currency: "USD", status: "completed",
+      metadata: JSON.stringify({ fromUsername: sender.username }),
+    });
+
+    res.json({ success: true, newBalance: newSenderBalance });
+  } catch (err) {
+    req.log.error({ err }, "Tip error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

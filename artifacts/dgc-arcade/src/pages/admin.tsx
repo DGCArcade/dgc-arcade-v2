@@ -1089,7 +1089,7 @@ export default function AdminDashboard() {
                                       setLoadingAction(`wd-reject-${w.id}`);
                                       try {
                                         await adminFetch(`/transactions/${w.id}`, { method: "PATCH", body: JSON.stringify({ status: "failed" }) });
-                                        toast({ title: "Rejected", description: `Balance refunded for TX ${w.id}` });
+                                        toast({ title: "Rejected", description: `Balance refunded to ${w.username ?? ("TX #" + w.id)}` });
                                         await loadBank();
                                       } catch (e: any) { toast({ title: "Failed", description: e.message, variant: "destructive" }); }
                                       finally { setLoadingAction(null); }
