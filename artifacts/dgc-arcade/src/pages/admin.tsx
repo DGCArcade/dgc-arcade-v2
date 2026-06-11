@@ -138,6 +138,39 @@ export default function AdminDashboard() {
     requireManualOver: 500,
     plisioConnected: true,
   });
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  const loadBankSettings = useCallback(async () => {
+    try {
+      const res = await adminFetch("/bank/settings");
+      if (res?.settings) {
+        setBankSettings(p => ({ ...p, ...res.settings }));
+      }
+    } catch {
+      // fanodgc-only endpoint — silently ignore for non-owner admins
+    }
+  }, []);
+
+  const saveBankSettings = useCallback(async (updates: Partial<typeof bankSettings>) => {
+    setSettingsSaving(true);
+    setSettingsSaved(false);
+    try {
+      const res = await adminFetch("/bank/settings", {
+        method: "PUT",
+        body: JSON.stringify(updates),
+      });
+      if (res?.settings) {
+        setBankSettings(p => ({ ...p, ...res.settings }));
+      }
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 2000);
+    } catch (e: any) {
+      toast({ title: "Settings save failed", description: e.message, variant: "destructive" });
+    } finally {
+      setSettingsSaving(false);
+    }
+  }, [toast]);
 
   const isAdmin = user?.role === "admin";
 
@@ -255,8 +288,8 @@ export default function AdminDashboard() {
     if (activeTab === "transactions" && isAdmin) loadTransactions();
   }, [activeTab, isAdmin, loadTransactions]);
   useEffect(() => {
-    if (activeTab === "bank" && isAdmin) { loadBank(); loadFraudAlerts(); }
-  }, [activeTab, isAdmin, loadBank, loadFraudAlerts]);
+    if (activeTab === "bank" && isAdmin) { loadBank(); loadFraudAlerts(); loadBankSettings(); }
+  }, [activeTab, isAdmin, loadBank, loadFraudAlerts, loadBankSettings]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1161,10 +1194,12 @@ export default function AdminDashboard() {
 
                     {/* AI Fraud Settings */}
                     <Card className="border-border/60 bg-card/60">
-                      <CardHeader className="pb-2 pt-4 px-4">
+                      <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
                         <CardTitle className="text-sm flex items-center gap-2">
                           <Shield className="w-4 h-4 text-red-400" /> AI Fraud Settings
                         </CardTitle>
+                        {settingsSaving && <span className="text-xs text-muted-foreground">Saving…</span>}
+                        {settingsSaved && <span className="text-xs text-green-400">Saved ✓</span>}
                       </CardHeader>
                       <CardContent className="px-4 pb-4 space-y-3">
                         <div>
@@ -1174,17 +1209,45 @@ export default function AdminDashboard() {
                           </div>
                           <input type="range" min={0} max={100} value={bankSettings.aiSensitivity}
                             onChange={e => setBankSettings(p => ({ ...p, aiSensitivity: +e.target.value }))}
+                            onMouseUp={e => saveBankSettings({ aiSensitivity: +(e.target as HTMLInputElement).value })}
+                            onTouchEnd={e => saveBankSettings({ aiSensitivity: +(e.target as HTMLInputElement).value })}
                             className="w-full accent-primary h-1.5 rounded" />
-                          <p className="text-xs text-muted-foreground mt-1">Higher = more flags, lower = fewer flags</p>
+                          <p className="text-xs text-muted-foreground mt-1">Higher = more flags, lower = fewer flags. Multiplies every risk score by 0.5x–1.5x.</p>
                         </div>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <span className="text-xs text-muted-foreground uppercase tracking-wider">Auto-approve under</span>
-                          <span className="font-mono text-xs font-bold">${bankSettings.autoApproveUnder}</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">$</span>
+                            <input
+                              type="number" min={0}
+                              defaultValue={bankSettings.autoApproveUnder}
+                              onBlur={e => {
+                                const val = +e.target.value;
+                                if (!isNaN(val) && val !== bankSettings.autoApproveUnder) saveBankSettings({ autoApproveUnder: val });
+                              }}
+                              className="w-20 bg-secondary/60 border border-border/40 rounded px-2 py-1 text-xs font-mono font-bold text-right"
+                            />
+                          </div>
                         </div>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <span className="text-xs text-muted-foreground uppercase tracking-wider">Manual review over</span>
-                          <span className="font-mono text-xs font-bold">${bankSettings.requireManualOver}</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">$</span>
+                            <input
+                              type="number" min={0}
+                              defaultValue={bankSettings.requireManualOver}
+                              onBlur={e => {
+                                const val = +e.target.value;
+                                if (!isNaN(val) && val !== bankSettings.requireManualOver) saveBankSettings({ requireManualOver: val });
+                              }}
+                              className="w-20 bg-secondary/60 border border-border/40 rounded px-2 py-1 text-xs font-mono font-bold text-right"
+                            />
+                          </div>
                         </div>
+                        <p className="text-xs text-muted-foreground/70 pt-1 border-t border-border/30">
+                          Withdrawals at or under "auto-approve" with low risk skip the fraud feed entirely.
+                          Withdrawals over "manual review" are always flagged for owner approval.
+                        </p>
                       </CardContent>
                     </Card>
 
