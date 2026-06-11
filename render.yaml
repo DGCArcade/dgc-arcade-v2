@@ -12,6 +12,10 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      - key: PLISIO_SECRET_KEY
+        sync: false
+      - key: SITE_URL
+        sync: false
       - key: NODE_ENV
         value: production
 
