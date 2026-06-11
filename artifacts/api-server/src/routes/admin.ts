@@ -413,7 +413,10 @@ adminRouter.get("/bank/balances", async (req, res) => {
     return;
   }
   try {
-    const currencies = ["BTC","ETH","LTC","DOGE","BCH","XMR","DASH","USDT_TRX","USDT_TON","TRX","TON","SOL"];
+    // Plisio's /currencies/{cid} balance endpoint currently only returns valid
+    // data for BTC — other currencies return server errors on Plisio's side.
+    // Deposits/withdrawals in other currencies (via /invoices) are unaffected.
+    const currencies = ["BTC"];
     const balances = {};
     await Promise.all(
       currencies.map(async (cur) => {
