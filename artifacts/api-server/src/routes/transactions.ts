@@ -77,7 +77,7 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
     const plisioCurrency = PLISIO_CURRENCY_MAP[currency.toUpperCase()] ?? currency.toUpperCase();
     const params = new URLSearchParams({
       api_key: PLISIO_SECRET_KEY,
-      currency: plisioCurrency,
+      psys_cids: plisioCurrency,
       source_amount: String(amount),
       order_number: orderId,
       order_name: "DGC Arcade Deposit",

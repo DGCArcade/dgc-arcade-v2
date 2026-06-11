@@ -1084,7 +1084,7 @@ export default function AdminDashboard() {
                                     onClick={async () => {
                                       setLoadingAction(`wd-reject-${w.id}`);
                                       try {
-                                        await adminFetch(`/transactions/${w.id}`, { method: "PATCH", body: JSON.stringify({ status: "rejected" }) });
+                                        await adminFetch(`/transactions/${w.id}`, { method: "PATCH", body: JSON.stringify({ status: "failed" }) });
                                         toast({ title: "Rejected", description: `Balance refunded for TX ${w.id}` });
                                         await loadBank();
                                       } catch (e: any) { toast({ title: "Failed", description: e.message, variant: "destructive" }); }
