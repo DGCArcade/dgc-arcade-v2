@@ -254,6 +254,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (activeTab === "transactions" && isAdmin) loadTransactions();
   }, [activeTab, isAdmin, loadTransactions]);
+  useEffect(() => {
+    if (activeTab === "bank" && isAdmin) { loadBank(); loadFraudAlerts(); }
+  }, [activeTab, isAdmin, loadBank, loadFraudAlerts]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
