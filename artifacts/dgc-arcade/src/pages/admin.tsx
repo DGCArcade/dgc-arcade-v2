@@ -208,14 +208,11 @@ export default function AdminDashboard() {
     try {
       const res = await adminFetch("/bank/fraud-alerts");
       setFraudAlerts(res.alerts ?? []);
-    } catch {
-      // Generate mock AI fraud data if endpoint not ready
-      const mockAlerts = [
-        { id: 1, userId: 42, username: "user_442", amount: 2850, currency: "USDT_TRX", type: "withdrawal", riskScore: 94, flags: ["velocity", "large_amount"], status: "pending", createdAt: new Date(Date.now() - 120000).toISOString() },
-        { id: 2, userId: 87, username: "newuser_87", amount: 1200, currency: "BTC", type: "withdrawal", riskScore: 78, flags: ["new_account", "suspicious_pattern"], status: "pending", createdAt: new Date(Date.now() - 300000).toISOString() },
-        { id: 3, userId: 15, username: "player_015", amount: 340, currency: "ETH", type: "withdrawal", riskScore: 61, flags: ["velocity"], status: "pending", createdAt: new Date(Date.now() - 600000).toISOString() },
-      ];
-      setFraudAlerts(mockAlerts);
+    } catch (err: any) {
+      // Show real error — never use mock data in production
+      console.error("Fraud alerts fetch error:", err);
+      toast({ title: "Fraud monitor error", description: err?.message ?? "Could not load fraud alerts", variant: "destructive" });
+      setFraudAlerts([]);
     } finally {
       setFraudLoading(false);
     }
@@ -1007,7 +1004,7 @@ export default function AdminDashboard() {
                                     try {
                                       await adminFetch(`/transactions/${alert.id}`, {
                                         method: "PATCH",
-                                        body: JSON.stringify({ status: "rejected" }),
+                                        body: JSON.stringify({ status: "failed" }),
                                       });
                                       setFraudAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, status: "denied" } : a));
                                       toast({ title: "Transaction denied", description: `TX #${alert.id} blocked — balance refunded` });
