@@ -1,207 +1,324 @@
-import { useState, useEffect } from "react";
-import { MapPin, Globe, ShieldAlert, X } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { MapPin, Globe, ShieldAlert, X, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const STORAGE_KEY = "dgc_geo_accepted";
-const BLOCKED_COUNTRIES = ["GB", "FR", "NL", "AU", "BE", "DK", "DE", "IT", "RO", "ES", "SE", "CH", "CZ"];
-const ALLOWED_US_STATES = ["Indiana", "Florida"];
+// Uses sessionStorage — shows on every new browser session, not cached forever
+const SESSION_KEY = "dgc_geo_session_v2";
 
-type GeoState = "checking" | "asking" | "blocked_declined" | "blocked_country" | "blocked_state" | "accepted";
+const BLOCKED_COUNTRIES = ["GB","FR","NL","AU","BE","DK","DE","IT","RO","ES","SE","CH","CZ"];
+const ALLOWED_US_STATES = ["Indiana","Florida"];
 
-interface GeoInfo {
+type GeoState = "loading" | "asking" | "verifying" | "blocked_country" | "blocked_state" | "blocked_declined" | "accepted";
+
+interface GeoData {
+  ip: string;
   country_code: string;
   country_name: string;
-  city: string;
   region: string;
-  ip: string;
+  city: string;
+  latitude?: number;
+  longitude?: number;
+  timezone?: string;
+  asn?: string;
+  org?: string;
+}
+
+function collectFingerprint(): string {
+  try {
+    return [
+      navigator.userAgent,
+      `${screen.width}x${screen.height}x${screen.colorDepth}`,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+      navigator.language,
+      String(navigator.hardwareConcurrency ?? 0),
+      String(navigator.maxTouchPoints ?? 0),
+      navigator.platform ?? "",
+    ].join("|");
+  } catch { return "unknown"; }
 }
 
 export function LocationGate({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<GeoState>("checking");
-  const [geoInfo, setGeoInfo] = useState<GeoInfo | null>(null);
+  const [state, setState] = useState<GeoState>("loading");
+  const [geoData, setGeoData] = useState<GeoData | null>(null);
+  const [geoReady, setGeoReady] = useState(false);
+  const [geoFailed, setGeoFailed] = useState(false);
+  const didFetch = useRef(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "accepted") {
-      setState("accepted");
-      return;
-    }
-    if (stored === "declined") {
-      setState("blocked_declined");
-      return;
-    }
+    if (didFetch.current) return;
+    didFetch.current = true;
+
+    // Check session — shows every new browser session
+    const session = sessionStorage.getItem(SESSION_KEY);
+    if (session === "accepted") { setState("accepted"); return; }
+    if (session === "declined") { setState("blocked_declined"); return; }
+    if (session === "blocked_country") { setState("blocked_country"); return; }
+    if (session === "blocked_state") { setState("blocked_state"); return; }
+
     setState("asking");
+    doGeoFetch();
   }, []);
 
-  async function handleAccept() {
+  async function doGeoFetch() {
     try {
-      const res = await fetch("https://ipapi.co/json/");
-      const data: GeoInfo = await res.json();
-      setGeoInfo(data);
-      if (BLOCKED_COUNTRIES.includes(data.country_code)) {
-        localStorage.setItem(STORAGE_KEY, "blocked_country");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 9000);
+      const res = await fetch("https://ipapi.co/json/", { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) throw new Error("geo fetch failed");
+      const data: GeoData = await res.json();
+      if (!data.ip || !data.country_code) throw new Error("incomplete geo data");
+      setGeoData(data);
+      setGeoReady(true);
+    } catch {
+      setGeoFailed(true);
+      setGeoReady(true); // allow accept anyway if fetch fails
+    }
+  }
+
+  async function handleAccept() {
+    setState("verifying");
+    try {
+      // Block check
+      if (geoData?.country_code && BLOCKED_COUNTRIES.includes(geoData.country_code)) {
+        sessionStorage.setItem(SESSION_KEY, "blocked_country");
         setState("blocked_country");
         return;
       }
-      if (data.country_code === "US" && !ALLOWED_US_STATES.includes(data.region)) {
-        localStorage.setItem(STORAGE_KEY, "blocked_state");
+      if (geoData?.country_code === "US" && geoData?.region && !ALLOWED_US_STATES.includes(geoData.region)) {
+        sessionStorage.setItem(SESSION_KEY, "blocked_state");
         setState("blocked_state");
         return;
       }
-      localStorage.setItem(STORAGE_KEY, "accepted");
-      localStorage.setItem("dgc_geo_country", data.country_code);
-      localStorage.setItem("dgc_geo_city", data.city ?? "");
-      localStorage.setItem("dgc_geo_ip", data.ip ?? "");
-      // Save full geo data to backend if user is logged in
-      try {
-        const token = localStorage.getItem("dgc_token");
-        if (token) {
-          await fetch("/api/users/geo", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({
-              country: data.country_name,
-              countryCode: data.country_code,
-              region: data.region,
-              city: data.city,
-              ip: data.ip,
-              hostname: (data as any).hostname ?? "",
-              asn: (data as any).org ?? "",
-              isp: (data as any).org ?? "",
-              lat: String((data as any).latitude ?? ""),
-              lon: String((data as any).longitude ?? ""),
-              timezone: (data as any).timezone ?? "",
-            }),
-          });
-        }
-      } catch { /* non-blocking */ }
+
+      // Mark accepted this session
+      sessionStorage.setItem(SESSION_KEY, "accepted");
+
+      // Save geo + fingerprint to backend (non-blocking)
+      const token = localStorage.getItem("dgc_token");
+      if (token) {
+        const fp = collectFingerprint();
+        const payload = geoData ? {
+          country: geoData.country_name ?? "",
+          countryCode: geoData.country_code ?? "",
+          region: geoData.region ?? "",
+          city: geoData.city ?? "",
+          ip: geoData.ip ?? "",
+          hostname: "",
+          asn: geoData.asn ?? "",
+          isp: geoData.org ?? "",
+          lat: String(geoData.latitude ?? ""),
+          lon: String(geoData.longitude ?? ""),
+          timezone: geoData.timezone ?? "",
+        } : {};
+
+        // Also save fingerprint to localStorage for reference
+        localStorage.setItem("dgc_fp", fp);
+
+        fetch("/api/users/geo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload),
+        }).catch(() => {}); // non-blocking
+      }
+
       setState("accepted");
     } catch {
-      localStorage.setItem(STORAGE_KEY, "accepted");
+      sessionStorage.setItem(SESSION_KEY, "accepted");
       setState("accepted");
     }
   }
 
   function handleDecline() {
-    localStorage.setItem(STORAGE_KEY, "declined");
+    sessionStorage.setItem(SESSION_KEY, "declined");
     setState("blocked_declined");
   }
 
+  function handleRetry() {
+    sessionStorage.removeItem(SESSION_KEY);
+    didFetch.current = false;
+    setGeoData(null);
+    setGeoReady(false);
+    setGeoFailed(false);
+    setState("asking");
+    doGeoFetch();
+  }
+
+  // ── Pass through ───────────────────────────────────────────────
   if (state === "accepted") return <>{children}</>;
 
-  if (state === "checking") {
+  // ── Spinners ───────────────────────────────────────────────────
+  if (state === "loading") {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  if (state === "verifying") {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground uppercase tracking-widest font-bold">Verifying access…</p>
       </div>
     );
   }
 
+  // ── Blocked: declined ──────────────────────────────────────────
   if (state === "blocked_declined") {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center gap-6">
-        <ShieldAlert className="w-16 h-16 text-destructive" />
+        <div className="w-20 h-20 rounded-2xl bg-destructive/10 border border-destructive/30 flex items-center justify-center">
+          <ShieldAlert className="w-10 h-10 text-destructive" />
+        </div>
         <div>
-          <h1 className="text-3xl font-display font-black uppercase tracking-tight text-destructive mb-2">Access Blocked</h1>
-          <p className="text-muted-foreground max-w-md">
-            DGC Arcade requires your consent to verify your location before you can access the Platform. This is required by our licensing obligations.
+          <h1 className="text-3xl font-display font-black uppercase tracking-tight text-destructive mb-2">Access Denied</h1>
+          <p className="text-muted-foreground max-w-md text-sm leading-relaxed">
+            Location verification is required by our Curaçao Gaming Authority license. You must consent to location verification before accessing the platform.
           </p>
         </div>
-        <Button onClick={() => setState("asking")} variant="outline" className="gap-2">
+        <Button onClick={handleRetry} variant="outline" className="gap-2 font-bold">
           <MapPin className="w-4 h-4" /> Try Again
         </Button>
+        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@differentgrindcrew.com</strong></p>
       </div>
     );
   }
 
+  // ── Blocked: country ───────────────────────────────────────────
   if (state === "blocked_country") {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center gap-6">
-        <ShieldAlert className="w-16 h-16 text-destructive" />
+        <div className="w-20 h-20 rounded-2xl bg-destructive/10 border border-destructive/30 flex items-center justify-center">
+          <ShieldAlert className="w-10 h-10 text-destructive" />
+        </div>
         <div>
-          <h1 className="text-3xl font-display font-black uppercase tracking-tight mb-2">Region Restricted</h1>
-          <p className="text-muted-foreground max-w-md">
-            DGC Arcade is not available in your region ({geoInfo?.country_name ?? "your country"}) due to local gambling regulations. We apologize for the inconvenience.
+          <h1 className="text-3xl font-display font-black uppercase tracking-tight mb-2">Region Not Available</h1>
+          <p className="text-muted-foreground max-w-md text-sm leading-relaxed">
+            DGC Arcade is not available in {geoData?.country_name ?? "your region"} due to local gambling regulations. We apologize for the inconvenience.
           </p>
         </div>
-        <div className="text-xs text-muted-foreground/60 max-w-sm">
-          If you believe this is an error, contact <strong>support@dgcarcade.io</strong>
-        </div>
+        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@differentgrindcrew.com</strong></p>
       </div>
     );
   }
 
+  // ── Blocked: state ─────────────────────────────────────────────
   if (state === "blocked_state") {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center gap-6">
-        <ShieldAlert className="w-16 h-16 text-destructive" />
+        <div className="w-20 h-20 rounded-2xl bg-destructive/10 border border-destructive/30 flex items-center justify-center">
+          <ShieldAlert className="w-10 h-10 text-destructive" />
+        </div>
         <div>
-          <h1 className="text-3xl font-display font-black uppercase tracking-tight mb-2">State Restricted</h1>
-          <p className="text-muted-foreground max-w-md">
-            DGC Arcade is not available in {geoInfo?.region ?? "your state"} due to local gambling regulations. We apologize for the inconvenience.
+          <h1 className="text-3xl font-display font-black uppercase tracking-tight mb-2">State Not Available</h1>
+          <p className="text-muted-foreground max-w-md text-sm leading-relaxed">
+            DGC Arcade is not currently available in {geoData?.region ?? "your state"} due to local gambling regulations.
           </p>
         </div>
-        <div className="text-xs text-muted-foreground/60 max-w-sm">
-          If you believe this is an error, contact <strong>support@dgcarcade.io</strong>
-        </div>
+        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@differentgrindcrew.com</strong></p>
       </div>
     );
   }
 
+  // ── Main consent dialog ────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-primary/5" />
+      {/* Space atmosphere */}
+      <div className="absolute inset-0 pointer-events-none" style={{
+        background: "radial-gradient(ellipse at 65% 20%, var(--theme-glow-strong, rgba(255,215,0,0.10)) 0%, transparent 55%), radial-gradient(ellipse at 25% 80%, rgba(80,40,200,0.07) 0%, transparent 50%)"
+      }} />
+      <div className="absolute inset-0 pointer-events-none opacity-20" style={{
+        backgroundImage: "radial-gradient(1.5px 1.5px at 15% 25%, white 0%, transparent 100%), radial-gradient(1px 1px at 80% 15%, white 0%, transparent 100%), radial-gradient(2px 2px at 45% 55%, white 0%, transparent 100%), radial-gradient(1px 1px at 8% 65%, white 0%, transparent 100%), radial-gradient(1.5px 1.5px at 92% 45%, white 0%, transparent 100%), radial-gradient(1px 1px at 60% 80%, white 0%, transparent 100%), radial-gradient(1px 1px at 35% 10%, white 0%, transparent 100%)"
+      }} />
+
       <div className="relative z-10 max-w-md w-full">
+        {/* Logo header */}
         <div className="text-center mb-8">
-          <div className="w-20 h-20 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center mx-auto mb-4 location-globe-glow">
-            <Globe className="w-10 h-10 location-globe-icon" />
+          <div className="w-20 h-20 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center mx-auto mb-4"
+            style={{ boxShadow: "0 0 40px rgba(255,215,0,0.15)" }}>
+            <Globe className="w-10 h-10 text-primary" />
           </div>
           <div className="flex items-center justify-center gap-2.5 mb-2">
-            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center font-display font-black text-primary-foreground text-xl">
-              D
-            </div>
+            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center font-display font-black text-primary-foreground text-xl">D</div>
             <span className="font-display font-bold text-2xl uppercase tracking-widest">DGC Arcade</span>
           </div>
           <p className="text-muted-foreground text-sm">Different Grind Crew</p>
         </div>
-        <div className="bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-5">
+
+        {/* Consent card */}
+        <div className="bg-card/95 border border-border rounded-2xl p-6 shadow-2xl space-y-5 backdrop-blur-sm">
           <div>
             <h2 className="text-xl font-display font-black uppercase tracking-tight mb-2">Location Verification Required</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              DGC Arcade is a licensed gambling platform. To comply with our <strong className="text-foreground">Curaçao Gaming Authority</strong> license, we must verify your location before granting access.
+              DGC Arcade is a licensed gambling platform. To comply with our{" "}
+              <strong className="text-foreground">Curaçao Gaming Authority</strong> license, we must verify your location before granting access.
             </p>
           </div>
-          <div className="bg-secondary/40 rounded-xl p-4 space-y-2 text-xs text-muted-foreground">
+
+          {/* Live geo status */}
+          <div className={`flex items-center gap-2.5 text-xs px-3 py-2.5 rounded-xl border font-medium transition-all duration-500 ${
+            geoReady && !geoFailed
+              ? "bg-green-500/10 border-green-500/30 text-green-400"
+              : geoFailed
+              ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
+              : "bg-secondary/60 border-border/50 text-muted-foreground"
+          }`}>
+            {!geoReady && <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />}
+            {geoReady && !geoFailed && <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />}
+            {geoFailed && <MapPin className="w-3.5 h-3.5 flex-shrink-0" />}
+            <span>
+              {!geoReady && "Detecting your location…"}
+              {geoReady && !geoFailed && `Location verified — ${geoData?.city ?? ""}${geoData?.city ? ", " : ""}${geoData?.country_code ?? ""}`}
+              {geoFailed && "Location check timed out — you may proceed"}
+            </span>
+          </div>
+
+          <div className="bg-secondary/40 rounded-xl p-4 space-y-2.5 text-xs text-muted-foreground">
             <div className="flex gap-2 items-start">
-              <span className="text-green-400 mt-0.5">✓</span>
-              <span>We will detect your country using your IP address</span>
+              <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
+              <span>Your IP address and location are verified for licensing compliance</span>
             </div>
             <div className="flex gap-2 items-start">
-              <span className="text-green-400 mt-0.5">✓</span>
-              <span>Your location data is stored securely and never sold</span>
+              <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
+              <span>Your data is stored securely and never sold to third parties</span>
             </div>
             <div className="flex gap-2 items-start">
-              <span className="text-green-400 mt-0.5">✓</span>
+              <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
               <span>Access is denied in jurisdictions where gambling is prohibited</span>
             </div>
             <div className="flex gap-2 items-start">
-              <span className="text-yellow-400 mt-0.5">⚠</span>
+              <span className="text-yellow-400 mt-0.5 flex-shrink-0">⚠</span>
               <span>You must be <strong className="text-foreground">18 years or older</strong> to access this platform</span>
             </div>
           </div>
-          <div className="text-xs text-muted-foreground text-center">
-            By clicking <strong className="text-foreground">I Accept</strong>, you confirm you are 18+ and consent to location verification per our{" "}
-            <a href="/privacy" className="text-primary hover:underline">Privacy Policy</a>.
-          </div>
+
+          <p className="text-xs text-muted-foreground text-center leading-relaxed">
+            By clicking <strong className="text-foreground">I Accept & Continue</strong>, you confirm you are 18+ and consent to location verification, our{" "}
+            <a href="/privacy" className="text-primary hover:underline">Privacy Policy</a>, and{" "}
+            <a href="/terms" className="text-primary hover:underline">Terms of Service</a>.
+          </p>
+
           <div className="flex gap-3">
             <Button variant="outline" className="flex-1 gap-2" onClick={handleDecline}>
               <X className="w-4 h-4" /> Decline
             </Button>
-            <Button className="flex-1 gap-2 font-bold location-accept-btn" onClick={handleAccept}>
-              <MapPin className="w-4 h-4" /> I Accept
+            <Button
+              className="flex-1 gap-2 font-bold transition-all duration-500"
+              style={geoReady ? {
+                boxShadow: "0 0 24px var(--theme-glow-strong, rgba(255,215,0,0.45)), 0 0 8px var(--theme-glow, rgba(255,215,0,0.25))"
+              } : { opacity: 0.55 }}
+              onClick={handleAccept}
+              disabled={!geoReady}
+            >
+              {geoReady
+                ? <><MapPin className="w-4 h-4" /> I Accept &amp; Continue</>
+                : <><Loader2 className="w-4 h-4 animate-spin" /> Verifying Location…</>
+              }
             </Button>
           </div>
         </div>
+
         <p className="text-center text-xs text-muted-foreground/50 mt-4">
           Operated by Medium Rare N.V. · Curaçao Gaming License No. 8048/JAZ
         </p>
