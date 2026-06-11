@@ -15,12 +15,18 @@ const depositSchema = z.object({
 });
 
 const CURRENCIES = [
-  { value: "BTC", label: "Bitcoin (BTC)" },
-  { value: "ETH", label: "Ethereum (ETH)" },
-  { value: "LTC", label: "Litecoin (LTC)" },
+  { value: "BTC",      label: "Bitcoin (BTC)" },
+  { value: "ETH",      label: "Ethereum (ETH)" },
+  { value: "LTC",      label: "Litecoin (LTC)" },
   { value: "USDT_TRX", label: "Tether USDT (TRC-20)" },
-  { value: "DOGE", label: "Dogecoin (DOGE)" },
-  { value: "SOL", label: "Solana (SOL)" },
+  { value: "USDT_TON", label: "Tether USDT (TON)" },
+  { value: "SOL",      label: "Solana (SOL)" },
+  { value: "DOGE",     label: "Dogecoin (DOGE)" },
+  { value: "TRX",      label: "Tron (TRX)" },
+  { value: "TON",      label: "Toncoin (TON)" },
+  { value: "BCH",      label: "Bitcoin Cash (BCH)" },
+  { value: "XMR",      label: "Monero (XMR)" },
+  { value: "DASH",     label: "Dash (DASH)" },
 ];
 export function DepositForm() {
   const { toast } = useToast();

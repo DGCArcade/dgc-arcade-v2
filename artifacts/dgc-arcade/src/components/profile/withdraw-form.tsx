@@ -17,11 +17,18 @@ const withdrawSchema = z.object({
 });
 
 const CURRENCIES = [
-  { value: "BTC", label: "Bitcoin (BTC)" },
-  { value: "ETH", label: "Ethereum (ETH)" },
-  { value: "LTC", label: "Litecoin (LTC)" },
-  { value: "USDT", label: "Tether (USDT)" },
-  { value: "DOGE", label: "Dogecoin (DOGE)" },
+  { value: "BTC",      label: "Bitcoin (BTC)" },
+  { value: "ETH",      label: "Ethereum (ETH)" },
+  { value: "LTC",      label: "Litecoin (LTC)" },
+  { value: "USDT_TRX", label: "Tether USDT (TRC-20)" },
+  { value: "USDT_TON", label: "Tether USDT (TON)" },
+  { value: "SOL",      label: "Solana (SOL)" },
+  { value: "DOGE",     label: "Dogecoin (DOGE)" },
+  { value: "TRX",      label: "Tron (TRX)" },
+  { value: "TON",      label: "Toncoin (TON)" },
+  { value: "BCH",      label: "Bitcoin Cash (BCH)" },
+  { value: "XMR",      label: "Monero (XMR)" },
+  { value: "DASH",     label: "Dash (DASH)" },
 ];
 
 export function WithdrawForm() {
@@ -34,7 +41,7 @@ export function WithdrawForm() {
     resolver: zodResolver(withdrawSchema),
     defaultValues: {
       amount: 10,
-      currency: "USDT",
+      currency: "USDT_TRX",
       address: "",
     },
   });
