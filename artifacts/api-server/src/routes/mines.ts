@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable, gamesTable, betsTable, minesSessionsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
@@ -56,9 +56,20 @@ minesRouter.post("/start", requireAuth, async (req, res) => {
       return;
     }
 
-    await db.update(usersTable)
-      .set({ balance: String(parseFloat(user.balance) - amount) })
-      .where(eq(usersTable.id, user.id));
+    // ATOMIC balance deduct + wager tracking -- prevents race conditions
+    // and ensures Mines bets count toward the withdrawal wager requirement
+    const deducted = await db.update(usersTable)
+      .set({
+        balance: sql`CAST((CAST(balance AS NUMERIC) - ${amount}) AS TEXT)`,
+        totalWageredAmount: sql`CAST((CAST(coalesce(total_wagered_amount, '0') AS NUMERIC) + ${amount}) AS TEXT)`,
+      })
+      .where(eq(usersTable.id, user.id))
+      .where(sql`CAST(balance AS NUMERIC) >= ${amount}`)
+      .returning({ balance: usersTable.balance });
+    if (deducted.length === 0) {
+      res.status(400).json({ error: "Insufficient balance" });
+      return;
+    }
 
     const serverSeed = uuidv4().replace(/-/g, "");
     const mines = genMines(serverSeed, mineCount);
@@ -79,7 +90,7 @@ minesRouter.post("/start", requireAuth, async (req, res) => {
       sessionId: session.id,
       mineCount,
       bet: amount,
-      balance: parseFloat(user.balance) - amount,
+      balance: parseFloat(deducted[0].balance),
       nextMultiplier: calcMultiplier(1, mineCount),
     });
   } catch (err) {
@@ -123,8 +134,7 @@ minesRouter.post("/reveal", requireAuth, async (req, res) => {
         status: "busted",
       }).where(eq(minesSessionsTable.id, session.id));
 
-      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-      await db.update(usersTable).set({ totalBets: user.totalBets + 1 }).where(eq(usersTable.id, user.id));
+      await db.update(usersTable).set({ totalBets: sql`total_bets + 1` }).where(eq(usersTable.id, req.user!.userId));
       await db.insert(betsTable).values({
         userId: session.userId, gameId: session.gameId,
         amount: session.bet, payout: "0",
@@ -177,13 +187,12 @@ minesRouter.post("/cashout", requireAuth, async (req, res) => {
     const bet = parseFloat(session.bet);
     const payout = bet * multiplier;
 
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-    const newBalance = parseFloat(user.balance) + payout;
-
-    await db.update(usersTable).set({
-      balance: String(newBalance), totalBets: user.totalBets + 1,
-      totalWon: String(parseFloat(user.totalWon) + payout),
-    }).where(eq(usersTable.id, user.id));
+    const [updated] = await db.update(usersTable).set({
+      balance: sql`CAST((CAST(balance AS NUMERIC) + ${payout}) AS TEXT)`,
+      totalBets: sql`total_bets + 1`,
+      totalWon: sql`CAST((CAST(coalesce(total_won, '0') AS NUMERIC) + ${payout}) AS TEXT)`,
+    }).where(eq(usersTable.id, req.user!.userId)).returning();
+    const newBalance = parseFloat(updated.balance);
 
     const mines: number[] = JSON.parse(session.minePositions);
     await db.update(minesSessionsTable).set({ status: "won" }).where(eq(minesSessionsTable.id, session.id));
