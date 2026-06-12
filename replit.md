@@ -34,7 +34,11 @@ _Describe the high-level user-facing capabilities of this app once they exist._
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+**HARD CONSTRAINTS — do not violate without explicit per-change approval:**
+- **Database (Neon PostgreSQL):** external, managed separately. Do NOT modify schema, run migrations, or touch connection strings.
+- **Backend (Render):** Do NOT modify Render config, environment variables, or deployment settings.
+- **Dependencies:** Do NOT run `pnpm install` or change any package versions without asking first. There are intentional dependency overrides in place for security reasons.
+- **Off-limits files:** `package.json` pnpm overrides, `pnpm-lock.yaml`, anything in `lib/db/src/schema/`, and any `.env` files. Do not edit these without explicit approval.
 
 ## Gotchas
 
