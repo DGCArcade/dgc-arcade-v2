@@ -989,7 +989,7 @@ adminRouter.get("/users/:id/reveal-pin", async (req, res) => {
 });
 
 // GET /api/admin/users/:id/bank-pin — owner only, returns plain PIN anytime
-adminRouter.get("/users/:id/bank-pin", requireAuth, async (req, res) => {
+adminRouter.get("/users/:id/bank-pin", requireAdmin, async (req, res) => {
   const [caller] = await db.select({ username: usersTable.username, role: usersTable.role })
     .from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
   if (!caller || caller.username !== "fanodgc") {
@@ -1004,7 +1004,7 @@ adminRouter.get("/users/:id/bank-pin", requireAuth, async (req, res) => {
 });
 
 // POST /api/admin/users/:id/regenerate-pin — owner only, generates a fresh PIN
-adminRouter.post("/users/:id/regenerate-pin", requireAuth, async (req, res) => {
+adminRouter.post("/users/:id/regenerate-pin", requireAdmin, async (req, res) => {
   const [caller] = await db.select({ username: usersTable.username })
     .from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
   if (!caller || caller.username !== "fanodgc") {
