@@ -51,8 +51,6 @@ externalPort = 3000
 
 [userenv.shared]
 JWT_SECRET = "dgc-arcade-jwt-9axm46zd2f2dm9zz7f6ta2l5gwlu140m"
-OXAPAY_MERCHANT_KEY = "KKCK8M-LCTGD0-QZZF9A-WDS0VN"
-OXAPAY_PAYOUT_KEY = "VPPNCM-CYTJII-5K76HM-FYUZIR"
 
 [nix]
 channel = "stable-25_05"

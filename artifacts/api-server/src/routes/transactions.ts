@@ -144,8 +144,26 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
 });
 
 // POST /api/transactions/deposit/callback (Plisio IPN)
+// Plisio sends callbacks from these IPs only
+const PLISIO_IPS = new Set([
+  "65.21.19.51",
+  "65.21.19.52",
+  "65.21.19.53",
+  "65.21.19.54",
+  "65.21.19.55",
+  "138.201.43.212",
+]);
+
 transactionsRouter.post("/deposit/callback", async (req, res) => {
   try {
+    // IP allowlist check — reject anything not from Plisio's known servers
+    const forwarded = req.headers["x-forwarded-for"];
+    const clientIp = (typeof forwarded === "string" ? forwarded.split(",")[0] : req.socket.remoteAddress ?? "").trim();
+    if (clientIp && !PLISIO_IPS.has(clientIp)) {
+      req.log.warn({ clientIp }, "Deposit callback rejected: IP not in Plisio allowlist");
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
     const { txn_id, status, source_amount, verify_hash } = req.body as {
       txn_id?: string;
       status?: string;
