@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable, gamesTable, betsTable, blackjackHandsTable } from "@workspace/db";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
@@ -95,10 +95,20 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
       return;
     }
 
-    // Deduct bet
-    await db.update(usersTable)
-      .set({ balance: String(parseFloat(user.balance) - amount) })
-      .where(eq(usersTable.id, user.id));
+    // ATOMIC balance deduct + wager tracking -- prevents race conditions
+    // and ensures Blackjack bets count toward the withdrawal wager requirement
+    const dealDeduct = await db.update(usersTable)
+      .set({
+        balance: sql`CAST((CAST(balance AS NUMERIC) - ${amount}) AS TEXT)`,
+        totalWageredAmount: sql`CAST((CAST(coalesce(total_wagered_amount, '0') AS NUMERIC) + ${amount}) AS TEXT)`,
+      })
+      .where(and(eq(usersTable.id, user.id), sql`CAST(balance AS NUMERIC) >= ${amount}`))
+      .returning({ balance: usersTable.balance });
+    if (dealDeduct.length === 0) {
+      res.status(400).json({ error: "Insufficient balance" });
+      return;
+    }
+    let currentBalance = parseFloat(dealDeduct[0].balance);
 
     const serverSeed = uuidv4().replace(/-/g, "");
     const deck = shuffleDeck(serverSeed, buildDeck());
@@ -127,9 +137,12 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
     // If blackjack, auto-resolve
     if (status === "player_blackjack") {
       const payout = amount * 2.5;
-      await db.update(usersTable)
-        .set({ balance: String(parseFloat(user.balance) - amount + payout), totalBets: user.totalBets + 1, totalWon: String(parseFloat(user.totalWon) + payout) })
-        .where(eq(usersTable.id, user.id));
+      const [bjUpdated] = await db.update(usersTable).set({
+        balance: sql`CAST((CAST(balance AS NUMERIC) + ${payout}) AS TEXT)`,
+        totalBets: sql`total_bets + 1`,
+        totalWon: sql`CAST((CAST(coalesce(total_won, '0') AS NUMERIC) + ${payout}) AS TEXT)`,
+      }).where(eq(usersTable.id, user.id)).returning({ balance: usersTable.balance });
+      currentBalance = parseFloat(bjUpdated.balance);
       await db.insert(betsTable).values({
         userId: user.id, gameId: game.id,
         amount: String(amount), payout: String(payout),
@@ -146,7 +159,7 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
       playerTotal: handTotal(playerHand),
       status,
       bet: amount,
-      balance: parseFloat(user.balance) - amount,
+      balance: currentBalance,
     });
   } catch (err) {
     req.log.error({ err }, "Blackjack deal error");
@@ -186,13 +199,17 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
 
       if (action === "double") {
         // Double bet, take one card, then stand
-        if (parseFloat(user.balance) < bet) {
+        const doubleDeduct = await db.update(usersTable)
+          .set({
+            balance: sql`CAST((CAST(balance AS NUMERIC) - ${bet}) AS TEXT)`,
+            totalWageredAmount: sql`CAST((CAST(coalesce(total_wagered_amount, '0') AS NUMERIC) + ${bet}) AS TEXT)`,
+          })
+          .where(and(eq(usersTable.id, user.id), sql`CAST(balance AS NUMERIC) >= ${bet}`))
+          .returning({ balance: usersTable.balance });
+        if (doubleDeduct.length === 0) {
           res.status(400).json({ error: "Insufficient balance for double" });
           return;
         }
-        await db.update(usersTable)
-          .set({ balance: String(parseFloat(user.balance) - bet) })
-          .where(eq(usersTable.id, user.id));
       }
     }
 
@@ -218,11 +235,10 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
       else if (status === "push") payout = finalBet;
       else payout = 0;
 
-      const newBalance = parseFloat(user.balance) - (action === "double" ? bet : 0) + payout;
       await db.update(usersTable).set({
-        balance: String(newBalance),
-        totalBets: user.totalBets + 1,
-        totalWon: String(parseFloat(user.totalWon) + payout),
+        balance: sql`CAST((CAST(balance AS NUMERIC) + ${payout}) AS TEXT)`,
+        totalBets: sql`total_bets + 1`,
+        totalWon: sql`CAST((CAST(coalesce(total_won, '0') AS NUMERIC) + ${payout}) AS TEXT)`,
       }).where(eq(usersTable.id, user.id));
 
       await db.insert(betsTable).values({
