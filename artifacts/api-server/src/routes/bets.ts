@@ -258,15 +258,23 @@ betsRouter.post("/", requireAuth, async (req, res) => {
 
     const minBet = parseFloat(game.minBet);
     const maxBet = parseFloat(game.maxBet);
-    const balance = parseFloat(user.balance);
     const houseEdge = parseFloat(game.houseEdge);
-
     if (amount < minBet || amount > maxBet) {
       res.status(400).json({ error: `Bet must be between ${minBet} and ${maxBet}` });
       return;
     }
-    if (balance < amount) { res.status(400).json({ error: "Insufficient balance" }); return; }
-
+    // ATOMIC balance deduct -- prevents race conditions
+    // Check and deduct happen in one SQL statement.
+    // Two simultaneous bets can never both pass on the same balance.
+    const deducted = await db.update(usersTable)
+      .set({ balance: sql`CAST((CAST(balance AS NUMERIC) - ${amount}) AS TEXT)` })
+      .where(eq(usersTable.id, user.id))
+      .where(sql`CAST(balance AS NUMERIC) >= ${amount}`)
+      .returning({ balance: usersTable.balance });
+    if (deducted.length === 0) {
+      res.status(400).json({ error: "Insufficient balance" });
+      return;
+    }
     const serverSeed = generateServerSeed();
     const clientSeedStr = clientSeed ?? uuidv4();
     const seedValue = getOutcome(serverSeed, clientSeedStr, game.slug);
@@ -274,14 +282,11 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       game.slug, amount, houseEdge, seedValue, serverSeed, clientSeedStr,
       (meta as Record<string, unknown>) ?? null
     );
-
-    const newBalance = balance - amount + payout;
     const newTotalBets = user.totalBets + 1;
     const newTotalWon = parseFloat(user.totalWon) + (won ? payout : 0);
     const newTotalWagered = parseFloat(user.totalWageredAmount ?? "0") + amount;
-
     await db.update(usersTable).set({
-      balance: String(newBalance),
+      balance: sql`CAST((CAST(balance AS NUMERIC) + ${payout}) AS TEXT)`,
       totalBets: newTotalBets,
       totalWon: String(newTotalWon),
       totalWageredAmount: String(newTotalWagered),
