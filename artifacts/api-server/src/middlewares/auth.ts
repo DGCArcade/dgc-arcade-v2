@@ -1,7 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET ?? "dgc-arcade-secret-change-in-production";
+const _jwtSecret = process.env.JWT_SECRET;
+if (!_jwtSecret || _jwtSecret === "dgc-arcade-secret-change-in-production") {
+  throw new Error("JWT_SECRET environment variable is required and must not be the default value.");
+}
+const JWT_SECRET = _jwtSecret;
 
 export interface AuthPayload {
   userId: number;
@@ -57,7 +61,7 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
     res.status(401).json({ error: "Invalid or expired token" });
     return;
   }
-  if (payload.role !== "admin") {
+  if (payload.role !== "admin" && payload.role !== "owner") {
     res.status(403).json({ error: "Admin access required" });
     return;
   }
