@@ -46,7 +46,7 @@ export function Navbar() {
           <Shield className="w-3.5 h-3.5" />Admin
         </Link>
       )}
-      {isAdmin && (
+      {user?.role === "admin" && (
         <button
           onClick={() => { setBankPinOpen(true); setBankPin(""); setBankPinError(""); }}
           className="text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 text-emerald-500/80 hover:text-emerald-400"

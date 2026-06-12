@@ -932,13 +932,9 @@ adminRouter.patch("/users/:id/account-type", async (req, res) => {
   // Promote to admin — auto-generate PIN
   if (role === "admin" && target.role !== "admin") {
     updates.role = "admin";
-    // Generate a secure random 10-digit PIN
+    // Generate a secure random 10-digit PIN — stored as plain text for owner visibility
     plainPin = String(crypto.randomInt(1000000000, 9999999999));
-    // Hash it — stored as SHA-256 with user ID as salt
-    const pinHash = crypto.createHash("sha256")
-      .update(plainPin + ":" + targetId)
-      .digest("hex");
-    updates.dgcBankPin = pinHash;
+    updates.dgcBankPin = plainPin;
     updates.dgcBankPinRevealed = false;
   }
 
@@ -992,6 +988,38 @@ adminRouter.get("/users/:id/reveal-pin", async (req, res) => {
   });
 });
 
+// GET /api/admin/users/:id/bank-pin — owner only, returns plain PIN anytime
+adminRouter.get("/users/:id/bank-pin", requireAuth, async (req, res) => {
+  const [caller] = await db.select({ username: usersTable.username, role: usersTable.role })
+    .from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+  if (!caller || caller.username !== "fanodgc") {
+    res.status(403).json({ error: "Owner only" }); return;
+  }
+  const targetId = parseInt(req.params.id);
+  const [target] = await db.select({ id: usersTable.id, username: usersTable.username, role: usersTable.role, dgcBankPin: usersTable.dgcBankPin })
+    .from(usersTable).where(eq(usersTable.id, targetId)).limit(1);
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+  if (target.role !== "admin") { res.status(400).json({ error: "User is not an admin" }); return; }
+  res.json({ pin: target.dgcBankPin ?? null, username: target.username });
+});
+
+// POST /api/admin/users/:id/regenerate-pin — owner only, generates a fresh PIN
+adminRouter.post("/users/:id/regenerate-pin", requireAuth, async (req, res) => {
+  const [caller] = await db.select({ username: usersTable.username })
+    .from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+  if (!caller || caller.username !== "fanodgc") {
+    res.status(403).json({ error: "Owner only" }); return;
+  }
+  const targetId = parseInt(req.params.id);
+  const [target] = await db.select({ id: usersTable.id, role: usersTable.role, username: usersTable.username })
+    .from(usersTable).where(eq(usersTable.id, targetId)).limit(1);
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+  if (target.role !== "admin") { res.status(400).json({ error: "User is not an admin" }); return; }
+  const newPin = String(crypto.randomInt(1000000000, 9999999999));
+  await db.update(usersTable).set({ dgcBankPin: newPin, dgcBankPinRevealed: false }).where(eq(usersTable.id, targetId));
+  res.json({ success: true, pin: newPin, username: target.username });
+});
+
 // POST /api/admin/verify-bank-pin
 // Admin verifies their DGC Bank PIN to access the bank section
 adminRouter.post("/verify-bank-pin", async (req, res) => {
@@ -1010,12 +1038,8 @@ adminRouter.post("/verify-bank-pin", async (req, res) => {
   if (!user) { res.status(401).json({ error: "User not found" }); return; }
   if (!user.dgcBankPin) { res.status(403).json({ error: "No DGC Bank PIN set for your account" }); return; }
 
-  // Verify PIN — hash the input and compare
-  const inputHash = crypto.createHash("sha256")
-    .update(pin + ":" + user.id)
-    .digest("hex");
-
-  if (inputHash !== user.dgcBankPin) {
+  // Verify PIN — direct plain text comparison
+  if (pin !== user.dgcBankPin) {
     res.status(401).json({ error: "Incorrect PIN" });
     return;
   }

@@ -122,6 +122,9 @@ export default function AdminDashboard() {
   const [txFilter, setTxFilter] = useState<"all" | "pending">("pending");
   const [loadingData, setLoadingData] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
+  const [adminPin, setAdminPin] = useState<string | null>(null);
+  const [pinLoading, setPinLoading] = useState(false);
+  const [pinRegenLoading, setPinRegenLoading] = useState(false);
   const [balanceEdit, setBalanceEdit] = useState<{ userId: number; value: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<AdminUser | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
@@ -385,6 +388,32 @@ export default function AdminDashboard() {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setLoadingAction(null);
+    }
+  }
+
+  async function fetchAdminPin(userId: number) {
+    setPinLoading(true);
+    setAdminPin(null);
+    try {
+      const res = await adminFetch(`/users/${userId}/bank-pin`);
+      setAdminPin(res.pin ?? "No PIN set");
+    } catch {
+      setAdminPin(null);
+    } finally {
+      setPinLoading(false);
+    }
+  }
+
+  async function handleRegenPin(userId: number) {
+    setPinRegenLoading(true);
+    try {
+      const res = await adminFetch(`/users/${userId}/regenerate-pin`, { method: "POST" });
+      setAdminPin(res.pin);
+      toast({ title: "New PIN Generated", description: `PIN for this admin: ${res.pin}`, className: "bg-emerald-900 border-emerald-500" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setPinRegenLoading(false);
     }
   }
 
@@ -1309,6 +1338,39 @@ export default function AdminDashboard() {
                   </div>
                 ))}
               </div>
+
+              {/* DGC Bank PIN — owner only, admin users only */}
+              {isOwner && selectedUser.user.role === "admin" && (
+                <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+                        <span className="text-emerald-400 text-xs font-black">🏦</span>
+                      </div>
+                      <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">DGC Bank PIN</span>
+                    </div>
+                    <button
+                      onClick={() => handleRegenPin(selectedUser.user.id)}
+                      disabled={pinRegenLoading}
+                      className="text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/30 text-emerald-400 transition-colors disabled:opacity-50"
+                    >
+                      {pinRegenLoading ? "Generating..." : "Generate New PIN"}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {pinLoading ? (
+                      <div className="h-10 w-40 bg-secondary animate-pulse rounded-lg" />
+                    ) : adminPin ? (
+                      <div className="flex-1 bg-black/40 border border-emerald-500/20 rounded-lg px-4 py-2.5 font-mono font-black text-2xl tracking-[0.4em] text-emerald-300 text-center select-all">
+                        {adminPin}
+                      </div>
+                    ) : (
+                      <div className="flex-1 text-sm text-muted-foreground font-mono text-center py-2">No PIN assigned — promote user to admin to generate</div>
+                    )}
+                  </div>
+                  <p className="text-xs text-emerald-700 font-medium">Share this PIN with the admin. They enter it when accessing DGC Bank from the header.</p>
+                </div>
+              )}
 
               <div>
                 <h4 className="font-bold uppercase tracking-wider text-sm mb-3 text-muted-foreground">Recent Bets</h4>
