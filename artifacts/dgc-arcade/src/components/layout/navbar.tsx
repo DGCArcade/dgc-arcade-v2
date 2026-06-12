@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAuthModal } from "@/hooks/use-auth-modal";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
-import {User, Wallet, LogOut, Menu, Shield, Gift, Settings} from "lucide-react";
+import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +23,12 @@ export function Navbar() {
   const [location, setLocation] = useLocation();
   const [walletOpen, setWalletOpen] = useState(false);
   const [bonusOpen, setBonusOpen] = useState(false);
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
+  const isOwner = user?.role === "owner";
+  const [bankPinOpen, setBankPinOpen] = useState(false);
+  const [bankPin, setBankPin] = useState("");
+  const [bankPinError, setBankPinError] = useState("");
+  const [bankPinLoading, setBankPinLoading] = useState(false);
 
   const NavLinks = () => (
     <>
@@ -41,8 +46,46 @@ export function Navbar() {
           <Shield className="w-3.5 h-3.5" />Admin
         </Link>
       )}
+      {isAdmin && (
+        <button
+          onClick={() => { setBankPinOpen(true); setBankPin(""); setBankPinError(""); }}
+          className="text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 text-emerald-500/80 hover:text-emerald-400"
+        >
+          <Building2 className="w-3.5 h-3.5" />DGC Bank
+        </button>
+      )}
     </>
   );
+
+  async function handleBankPinSubmit() {
+    if (bankPin.length < 5) return;
+    setBankPinLoading(true);
+    setBankPinError("");
+    try {
+      const res = await fetch("/api/admin/verify-bank-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ pin: bankPin }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBankPinError(data.error ?? "Incorrect PIN");
+        setBankPin("");
+      } else {
+        // PIN correct — store session token and navigate to admin DGC Bank tab
+        sessionStorage.setItem("dgcBankSession", data.sessionToken);
+        sessionStorage.setItem("dgcBankExpires", data.expiresAt);
+        setBankPinOpen(false);
+        setBankPin("");
+        setLocation("/admin?tab=bank");
+      }
+    } catch {
+      setBankPinError("Connection error. Try again.");
+    } finally {
+      setBankPinLoading(false);
+    }
+  }
 
   return (
     <>
@@ -168,6 +211,60 @@ export function Navbar() {
           <WalletModal open={walletOpen} onClose={() => setWalletOpen(false)} />
           <DailyBonusModal open={bonusOpen} onClose={() => setBonusOpen(false)} />
         </>
+      )}
+
+      {/* ── DGC Bank PIN Modal ─────────────────────────────────────── */}
+      {bankPinOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-card border border-border/60 rounded-2xl p-8 w-full max-w-sm shadow-2xl mx-4">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
+                <Building2 className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="font-display font-black uppercase tracking-widest text-lg">DGC Bank</h2>
+                <p className="text-xs text-muted-foreground">Enter your secure PIN to access</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="relative">
+                <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  placeholder="Enter PIN (5–15 digits)"
+                  value={bankPin}
+                  onChange={e => { setBankPin(e.target.value.replace(/\D/g, "").slice(0, 15)); setBankPinError(""); }}
+                  onKeyDown={e => { if (e.key === "Enter") handleBankPinSubmit(); }}
+                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-secondary border border-border/50 font-mono text-lg tracking-[0.3em] text-center focus:outline-none focus:border-emerald-500/50"
+                  autoFocus
+                  maxLength={15}
+                />
+              </div>
+
+              {bankPinError && (
+                <p className="text-xs text-red-400 text-center font-medium">{bankPinError}</p>
+              )}
+
+              <div className="flex gap-3 mt-2">
+                <button
+                  onClick={() => setBankPinOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-border/50 text-sm font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBankPinSubmit}
+                  disabled={bankPinLoading || bankPin.length < 5}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-bold uppercase tracking-wider text-white transition-colors"
+                >
+                  {bankPinLoading ? "Verifying..." : "Enter"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
