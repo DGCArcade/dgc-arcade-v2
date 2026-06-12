@@ -264,7 +264,6 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     const timeSinceCreated = Date.now() - new Date(user.createdAt).getTime();
     const accountAgeHours = timeSinceCreated / (1000 * 60 * 60);
     const flagReasons: string[] = [];
-
     // Instant cashout: withdraw >90% of deposit within 2 hours
     if (withdrawRatio > 0.90 && accountAgeHours < 2) {
       flagReasons.push("Immediate high-value withdrawal on new account");
@@ -282,10 +281,8 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       res.status(400).json({ error: "Insufficient balance" });
       return;
     }
-
     const fraudScore = flagReasons.length;
     const autoDecline = fraudScore >= 2 || (withdrawRatio > 0.95 && accountAgeHours < 1);
-
     if (autoDecline) {
       // Log the declined attempt but do NOT touch the balance
       await db.insert(transactionsTable).values({
@@ -300,10 +297,20 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       res.status(403).json({ error: "Withdrawal declined. Please contact support if you believe this is an error." });
       return;
     }
-
     // ── PASSED ALL CHECKS: process withdrawal ─────────────────────
+    // ATOMIC balance deduct -- prevents race conditions
+    // Check and deduct in one SQL statement so two simultaneous
+    // withdrawal requests can never both pass on the same balance.
     const status = fraudScore >= 1 ? "flagged" : "pending";
-    await db.update(usersTable).set({ balance: String(balance - amount) }).where(eq(usersTable.id, user.id));
+    const deducted = await db.update(usersTable)
+      .set({ balance: sql`CAST((CAST(balance AS NUMERIC) - ${amount}) AS TEXT)` })
+      .where(eq(usersTable.id, user.id))
+      .where(sql`CAST(balance AS NUMERIC) >= ${amount}`)
+      .returning({ balance: usersTable.balance });
+    if (deducted.length === 0) {
+      res.status(400).json({ error: "Insufficient balance" });
+      return;
+    }
     await db.insert(transactionsTable).values({
       userId: user.id,
       type: "withdrawal",
