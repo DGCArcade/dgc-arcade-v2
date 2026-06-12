@@ -129,7 +129,7 @@ export interface DepositLink {
   trackId: string;
 }
 
-export interface OxapayCallbackInput {
+export interface PlisioCallbackInput {
   /** @nullable */
   trackId?: string | null;
   /** @nullable */

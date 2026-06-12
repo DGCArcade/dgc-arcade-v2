@@ -6,7 +6,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DepositForm } from "@/components/profile/deposit-form";
 import { WithdrawForm } from "@/components/profile/withdraw-form";
 import { useLocation } from "wouter";
-import { useEffect } from "react";
 import { ArrowDownLeft, ArrowUpRight, Clock, CheckCircle2, XCircle, Landmark, RefreshCw } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 

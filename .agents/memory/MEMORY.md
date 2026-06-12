@@ -1,1 +1,2 @@
 - [DGC Arcade Architecture](dgc-arcade-arch.md) — game slugs in DB, multi-step game routes, theme system, and frontend patterns
+- [DGC Arcade gotchas](dgc-arcade-gotchas.md) — pre-existing scripts typecheck fail, dev/prod DB split, Plisio (not OxaPay), push=live deploy

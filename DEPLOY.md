@@ -1,206 +1,124 @@
 # DGC Arcade — Deployment Guide
-## Moving from Replit → GitHub → Your VPS (IONOS)
+
+How your site is wired up and how to ship changes. This reflects your **real** setup:
+**GitHub → Render (hosting) → Neon (database) → Plisio (crypto payments).**
 
 ---
 
-## 🗃️ WHERE EVERYTHING IS STORED (Kindergarten Edition)
-
-Think of it like a restaurant:
+## 🗺️ Where everything lives
 
 | Thing | What it is | Where it lives |
 |---|---|---|
-| **Your code** | The recipe book | GitHub (free) |
-| **Your database** | The ingredient storage | PostgreSQL — needs a host (see below) |
-| **Your files/assets** | The menu printouts | GitHub (code) / CDN if you add images |
-| **Your server** | The kitchen/cook | IONOS VPS (runs 24/7) |
-| **Your domain** | The restaurant address | IONOS DNS → DifferentGrindCrw.com |
-| **Player money** | Crypto wallets | OxaPay handles it — you never touch it directly |
-| **API Keys** | The safe codes | `.env` file on your VPS — NEVER in GitHub |
+| **Code** | The whole app (frontend + backend) | GitHub → `DGC4/dgc-arcade-v2` |
+| **Frontend** | React/Vite site players see | Render service `dgc-arcade-frontend` |
+| **Backend** | Express API (`/api`) | Render service `dgc-arcade-api` |
+| **Database** | Players, bets, balances, transactions | Neon PostgreSQL (managed separately) |
+| **Payments** | Crypto deposits & withdrawals | Plisio |
+| **Secrets** | DB URL, JWT secret, Plisio key | Render dashboard (Environment tab) — never in code |
+
+> ⚠️ **Two separate databases.** While developing on Replit you use Replit's
+> built-in database. Your **live** site on Render uses your **Neon** database.
+> They do not share data — test accounts made on Replit never appear live.
 
 ---
 
-## 📦 STEP 1 — Push Code to GitHub
+## 🚀 How to ship a change (the everyday flow)
 
-**From your computer (after downloading from Replit):**
+Render is set to **auto-deploy** (`autoDeploy: true`). That means:
+
+```
+You push to GitHub main  →  Render automatically rebuilds & redeploys both services
+```
+
+So the entire deploy is just:
 
 ```bash
-# Unzip the downloaded code
-unzip dgc-arcade-deploy.zip
-cd dgc-arcade-deploy
-
-# Initialize git (if not already)
-git init
-git remote add origin https://github.com/YOUR_USERNAME/dgc-arcade.git
-
-# Push to GitHub
 git add .
-git commit -m "DGC Arcade — initial deploy"
-git push -u origin main
+git commit -m "describe your change"
+git push origin main
 ```
 
-**IMPORTANT:** The `.env` file is in `.gitignore` — it will NOT be pushed. Good. Your secrets stay private.
+Within a few minutes Render builds and your live site updates. Watch progress in
+the Render dashboard under each service's "Events"/"Logs" tab.
 
 ---
 
-## 🖥️ STEP 2 — Set Up Your IONOS VPS
+## 🔑 Environment variables (set these in Render, not in code)
 
-1. Buy a VPS from ionos.com (Linux Ubuntu 22.04, at least 2GB RAM recommended)
-2. SSH into it: `ssh root@YOUR_VPS_IP`
-3. Install Node.js 20+:
-   ```bash
-   curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-   apt-get install -y nodejs
-   npm install -g pnpm pm2
-   ```
-4. Install PostgreSQL:
-   ```bash
-   apt-get install -y postgresql postgresql-contrib
-   sudo -u postgres psql -c "CREATE DATABASE dgcarcade;"
-   sudo -u postgres psql -c "CREATE USER dgcuser WITH PASSWORD 'yourpassword';"
-   sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE dgcarcade TO dgcuser;"
-   ```
+Both are configured in the Render dashboard → service → **Environment**.
+`sync: false` in `render.yaml` means you type the real values into Render by hand.
 
----
+**`dgc-arcade-api` (backend) needs:**
 
-## 🔑 STEP 3 — Add Your API Keys (on VPS)
+| Variable | What it is | Where to get it |
+|---|---|---|
+| `DATABASE_URL` | Neon connection string | https://console.neon.tech → Connection Details |
+| `JWT_SECRET` | Signs login tokens | Generate a long random string (see `.env.example`) |
+| `PLISIO_SECRET_KEY` | Crypto payments | https://plisio.net → Dashboard → API → Secret Key |
+| `SITE_URL` | Your live domain | e.g. `https://differentgrindcrw.com` |
+| `NODE_ENV` | Set to `production` | (already set in `render.yaml`) |
 
-```bash
-# On your VPS, create the .env file:
-nano /var/www/dgc-arcade/.env
-```
+**`dgc-arcade-frontend` (frontend) needs:** `NODE_ENV=production` (already set).
 
-Paste in your values (see `.env.example`):
-```
-DATABASE_URL=postgresql://dgcuser:yourpassword@localhost:5432/dgcarcade
-SESSION_SECRET=paste_your_64_char_random_string_here
-OXAPAY_MERCHANT_KEY=your_key_from_oxapay_dashboard
-OXAPAY_PAYOUT_KEY=your_payout_key_from_oxapay_dashboard
-SITE_URL=https://differentgrindcrw.com
-NODE_ENV=production
-PORT=8080
-```
-
-**Where to get OxaPay keys:**
-1. Go to https://oxapay.com
-2. Sign up / Log in
-3. Dashboard → Create Merchant → copy the Merchant Key
-4. Dashboard → Payout API → copy the Payout Key
+See `.env.example` for a copy-paste template with explanations.
 
 ---
 
-## 🌐 STEP 4 — IONOS DNS Setup
-
-In your IONOS control panel for DifferentGrindCrw.com:
-
-| Type | Name | Value | TTL |
-|---|---|---|---|
-| A | @ | YOUR_VPS_IP | 3600 |
-| A | www | YOUR_VPS_IP | 3600 |
-| CNAME | api | @ | 3600 |
-
-The site runs at root `/` (frontend) and `/api` (backend) — both served from the same VPS.
-
----
-
-## 🚀 STEP 5 — Deploy the Code on VPS
-
-```bash
-# Clone from GitHub
-cd /var/www
-git clone https://github.com/YOUR_USERNAME/dgc-arcade.git
-cd dgc-arcade
-
-# Install dependencies
-pnpm install
-
-# Run database migrations
-pnpm --filter @workspace/db run push
-
-# Build the frontend
-pnpm --filter @workspace/dgc-arcade run build
-
-# Build the API server
-pnpm --filter @workspace/api-server run build
-
-# Start with PM2 (keeps it running 24/7)
-pm2 start "node --enable-source-maps artifacts/api-server/dist/index.mjs" --name dgc-api
-pm2 start "npx serve -s artifacts/dgc-arcade/dist -l 3000" --name dgc-web
-pm2 save
-pm2 startup
-```
-
----
-
-## 🔒 STEP 6 — SSL Certificate (HTTPS)
-
-```bash
-apt-get install -y certbot
-certbot --nginx -d differentgrindcrw.com -d www.differentgrindcrw.com
-```
-
----
-
-## 🔄 STEP 7 — Update Your Site (After Changes)
-
-When you update code on GitHub:
-```bash
-cd /var/www/dgc-arcade
-git pull origin main
-pnpm install
-pnpm --filter @workspace/api-server run build
-pnpm --filter @workspace/dgc-arcade run build
-pm2 restart all
-```
-
----
-
-## 💰 PAYMENT FLOW (OxaPay)
+## 💰 Payment flow (Plisio)
 
 ```
-Player clicks "Deposit" 
-  → Your site calls OxaPay API with your Merchant Key
-  → OxaPay generates a payment address (BTC/ETH/USDT etc.)
-  → Player sends crypto to that address
-  → OxaPay sends a webhook to your site: POST /api/transactions/oxapay-webhook
-  → Your site adds balance to player account ✅
+DEPOSIT
+  Player clicks "Deposit"
+   → backend calls Plisio API with PLISIO_SECRET_KEY, gets a checkout URL
+   → player pays crypto on Plisio's page
+   → Plisio sends an IPN webhook to:  POST /api/transactions/deposit/callback
+   → backend verifies it came from Plisio's IPs, then credits the balance ✅
 
-Player clicks "Withdraw"
-  → Request goes to Admin panel (pending)
-  → You approve it in admin panel
-  → Your site calls OxaPay Payout API with your Payout Key
-  → Crypto sent to player wallet automatically ✅
+WITHDRAW
+  Player requests a withdrawal
+   → it appears as "pending" in the Admin panel
+   → an admin approves it
+   → the payout is processed via Plisio ✅
 ```
 
----
-
-## 👑 ADMIN LOGIN
-
-Your owner account: **fanodgc**
-- Set your password when you first register on the site
-- Go to `/admin` to access the full admin panel
-- This account can NEVER be banned, deleted, or demoted by anyone
-
-To make yourself admin (first time):
-```bash
-# On your VPS or Replit:
-psql $DATABASE_URL -c "UPDATE users SET role='admin' WHERE username='fanodgc';"
-```
+Owner-only balance/bank views in the admin panel also read live data from Plisio
+using the same `PLISIO_SECRET_KEY`.
 
 ---
 
-## 🐙 GITHUB SECRETS (Optional — for CI/CD)
+## 🛠️ First-time / fresh deploy (if rebuilding from scratch)
 
-If you want GitHub to auto-deploy when you push:
-1. Go to GitHub → Your Repo → Settings → Secrets and Variables → Actions
-2. Add these secrets:
-   - `VPS_HOST` — your VPS IP
-   - `VPS_USER` — usually `root`
-   - `VPS_SSH_KEY` — your private SSH key
+1. Push the code to GitHub (`DGC4/dgc-arcade-v2`).
+2. In Render, create a **Blueprint** from the repo — it reads `render.yaml` and
+   creates both services automatically.
+3. Add the environment variables above to the `dgc-arcade-api` service.
+4. Point your domain's DNS at the Render frontend service (Render gives you the
+   target in the service's "Settings → Custom Domain" section).
+5. Push to `main` → Render builds and goes live.
 
 ---
 
-## 📞 SUPPORT
+## 👑 Admin / Owner login
 
-- OxaPay docs: https://oxapay.com/developers
-- PM2 docs: https://pm2.keymetrics.io
-- Curaçao Gaming info: https://www.gaming-curacao.com
+Your owner account is **fanodgc**:
+- It can never be banned, deleted, or demoted (enforced in both the API and UI).
+- Go to `/admin` for the full admin panel (users, transactions, bank/fraud views).
+- Create more players or admins from **Admin → Users → "+ Create User"**.
+
+---
+
+## 🔐 Security reminders
+
+- Real secrets live **only** in Render's Environment tab. Never commit a real `.env`.
+- If a secret is ever exposed, rotate it (generate a new one) in its provider and
+  update it in Render.
+- Database schema is managed via Drizzle; production DB migrations are handled
+  separately from local development.
+
+---
+
+## 📞 References
+
+- Plisio API: https://plisio.net/documentation
+- Render: https://render.com/docs
+- Neon: https://neon.tech/docs
