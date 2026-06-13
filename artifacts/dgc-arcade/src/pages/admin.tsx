@@ -1302,15 +1302,41 @@ export default function AdminDashboard() {
                                 </TableCell>
                                 <TableCell>
                                   {tx.type === "deposit" && tx.status === "pending" && isOwner && (
-                                    <Button
-                                      size="sm"
-                                      className="bg-green-600 hover:bg-green-700 h-7 text-xs gap-1 font-bold"
-                                      disabled={loadingAction === `dep-${tx.id}`}
-                                      onClick={() => handleCompleteDeposit(tx)}
-                                    >
-                                      <CheckCircle2 className="h-3 w-3" />
-                                      {loadingAction === `dep-${tx.id}` ? "Crediting…" : "Credit User"}
-                                    </Button>
+                                    <div className="flex flex-col gap-1">
+                                      {(tx.plisioTrackId || tx.orderId) && (
+                                        <div className="text-[10px] font-mono text-muted-foreground space-y-0.5 max-w-[180px]">
+                                          {tx.plisioTrackId && (
+                                            <div className="flex items-center gap-1 truncate" title={tx.plisioTrackId}>
+                                              <span className="text-amber-400 font-bold shrink-0">TxID:</span>
+                                              <span className="truncate">{tx.plisioTrackId.slice(0,14)}…</span>
+                                            </div>
+                                          )}
+                                          {tx.orderId && (
+                                            <div className="flex items-center gap-1 truncate" title={tx.orderId}>
+                                              <span className="text-blue-400 font-bold shrink-0">Order:</span>
+                                              <span className="truncate">{tx.orderId.slice(0,14)}…</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                      <div className="flex gap-1">
+                                        <Button
+                                          size="sm"
+                                          className="bg-green-600 hover:bg-green-700 h-7 text-xs gap-1 font-bold"
+                                          disabled={loadingAction === `dep-${tx.id}`}
+                                          onClick={() => handleCompleteDeposit(tx)}
+                                        >
+                                          <CheckCircle2 className="h-3 w-3" />
+                                          {loadingAction === `dep-${tx.id}` ? "Crediting…" : "Credit User"}
+                                        </Button>
+                                        {tx.plisioTrackId && (
+                                          <Button size="sm" variant="outline" className="h-7 text-xs px-2" title="View in Plisio dashboard"
+                                            onClick={() => window.open(`https://plisio.net/invoice/${tx.plisioTrackId}`, "_blank")}>
+                                            🔗
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </div>
                                   )}
                                   {tx.type === "withdrawal" && tx.status === "pending" && (
                                     <div className="flex gap-1">
