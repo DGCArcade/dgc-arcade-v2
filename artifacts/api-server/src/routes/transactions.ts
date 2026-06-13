@@ -242,10 +242,19 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       return;
     }
 
-    const { txn_id, status, source_amount, verify_hash } = req.body as {
+    const {
+      txn_id,
+      status,
+      source_amount,        // USD amount on the invoice (requested)
+      received_amount,      // actual crypto amount received (may be less due to network fees)
+      invoice_total_sum,    // total crypto amount on the invoice
+      verify_hash,
+    } = req.body as {
       txn_id?: string;
       status?: string;
-      source_amount?: string;
+      source_amount?: string | number;
+      received_amount?: string | number;
+      invoice_total_sum?: string | number;
       verify_hash?: string;
     };
 
@@ -302,8 +311,44 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       return;
     }
 
-    // For "mismatch" status, source_amount contains the actual received amount
-    const creditAmount = source_amount ? parseFloat(source_amount) : parseFloat(tx.amount);
+    // ── Exact credit calculation ─────────────────────────────────────────────
+    // Credit the user with what ACTUALLY arrived in the merchant wallet — not the
+    // invoice face value. Network fees and partial payments mean received_amount
+    // can be less than invoice_total_sum. We scale the USD credit by that ratio so
+    // the house never covers blockchain or Plisio network fees for the user.
+    //
+    // Logic (in order of preference):
+    //  1. If Plisio sends both received_amount and invoice_total_sum (crypto values),
+    //     scale source_amount by the ratio of actual vs invoiced crypto. This is the
+    //     most accurate: $5 invoice, 97.4% received → credit $4.87.
+    //  2. If only source_amount is present (common for mismatch), use it directly —
+    //     for mismatch Plisio already sets source_amount to the actual received USD.
+    //  3. Fall back to the original invoice amount stored in tx.amount.
+    //
+    // Safety: creditAmount is always capped at the original invoice amount so a
+    // rounding/data error can never over-credit the user.
+    const requestedUsd = parseFloat(tx.amount);
+    const sourceUsd    = source_amount    != null ? parseFloat(String(source_amount))    : null;
+    const receivedCrypto  = received_amount   != null ? parseFloat(String(received_amount))   : null;
+    const invoicedCrypto  = invoice_total_sum != null ? parseFloat(String(invoice_total_sum)) : null;
+
+    let creditAmount: number;
+    if (receivedCrypto != null && invoicedCrypto != null && invoicedCrypto > 0 && sourceUsd != null) {
+      // Most accurate: scale USD by actual-vs-invoiced crypto ratio
+      const ratio = Math.min(receivedCrypto / invoicedCrypto, 1.0);
+      creditAmount = Math.min(Math.round(sourceUsd * ratio * 1e8) / 1e8, requestedUsd);
+    } else if (sourceUsd != null) {
+      // Mismatch path: Plisio sets source_amount to actual received USD
+      creditAmount = Math.min(sourceUsd, requestedUsd);
+    } else {
+      // Last resort: use the invoice amount (never over-credits, may under-report)
+      creditAmount = requestedUsd;
+    }
+
+    req.log.info(
+      { txn_id, creditAmount, sourceUsd, receivedCrypto, invoicedCrypto, requestedUsd, status },
+      "Plisio IPN: credit calculation",
+    );
 
     // Idempotent + transactional credit
     await db.transaction(async (txn) => {
