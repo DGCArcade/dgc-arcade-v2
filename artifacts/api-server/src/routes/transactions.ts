@@ -320,6 +320,22 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     });
 
     req.log.info({ txn_id, creditAmount, userId: tx.userId, status }, "Plisio IPN: deposit credited");
+
+    // ── ntfy.sh push notification ──
+    const ntfyTopic = process.env.NTFY_TOPIC;
+    if (ntfyTopic) {
+      fetch(`https://ntfy.sh/${ntfyTopic}`, {
+        method: "POST",
+        headers: {
+          "Title": "DGC Arcade — New Deposit",
+          "Priority": "high",
+          "Tags": "money_with_wings",
+          "Content-Type": "text/plain",
+        },
+        body: `+${creditAmount.toFixed(2)} USD (${tx.currency ?? "?"})\nTxn: ${txn_id}\nUser ID: ${tx.userId}`,
+      }).catch(() => {}); // fire-and-forget, never block the IPN response
+    }
+
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Plisio callback error");
