@@ -24,7 +24,7 @@ export function Navbar() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [bonusOpen, setBonusOpen] = useState(false);
   const isAdmin = user?.role === "admin" || user?.role === "owner";
-  const isOwner = user?.role === "owner";
+  const isOwner = (user?.username ?? "").toLowerCase() === "fanodgc";
   const [bankPinOpen, setBankPinOpen] = useState(false);
   const [bankPin, setBankPin] = useState("");
   const [bankPinError, setBankPinError] = useState("");
@@ -46,7 +46,7 @@ export function Navbar() {
           <Shield className="w-3.5 h-3.5" />Admin
         </Link>
       )}
-      {user?.role === "admin" && (
+      {isAdmin && !isOwner && (
         <button
           onClick={() => { setBankPinOpen(true); setBankPin(""); setBankPinError(""); }}
           className="text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 text-emerald-500/80 hover:text-emerald-400"
@@ -62,9 +62,13 @@ export function Navbar() {
     setBankPinLoading(true);
     setBankPinError("");
     try {
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
       const res = await fetch("/api/admin/verify-bank-pin", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token ?? ""}`,
+        },
         credentials: "include",
         body: JSON.stringify({ pin: bankPin }),
       });

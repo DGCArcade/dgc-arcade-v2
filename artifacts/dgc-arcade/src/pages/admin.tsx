@@ -35,6 +35,7 @@ import {
   XCircle,
   RefreshCw,
   Wallet,
+  KeyRound,
   Activity,
   Clock,
 } from "lucide-react";
@@ -46,13 +47,30 @@ function getToken() {
   return typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
 }
 
+function bankSessionValid(): boolean {
+  if (typeof sessionStorage === "undefined") return false;
+  const tok = sessionStorage.getItem("dgcBankSession");
+  const exp = sessionStorage.getItem("dgcBankExpires");
+  if (!tok || !exp) return false;
+  return new Date(exp).getTime() > Date.now();
+}
+
+function clearBankSession() {
+  if (typeof sessionStorage === "undefined") return;
+  sessionStorage.removeItem("dgcBankSession");
+  sessionStorage.removeItem("dgcBankExpires");
+}
+
 async function adminFetch(path: string, opts?: RequestInit) {
   const token = getToken();
+  const bankSession =
+    typeof sessionStorage !== "undefined" ? sessionStorage.getItem("dgcBankSession") : null;
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token ?? ""}`,
+      ...(bankSession ? { "x-bank-session": bankSession } : {}),
       ...(opts?.headers ?? {}),
     },
   });
@@ -147,6 +165,11 @@ export default function AdminDashboard() {
   });
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
+  // ── DGC Bank PIN session (gates the bank tab for owner and regular admins) ──
+  const [bankUnlocked, setBankUnlocked] = useState<boolean>(() => bankSessionValid());
+  const [bankPinInput, setBankPinInput] = useState("");
+  const [bankPinError, setBankPinError] = useState("");
+  const [bankPinVerifying, setBankPinVerifying] = useState(false);
 
   const loadBankSettings = useCallback(async () => {
     try {
@@ -179,7 +202,8 @@ export default function AdminDashboard() {
     }
   }, [toast]);
 
-  const isAdmin = user?.role === "admin";
+  const isOwner = (user?.username ?? "").toLowerCase() === "fanodgc";
+  const isAdmin = user?.role === "admin" || user?.role === "owner" || isOwner;
 
   useEffect(() => {
     if (!isLoading && (!user || !isAdmin)) {
@@ -228,21 +252,33 @@ export default function AdminDashboard() {
   const loadBank = useCallback(async () => {
     setBankLoading(true);
     try {
-      const [balRes, invRes, wdRes] = await Promise.all([
+      // Invoices are owner-only (server-enforced); regular admins skip them.
+      const tasks: Promise<any>[] = [
         adminFetch("/bank/balances"),
-        adminFetch("/bank/invoices?limit=25"),
         adminFetch("/bank/pending-withdrawals"),
-      ]);
-      setBankBalances(balRes.balances ?? {});
-      setBankInvoices(invRes.invoices ?? []);
-      setBankWithdrawals(wdRes.withdrawals ?? []);
+      ];
+      if (isOwner) tasks.push(adminFetch("/bank/invoices?limit=25"));
+      const [balR, wdR, invR] = await Promise.allSettled(tasks);
+
+      if (balR.status === "fulfilled") setBankBalances(balR.value.balances ?? {});
+      if (wdR.status === "fulfilled") setBankWithdrawals(wdR.value.withdrawals ?? []);
+      if (isOwner && invR && invR.status === "fulfilled") setBankInvoices(invR.value.invoices ?? []);
+
+      // Surface failures without blanking the whole view; relock on lost session.
+      const reasons = [balR, wdR, invR]
+        .filter((r): r is PromiseRejectedResult => !!r && r.status === "rejected")
+        .map((r) => String(r.reason?.message ?? r.reason ?? ""));
+      if (reasons.some((m) => /locked|expired/i.test(m))) {
+        clearBankSession();
+        setBankUnlocked(false);
+      } else if (reasons.length > 0) {
+        toast({ title: "Some bank data failed to load", description: reasons[0], variant: "destructive" });
+      }
       setBankLastRefresh(new Date());
-    } catch (e) {
-      toast({ title: "Bank load failed", description: String(e), variant: "destructive" });
     } finally {
       setBankLoading(false);
     }
-  }, [toast]);
+  }, [isOwner, toast]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -292,8 +328,29 @@ export default function AdminDashboard() {
     if (activeTab === "transactions" && isAdmin) loadTransactions();
   }, [activeTab, isAdmin, loadTransactions]);
   useEffect(() => {
-    if (activeTab === "bank" && isAdmin) { loadBank(); loadFraudAlerts(); loadBankSettings(); }
-  }, [activeTab, isAdmin, loadBank, loadFraudAlerts, loadBankSettings]);
+    if (activeTab === "bank" && isAdmin && bankUnlocked) {
+      loadBank();
+      loadFraudAlerts();
+      if (isOwner) loadBankSettings();
+    }
+  }, [activeTab, isAdmin, bankUnlocked, isOwner, loadBank, loadFraudAlerts, loadBankSettings]);
+
+  // Open the DGC Bank tab when navigated to /admin?tab=bank (e.g. from the header).
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "bank" || t === "users" || t === "overview") {
+      setActiveTab(t as TabKey);
+    }
+  }, []);
+
+  // Relock automatically if the bank session expires while the page is open.
+  useEffect(() => {
+    if (!bankUnlocked) return;
+    const id = setInterval(() => {
+      if (!bankSessionValid()) setBankUnlocked(false);
+    }, 30000);
+    return () => clearInterval(id);
+  }, [bankUnlocked]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -417,10 +474,36 @@ export default function AdminDashboard() {
     }
   }
 
+  async function verifyBankPin() {
+    if (bankPinInput.length < 5) return;
+    setBankPinVerifying(true);
+    setBankPinError("");
+    try {
+      const data = await adminFetch("/verify-bank-pin", {
+        method: "POST",
+        body: JSON.stringify({ pin: bankPinInput }),
+      });
+      sessionStorage.setItem("dgcBankSession", data.sessionToken);
+      sessionStorage.setItem("dgcBankExpires", data.expiresAt);
+      setBankPinInput("");
+      setBankUnlocked(true);
+    } catch (e: any) {
+      setBankPinError(e?.message ?? "Incorrect PIN");
+      setBankPinInput("");
+    } finally {
+      setBankPinVerifying(false);
+    }
+  }
+
   async function handleViewUser(u: AdminUser) {
+    setAdminPin(null); // reset so the previous user's PIN never lingers
     try {
       const data = await adminFetch(`/users/${u.id}`);
       setSelectedUser(data);
+      // Owner-only: fetch this specific admin's PIN.
+      if (isOwner && data?.user?.role === "admin") {
+        void fetchAdminPin(u.id);
+      }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -440,8 +523,8 @@ export default function AdminDashboard() {
     setActiveTab("overview");
   }
 
-  const isOwner = user?.username === "fanodgc";
-
+  // Owner: Overview / Users / DGC Bank (in-panel, PIN-gated).
+  // Regular admin: Overview / Users only — their DGC Bank lives on the header.
   const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = isOwner
     ? [
         { key: "overview", label: "Overview", icon: Activity },
@@ -451,8 +534,6 @@ export default function AdminDashboard() {
     : [
         { key: "overview", label: "Overview", icon: Activity },
         { key: "users", label: "Users", icon: Users },
-        { key: "transactions", label: "Withdrawals", icon: DollarSign },
-        { key: "bank", label: "DGC Bank", icon: DollarSign },
       ];
 
   return (
@@ -540,7 +621,7 @@ export default function AdminDashboard() {
                 <p className="stat-number text-2xl font-bold text-amber-400">{stats?.pendingWithdrawals ?? "—"}</p>
                 <p className="text-sm text-muted-foreground mt-1">{stats ? formatCurrency(stats.pendingWithdrawalAmount) : "—"} total</p>
                 {stats && stats.pendingWithdrawals > 0 && (
-                  <Button size="sm" className="mt-3 w-full" onClick={() => setActiveTab("transactions")}>
+                  <Button size="sm" className="mt-3 w-full" onClick={() => setActiveTab("bank")}>
                     Review Now
                   </Button>
                 )}
@@ -886,8 +967,40 @@ export default function AdminDashboard() {
         </div>
       )}
 
+          {/* ── BANK TAB: PIN GATE ── */}
+          {activeTab === "bank" && !bankUnlocked && (
+            <div className="max-w-md mx-auto mt-10">
+              <Card className="border-emerald-500/30 bg-emerald-950/20">
+                <CardContent className="p-8 space-y-5 text-center">
+                  <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+                    <Wallet className="w-7 h-7 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h2 className="font-display font-black uppercase tracking-widest text-xl text-white">DGC Bank Locked</h2>
+                    <p className="text-sm text-muted-foreground mt-1">Enter your bank PIN to unlock. Session lasts 70 minutes.</p>
+                  </div>
+                  <Input
+                    type="password"
+                    inputMode="numeric"
+                    autoFocus
+                    value={bankPinInput}
+                    onChange={(e) => { setBankPinInput(e.target.value.replace(/\D/g, "")); setBankPinError(""); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") verifyBankPin(); }}
+                    placeholder="••••••••"
+                    className="text-center text-2xl tracking-[0.4em] font-mono h-14"
+                  />
+                  {bankPinError && <p className="text-sm text-red-400 font-medium">{bankPinError}</p>}
+                  <Button onClick={verifyBankPin} disabled={bankPinVerifying || bankPinInput.length < 5} className="w-full h-11 gap-2">
+                    {bankPinVerifying ? <RefreshCw className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                    {bankPinVerifying ? "Verifying…" : "Unlock DGC Bank"}
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           {/* ── BANK TAB ── */}
-          {activeTab === "bank" && (
+          {activeTab === "bank" && bankUnlocked && (
             <div className="space-y-6">
               {/* ── Header ── */}
               <div className="flex items-center justify-between flex-wrap gap-3">
@@ -896,7 +1009,7 @@ export default function AdminDashboard() {
                     <Wallet className="w-6 h-6 text-primary" /> DGC Bank
                   </h2>
                   <p className="text-sm text-muted-foreground">
-                    Owner control center · Plisio live data
+                    {isOwner ? "Owner control center · Plisio live data" : "Withdrawal approvals · fraud monitor"}
                     {bankLastRefresh && (
                       <span className="ml-2 text-xs opacity-60">
                         · Refreshed {bankLastRefresh.toLocaleTimeString()}
@@ -1136,7 +1249,8 @@ export default function AdminDashboard() {
                 )}
               </div>
 
-              {/* ── Live Invoice Feed ── */}
+              {/* ── Live Invoice Feed (OWNER ONLY) ── */}
+              {isOwner && (
               <div>
                 <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
                   <TrendingUp className="w-3.5 h-3.5" /> Live Plisio Invoice Feed
@@ -1184,6 +1298,7 @@ export default function AdminDashboard() {
                   </Card>
                 )}
               </div>
+              )}
 
               {/* ── fanodgc-only Settings Panel ── */}
               {user?.username === "fanodgc" && (
@@ -1436,7 +1551,7 @@ export default function AdminDashboard() {
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Role</label>
               <div className="flex gap-2">
-                {["player", "admin"].map(r => (
+                {(isOwner ? ["player", "admin"] : ["player"]).map(r => (
                   <button key={r} onClick={() => setNewUser(p => ({ ...p, role: r }))}
                     className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase border transition-colors ${newUser.role === r ? "border-primary bg-primary/10 text-primary" : "border-border/40 text-muted-foreground hover:border-border"}`}>
                     {r === "admin" ? "🛡 Admin" : "👤 Player"}

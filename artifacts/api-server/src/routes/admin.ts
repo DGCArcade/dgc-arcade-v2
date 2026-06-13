@@ -8,6 +8,69 @@ export const adminRouter = Router();
 
 adminRouter.use(requireAdmin);
 
+// ── Owner identity ──
+// There is exactly one platform owner, identified by username "fanodgc".
+// Centralized here so owner checks never drift between username/role again.
+const OWNER_USERNAME = "fanodgc";
+async function callerIsOwner(req: { user?: { userId: number } }): Promise<boolean> {
+  const [caller] = await db
+    .select({ username: usersTable.username })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.user!.userId))
+    .limit(1);
+  return (caller?.username ?? "").toLowerCase() === OWNER_USERNAME;
+}
+
+// Generates a 10-digit DGC Bank PIN guaranteed not to collide with an existing one.
+async function generateUniqueBankPin(): Promise<string> {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const pin = String(crypto.randomInt(1000000000, 9999999999));
+    const [existing] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.dgcBankPin, pin))
+      .limit(1);
+    if (!existing) return pin;
+  }
+  throw new Error("Unable to generate a unique DGC Bank PIN");
+}
+
+// ── DGC Bank PIN session gate ──
+// Requires a valid, non-expired bank session (issued by /verify-bank-pin) that
+// belongs to the authenticated user. The session token is sent via the
+// "x-bank-session" request header. This enforces — server-side — that bank data
+// and withdrawal approvals are only reachable after the admin enters their PIN.
+function requireBankSession(
+  req: import("express").Request,
+  res: import("express").Response,
+  next: import("express").NextFunction,
+): void {
+  const token = req.header("x-bank-session");
+  if (!token) {
+    res.status(401).json({ error: "DGC Bank locked. Enter your PIN to continue.", code: "BANK_LOCKED" });
+    return;
+  }
+  const sessions = ((global as any).__bankSessions ??= {}) as Record<
+    string,
+    { userId: number; expiresAt: string }
+  >;
+  const sess = sessions[token];
+  if (!sess) {
+    res.status(401).json({ error: "DGC Bank locked. Enter your PIN to continue.", code: "BANK_LOCKED" });
+    return;
+  }
+  if (new Date(sess.expiresAt).getTime() <= Date.now()) {
+    delete sessions[token];
+    res.status(401).json({ error: "DGC Bank session expired. Enter your PIN again.", code: "BANK_EXPIRED" });
+    return;
+  }
+  if (sess.userId !== req.user!.userId) {
+    res.status(403).json({ error: "Bank session does not match your account." });
+    return;
+  }
+  next();
+}
+
 
 function getSiteUrl(): string {
   if (process.env.SITE_URL) return process.env.SITE_URL;
@@ -143,17 +206,27 @@ adminRouter.post("/create-user", async (req, res) => {
     res.status(403).json({ error: "That username is reserved." });
     return;
   }
+  // Only the owner may create admin accounts (and therefore see a new admin's PIN).
+  if (role === "admin" && !(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Only the owner can create admin accounts." });
+    return;
+  }
 
   try {
     const bcrypt = await import("bcryptjs");
     const passwordHash = await bcrypt.hash(password, 12);
+    const isAdminRole = role === "admin";
+    // New admins get a unique DGC Bank PIN immediately so they can be granted access.
+    const newAdminPin = isAdminRole ? await generateUniqueBankPin() : null;
     const [created] = await db
       .insert(usersTable)
       .values({
         username,
         passwordHash,
-        role: role === "admin" ? "admin" : "player",
+        role: isAdminRole ? "admin" : "player",
         balance: String(balance ?? 0),
+        dgcBankPin: newAdminPin,
+        dgcBankPinRevealed: false,
       })
       .returning();
 
@@ -162,10 +235,15 @@ adminRouter.post("/create-user", async (req, res) => {
       username: created.username,
       role: created.role,
       balance: parseFloat(created.balance),
+      ...(newAdminPin ? { newAdminPin } : {}),
     });
   } catch (err: unknown) {
-    const msg = String((err as { message?: string }).message ?? "");
-    if (msg.includes("unique")) {
+    // Drizzle wraps the underlying pg error, so the unique-violation signal
+    // (code 23505 / "unique constraint") lives on err.cause, not err.message.
+    const e = err as { message?: string; code?: string; cause?: { message?: string; code?: string } };
+    const combined = `${e.message ?? ""} ${e.cause?.message ?? ""}`;
+    const code = e.code ?? e.cause?.code;
+    if (code === "23505" || combined.includes("unique")) {
       res.status(409).json({ error: "Username already taken" });
       return;
     }
@@ -184,9 +262,18 @@ adminRouter.patch("/users/:id", async (req, res) => {
   };
 
   // Protect superadmin
-  const [target] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  const [target] = await db
+    .select({ username: usersTable.username, role: usersTable.role, dgcBankPin: usersTable.dgcBankPin })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
   if (target?.username === "fanodgc") {
     res.status(403).json({ error: "This account is protected and cannot be modified." });
+    return;
+  }
+  // Only the owner can change a user's role (promote/demote admin status).
+  if (role !== undefined && role !== target?.role && !(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Only the owner can change a user's role." });
     return;
   }
 
@@ -195,6 +282,17 @@ adminRouter.patch("/users/:id", async (req, res) => {
     if (balance !== undefined) updates.balance = String(balance);
     if (role !== undefined) updates.role = role;
     if (isBanned !== undefined) updates.isBanned = isBanned;
+
+    // Keep DGC Bank PINs in sync with admin status, regardless of promotion path.
+    if (role === "admin" && target && !target.dgcBankPin) {
+      // Promoting to admin and no PIN yet — generate a unique one.
+      updates.dgcBankPin = await generateUniqueBankPin();
+      updates.dgcBankPinRevealed = false;
+    } else if (role === "player" && target?.role === "admin") {
+      // Demoting an admin — revoke their bank PIN.
+      updates.dgcBankPin = null;
+      updates.dgcBankPinRevealed = false;
+    }
 
     if (Object.keys(updates).length === 0) {
       res.status(400).json({ error: "No fields to update" });
@@ -256,7 +354,7 @@ adminRouter.delete("/users/:id", async (req, res) => {
 });
 
 // GET /api/admin/transactions
-adminRouter.get("/transactions", async (req, res) => {
+adminRouter.get("/transactions", requireBankSession, async (req, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
   const type = typeof req.query.type === "string" ? req.query.type : undefined;
   const limit = parseInt(String(req.query.limit ?? "50"), 10);
@@ -299,8 +397,9 @@ adminRouter.get("/transactions", async (req, res) => {
 });
 
 // PATCH /api/admin/transactions/:id  — approve or reject a withdrawal
-adminRouter.patch("/transactions/:id", async (req, res) => {
-  const txId = parseInt(req.params.id, 10);
+// Requires an unlocked DGC Bank session — approvals only happen inside the bank.
+adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
+  const txId = parseInt(String(req.params.id), 10);
   const { status } = req.body as { status: "completed" | "failed" };
 
   if (!["completed", "failed"].includes(status)) {
@@ -447,7 +546,7 @@ adminRouter.patch("/transactions/:id", async (req, res) => {
 
 
 // ── OWNER BANK: GET /api/admin/bank/balances — live Plisio balances ──
-adminRouter.get("/bank/balances", async (req, res) => {
+adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
   const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
   if (!PLISIO_KEY) {
     res.status(500).json({ error: "PLISIO_SECRET_KEY not set" });
@@ -478,8 +577,12 @@ adminRouter.get("/bank/balances", async (req, res) => {
   }
 });
 
-// GET /api/admin/bank/invoices — recent Plisio invoices
-adminRouter.get("/bank/invoices", async (req, res) => {
+// GET /api/admin/bank/invoices — recent Plisio invoices (OWNER ONLY)
+adminRouter.get("/bank/invoices", requireBankSession, async (req, res) => {
+  if (!(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Invoices are visible to the owner only." });
+    return;
+  }
   const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
   if (!PLISIO_KEY) {
     res.status(500).json({ error: "PLISIO_SECRET_KEY not set" });
@@ -503,7 +606,7 @@ adminRouter.get("/bank/invoices", async (req, res) => {
 });
 
 // GET /api/admin/bank/pending-withdrawals — our pending withdrawal queue
-adminRouter.get("/bank/pending-withdrawals", async (req, res) => {
+adminRouter.get("/bank/pending-withdrawals", requireBankSession, async (req, res) => {
   try {
     const pending = await db
       .select()
@@ -545,7 +648,7 @@ async function getPlatformSettings() {
 }
 
 // GET /api/admin/bank/settings — fanodgc only
-adminRouter.get("/bank/settings", async (req, res) => {
+adminRouter.get("/bank/settings", requireBankSession, async (req, res) => {
   const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
   if (!user || user.username !== "fanodgc") {
     res.status(403).json({ error: "Forbidden" });
@@ -561,7 +664,7 @@ adminRouter.get("/bank/settings", async (req, res) => {
 });
 
 // PUT /api/admin/bank/settings — fanodgc only
-adminRouter.put("/bank/settings", async (req, res) => {
+adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
   const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
   if (!user || user.username !== "fanodgc") {
     res.status(403).json({ error: "Forbidden" });
@@ -590,7 +693,7 @@ adminRouter.put("/bank/settings", async (req, res) => {
 
 // ── OWNER BANK: GET /api/admin/bank/fraud-alerts ─────────────────────────────
 // Real AI fraud detection — scores every pending withdrawal using behavioral rules
-adminRouter.get("/bank/fraud-alerts", async (req, res) => {
+adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
   try {
     const settings = await getPlatformSettings();
     // Sensitivity 0-100 maps to a multiplier of 0.5x - 1.5x on raw risk scores
@@ -887,9 +990,7 @@ adminRouter.get("/stats", async (req, res) => {
 // When promoting to admin role, auto-generates a one-time-viewable DGC Bank PIN
 adminRouter.patch("/users/:id/account-type", async (req, res) => {
   // Verify caller is owner
-  const [caller] = await db.select({ role: usersTable.role, username: usersTable.username })
-    .from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  if (!caller || caller.role !== "owner") {
+  if (!(await callerIsOwner(req))) {
     res.status(403).json({ error: "Only the platform owner can change account types" });
     return;
   }
@@ -906,8 +1007,8 @@ adminRouter.patch("/users/:id/account-type", async (req, res) => {
   const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId)).limit(1);
   if (!target) { res.status(404).json({ error: "User not found" }); return; }
 
-  // Prevent changing owner account
-  if (target.role === "owner") {
+  // Prevent changing the owner account
+  if (target.role === "owner" || (target.username ?? "").toLowerCase() === OWNER_USERNAME) {
     res.status(403).json({ error: "Cannot modify the owner account" });
     return;
   }
@@ -958,9 +1059,7 @@ adminRouter.patch("/users/:id/account-type", async (req, res) => {
 // GET /api/admin/users/:id/reveal-pin
 // Owner only — reveals the plain PIN once, then marks it as revealed forever
 adminRouter.get("/users/:id/reveal-pin", async (req, res) => {
-  const [caller] = await db.select({ role: usersTable.role })
-    .from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  if (!caller || caller.role !== "owner") {
+  if (!(await callerIsOwner(req))) {
     res.status(403).json({ error: "Only the owner can reveal admin PINs" });
     return;
   }
@@ -995,7 +1094,7 @@ adminRouter.get("/users/:id/bank-pin", requireAdmin, async (req, res) => {
   if (!caller || caller.username !== "fanodgc") {
     res.status(403).json({ error: "Owner only" }); return;
   }
-  const targetId = parseInt(req.params.id);
+  const targetId = parseInt(String(req.params.id), 10);
   const [target] = await db.select({ id: usersTable.id, username: usersTable.username, role: usersTable.role, dgcBankPin: usersTable.dgcBankPin })
     .from(usersTable).where(eq(usersTable.id, targetId)).limit(1);
   if (!target) { res.status(404).json({ error: "User not found" }); return; }
@@ -1010,12 +1109,12 @@ adminRouter.post("/users/:id/regenerate-pin", requireAdmin, async (req, res) => 
   if (!caller || caller.username !== "fanodgc") {
     res.status(403).json({ error: "Owner only" }); return;
   }
-  const targetId = parseInt(req.params.id);
+  const targetId = parseInt(String(req.params.id), 10);
   const [target] = await db.select({ id: usersTable.id, role: usersTable.role, username: usersTable.username })
     .from(usersTable).where(eq(usersTable.id, targetId)).limit(1);
   if (!target) { res.status(404).json({ error: "User not found" }); return; }
   if (target.role !== "admin") { res.status(400).json({ error: "User is not an admin" }); return; }
-  const newPin = String(crypto.randomInt(1000000000, 9999999999));
+  const newPin = await generateUniqueBankPin();
   await db.update(usersTable).set({ dgcBankPin: newPin, dgcBankPinRevealed: false }).where(eq(usersTable.id, targetId));
   res.json({ success: true, pin: newPin, username: target.username });
 });
@@ -1044,9 +1143,9 @@ adminRouter.post("/verify-bank-pin", async (req, res) => {
     return;
   }
 
-  // Issue a short-lived bank session token (valid 30 minutes)
+  // Issue a short-lived bank session token (valid 70 minutes — 1h10m)
   const sessionToken = crypto.randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + 70 * 60 * 1000).toISOString();
 
   // Store token temporarily in memory (simple approach — good enough for admin panel)
   if (!(global as any).__bankSessions) (global as any).__bankSessions = {};

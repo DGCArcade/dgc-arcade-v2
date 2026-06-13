@@ -74,6 +74,16 @@ Use `tsc` only to HUNT pre-existing bugs, not to gate the deploy.
 (`DGC4/dgc-arcade-v2`) auto-rebuilds and redeploys production on Render.
 **How to apply:** Treat any `git push origin main` as a production deploy.
 
+## The main agent CANNOT run `git commit`/`git push` — the sandbox blocks them
+Destructive git (incl. `git commit`, force-push, reset, rebase) errors in the main
+agent with "Destructive git operations are not allowed in the main agent." The
+platform auto-commits the working tree at task end, so to actually deploy you must
+push to GitHub via a **background Project Task** (it has the protections to run git).
+**Why:** main agent is sandboxed; only Project-Task agents can perform git writes.
+**How to apply:** when the user wants changes pushed to GitHub, finish + verify the
+work (it auto-commits to local `main`), then create & propose a Project Task whose
+sole job is `git push origin main`. Don't waste a turn trying to commit/push yourself.
+
 ## drizzle UPDATE/DELETE: a second chained `.where()` SILENTLY OVERWRITES the first (NOT an AND)
 In drizzle-orm pg-core, `.update(t).set(...).where(a).where(b)` keeps ONLY `b`; the first
 condition is discarded silently (no runtime error, no reliable type guard). The intended atomic
