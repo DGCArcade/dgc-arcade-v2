@@ -254,7 +254,7 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
 
-    // ── FRAUD CHECK 2: 75% wagering requirement ───────────────────
+    // ── FRAUD CHECK 2: 100% wagering requirement (WAGER_MULTIPLIER) ──
     const totalDeposited = parseFloat(user.totalDeposited ?? "0");
     const totalWageredAmount = parseFloat(user.totalWageredAmount ?? "0");
     const requiredWager = totalDeposited * WAGER_MULTIPLIER;

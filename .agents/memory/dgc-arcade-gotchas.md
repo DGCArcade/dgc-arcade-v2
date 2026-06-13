@@ -120,3 +120,19 @@ of casting. The 500 only surfaced loudly on withdrawals because that's what got 
 **How to apply:** for numeric columns write `sql\`balance - ${x}\`` / `sql\`coalesce(total_won,0) + ${x}\``
 (no CAST). Bound params like `String(x)` also work. Verify any money UPDATE with a rolled-back
 `BEGIN; UPDATE ...; ROLLBACK;` against the real column type before trusting it.
+
+## Money-state transitions must gate the balance change behind a GUARDED status flip inside a DB transaction
+Atomic increments (`sql`balance + ${x}``) fix read-modify-write races but, ALONE, DOUBLE-APPLY when an
+event can fire twice (duplicate/retried Plisio deposit webhook; double-clicked admin approve/reject).
+Correct pattern for deposit-credit and withdrawal-refund: inside `db.transaction(...)` run a guarded
+`UPDATE transactions SET status=<next> WHERE id=? AND status<>'<next>' RETURNING id`; credit/refund the
+user ONLY if it returns a row. Concurrent duplicates block on the row lock, then match 0 rows and skip.
+**Why:** the deposit callback + admin reject/refund were first converted to bare atomic increments without
+an idempotency gate — that turned a "accidentally clobber to one credit" bug into a "double-credit real
+money" bug under duplicate webhooks. Verified e2e: two identical deposit callbacks now credit exactly once.
+**How to apply:** any handler that moves real money on a state change (pending→completed/failed) must make
+the status transition ITSELF the idempotency key, in the SAME transaction as the balance mutation.
+**Still-open follow-ups (NOT yet fixed):** (1) admin APPROVE→Plisio payout path is NOT idempotent — a
+double-click can double-pay; gate it the same way (flip first, revert to pending if the Plisio call fails).
+(2) Plisio IPN HMAC is verified only when `verify_hash` is present and the IP allowlist reads the raw
+`X-Forwarded-For[0]` — make a valid HMAC REQUIRED when `PLISIO_SECRET_KEY` is set.
