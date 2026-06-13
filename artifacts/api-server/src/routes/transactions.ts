@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable, transactionsTable } from "@workspace/db";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, ne, sql } from "drizzle-orm";
 import {
   InitiateDepositBody,
   RequestWithdrawalBody,
@@ -14,6 +14,11 @@ export const transactionsRouter = Router();
 
 const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? "";
 const PLISIO_API = "https://api.plisio.net/api/v1";
+
+// Wager (playthrough) requirement as a multiple of total deposits a user must
+// bet before withdrawing. Centralized so the deposit-credit and withdraw checks
+// can never drift. 1.0 = must wager 100% of deposits before cashing out.
+const WAGER_MULTIPLIER = 1.0;
 
 // Map our currency codes to Plisio's exact currency codes
 const PLISIO_CURRENCY_MAP: Record<string, string> = {
@@ -197,19 +202,24 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       return;
     }
     const creditAmount = source_amount ? parseFloat(source_amount) : parseFloat(tx.amount);
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, tx.userId)).limit(1);
-    if (user) {
-      const newBalance = parseFloat(user.balance) + creditAmount;
-      const newTotalDeposited = parseFloat(user.totalDeposited ?? "0") + creditAmount;
-      const newWagerReq = newTotalDeposited * 1.0;
-      await db.update(usersTable).set({
-        balance: String(newBalance),
-        totalDeposited: String(newTotalDeposited),
-        wagerRequirement: String(newWagerReq),
-        locationVerified: user.locationVerified,
-      }).where(eq(usersTable.id, user.id));
-    }
-    await db.update(transactionsTable).set({ status: "completed", amount: String(creditAmount) }).where(eq(transactionsTable.id, tx.id));
+    // Idempotent + transactional credit. The guarded status flip (-> completed) is the
+    // single source of truth: concurrent duplicate/retried Plisio callbacks block on the
+    // transactions row lock, and only the one that actually flips the status credits the
+    // user. This prevents a duplicated webhook from double-crediting real money. The
+    // balance arithmetic runs in Postgres NUMERIC (no JS float drift).
+    await db.transaction(async (txn) => {
+      const flipped = await txn
+        .update(transactionsTable)
+        .set({ status: "completed", amount: String(creditAmount) })
+        .where(and(eq(transactionsTable.id, tx.id), ne(transactionsTable.status, "completed")))
+        .returning({ id: transactionsTable.id });
+      if (flipped.length === 0) return; // already credited by a concurrent callback
+      await txn.update(usersTable).set({
+        balance: sql`balance + ${creditAmount}`,
+        totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
+        wagerRequirement: sql`(coalesce(total_deposited, 0) + ${creditAmount}) * ${WAGER_MULTIPLIER}`,
+      }).where(eq(usersTable.id, tx.userId));
+    });
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Plisio callback error");
@@ -247,7 +257,7 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     // ── FRAUD CHECK 2: 75% wagering requirement ───────────────────
     const totalDeposited = parseFloat(user.totalDeposited ?? "0");
     const totalWageredAmount = parseFloat(user.totalWageredAmount ?? "0");
-    const requiredWager = totalDeposited * 1.0;
+    const requiredWager = totalDeposited * WAGER_MULTIPLIER;
     if (totalDeposited > 0 && totalWageredAmount < requiredWager) {
       const remaining = (requiredWager - totalWageredAmount).toFixed(2);
       res.status(403).json({
@@ -270,7 +280,7 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       flagReasons.push("Immediate high-value withdrawal on new account");
     }
     // Withdraw almost entire balance right after depositing
-    if (withdrawRatio > 0.95 && totalWageredAmount < totalDeposited * 1.0) {
+    if (withdrawRatio > 0.95 && totalWageredAmount < totalDeposited * WAGER_MULTIPLIER) {
       flagReasons.push("Withdrawal exceeds 95% of deposit with minimal play");
     }
     // New account large withdrawal

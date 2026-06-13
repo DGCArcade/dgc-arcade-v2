@@ -460,21 +460,29 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
       return;
     }
 
-    // Refund balance if rejecting a withdrawal
+    // Reject a withdrawal → refund the held balance. Idempotent + transactional: the
+    // guarded status flip (pending -> failed) gates the refund inside one DB transaction,
+    // so concurrent/duplicate rejects block on the row lock and can't double-refund.
     if (status === "failed" && tx.type === "withdrawal") {
-      const [user] = await db
-        .select({ balance: usersTable.balance })
-        .from(usersTable)
-        .where(eq(usersTable.id, tx.userId))
-        .limit(1);
-
-      if (user) {
-        const refunded = parseFloat(user.balance) + parseFloat(tx.amount);
-        await db
+      const refunded = await db.transaction(async (txn) => {
+        const flipped = await txn
+          .update(transactionsTable)
+          .set({ status: "failed" })
+          .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "pending")))
+          .returning({ id: transactionsTable.id });
+        if (flipped.length === 0) return false;
+        await txn
           .update(usersTable)
-          .set({ balance: String(refunded) })
+          .set({ balance: sql`balance + ${parseFloat(tx.amount)}` })
           .where(eq(usersTable.id, tx.userId));
+        return true;
+      });
+      if (!refunded) {
+        res.status(400).json({ error: "Transaction is not pending" });
+        return;
       }
+      res.json({ id: txId, status: "failed", amount: parseFloat(tx.amount) });
+      return;
     }
 
     // If approving a withdrawal, send via Plisio payout API

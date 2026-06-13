@@ -281,14 +281,13 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       game.slug, amount, houseEdge, seedValue, serverSeed, clientSeedStr,
       (meta as Record<string, unknown>) ?? null
     );
-    const newTotalBets = user.totalBets + 1;
-    const newTotalWon = parseFloat(user.totalWon) + (won ? payout : 0);
-    const newTotalWagered = parseFloat(user.totalWageredAmount ?? "0") + amount;
+    // Atomic stat + payout update — consistent with mines/blackjack, avoids
+    // read-modify-write races and JS float drift on real-money columns.
     const [updatedUser] = await db.update(usersTable).set({
       balance: sql`balance + ${payout}`,
-      totalBets: newTotalBets,
-      totalWon: String(newTotalWon),
-      totalWageredAmount: String(newTotalWagered),
+      totalBets: sql`coalesce(total_bets, 0) + 1`,
+      totalWon: sql`coalesce(total_won, 0) + ${won ? payout : 0}`,
+      totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${amount}`,
     }).where(eq(usersTable.id, user.id)).returning({ balance: usersTable.balance });
 
     const [bet] = await db.insert(betsTable).values({

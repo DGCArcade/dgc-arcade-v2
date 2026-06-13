@@ -7,6 +7,10 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Behind Render's reverse proxy: trust the first hop so req.ip and rate limiting
+// key off the real client IP (and the express-rate-limit X-Forwarded-For warning clears).
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
@@ -41,6 +45,15 @@ app.use(cors({
   },
   credentials: true,
 }));
+
+// Security headers (manual — no extra dependency). This is a JSON-only API.
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  next();
+});
 
 // ── Rate limiting ────────────────────────────────────────────────────────────
 // Auth endpoints: 10 attempts per 15 minutes per IP
