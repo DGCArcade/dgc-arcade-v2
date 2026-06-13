@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 export interface CurrencyMeta {
   value: string;
   name: string;
@@ -30,7 +32,25 @@ export function getCurrencyMeta(value: string): CurrencyMeta {
   );
 }
 
-// Self-contained color coin token (colored disc + white glyph). No network/CDN dependency.
+// Real brand logos from CDN — transparent background, no disc/circle.
+// Falls back to colored disc + symbol if CDN fails.
+const CDN = "https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/svg/color";
+
+const LOGO_URL: Record<string, string> = {
+  BTC:      `${CDN}/btc.svg`,
+  ETH:      `${CDN}/eth.svg`,
+  LTC:      `${CDN}/ltc.svg`,
+  USDT_TRX: `${CDN}/usdt.svg`,
+  USDT_TON: `${CDN}/usdt.svg`,
+  SOL:      `${CDN}/sol.svg`,
+  DOGE:     `${CDN}/doge.svg`,
+  TRX:      `${CDN}/trx.svg`,
+  TON:      `${CDN}/ton.svg`,
+  BCH:      `${CDN}/bch.svg`,
+  XMR:      `${CDN}/xmr.svg`,
+  DASH:     `${CDN}/dash.svg`,
+};
+
 export function CoinIcon({
   currency,
   size = 18,
@@ -41,6 +61,25 @@ export function CoinIcon({
   className?: string;
 }) {
   const c = getCurrencyMeta(currency);
+  const src = LOGO_URL[currency] ?? LOGO_URL[currency.split("_")[0]];
+  const [imgError, setImgError] = useState(false);
+
+  if (src && !imgError) {
+    return (
+      <img
+        src={src}
+        width={size}
+        height={size}
+        alt={c.name}
+        title={c.name}
+        onError={() => setImgError(true)}
+        style={{ flexShrink: 0, display: "inline-block" }}
+        className={className}
+      />
+    );
+  }
+
+  // Fallback: colored disc + symbol (only if CDN unavailable)
   return (
     <svg
       width={size}
