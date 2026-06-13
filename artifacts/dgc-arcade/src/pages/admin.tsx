@@ -181,6 +181,8 @@ export default function AdminDashboard() {
   const [bankBalances, setBankBalances] = useState<Record<string, { balance: string; allowed: number }>>({});
   const [bankInvoices, setBankInvoices] = useState<any[]>([]);
   const [bankWithdrawals, setBankWithdrawals] = useState<any[]>([]);
+  const [pendingDeposits, setPendingDeposits] = useState<any[]>([]);
+  const [allLiveTx, setAllLiveTx] = useState<any[]>([]);
   const [bankLoading, setBankLoading] = useState(false);
   const [bankLastRefresh, setBankLastRefresh] = useState<Date | null>(null);
   const [fraudAlerts, setFraudAlerts] = useState<any[]>([]);
@@ -303,16 +305,20 @@ export default function AdminDashboard() {
       const tasks: Promise<any>[] = [
         adminFetch("/bank/balances"),
         adminFetch("/bank/pending-withdrawals"),
+        adminFetch("/transactions?status=pending&type=deposit&limit=50"),
+        adminFetch("/transactions?limit=50"),
       ];
       if (isOwner) tasks.push(adminFetch("/bank/invoices?limit=25"));
-      const [balR, wdR, invR] = await Promise.allSettled(tasks);
+      const [balR, wdR, depR, liveR, invR] = await Promise.allSettled(tasks);
 
       if (balR.status === "fulfilled") setBankBalances(balR.value.balances ?? {});
       if (wdR.status === "fulfilled") setBankWithdrawals(wdR.value.withdrawals ?? []);
+      if (depR && depR.status === "fulfilled") setPendingDeposits(Array.isArray(depR.value) ? depR.value : []);
+      if (liveR && liveR.status === "fulfilled") setAllLiveTx(Array.isArray(liveR.value) ? liveR.value : []);
       if (isOwner && invR && invR.status === "fulfilled") setBankInvoices(invR.value.invoices ?? []);
 
       // Surface failures without blanking the whole view; relock on lost session.
-      const reasons = [balR, wdR, invR]
+      const reasons = [balR, wdR, depR, liveR, invR]
         .filter((r): r is PromiseRejectedResult => !!r && r.status === "rejected")
         .map((r) => String(r.reason?.message ?? r.reason ?? ""));
       if (reasons.some((m) => /locked|expired/i.test(m))) {
@@ -1209,6 +1215,140 @@ export default function AdminDashboard() {
                     ))}
                   </div>
                 )}
+              </div>
+
+
+              {/* ── Live Deposits Panel ── */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                    <Activity className="w-3.5 h-3.5 text-green-400" /> Live Deposits
+                    {pendingDeposits.filter((d: any) => d.type === "deposit" && d.status === "pending").length > 0 && (
+                      <span className="bg-amber-500 text-black text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">
+                        {pendingDeposits.filter((d: any) => d.type === "deposit" && d.status === "pending").length} PENDING
+                      </span>
+                    )}
+                  </h3>
+                  <Button size="sm" variant="ghost" onClick={() => loadBank()} disabled={bankLoading} className="h-7 text-xs gap-1">
+                    <RefreshCw className={bankLoading ? "animate-spin h-3 w-3" : "h-3 w-3"} /> Refresh
+                  </Button>
+                </div>
+
+                {/* All transactions stream */}
+                <div className="mb-4">
+                  <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider font-semibold">Recent Transactions (Live)</p>
+                  {allLiveTx.length === 0 ? (
+                    <Card className="border-dashed border-border/40">
+                      <CardContent className="py-5 text-center text-muted-foreground text-sm">No transactions yet</CardContent>
+                    </Card>
+                  ) : (
+                    <Card className="border-border/60">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="border-border/40">
+                              <TableHead className="text-xs">ID</TableHead>
+                              <TableHead className="text-xs">User</TableHead>
+                              <TableHead className="text-xs">Type</TableHead>
+                              <TableHead className="text-xs">Amount</TableHead>
+                              <TableHead className="text-xs">Currency</TableHead>
+                              <TableHead className="text-xs">Status</TableHead>
+                              <TableHead className="text-xs">Time</TableHead>
+                              <TableHead className="text-xs">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {allLiveTx.slice(0, 30).map((tx: any) => (
+                              <TableRow key={tx.id} className={
+                                tx.type === "deposit" && tx.status === "pending"
+                                  ? "border-amber-500/20 bg-amber-950/10"
+                                  : tx.status === "completed"
+                                    ? "border-green-500/10 bg-green-950/5"
+                                    : "border-border/30"
+                              }>
+                                <TableCell className="font-mono text-xs text-muted-foreground">#{tx.id}</TableCell>
+                                <TableCell className="font-bold text-sm">
+                                  {tx.username ? `@${tx.username}` : `#${tx.userId}`}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className={`text-xs capitalize ${
+                                    tx.type === "deposit" ? "border-green-500/40 text-green-400" :
+                                    tx.type === "withdrawal" ? "border-amber-500/40 text-amber-400" :
+                                    "border-border/40 text-muted-foreground"
+                                  }`}>
+                                    {tx.type === "deposit" ? "↓ deposit" : tx.type === "withdrawal" ? "↑ withdraw" : tx.type}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="font-mono font-bold">
+                                  <span className={tx.type === "deposit" ? "text-green-400" : tx.type === "withdrawal" ? "text-amber-400" : ""}>
+                                    {tx.type === "deposit" ? "+" : tx.type === "withdrawal" ? "-" : ""}{parseFloat(tx.amount).toFixed(2)}
+                                  </span>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="text-xs">{tx.currency}</Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge className={`text-xs ${
+                                    tx.status === "completed" ? "bg-green-600/20 text-green-400 border-green-500/30" :
+                                    tx.status === "pending" ? "bg-amber-600/20 text-amber-400 border-amber-500/30" :
+                                    tx.status === "failed" || tx.status === "declined" ? "bg-red-600/20 text-red-400 border-red-500/30" :
+                                    "bg-secondary text-muted-foreground"
+                                  }`} variant="outline">
+                                    {tx.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                  {tx.createdAt ? new Date(tx.createdAt).toLocaleString() : "—"}
+                                </TableCell>
+                                <TableCell>
+                                  {tx.type === "deposit" && tx.status === "pending" && isOwner && (
+                                    <Button
+                                      size="sm"
+                                      className="bg-green-600 hover:bg-green-700 h-7 text-xs gap-1 font-bold"
+                                      disabled={loadingAction === `dep-${tx.id}`}
+                                      onClick={() => handleCompleteDeposit(tx)}
+                                    >
+                                      <CheckCircle2 className="h-3 w-3" />
+                                      {loadingAction === `dep-${tx.id}` ? "Crediting…" : "Credit User"}
+                                    </Button>
+                                  )}
+                                  {tx.type === "withdrawal" && tx.status === "pending" && (
+                                    <div className="flex gap-1">
+                                      <Button size="sm" className="bg-green-600 hover:bg-green-700 h-7 text-xs gap-1" disabled={loadingAction === `wd-approve-${tx.id}`}
+                                        onClick={async () => {
+                                          setLoadingAction(`wd-approve-${tx.id}`);
+                                          try {
+                                            await adminFetch(`/transactions/${tx.id}`, { method: "PATCH", body: JSON.stringify({ status: "completed" }) });
+                                            toast({ title: "Approved", description: `TX #${tx.id} sent via Plisio` });
+                                            await loadBank();
+                                          } catch (e: any) { toast({ title: "Failed", description: e.message, variant: "destructive" }); }
+                                          finally { setLoadingAction(null); }
+                                        }}>
+                                        <CheckCircle2 className="h-3 w-3" /> Release
+                                      </Button>
+                                      <Button size="sm" variant="destructive" className="h-7 text-xs" disabled={loadingAction === `wd-reject-${tx.id}`}
+                                        onClick={async () => {
+                                          setLoadingAction(`wd-reject-${tx.id}`);
+                                          try {
+                                            await adminFetch(`/transactions/${tx.id}`, { method: "PATCH", body: JSON.stringify({ status: "failed" }) });
+                                            toast({ title: "Held", description: `TX #${tx.id} held, balance refunded` });
+                                            await loadBank();
+                                          } catch (e: any) { toast({ title: "Failed", description: e.message, variant: "destructive" }); }
+                                          finally { setLoadingAction(null); }
+                                        }}>
+                                        Hold
+                                      </Button>
+                                    </div>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </Card>
+                  )}
+                </div>
               </div>
 
               {/* ── AI Fraud Monitor ── */}
