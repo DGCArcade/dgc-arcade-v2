@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { requireAuth, signToken } from "../middlewares/auth.js";
 import { logger } from "../lib/logger.js";
+import crypto from "crypto";
 
 export const authRouter = Router();
 
@@ -21,6 +22,7 @@ function formatUser(user: typeof usersTable.$inferSelect) {
     createdAt: user.createdAt.toISOString(),
     accountType: user.accountType,
     withdrawalsEnabled: user.withdrawalsEnabled,
+    referralCode: user.referralCode ?? null,
   };
 }
 
@@ -65,7 +67,7 @@ authRouter.post("/register", async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const [user] = await db
+    let [user] = await db
       .insert(usersTable)
       .values({
         username,
@@ -75,6 +77,28 @@ authRouter.post("/register", async (req, res) => {
         deviceFingerprint,
       })
       .returning();
+
+    // Generate a unique referral code for this user (DGC + id in base36 + 3 random bytes)
+    const refCode = 'DGC' + user.id.toString(36).toUpperCase().padStart(4, '0') + crypto.randomBytes(3).toString('hex').toUpperCase();
+    await db.update(usersTable).set({ referralCode: refCode }).where(eq(usersTable.id, user.id));
+    user = { ...user, referralCode: refCode };
+
+    // If the registration came with a referral code, link this new user to the referrer
+    const incomingRef = typeof req.body.referralCode === 'string' ? req.body.referralCode.trim() : null;
+    if (incomingRef) {
+      try {
+        const { referralsTable } = await import('@workspace/db');
+        const [referrer] = await db.select({ id: usersTable.id }).from(usersTable)
+          .where(eq(usersTable.referralCode, incomingRef)).limit(1);
+        if (referrer && referrer.id !== user.id) {
+          await db.update(usersTable).set({ referredBy: referrer.id }).where(eq(usersTable.id, user.id));
+          await db.insert(referralsTable).values({ referrerId: referrer.id, referredId: user.id, status: 'pending' });
+          logger.info({ referrerId: referrer.id, referredId: user.id }, 'Referral link created on registration');
+        }
+      } catch (refErr) {
+        logger.warn({ refErr }, 'Referral link creation failed — non-critical, registration continues');
+      }
+    }
 
     const token = signToken({
       userId: user.id,
