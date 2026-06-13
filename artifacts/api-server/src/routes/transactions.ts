@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
+import { sendPlisioPayout } from "../lib/plisio-payout.js";
 import { v4 as uuidv4 } from "uuid";
 
 export const transactionsRouter = Router();
@@ -421,16 +422,22 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
 
-    const flaggedForReview = amount >= settings.requireManualOver || effectiveScore >= 1;
+    // ── Auto-approve threshold ──────────────────────────────────────────────────
+    // Withdrawals under $10,000 with no fraud flags are sent immediately via Plisio.
+    // Withdrawals of $10,000 or more (or any flagged withdrawal) go to admin queue.
+    const AUTO_APPROVE_THRESHOLD = 10_000;
+    const autoApprove = amount < AUTO_APPROVE_THRESHOLD && effectiveScore < 1;
+    const flaggedForReview = !autoApprove && (amount >= AUTO_APPROVE_THRESHOLD || effectiveScore >= 1);
     const status = "pending" as const;
 
-    const deducted = await db.transaction(async (tx) => {
-      const d = await tx.update(usersTable)
+    let insertedTxId = 0;
+    const deducted = await db.transaction(async (txn) => {
+      const d = await txn.update(usersTable)
         .set({ balance: sql`${usersTable.balance} - ${amount}` })
         .where(and(eq(usersTable.id, user.id), sql`${usersTable.balance} >= ${amount}`))
         .returning({ balance: usersTable.balance });
       if (d.length === 0) return d;
-      await tx.insert(transactionsTable).values({
+      const [inserted] = await txn.insert(transactionsTable).values({
         userId: user.id,
         type: "withdrawal",
         amount: String(amount),
@@ -442,14 +449,15 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
           fraudScore,
           effectiveScore,
           flaggedForReview,
-          autoApproved: amount <= settings.autoApproveUnder && effectiveScore < 1,
+          autoApproved: autoApprove,
           thresholds: {
             aiSensitivity: settings.aiSensitivity,
             autoApproveUnder: settings.autoApproveUnder,
             requireManualOver: settings.requireManualOver,
           },
         }),
-      });
+      }).returning({ id: transactionsTable.id });
+      insertedTxId = inserted.id;
       return d;
     });
     if (deducted.length === 0) {
@@ -457,8 +465,28 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
 
+    // ── Auto-approve: < $10,000, no fraud flags → send via Plisio immediately ──
+    if (autoApprove && insertedTxId) {
+      const result = await sendPlisioPayout(insertedTxId, req.log);
+      switch (result.outcome) {
+        case "completed":
+          res.json({ success: true, message: "Withdrawal sent. Funds are on their way.", status: "completed" });
+          break;
+        case "needs_review":
+          res.json({ success: true, message: "Withdrawal submitted. There was a temporary issue sending automatically — our team will process it shortly.", status: "needs_review" });
+          break;
+        case "reverted_pending":
+          res.json({ success: true, message: "Withdrawal submitted and under review.", status: "pending" });
+          break;
+        default:
+          res.json({ success: true, message: "Withdrawal submitted and under review.", status: "pending" });
+      }
+      return;
+    }
+
+    // ── Manual review: >= $10,000 or fraud-flagged ─────────────────────────────
     const msg = flaggedForReview
-      ? "Withdrawal flagged for manual review. Our team will process it within 24 hours."
+      ? "Withdrawal of $10,000 or more requires manual review. Our team will process it within 24 hours."
       : "Withdrawal request submitted. Under review.";
     res.json({ success: true, message: msg, status });
   } catch (err) {
