@@ -183,6 +183,8 @@ export default function AdminDashboard() {
   const [bankWithdrawals, setBankWithdrawals] = useState<any[]>([]);
   const [pendingDeposits, setPendingDeposits] = useState<any[]>([]);
   const [allLiveTx, setAllLiveTx] = useState<any[]>([]);
+  const [newPendingDeposits, setNewPendingDeposits] = useState(0);
+  const prevPendingCountRef = useRef<number>(0);
   const [bankLoading, setBankLoading] = useState(false);
   const [bankLastRefresh, setBankLastRefresh] = useState<Date | null>(null);
   const [fraudAlerts, setFraudAlerts] = useState<any[]>([]);
@@ -313,7 +315,16 @@ export default function AdminDashboard() {
 
       if (balR.status === "fulfilled") setBankBalances(balR.value.balances ?? {});
       if (wdR.status === "fulfilled") setBankWithdrawals(wdR.value.withdrawals ?? []);
-      if (depR && depR.status === "fulfilled") setPendingDeposits(Array.isArray(depR.value) ? depR.value : []);
+      if (depR && depR.status === "fulfilled") {
+        const deps = Array.isArray(depR.value) ? depR.value : [];
+        setPendingDeposits(deps);
+        const pendingCount = deps.filter((d: any) => d.type === "deposit" && d.status === "pending").length;
+        const prev = prevPendingCountRef.current;
+        if (pendingCount > prev && prev >= 0) {
+          setNewPendingDeposits(pendingCount - prev);
+        }
+        prevPendingCountRef.current = pendingCount;
+      }
       if (liveR && liveR.status === "fulfilled") setAllLiveTx(Array.isArray(liveR.value) ? liveR.value : []);
       if (isOwner && invR && invR.status === "fulfilled") setBankInvoices(invR.value.invoices ?? []);
 
@@ -389,11 +400,21 @@ export default function AdminDashboard() {
     }
   }, [activeTab, isAdmin, bankUnlocked, isOwner, loadBank, loadFraudAlerts, loadNeedsReview, loadBankSettings]);
 
+  // Auto-refresh bank every 30 seconds while bank tab is active + unlocked
+  useEffect(() => {
+    if (activeTab !== "bank" || !bankUnlocked) return;
+    const id = setInterval(() => {
+      loadBank();
+    }, 30000);
+    return () => clearInterval(id);
+  }, [activeTab, bankUnlocked, loadBank]);
+
   // Open the DGC Bank tab when navigated to /admin?tab=bank (e.g. from the header).
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
     if (t === "bank" || t === "users" || t === "overview") {
       setActiveTab(t as TabKey);
+      if (t === "bank") setNewPendingDeposits(0);
     }
   }, []);
 
@@ -694,7 +715,7 @@ export default function AdminDashboard() {
         {TABS.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => { setActiveTab(tab.key); if (tab.key === "bank") setNewPendingDeposits(0); }}
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold uppercase tracking-wider transition-all ${
               activeTab === tab.key
                 ? "bg-primary text-primary-foreground shadow-[0_0_16px_rgba(255,215,0,0.3)]"
@@ -706,6 +727,11 @@ export default function AdminDashboard() {
             {tab.key === "transactions" && stats && stats.pendingWithdrawals > 0 && (
               <span className="ml-1 bg-destructive text-destructive-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-mono">
                 {stats.pendingWithdrawals}
+              </span>
+            )}
+            {tab.key === "bank" && newPendingDeposits > 0 && (
+              <span className="ml-1 bg-amber-500 text-black text-xs rounded-full w-5 h-5 flex items-center justify-center font-mono animate-pulse font-bold">
+                {newPendingDeposits}
               </span>
             )}
           </button>
