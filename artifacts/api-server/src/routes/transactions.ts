@@ -15,12 +15,8 @@ export const transactionsRouter = Router();
 const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? "";
 const PLISIO_API = "https://api.plisio.net/api/v1";
 
-// Wager (playthrough) requirement as a multiple of total deposits a user must
-// bet before withdrawing. Centralized so the deposit-credit and withdraw checks
-// can never drift. 1.0 = must wager 100% of deposits before cashing out.
 const WAGER_MULTIPLIER = 1.0;
 
-// Map our currency codes to Plisio's exact currency codes
 const PLISIO_CURRENCY_MAP: Record<string, string> = {
   BTC:      "BTC",
   ETH:      "ETH",
@@ -115,8 +111,6 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       res.status(500).json({ error: "Payment gateway error: " + errMsg });
       return;
     }
-    // Read wallet address + QR directly from the invoice creation response
-    // (removed second /operations fetch — it races Plisio processing and always returns empty)
     const walletAddress = data.data.wallet_hash ?? "";
     const qrCodeUrl = data.data.qr_code ?? data.data.qr_code_link ?? "";
     req.log.info({
@@ -160,13 +154,6 @@ const PLISIO_IPS = new Set([
   "138.201.43.212",
 ]);
 
-// ── Plisio IPN signature helpers ─────────────────────────────────────────────
-// Plisio computes verify_hash as hmac_sha1(serialize($post), secret_key), where $post is the
-// callback payload (minus verify_hash) after PHP ksort(), with every value treated as a string,
-// expire_utc cast to string, and tx_urls HTML-entity-decoded. PHP serialize of an associative
-// string array is: a:<n>:{s:<klen>:"k";s:<vlen>:"v";...} using UTF-8 BYTE lengths. A plain
-// "k=v&..." query string (the old implementation) would never match and would reject every
-// genuine callback once the secret is configured.
 function plisioHtmlEntityDecode(input: string): string {
   return input
     .replace(/&lt;/g, "<")
@@ -196,11 +183,14 @@ export function plisioSerialize(body: Record<string, unknown>): string {
 
 transactionsRouter.post("/deposit/callback", async (req, res) => {
   try {
-    // ── Diagnostic: log every incoming IPN hit before any checks ──────────────
-    // These appear in Render logs and let us identify IP / body issues quickly.
+    // ── FIX: use req.ip which Express resolves correctly with trust proxy = 1 ──
+    // With app.set("trust proxy", 1), req.ip is the real client IP from X-Forwarded-For.
+    // Using req.socket.remoteAddress was giving us the Render load balancer IP instead,
+    // causing every Plisio IPN to be blocked by the allowlist check.
+    const clientIp = (req.ip ?? "").replace(/^::ffff:/, "").trim();
     const forwarded = req.headers["x-forwarded-for"];
     const socketIp = req.socket.remoteAddress ?? "";
-    const clientIp = (typeof forwarded === "string" ? forwarded.split(",")[0] : socketIp).trim();
+
     req.log.info({
       clientIp,
       socketIp,
@@ -211,27 +201,22 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       hasVerifyHash: !!(req.body as any)?.verify_hash,
       ipAllowed: PLISIO_IPS.has(clientIp),
     }, "Plisio IPN deposit callback — incoming");
-    // ── IP allowlist check — reject anything not from Plisio's known servers ──
+
+    // ── IP allowlist check ──
     if (clientIp && !PLISIO_IPS.has(clientIp)) {
       req.log.warn({ clientIp, xForwardedFor: forwarded, socketIp }, "Deposit callback rejected: IP not in Plisio allowlist");
       res.status(403).json({ error: "Forbidden" });
       return;
     }
+
     const { txn_id, status, source_amount, verify_hash } = req.body as {
       txn_id?: string;
       status?: string;
       source_amount?: string;
       verify_hash?: string;
     };
-    // HMAC signature is the PRIMARY authenticity control (the IP allowlist above is a
-    // secondary best-effort check). When the secret is configured (production), a VALID
-    // verify_hash is REQUIRED — reject any callback that is missing or fails the signature.
+
     if (PLISIO_SECRET_KEY) {
-      // NOTE: this path can only be confirmed end-to-end against the LIVE Plisio service (dev
-      // has no key, and the IP allowlist above 403s localhost before we reach here). The
-      // diagnostics below make the FIRST real production callback conclusive: on any failure we
-      // log the sorted field names, the serialized length/preview, and both hex digests. None of
-      // these is the secret — the secret is PLISIO_SECRET_KEY, which is never logged.
       const bodyKeys = Object.keys(req.body as Record<string, unknown>)
         .filter((k) => k !== "verify_hash")
         .sort();
@@ -241,20 +226,11 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
         return;
       }
       const crypto = await import("crypto");
-      // Reconstruct Plisio's exact signed string (see plisioSerialize) and compare in
-      // constant time. Mismatched lengths are treated as invalid (timingSafeEqual throws on them).
       const serialized = plisioSerialize(req.body as Record<string, unknown>);
       const expectedHash = crypto.createHmac("sha1", PLISIO_SECRET_KEY).update(serialized).digest("hex");
       const want = Buffer.from(expectedHash, "utf8");
       const got = Buffer.from(String(verify_hash), "utf8");
       if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) {
-        // Loud, secret-free diagnostics: a genuine callback failing here is almost always a
-        // serialization-format mismatch — these fields pinpoint it in a single real callback.
-        // Do NOT log the full server-computed HMAC: for this exact (attacker-controllable) body
-        // it IS a valid verify_hash, so a full value would turn the logs into a signing/replay
-        // oracle. An 8-char prefix is enough to eyeball "did my computation even run" without
-        // leaking a usable authenticator (the remaining 128 bits are unknown). The receivedHash
-        // is attacker-supplied (already wrong) so it is safe to log in full.
         req.log.warn(
           {
             txn_id,
@@ -273,38 +249,45 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     } else {
       req.log.warn("Plisio callback HMAC check skipped: PLISIO_SECRET_KEY not set (dev only)");
     }
+
     if (!txn_id || !status) {
       res.json({ success: true });
       return;
     }
-    if (status !== "completed") {
+
+    // Credit on "completed" OR "mismatch" (underpayment) statuses
+    const creditStatuses = new Set(["completed", "mismatch"]);
+    if (!creditStatuses.has(status)) {
+      req.log.info({ txn_id, status }, "Plisio IPN: non-credit status, acknowledging");
       res.json({ success: true });
       return;
     }
+
     const [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.plisioTrackId, txn_id)).limit(1);
     if (!tx || tx.status === "completed") {
       res.json({ success: true });
       return;
     }
+
+    // For "mismatch" status, source_amount contains the actual received amount
     const creditAmount = source_amount ? parseFloat(source_amount) : parseFloat(tx.amount);
-    // Idempotent + transactional credit. The guarded status flip (-> completed) is the
-    // single source of truth: concurrent duplicate/retried Plisio callbacks block on the
-    // transactions row lock, and only the one that actually flips the status credits the
-    // user. This prevents a duplicated webhook from double-crediting real money. The
-    // balance arithmetic runs in Postgres NUMERIC (no JS float drift).
+
+    // Idempotent + transactional credit
     await db.transaction(async (txn) => {
       const flipped = await txn
         .update(transactionsTable)
         .set({ status: "completed", amount: String(creditAmount) })
         .where(and(eq(transactionsTable.id, tx.id), ne(transactionsTable.status, "completed")))
         .returning({ id: transactionsTable.id });
-      if (flipped.length === 0) return; // already credited by a concurrent callback
+      if (flipped.length === 0) return;
       await txn.update(usersTable).set({
         balance: sql`balance + ${creditAmount}`,
         totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
         wagerRequirement: sql`(coalesce(total_deposited, 0) + ${creditAmount}) * ${WAGER_MULTIPLIER}`,
       }).where(eq(usersTable.id, tx.userId));
     });
+
+    req.log.info({ txn_id, creditAmount, userId: tx.userId, status }, "Plisio IPN: deposit credited");
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Plisio callback error");
@@ -324,7 +307,6 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(401).json({ error: "User not found" }); return; }
 
-    // Block withdrawals for creator and tester accounts — enforced at backend level
     if (user.withdrawalsEnabled === false) {
       res.status(403).json({
         error: "Withdrawals are not available for this account type.",
@@ -333,13 +315,11 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
 
-    // ── FRAUD CHECK 1: Location must be verified ──────────────────
     if (!user.locationVerified) {
       res.status(403).json({ error: "Location verification required before withdrawing. Please enable location access and refresh." });
       return;
     }
 
-    // ── FRAUD CHECK 2: 100% wagering requirement (WAGER_MULTIPLIER) ──
     const totalDeposited = parseFloat(user.totalDeposited ?? "0");
     const totalWageredAmount = parseFloat(user.totalWageredAmount ?? "0");
     const requiredWager = totalDeposited * WAGER_MULTIPLIER;
@@ -354,42 +334,32 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
 
-    // ── FRAUD CHECK 3: AI pattern detection ───────────────────────
     const balance = parseFloat(user.balance);
     const withdrawRatio = amount / (totalDeposited || 1);
     const timeSinceCreated = Date.now() - new Date(user.createdAt).getTime();
     const accountAgeHours = timeSinceCreated / (1000 * 60 * 60);
     const flagReasons: string[] = [];
-    // Instant cashout: withdraw >90% of deposit within 2 hours
     if (withdrawRatio > 0.90 && accountAgeHours < 2) {
       flagReasons.push("Immediate high-value withdrawal on new account");
     }
-    // Withdraw almost entire balance right after depositing
     if (withdrawRatio > 0.95 && totalWageredAmount < totalDeposited * WAGER_MULTIPLIER) {
       flagReasons.push("Withdrawal exceeds 95% of deposit with minimal play");
     }
-    // New account large withdrawal
     if (accountAgeHours < 1 && amount > 100) {
       flagReasons.push("Large withdrawal within 1 hour of account creation");
     }
-    // Withdrawal larger than balance
     if (amount > balance) {
       res.status(400).json({ error: "Insufficient balance" });
       return;
     }
     const fraudScore = flagReasons.length;
 
-    // ── Owner-tunable fraud knobs (DGC Bank → AI Fraud Settings) ──
-    // aiSensitivity scales the raw flag count by 0.5x–1.5x so the owner can make
-    // the engine more or less aggressive. autoApproveUnder / requireManualOver
-    // set the dollar bands that bypass or force manual review.
     const settings = await getPlatformSettings();
     const sensitivityMultiplier = 0.5 + settings.aiSensitivity / 100;
     const effectiveScore = fraudScore * sensitivityMultiplier;
 
     const autoDecline = effectiveScore >= 2 || (withdrawRatio > 0.95 && accountAgeHours < 1);
     if (autoDecline) {
-      // Log the declined attempt but do NOT touch the balance
       await db.insert(transactionsTable).values({
         userId: user.id,
         type: "withdrawal",
@@ -402,21 +372,10 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       res.status(403).json({ error: "Withdrawal declined. Please contact support if you believe this is an error." });
       return;
     }
-    // ── PASSED ALL CHECKS: process withdrawal ─────────────────────
-    // ATOMIC balance deduct -- prevents race conditions
-    // Check and deduct in one SQL statement so two simultaneous
-    // withdrawal requests can never both pass on the same balance.
-    //
-    // Every non-declined withdrawal goes to the manual-review queue as "pending"
-    // so it surfaces in the DGC Bank queue / fraud-alerts and stays approvable
-    // via PATCH /admin/transactions/:id. The fraud signals that would otherwise
-    // mark it are preserved in metadata (flaggedForReview) and independently
-    // re-scored by /bank/fraud-alerts for the owner.
+
     const flaggedForReview = amount >= settings.requireManualOver || effectiveScore >= 1;
     const status = "pending" as const;
-    // Deduct balance and record the withdrawal atomically. If the transaction
-    // insert fails, the balance deduction rolls back, so a user can never lose
-    // funds without a corresponding (refundable) withdrawal row.
+
     const deducted = await db.transaction(async (tx) => {
       const d = await tx.update(usersTable)
         .set({ balance: sql`${usersTable.balance} - ${amount}` })
