@@ -31,9 +31,30 @@ export default function Profile() {
   const [plisioLoading, setPlisioLoading] = useState(false);
   const [plisioError, setPlisioError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [tipUsername, setTipUsername] = useState("");
+  const [tipAmount, setTipAmount] = useState(5);
+  const [tipLoading, setTipLoading] = useState(false);
+
+  const handleProfileTip = async () => {
+    if (!tipUsername.trim() || tipAmount <= 0) return;
+    setTipLoading(true);
+    try {
+      const token = localStorage.getItem("dgc_token");
+      const res = await fetch("/api/admin/tip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ toUsername: tipUsername.trim(), amount: tipAmount }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setTipUsername("");
+        setTipAmount(5);
+      }
+    } finally { setTipLoading(false); }
+  };
 
   const fetchPlisioBalance = useCallback(async () => {
-    if (user?.username !== "fanodgc") return;
+    if (user?.role !== "owner" && user?.role !== "admin") return;
     setPlisioLoading(true);
     setPlisioError(null);
     try {
@@ -57,7 +78,7 @@ export default function Profile() {
   }, [user?.username]);
 
   useEffect(() => {
-    if (user?.username === "fanodgc") {
+    if (user?.role === "owner" || user?.role === "admin") {
       fetchPlisioBalance();
       const interval = setInterval(fetchPlisioBalance, 30000);
       return () => clearInterval(interval);
@@ -112,15 +133,58 @@ export default function Profile() {
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="deposit" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-6 bg-secondary">
+                <TabsList className="grid w-full grid-cols-3 mb-6 bg-secondary">
                   <TabsTrigger value="deposit" className="font-bold uppercase text-xs">Deposit</TabsTrigger>
                   <TabsTrigger value="withdraw" className="font-bold uppercase text-xs">Withdraw</TabsTrigger>
+                  <TabsTrigger value="tip" className="font-bold uppercase text-xs">Tip</TabsTrigger>
                 </TabsList>
                 <TabsContent value="deposit">
                   <DepositForm />
                 </TabsContent>
                 <TabsContent value="withdraw">
                   <WithdrawForm />
+                </TabsContent>
+                <TabsContent value="tip" className="space-y-4">
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Recipient Username</label>
+                      <input
+                        type="text"
+                        value={tipUsername}
+                        onChange={e => setTipUsername(e.target.value)}
+                        placeholder="username"
+                        className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Amount (USD)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={tipAmount}
+                          onChange={e => setTipAmount(Number(e.target.value))}
+                          className="w-full rounded-md border border-border bg-secondary pl-8 pr-3 py-2 text-sm font-mono"
+                        />
+                      </div>
+                      <div className="flex gap-1 mt-2">
+                        {[1,5,10,25,50].map(v => (
+                          <button key={v} type="button" onClick={() => setTipAmount(v)}
+                            className="flex-1 text-xs py-1 rounded bg-secondary border border-border font-mono hover:border-primary/40 transition-colors">
+                            ${v}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleProfileTip}
+                      disabled={tipLoading || !tipUsername.trim() || tipAmount <= 0}
+                      className="w-full h-10 rounded-md bg-primary text-primary-foreground font-bold uppercase tracking-widest text-sm disabled:opacity-50 hover:bg-primary/90 transition-colors"
+                    >
+                      {tipLoading ? "Sending…" : `Send ${formatCurrency(tipAmount)} Tip`}
+                    </button>
+                  </div>
                 </TabsContent>
               </Tabs>
             </CardContent>
@@ -184,7 +248,7 @@ export default function Profile() {
         </div>
       </div>
 
-      {user.username === "fanodgc" && (
+      {(user.role === "owner" || user.role === "admin") && (
         <Card className="bg-card border-border border-yellow-500/30 shadow-[0_0_32px_rgba(255,215,0,0.08)]">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2">
