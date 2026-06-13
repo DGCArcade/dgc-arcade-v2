@@ -19,6 +19,8 @@ function formatUser(user: typeof usersTable.$inferSelect) {
     role: user.role,
     isBanned: user.isBanned,
     createdAt: user.createdAt.toISOString(),
+    accountType: user.accountType,
+    withdrawalsEnabled: user.withdrawalsEnabled,
   };
 }
 

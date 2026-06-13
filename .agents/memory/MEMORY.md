@@ -1,2 +1,3 @@
 - [DGC Arcade Architecture](dgc-arcade-arch.md) — game slugs in DB, multi-step game routes, theme system, and frontend patterns
 - [DGC Arcade gotchas](dgc-arcade-gotchas.md) — pre-existing scripts typecheck fail, dev/prod DB split, Plisio (not OxaPay), push=live deploy
+- [Withdrawal lifecycle & geo gate](dgc-arcade-money-and-geo.md) — withdrawals must stay status="pending" (deduct+insert atomic); location gate is client-attested/forgeable

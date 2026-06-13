@@ -4,35 +4,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
 import { useInitiateDeposit, useRequestWithdrawal, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
-import { Copy, ExternalLink, QrCode, Send, ShoppingCart, Wallet, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
-
-const CURRENCIES = [
-  { value: "BTC",      label: "Bitcoin",           symbol: "₿",  color: "#F7931A", network: "" },
-  { value: "ETH",      label: "Ethereum",           symbol: "Ξ",  color: "#627EEA", network: "" },
-  { value: "LTC",      label: "Litecoin",           symbol: "Ł",  color: "#BFBBBB", network: "" },
-  { value: "USDT_TRX", label: "Tether USDT",        symbol: "₮",  color: "#26A17B", network: "TRC-20" },
-  { value: "USDT_TON", label: "Tether USDT",        symbol: "₮",  color: "#0098EA", network: "TON" },
-  { value: "SOL",      label: "Solana",             symbol: "◎",  color: "#9945FF", network: "" },
-  { value: "DOGE",     label: "Dogecoin",           symbol: "Ð",  color: "#C2A633", network: "" },
-  { value: "TRX",      label: "Tron",               symbol: "⚡", color: "#FF0013", network: "" },
-  { value: "TON",      label: "Toncoin",            symbol: "💎", color: "#0098EA", network: "" },
-  { value: "BCH",      label: "Bitcoin Cash",       symbol: "Ƀ",  color: "#8DC351", network: "" },
-  { value: "XMR",      label: "Monero",             symbol: "ɱ",  color: "#FF6600", network: "" },
-  { value: "DASH",     label: "Dash",               symbol: "D",  color: "#008CE7", network: "" },
-];
+import { ExternalLink, Send, Wallet, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { CoinIcon, CURRENCIES } from "./coin-icon";
 
 interface WalletModalProps {
   open: boolean;
   onClose: () => void;
 }
-
-
 
 export function WalletModal({ open, onClose }: WalletModalProps) {
   const { user } = useAuth();
@@ -53,7 +36,8 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const [copied, setCopied] = useState(false);
 
   const selectedCurrency = CURRENCIES.find(c => c.value === currency) ?? CURRENCIES[0];
-
+  // Creator / tester accounts have withdrawals disabled — they only see Deposit + Withdraw.
+  const isCreator = user?.withdrawalsEnabled === false;
 
   const handleDeposit = () => {
     initiateDeposit.mutate({ data: { amount, currency } } as any, {
@@ -126,19 +110,18 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
 
         <div className="p-6">
           <Tabs defaultValue="deposit">
-            <TabsList className="grid grid-cols-4 w-full bg-secondary/60 h-10 mb-6">
+            <TabsList className={`grid ${isCreator ? "grid-cols-2" : "grid-cols-3"} w-full bg-secondary/60 h-10 mb-6`}>
               <TabsTrigger value="deposit" className="text-xs font-bold uppercase">
                 <ArrowDownToLine className="w-3.5 h-3.5 mr-1"/>Deposit
               </TabsTrigger>
               <TabsTrigger value="withdraw" className="text-xs font-bold uppercase">
                 <ArrowUpFromLine className="w-3.5 h-3.5 mr-1"/>Withdraw
               </TabsTrigger>
-              <TabsTrigger value="buy" className="text-xs font-bold uppercase">
-                <ShoppingCart className="w-3.5 h-3.5 mr-1"/>Buy
-              </TabsTrigger>
-              <TabsTrigger value="tip" className="text-xs font-bold uppercase">
-                <Send className="w-3.5 h-3.5 mr-1"/>Tip
-              </TabsTrigger>
+              {!isCreator && (
+                <TabsTrigger value="tip" className="text-xs font-bold uppercase">
+                  <Send className="w-3.5 h-3.5 mr-1"/>Tip
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {/* ── DEPOSIT ─────────────────────────────────────── */}
@@ -149,14 +132,14 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                   <button
                     key={c.value}
                     onClick={() => { setCurrency(c.value); setDepositResult(null); setPaymentUrl(null); }}
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
                       currency === c.value
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-border/50 bg-secondary/40 text-muted-foreground hover:border-primary/40"
                     }`}
                   >
-                    <span style={{ color: c.color }} className="text-sm">{c.symbol}</span>
-                    <span>{c.label === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
+                    <CoinIcon currency={c.value} size={16} />
+                    <span>{c.name === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
                     {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground">{c.network}</span>}
                   </button>
                 ))}
@@ -194,7 +177,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                 <div className="space-y-4 py-2">
                   <div className="text-center">
                     <h3 className="font-black text-lg uppercase tracking-wider mb-1">Send Payment</h3>
-                    <p className="text-xs text-muted-foreground">Send <span className="text-primary font-bold">{formatCurrency(amount)}</span> worth of <span className="text-primary font-bold">{selectedCurrency.label}</span> to this address.</p>
+                    <p className="text-xs text-muted-foreground">Send <span className="text-primary font-bold">{formatCurrency(amount)}</span> worth of <span className="text-primary font-bold">{selectedCurrency.name}</span> to this address.</p>
                   </div>
                   {depositResult.qrCode && (
                     <div className="flex justify-center">
@@ -213,7 +196,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                   </div>
                   <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
                     <p className="text-yellow-400 text-xs font-bold uppercase mb-1">Important</p>
-                    <p className="text-xs text-muted-foreground">Only send <span className="font-bold">{selectedCurrency.label}</span> to this address. Wrong coin = permanent loss.</p>
+                    <p className="text-xs text-muted-foreground">Only send <span className="font-bold">{selectedCurrency.name}</span> to this address. Wrong coin = permanent loss.</p>
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => window.open(depositResult.paymentUrl, "_blank")}>
@@ -227,15 +210,22 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
 
             {/* ── WITHDRAW ────────────────────────────────────── */}
             <TabsContent value="withdraw" className="space-y-4 mt-0">
+              {isCreator ? (
+                <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-6 text-center space-y-2">
+                  <p className="font-display font-black uppercase tracking-widest text-yellow-400">Withdrawals Unavailable</p>
+                  <p className="text-sm text-muted-foreground">Please contact DGC Arcade support to process a withdrawal for your account.</p>
+                </div>
+              ) : (
+              <>
               <div className="flex gap-2 flex-wrap">
                 {CURRENCIES.map(c => (
                   <button key={c.value} onClick={() => setWithdrawCurrency(c.value)}
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
                       withdrawCurrency === c.value ? "border-primary bg-primary/10 text-primary" : "border-border/50 bg-secondary/40 text-muted-foreground hover:border-primary/40"
                     }`}
                   >
-                    <span style={{ color: c.color }} className="text-sm">{c.symbol}</span>
-                    <span>{c.label === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
+                    <CoinIcon currency={c.value} size={16} />
+                    <span>{c.name === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
                     {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground">{c.network}</span>}
                   </button>
                 ))}
@@ -274,29 +264,12 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
               >
                 {requestWithdrawal.isPending ? "Processing…" : "Request Withdrawal"}
               </Button>
-            </TabsContent>
-
-            {/* ── BUY CRYPTO ──────────────────────────────────── */}
-            <TabsContent value="buy" className="mt-0 space-y-3">
-              <p className="text-sm text-muted-foreground">Purchase crypto directly with your card. Opens an external exchange.</p>
-              {[
-                { name: "MoonPay", desc: "Card & bank transfer", url: "https://www.moonpay.com", color: "#7D5AF0" },
-                { name: "Simplex", desc: "Fast credit card", url: "https://www.simplex.com", color: "#0075FF" },
-                { name: "Coinbase", desc: "Buy with bank", url: "https://www.coinbase.com", color: "#0052FF" },
-              ].map(e => (
-                <a key={e.name} href={e.url} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-secondary/40 hover:border-primary/40 hover:bg-secondary/70 transition-all group"
-                >
-                  <div>
-                    <div className="font-bold text-sm" style={{ color: e.color }}>{e.name}</div>
-                    <div className="text-xs text-muted-foreground">{e.desc}</div>
-                  </div>
-                  <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                </a>
-              ))}
+              </>
+              )}
             </TabsContent>
 
             {/* ── TIP ─────────────────────────────────────────── */}
+            {!isCreator && (
             <TabsContent value="tip" className="space-y-4 mt-0">
               <p className="text-sm text-muted-foreground">Send a tip to any player on DGC Arcade.</p>
               <div className="space-y-2">
@@ -328,6 +301,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                 <Send className="w-4 h-4 mr-2" />Send Tip
               </Button>
             </TabsContent>
+            )}
           </Tabs>
         </div>
       </DialogContent>

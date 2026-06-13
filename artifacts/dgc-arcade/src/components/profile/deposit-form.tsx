@@ -8,26 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CoinIcon, CURRENCIES } from "@/components/wallet/coin-icon";
 
 const depositSchema = z.object({
   amount: z.coerce.number().min(1, "Minimum deposit is $1"),
   currency: z.string().min(1, "Please select a currency"),
 });
 
-const CURRENCIES = [
-  { value: "BTC",      label: "₿ Bitcoin (BTC)" },
-  { value: "ETH",      label: "Ξ Ethereum (ETH)" },
-  { value: "LTC",      label: "Ł Litecoin (LTC)" },
-  { value: "USDT_TRX", label: "₮ Tether USDT · TRC-20" },
-  { value: "USDT_TON", label: "₮ Tether USDT · TON" },
-  { value: "SOL",      label: "◎ Solana (SOL)" },
-  { value: "DOGE",     label: "Ð Dogecoin (DOGE)" },
-  { value: "TRX",      label: "⚡ Tron (TRX)" },
-  { value: "TON",      label: "💎 Toncoin (TON)" },
-  { value: "BCH",      label: "Ƀ Bitcoin Cash (BCH)" },
-  { value: "XMR",      label: "ɱ Monero (XMR)" },
-  { value: "DASH",     label: "D Dash (DASH)" },
-];
 export function DepositForm() {
   const { toast } = useToast();
   const initiateDeposit = useInitiateDeposit();
@@ -148,7 +135,12 @@ export function DepositForm() {
                 </FormControl>
                 <SelectContent>
                   {CURRENCIES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    <SelectItem key={c.value} value={c.value}>
+                      <span className="flex items-center gap-2">
+                        <CoinIcon currency={c.value} size={16} />
+                        {c.network ? `${c.name} · ${c.network}` : `${c.name} (${c.value})`}
+                      </span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

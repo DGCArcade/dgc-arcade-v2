@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { db, usersTable, betsTable, transactionsTable, platformSettingsTable } from "@workspace/db";
 import { eq, desc, ilike, and, sql } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/auth.js";
+import { getPlatformSettings } from "../lib/platform-settings.js";
 
 export const adminRouter = Router();
 
@@ -19,6 +20,15 @@ async function callerIsOwner(req: { user?: { userId: number } }): Promise<boolea
     .where(eq(usersTable.id, req.user!.userId))
     .limit(1);
   return (caller?.username ?? "").toLowerCase() === OWNER_USERNAME;
+}
+
+// True if the target row is the protected platform owner. Matches by case-insensitive
+// username OR the "owner" role so no mutation path can ever ban/demote/delete/modify it.
+function isOwnerAccount(
+  target: { username?: string | null; role?: string | null } | undefined | null,
+): boolean {
+  if (!target) return false;
+  return target.role === "owner" || (target.username ?? "").toLowerCase() === OWNER_USERNAME;
 }
 
 // Generates a 10-digit DGC Bank PIN guaranteed not to collide with an existing one.
@@ -164,6 +174,32 @@ adminRouter.get("/users/:id", async (req, res) => {
         totalBets: user.totalBets,
         totalWon: parseFloat(user.totalWon),
         createdAt: user.createdAt.toISOString(),
+        accountType: user.accountType,
+        withdrawalsEnabled: user.withdrawalsEnabled,
+        promoBalance: parseFloat(user.promoBalance),
+        totalDeposited: parseFloat(user.totalDeposited),
+        totalWageredAmount: parseFloat(user.totalWageredAmount),
+        // ── Location / geo ──
+        locationVerified: user.locationVerified,
+        geoIp: user.geoIp,
+        geoCountry: user.geoCountry,
+        geoCountryCode: user.geoCountryCode,
+        geoRegion: user.geoRegion,
+        geoCity: user.geoCity,
+        geoHostname: user.geoHostname,
+        geoAsn: user.geoAsn,
+        geoIsp: user.geoIsp,
+        geoLat: user.geoLat,
+        geoLon: user.geoLon,
+        geoTimezone: user.geoTimezone,
+        vpnDetected: user.vpnDetected,
+        vpnProvider: user.vpnProvider,
+        // ── Device ──
+        deviceFingerprint: user.deviceFingerprint,
+        deviceName: user.deviceName,
+        deviceOs: user.deviceOs,
+        deviceBrowser: user.deviceBrowser,
+        deviceType: user.deviceType,
       },
       bets: bets.map((b) => ({
         id: b.id,
@@ -267,7 +303,7 @@ adminRouter.patch("/users/:id", async (req, res) => {
     .from(usersTable)
     .where(eq(usersTable.id, userId))
     .limit(1);
-  if (target?.username === "fanodgc") {
+  if (isOwnerAccount(target)) {
     res.status(403).json({ error: "This account is protected and cannot be modified." });
     return;
   }
@@ -335,8 +371,8 @@ adminRouter.delete("/users/:id", async (req, res) => {
   }
 
   // Protect superadmin
-  const [target] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-  if (target?.username === "fanodgc") {
+  const [target] = await db.select({ username: usersTable.username, role: usersTable.role }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  if (isOwnerAccount(target)) {
     res.status(403).json({ error: "This account is protected and cannot be deleted." });
     return;
   }
@@ -628,25 +664,6 @@ adminRouter.get("/bank/pending-withdrawals", requireBankSession, async (req, res
 
 
 
-// ── Default platform settings ──
-const DEFAULT_SETTINGS = {
-  aiSensitivity: 75,
-  autoApproveUnder: 50,
-  requireManualOver: 500,
-};
-
-async function getPlatformSettings() {
-  const rows = await db.select().from(platformSettingsTable);
-  const settings: Record<string, number> = { ...DEFAULT_SETTINGS };
-  for (const row of rows) {
-    if (row.key in settings) {
-      const num = parseFloat(row.value);
-      if (!isNaN(num)) settings[row.key as keyof typeof DEFAULT_SETTINGS] = num;
-    }
-  }
-  return settings as typeof DEFAULT_SETTINGS;
-}
-
 // GET /api/admin/bank/settings — fanodgc only
 adminRouter.get("/bank/settings", requireBankSession, async (req, res) => {
   const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
@@ -874,6 +891,8 @@ adminRouter.post("/tip", async (req, res) => {
     const [recipient] = await db.select().from(usersTable).where(eq(usersTable.username, toUsername)).limit(1);
     if (!recipient) { res.status(404).json({ error: "User not found: " + toUsername }); return; }
     if (recipient.id === sender.id) { res.status(400).json({ error: "Cannot tip yourself" }); return; }
+    // The platform owner account is never externally mutable — block tips into it.
+    if (isOwnerAccount(recipient)) { res.status(400).json({ error: "Cannot tip the house account" }); return; }
 
     // Deduct from sender, add to recipient
     const newSenderBalance = parseFloat(sender.balance) - amount;
@@ -1008,7 +1027,7 @@ adminRouter.patch("/users/:id/account-type", async (req, res) => {
   if (!target) { res.status(404).json({ error: "User not found" }); return; }
 
   // Prevent changing the owner account
-  if (target.role === "owner" || (target.username ?? "").toLowerCase() === OWNER_USERNAME) {
+  if (isOwnerAccount(target)) {
     res.status(403).json({ error: "Cannot modify the owner account" });
     return;
   }

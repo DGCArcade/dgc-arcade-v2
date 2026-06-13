@@ -470,6 +470,10 @@ components:
           type: boolean
         createdAt:
           type: string
+        accountType:
+          type: string
+        withdrawalsEnabled:
+          type: boolean
 
     # ── Games ─────────────────────────────────────────────────────────
     Game:

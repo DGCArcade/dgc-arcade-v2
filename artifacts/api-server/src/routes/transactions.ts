@@ -7,6 +7,7 @@ import {
   ListTransactionsQueryParams,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth.js";
+import { getPlatformSettings } from "../lib/platform-settings.js";
 import { v4 as uuidv4 } from "uuid";
 
 export const transactionsRouter = Router();
@@ -282,7 +283,16 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
     const fraudScore = flagReasons.length;
-    const autoDecline = fraudScore >= 2 || (withdrawRatio > 0.95 && accountAgeHours < 1);
+
+    // ── Owner-tunable fraud knobs (DGC Bank → AI Fraud Settings) ──
+    // aiSensitivity scales the raw flag count by 0.5x–1.5x so the owner can make
+    // the engine more or less aggressive. autoApproveUnder / requireManualOver
+    // set the dollar bands that bypass or force manual review.
+    const settings = await getPlatformSettings();
+    const sensitivityMultiplier = 0.5 + settings.aiSensitivity / 100;
+    const effectiveScore = fraudScore * sensitivityMultiplier;
+
+    const autoDecline = effectiveScore >= 2 || (withdrawRatio > 0.95 && accountAgeHours < 1);
     if (autoDecline) {
       // Log the declined attempt but do NOT touch the balance
       await db.insert(transactionsTable).values({
@@ -292,7 +302,7 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
         currency,
         status: "declined",
         address,
-        metadata: JSON.stringify({ fraudFlags: flagReasons, fraudScore, autoDeclined: true }),
+        metadata: JSON.stringify({ fraudFlags: flagReasons, fraudScore, effectiveScore, autoDeclined: true }),
       });
       res.status(403).json({ error: "Withdrawal declined. Please contact support if you believe this is an error." });
       return;
@@ -301,26 +311,51 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     // ATOMIC balance deduct -- prevents race conditions
     // Check and deduct in one SQL statement so two simultaneous
     // withdrawal requests can never both pass on the same balance.
-    const status = fraudScore >= 1 ? "flagged" : "pending";
-    const deducted = await db.update(usersTable)
-      .set({ balance: sql`CAST((CAST(balance AS NUMERIC) - ${amount}) AS TEXT)` })
-      .where(and(eq(usersTable.id, user.id), sql`CAST(balance AS NUMERIC) >= ${amount}`))
-      .returning({ balance: usersTable.balance });
+    //
+    // Every non-declined withdrawal goes to the manual-review queue as "pending"
+    // so it surfaces in the DGC Bank queue / fraud-alerts and stays approvable
+    // via PATCH /admin/transactions/:id. The fraud signals that would otherwise
+    // mark it are preserved in metadata (flaggedForReview) and independently
+    // re-scored by /bank/fraud-alerts for the owner.
+    const flaggedForReview = amount >= settings.requireManualOver || effectiveScore >= 1;
+    const status = "pending" as const;
+    // Deduct balance and record the withdrawal atomically. If the transaction
+    // insert fails, the balance deduction rolls back, so a user can never lose
+    // funds without a corresponding (refundable) withdrawal row.
+    const deducted = await db.transaction(async (tx) => {
+      const d = await tx.update(usersTable)
+        .set({ balance: sql`${usersTable.balance} - ${amount}` })
+        .where(and(eq(usersTable.id, user.id), sql`${usersTable.balance} >= ${amount}`))
+        .returning({ balance: usersTable.balance });
+      if (d.length === 0) return d;
+      await tx.insert(transactionsTable).values({
+        userId: user.id,
+        type: "withdrawal",
+        amount: String(amount),
+        currency,
+        status,
+        address,
+        metadata: JSON.stringify({
+          fraudFlags: flagReasons,
+          fraudScore,
+          effectiveScore,
+          flaggedForReview,
+          autoApproved: amount <= settings.autoApproveUnder && effectiveScore < 1,
+          thresholds: {
+            aiSensitivity: settings.aiSensitivity,
+            autoApproveUnder: settings.autoApproveUnder,
+            requireManualOver: settings.requireManualOver,
+          },
+        }),
+      });
+      return d;
+    });
     if (deducted.length === 0) {
       res.status(400).json({ error: "Insufficient balance" });
       return;
     }
-    await db.insert(transactionsTable).values({
-      userId: user.id,
-      type: "withdrawal",
-      amount: String(amount),
-      currency,
-      status,
-      address,
-      metadata: JSON.stringify({ fraudFlags: flagReasons, fraudScore }),
-    });
 
-    const msg = status === "flagged"
+    const msg = flaggedForReview
       ? "Withdrawal flagged for manual review. Our team will process it within 24 hours."
       : "Withdrawal request submitted. Under review.";
     res.json({ success: true, message: msg, status });

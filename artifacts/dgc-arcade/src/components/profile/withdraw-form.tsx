@@ -9,6 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
+import { CoinIcon, CURRENCIES } from "@/components/wallet/coin-icon";
 
 const withdrawSchema = z.object({
   amount: z.coerce.number().min(10, "Minimum withdrawal is $10"),
@@ -16,26 +17,13 @@ const withdrawSchema = z.object({
   address: z.string().min(10, "Please enter a valid wallet address"),
 });
 
-const CURRENCIES = [
-  { value: "BTC",      label: "₿ Bitcoin (BTC)" },
-  { value: "ETH",      label: "Ξ Ethereum (ETH)" },
-  { value: "LTC",      label: "Ł Litecoin (LTC)" },
-  { value: "USDT_TRX", label: "₮ Tether USDT · TRC-20" },
-  { value: "USDT_TON", label: "₮ Tether USDT · TON" },
-  { value: "SOL",      label: "◎ Solana (SOL)" },
-  { value: "DOGE",     label: "Ð Dogecoin (DOGE)" },
-  { value: "TRX",      label: "⚡ Tron (TRX)" },
-  { value: "TON",      label: "💎 Toncoin (TON)" },
-  { value: "BCH",      label: "Ƀ Bitcoin Cash (BCH)" },
-  { value: "XMR",      label: "ɱ Monero (XMR)" },
-  { value: "DASH",     label: "D Dash (DASH)" },
-];
-
 export function WithdrawForm() {
   const { toast } = useToast();
   const requestWithdrawal = useRequestWithdrawal();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  // Creator / tester accounts cannot withdraw — they must contact support.
+  const isCreator = user?.withdrawalsEnabled === false;
 
   const form = useForm<z.infer<typeof withdrawSchema>>({
     resolver: zodResolver(withdrawSchema),
@@ -73,6 +61,15 @@ export function WithdrawForm() {
       }
     );
   };
+
+  if (isCreator) {
+    return (
+      <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-6 text-center space-y-2">
+        <p className="font-display font-black uppercase tracking-widest text-yellow-400">Withdrawals Unavailable</p>
+        <p className="text-sm text-muted-foreground">Please contact DGC Arcade support to process a withdrawal for your account.</p>
+      </div>
+    );
+  }
 
   return (
     <Form {...form}>
@@ -118,7 +115,10 @@ export function WithdrawForm() {
                 <SelectContent>
                   {CURRENCIES.map(c => (
                     <SelectItem key={c.value} value={c.value}>
-                      {c.label}
+                      <span className="flex items-center gap-2">
+                        <CoinIcon currency={c.value} size={16} />
+                        {c.network ? `${c.name} · ${c.network}` : `${c.name} (${c.value})`}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>

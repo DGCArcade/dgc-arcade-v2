@@ -38,6 +38,7 @@ import {
   KeyRound,
   Activity,
   Clock,
+  MapPin,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -90,6 +91,31 @@ interface AdminUser {
   totalBets: number;
   totalWon: number;
   createdAt: string;
+  // ── Extended fields (returned by GET /users/:id detail only) ──
+  accountType?: string;
+  withdrawalsEnabled?: boolean;
+  promoBalance?: number;
+  totalDeposited?: number;
+  totalWageredAmount?: number;
+  locationVerified?: boolean;
+  geoIp?: string | null;
+  geoCountry?: string | null;
+  geoCountryCode?: string | null;
+  geoRegion?: string | null;
+  geoCity?: string | null;
+  geoHostname?: string | null;
+  geoAsn?: string | null;
+  geoIsp?: string | null;
+  geoLat?: string | null;
+  geoLon?: string | null;
+  geoTimezone?: string | null;
+  vpnDetected?: boolean | null;
+  vpnProvider?: string | null;
+  deviceFingerprint?: string | null;
+  deviceName?: string | null;
+  deviceOs?: string | null;
+  deviceBrowser?: string | null;
+  deviceType?: string | null;
 }
 
 interface AdminTx {
@@ -590,12 +616,19 @@ export default function AdminDashboard() {
         <div className="space-y-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             {[
-              { label: "Total Users", value: stats?.totalUsers ?? "—", icon: Users, color: "text-blue-400", bg: "from-blue-500/10 to-transparent" },
-              { label: "Total Bets", value: stats?.totalBets ?? "—", icon: Activity, color: "text-purple-400", bg: "from-purple-500/10 to-transparent" },
-              { label: "Total Wagered", value: stats ? formatCurrency(stats.totalWagered) : "—", icon: TrendingUp, color: "text-green-400", bg: "from-green-500/10 to-transparent" },
-              { label: "Biggest Win", value: stats ? formatCurrency(stats.biggestWin) : "—", icon: TrendingUp, color: "text-primary", bg: "from-primary/10 to-transparent" },
+              { label: "Total Users", value: stats?.totalUsers ?? "—", icon: Users, color: "text-blue-400", bg: "from-blue-500/10 to-transparent", tab: "users" as TabKey },
+              { label: "Total Bets", value: stats?.totalBets ?? "—", icon: Activity, color: "text-purple-400", bg: "from-purple-500/10 to-transparent", tab: "users" as TabKey },
+              { label: "Total Wagered", value: stats ? formatCurrency(stats.totalWagered) : "—", icon: TrendingUp, color: "text-green-400", bg: "from-green-500/10 to-transparent", tab: "users" as TabKey },
+              { label: "Biggest Win", value: stats ? formatCurrency(stats.biggestWin) : "—", icon: TrendingUp, color: "text-primary", bg: "from-primary/10 to-transparent", tab: "users" as TabKey },
             ].map((s) => (
-              <Card key={s.label} className="bg-secondary/40 border-border/40 card-hover-glow overflow-hidden">
+              <Card
+                key={s.label}
+                role="button"
+                tabIndex={0}
+                onClick={() => setActiveTab(s.tab)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveTab(s.tab); } }}
+                className="bg-secondary/40 border-border/40 card-hover-glow overflow-hidden cursor-pointer hover:border-primary/40 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
                 <CardContent className="p-0">
                   <div className={`bg-gradient-to-br ${s.bg} p-5`}>
                     <div className="flex items-center justify-between mb-4">
@@ -641,7 +674,13 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-secondary/40 border-border/40 card-hover-glow">
+            <Card
+              role="button"
+              tabIndex={0}
+              onClick={() => setActiveTab("bank")}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveTab("bank"); } }}
+              className="bg-secondary/40 border-border/40 card-hover-glow cursor-pointer hover:border-primary/40 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
               <CardContent className="p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <Wallet className="w-4 h-4 text-green-400" />
@@ -1452,6 +1491,55 @@ export default function AdminDashboard() {
                     <p className="font-mono font-bold">{String(s.value)}</p>
                   </div>
                 ))}
+              </div>
+
+              {/* ── Account / Compliance ── */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: "Account Type", value: selectedUser.user.accountType ?? "—" },
+                  { label: "Withdrawals", value: selectedUser.user.withdrawalsEnabled === false ? "Disabled" : "Enabled" },
+                  { label: "Total Deposited", value: selectedUser.user.totalDeposited != null ? formatCurrency(selectedUser.user.totalDeposited) : "—" },
+                  { label: "Total Wagered", value: selectedUser.user.totalWageredAmount != null ? formatCurrency(selectedUser.user.totalWageredAmount) : "—" },
+                ].map((s) => (
+                  <div key={s.label} className="bg-secondary/50 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{s.label}</p>
+                    <p className="font-mono font-bold text-sm">{String(s.value)}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── Location & Device (all collected compliance data) ── */}
+              <div>
+                <h4 className="font-bold uppercase tracking-wider text-sm mb-3 text-muted-foreground flex items-center gap-2">
+                  <MapPin className="w-3.5 h-3.5" /> Location &amp; Device
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 bg-secondary/30 rounded-lg p-4">
+                  {[
+                    { label: "IP Address", value: selectedUser.user.geoIp },
+                    { label: "Location Verified", value: selectedUser.user.locationVerified ? "Yes" : "No" },
+                    { label: "Country", value: [selectedUser.user.geoCountry, selectedUser.user.geoCountryCode ? `(${selectedUser.user.geoCountryCode})` : ""].filter(Boolean).join(" ") },
+                    { label: "Region", value: selectedUser.user.geoRegion },
+                    { label: "City", value: selectedUser.user.geoCity },
+                    { label: "Coordinates", value: selectedUser.user.geoLat && selectedUser.user.geoLon ? `${selectedUser.user.geoLat}, ${selectedUser.user.geoLon}` : "" },
+                    { label: "Timezone", value: selectedUser.user.geoTimezone },
+                    { label: "Hostname", value: selectedUser.user.geoHostname },
+                    { label: "ASN", value: selectedUser.user.geoAsn },
+                    { label: "ISP", value: selectedUser.user.geoIsp },
+                    { label: "VPN", value: selectedUser.user.vpnDetected ? `Detected${selectedUser.user.vpnProvider ? ` (${selectedUser.user.vpnProvider})` : ""}` : "Not detected" },
+                    { label: "Device", value: selectedUser.user.deviceName },
+                    { label: "OS", value: selectedUser.user.deviceOs },
+                    { label: "Browser", value: selectedUser.user.deviceBrowser },
+                    { label: "Device Type", value: selectedUser.user.deviceType },
+                    { label: "Fingerprint", value: selectedUser.user.deviceFingerprint },
+                  ].map((row) => (
+                    <div key={row.label} className="flex items-center justify-between gap-3 border-b border-border/20 py-1.5 last:border-0">
+                      <span className="text-xs text-muted-foreground uppercase tracking-wider shrink-0">{row.label}</span>
+                      <span className="font-mono text-xs text-right truncate max-w-[60%]" title={row.value ? String(row.value) : ""}>
+                        {row.value ? String(row.value) : "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* DGC Bank PIN — owner only, admin users only */}

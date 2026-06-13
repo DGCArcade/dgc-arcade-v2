@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { MapPin, Globe, ShieldAlert, X, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { savePendingGeo } from "@/lib/geo-sync";
 
 // Uses sessionStorage — shows on every new browser session, not cached forever
 const SESSION_KEY = "dgc_geo_session_v2";
@@ -218,46 +219,50 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
       sessionStorage.setItem(SESSION_KEY, "accepted");
 
       // Save geo + fingerprint to backend (non-blocking)
+      const fp = collectFingerprint();
+      // Parse real device info from user agent
+      const deviceInfo = parseDevice(navigator.userAgent);
+
+      // Detect VPN signals
+      const vpnInfo = geoData ? detectVpn(geoData) : { detected: false, signals: [], provider: null };
+
+      const payload = geoData ? {
+        country: geoData.country_name ?? "",
+        countryCode: geoData.country_code ?? "",
+        region: geoData.region ?? "",
+        city: geoData.city ?? "",
+        ip: geoData.ip ?? "",
+        hostname: "",
+        asn: geoData.asn ?? "",
+        isp: geoData.org ?? "",
+        lat: String(geoData.latitude ?? ""),
+        lon: String(geoData.longitude ?? ""),
+        timezone: geoData.timezone ?? "",
+        deviceName: deviceInfo.deviceName,
+        deviceOs: deviceInfo.deviceOs,
+        deviceBrowser: deviceInfo.deviceBrowser,
+        deviceType: deviceInfo.deviceType,
+        vpnDetected: vpnInfo.detected,
+        vpnProvider: vpnInfo.provider ?? "",
+        fingerprint: fp,
+      } : {};
+
+      // Save to localStorage for reference
+      localStorage.setItem("dgc_fp", fp);
+      localStorage.setItem("dgc_device", deviceInfo.deviceName);
+      if (vpnInfo.detected) localStorage.setItem("dgc_vpn", vpnInfo.provider ?? "detected");
+
       const token = localStorage.getItem("dgc_token");
       if (token) {
-        const fp = collectFingerprint();
-        // Parse real device info from user agent
-        const deviceInfo = parseDevice(navigator.userAgent);
-
-        // Detect VPN signals
-        const vpnInfo = geoData ? detectVpn(geoData) : { detected: false, signals: [], provider: null };
-
-        const payload = geoData ? {
-          country: geoData.country_name ?? "",
-          countryCode: geoData.country_code ?? "",
-          region: geoData.region ?? "",
-          city: geoData.city ?? "",
-          ip: geoData.ip ?? "",
-          hostname: "",
-          asn: geoData.asn ?? "",
-          isp: geoData.org ?? "",
-          lat: String(geoData.latitude ?? ""),
-          lon: String(geoData.longitude ?? ""),
-          timezone: geoData.timezone ?? "",
-          deviceName: deviceInfo.deviceName,
-          deviceOs: deviceInfo.deviceOs,
-          deviceBrowser: deviceInfo.deviceBrowser,
-          deviceType: deviceInfo.deviceType,
-          vpnDetected: vpnInfo.detected,
-          vpnProvider: vpnInfo.provider ?? "",
-          fingerprint: fp,
-        } : {};
-
-        // Save to localStorage for reference
-        localStorage.setItem("dgc_fp", fp);
-        localStorage.setItem("dgc_device", deviceInfo.deviceName);
-        if (vpnInfo.detected) localStorage.setItem("dgc_vpn", vpnInfo.provider ?? "detected");
-
         fetch("/api/users/geo", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify(payload),
         }).catch(() => {}); // non-blocking
+      } else if (geoData) {
+        // Not logged in yet — stash the verified geo so it is flushed to the
+        // account right after the user logs in or registers this session.
+        savePendingGeo(payload);
       }
 
       setState("accepted");

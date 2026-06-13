@@ -5,6 +5,7 @@ import { useLogin, getGetMeQueryKey } from "@workspace/api-client-react";
 import { setAuthToken } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { flushPendingGeo } from "@/lib/geo-sync";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,7 @@ export function LoginForm() {
       onSuccess: (result) => {
         setAuthToken(result.token);
         queryClient.setQueryData(getGetMeQueryKey(), result.user);
+        void flushPendingGeo();
         toast({ title: "Welcome back", description: "You have successfully logged in." });
         authModal.close();
         if (result.user.role === "admin") {

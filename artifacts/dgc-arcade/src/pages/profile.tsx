@@ -7,6 +7,7 @@ import { DepositForm } from "@/components/profile/deposit-form";
 import { WithdrawForm } from "@/components/profile/withdraw-form";
 import { useLocation } from "wouter";
 import { ArrowDownLeft, ArrowUpRight, Clock, CheckCircle2, XCircle, Landmark, RefreshCw } from "lucide-react";
+import { CoinIcon } from "@/components/wallet/coin-icon";
 import { useState, useEffect, useCallback } from "react";
 
 export default function Profile() {
@@ -197,7 +198,7 @@ export default function Profile() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
                 {Object.entries(plisioBalances).map(([currency, balance]) => (
                   <div key={currency} className="bg-secondary/50 border border-yellow-500/20 rounded-lg p-3 flex flex-col gap-1">
-                    <span className="text-xs font-bold uppercase tracking-widest text-yellow-400">{currency}</span>
+                    <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-yellow-400"><CoinIcon currency={currency} size={16} />{currency}</span>
                     <span className="font-mono font-black text-sm break-all">{String(balance)}</span>
                   </div>
                 ))}

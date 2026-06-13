@@ -267,8 +267,8 @@ betsRouter.post("/", requireAuth, async (req, res) => {
     // Check and deduct happen in one SQL statement.
     // Two simultaneous bets can never both pass on the same balance.
     const deducted = await db.update(usersTable)
-      .set({ balance: sql`CAST((CAST(balance AS NUMERIC) - ${amount}) AS TEXT)` })
-      .where(and(eq(usersTable.id, user.id), sql`CAST(balance AS NUMERIC) >= ${amount}`))
+      .set({ balance: sql`balance - ${amount}` })
+      .where(and(eq(usersTable.id, user.id), sql`balance >= ${amount}`))
       .returning({ balance: usersTable.balance });
     if (deducted.length === 0) {
       res.status(400).json({ error: "Insufficient balance" });
@@ -285,7 +285,7 @@ betsRouter.post("/", requireAuth, async (req, res) => {
     const newTotalWon = parseFloat(user.totalWon) + (won ? payout : 0);
     const newTotalWagered = parseFloat(user.totalWageredAmount ?? "0") + amount;
     const [updatedUser] = await db.update(usersTable).set({
-      balance: sql`CAST((CAST(balance AS NUMERIC) + ${payout}) AS TEXT)`,
+      balance: sql`balance + ${payout}`,
       totalBets: newTotalBets,
       totalWon: String(newTotalWon),
       totalWageredAmount: String(newTotalWagered),

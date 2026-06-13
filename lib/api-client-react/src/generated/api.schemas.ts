@@ -47,6 +47,8 @@ export interface User {
   role: string;
   isBanned: boolean;
   createdAt: string;
+  accountType?: string;
+  withdrawalsEnabled?: boolean;
 }
 
 export interface AuthResult {

@@ -99,10 +99,10 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
     // and ensures Blackjack bets count toward the withdrawal wager requirement
     const dealDeduct = await db.update(usersTable)
       .set({
-        balance: sql`CAST((CAST(balance AS NUMERIC) - ${amount}) AS TEXT)`,
-        totalWageredAmount: sql`CAST((CAST(coalesce(total_wagered_amount, '0') AS NUMERIC) + ${amount}) AS TEXT)`,
+        balance: sql`balance - ${amount}`,
+        totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${amount}`,
       })
-      .where(and(eq(usersTable.id, user.id), sql`CAST(balance AS NUMERIC) >= ${amount}`))
+      .where(and(eq(usersTable.id, user.id), sql`balance >= ${amount}`))
       .returning({ balance: usersTable.balance });
     if (dealDeduct.length === 0) {
       res.status(400).json({ error: "Insufficient balance" });
@@ -138,9 +138,9 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
     if (status === "player_blackjack") {
       const payout = amount * 2.5;
       const [bjUpdated] = await db.update(usersTable).set({
-        balance: sql`CAST((CAST(balance AS NUMERIC) + ${payout}) AS TEXT)`,
+        balance: sql`balance + ${payout}`,
         totalBets: sql`total_bets + 1`,
-        totalWon: sql`CAST((CAST(coalesce(total_won, '0') AS NUMERIC) + ${payout}) AS TEXT)`,
+        totalWon: sql`coalesce(total_won, 0) + ${payout}`,
       }).where(eq(usersTable.id, user.id)).returning({ balance: usersTable.balance });
       currentBalance = parseFloat(bjUpdated.balance);
       await db.insert(betsTable).values({
@@ -201,10 +201,10 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
         // Double bet, take one card, then stand
         const doubleDeduct = await db.update(usersTable)
           .set({
-            balance: sql`CAST((CAST(balance AS NUMERIC) - ${bet}) AS TEXT)`,
-            totalWageredAmount: sql`CAST((CAST(coalesce(total_wagered_amount, '0') AS NUMERIC) + ${bet}) AS TEXT)`,
+            balance: sql`balance - ${bet}`,
+            totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${bet}`,
           })
-          .where(and(eq(usersTable.id, user.id), sql`CAST(balance AS NUMERIC) >= ${bet}`))
+          .where(and(eq(usersTable.id, user.id), sql`balance >= ${bet}`))
           .returning({ balance: usersTable.balance });
         if (doubleDeduct.length === 0) {
           res.status(400).json({ error: "Insufficient balance for double" });
@@ -236,9 +236,9 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
       else payout = 0;
 
       await db.update(usersTable).set({
-        balance: sql`CAST((CAST(balance AS NUMERIC) + ${payout}) AS TEXT)`,
+        balance: sql`balance + ${payout}`,
         totalBets: sql`total_bets + 1`,
-        totalWon: sql`CAST((CAST(coalesce(total_won, '0') AS NUMERIC) + ${payout}) AS TEXT)`,
+        totalWon: sql`coalesce(total_won, 0) + ${payout}`,
       }).where(eq(usersTable.id, user.id));
 
       await db.insert(betsTable).values({

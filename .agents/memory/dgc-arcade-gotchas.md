@@ -107,3 +107,16 @@ which points at the Replit Helium DB), connect with `pg` resolved via
 `SET default_transaction_read_only = on; BEGIN; SET TRANSACTION READ ONLY; …; ROLLBACK`.
 Neon needs `ssl: { rejectUnauthorized: false }`. Never print the connection string.
 **Why:** prod is external Neon, off-limits for writes; this is the only safe way to inspect it.
+
+## All money columns are `numeric(18,8)` in BOTH dev and prod — never assign a text-cast expression
+`users.balance`, `total_won`, `total_wagered_amount`, `total_deposited`, `wager_requirement`,
+`promo_balance` are all `numeric` (confirmed in dev Helium AND prod Neon). The shipped pattern
+`set({ balance: sql\`CAST((CAST(balance AS NUMERIC) - ${x}) AS TEXT)\` })` assigns TEXT to a numeric
+column → Postgres throws `column "balance" is of type numeric but expression is of type text` and
+500s EVERY balance mutation (withdrawals AND all games: bets/mines/blackjack deduct+payout).
+**Why:** columns were migrated text→numeric but the SQL still cast results back to text; deposits/
+tips/refunds escaped because they bind `String(x)` params (unknown type, Postgres coerces) instead
+of casting. The 500 only surfaced loudly on withdrawals because that's what got tested.
+**How to apply:** for numeric columns write `sql\`balance - ${x}\`` / `sql\`coalesce(total_won,0) + ${x}\``
+(no CAST). Bound params like `String(x)` also work. Verify any money UPDATE with a rolled-back
+`BEGIN; UPDATE ...; ROLLBACK;` against the real column type before trusting it.

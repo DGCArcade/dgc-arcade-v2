@@ -60,10 +60,10 @@ minesRouter.post("/start", requireAuth, async (req, res) => {
     // and ensures Mines bets count toward the withdrawal wager requirement
     const deducted = await db.update(usersTable)
       .set({
-        balance: sql`CAST((CAST(balance AS NUMERIC) - ${amount}) AS TEXT)`,
-        totalWageredAmount: sql`CAST((CAST(coalesce(total_wagered_amount, '0') AS NUMERIC) + ${amount}) AS TEXT)`,
+        balance: sql`balance - ${amount}`,
+        totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${amount}`,
       })
-      .where(and(eq(usersTable.id, user.id), sql`CAST(balance AS NUMERIC) >= ${amount}`))
+      .where(and(eq(usersTable.id, user.id), sql`balance >= ${amount}`))
       .returning({ balance: usersTable.balance });
     if (deducted.length === 0) {
       res.status(400).json({ error: "Insufficient balance" });
@@ -187,9 +187,9 @@ minesRouter.post("/cashout", requireAuth, async (req, res) => {
     const payout = bet * multiplier;
 
     const [updated] = await db.update(usersTable).set({
-      balance: sql`CAST((CAST(balance AS NUMERIC) + ${payout}) AS TEXT)`,
+      balance: sql`balance + ${payout}`,
       totalBets: sql`total_bets + 1`,
-      totalWon: sql`CAST((CAST(coalesce(total_won, '0') AS NUMERIC) + ${payout}) AS TEXT)`,
+      totalWon: sql`coalesce(total_won, 0) + ${payout}`,
     }).where(eq(usersTable.id, req.user!.userId)).returning();
     const newBalance = parseFloat(updated.balance);
 

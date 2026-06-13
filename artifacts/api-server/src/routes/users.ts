@@ -38,6 +38,13 @@ usersRouter.get("/owner/plisio-balance", requireAuth, async (req, res) => {
   }
 });
 
+// Jurisdiction rules — kept in sync with the client location gate
+// (location-gate.tsx). Used to re-validate the reported jurisdiction server-side
+// before granting locationVerified, so a forged client request cannot self-verify
+// from a blocked region.
+const BLOCKED_COUNTRIES = ["GB", "FR", "NL", "AU", "BE", "DK", "DE", "IT", "RO", "ES", "SE", "CH", "CZ"];
+const ALLOWED_US_STATES = ["Indiana", "Florida"];
+
 // POST /api/users/geo — save location + device data for logged-in user
 usersRouter.post("/geo", requireAuth, async (req, res) => {
   const {
@@ -46,29 +53,54 @@ usersRouter.post("/geo", requireAuth, async (req, res) => {
     vpnDetected, vpnProvider, fingerprint,
   } = req.body;
   try {
-    await db.update(usersTable)
-      .set({
-        geoCountry: country ?? null,
-        geoCountryCode: countryCode ?? null,
-        geoRegion: region ?? null,
-        geoCity: city ?? null,
-        geoIp: ip ?? null,
-        geoHostname: hostname ?? null,
-        geoAsn: asn ?? null,
-        geoIsp: isp ?? null,
-        geoLat: lat ?? null,
-        geoLon: lon ?? null,
-        geoTimezone: timezone ?? null,
-        deviceName: deviceName ?? null,
-        deviceOs: deviceOs ?? null,
-        deviceBrowser: deviceBrowser ?? null,
-        deviceType: deviceType ?? null,
-        vpnDetected: vpnDetected ?? false,
-        vpnProvider: vpnProvider ?? null,
-        deviceFingerprint: fingerprint ?? null,
-      })
-      .where(eq(usersTable.id, req.user!.userId));
-    res.json({ success: true });
+    // Only persist a field when the client actually sent a non-empty value, so a
+    // partial or empty payload can never erase previously collected compliance
+    // data (Drizzle skips `undefined` keys in .set()).
+    const str = (v: unknown) => (typeof v === "string" && v.trim().length > 0 ? v : undefined);
+
+    // Location is "verified" only when we have a real IP AND the reported
+    // jurisdiction passes the same block rules the gate enforces. This server-side
+    // re-check stops a forged request from self-verifying out of a blocked region.
+    // (Geo data is still client-sourced; full server-side IP geolocation is a
+    // future hardening step.)
+    const cc = typeof countryCode === "string" ? countryCode.toUpperCase() : "";
+    const hasValidIp = typeof ip === "string" && ip.trim().length > 0;
+    const jurisdictionAllowed =
+      cc.length > 0 &&
+      !BLOCKED_COUNTRIES.includes(cc) &&
+      !(cc === "US" && typeof region === "string" && region.length > 0 && !ALLOWED_US_STATES.includes(region));
+    const locationVerified = hasValidIp && jurisdictionAllowed;
+
+    const updates = {
+      geoCountry: str(country),
+      geoCountryCode: str(countryCode),
+      geoRegion: str(region),
+      geoCity: str(city),
+      geoIp: str(ip),
+      geoHostname: str(hostname),
+      geoAsn: str(asn),
+      geoIsp: str(isp),
+      geoLat: str(lat),
+      geoLon: str(lon),
+      geoTimezone: str(timezone),
+      deviceName: str(deviceName),
+      deviceOs: str(deviceOs),
+      deviceBrowser: str(deviceBrowser),
+      deviceType: str(deviceType),
+      vpnProvider: str(vpnProvider),
+      deviceFingerprint: str(fingerprint),
+      vpnDetected: typeof vpnDetected === "boolean" ? vpnDetected : undefined,
+      // When we have a real IP, set verification to the computed value (so an
+      // honest re-check from a now-blocked region downgrades to false). When no
+      // IP is present, leave the existing value untouched (don't let a transient
+      // empty post drop a previously verified user).
+      locationVerified: hasValidIp ? locationVerified : undefined,
+    };
+
+    if (Object.values(updates).some((v) => v !== undefined)) {
+      await db.update(usersTable).set(updates).where(eq(usersTable.id, req.user!.userId));
+    }
+    res.json({ success: true, locationVerified });
   } catch (err) {
     req.log.error({ err }, "Save geo error");
     res.status(500).json({ error: "Internal server error" });
