@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable, transactionsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import {
   InitiateDepositBody,
   RequestWithdrawalBody,
@@ -304,8 +304,7 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     const status = fraudScore >= 1 ? "flagged" : "pending";
     const deducted = await db.update(usersTable)
       .set({ balance: sql`CAST((CAST(balance AS NUMERIC) - ${amount}) AS TEXT)` })
-      .where(eq(usersTable.id, user.id))
-      .where(sql`CAST(balance AS NUMERIC) >= ${amount}`)
+      .where(and(eq(usersTable.id, user.id), sql`CAST(balance AS NUMERIC) >= ${amount}`))
       .returning({ balance: usersTable.balance });
     if (deducted.length === 0) {
       res.status(400).json({ error: "Insufficient balance" });

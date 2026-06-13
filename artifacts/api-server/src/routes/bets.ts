@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable, gamesTable, betsTable } from "@workspace/db";
-import { eq, desc, gte, sql } from "drizzle-orm";
+import { eq, desc, gte, sql, and } from "drizzle-orm";
 import { BetBody, ListBetsQueryParams } from "@workspace/api-zod";
 import { requireAuth, optionalAuth } from "../middlewares/auth.js";
 import { v4 as uuidv4 } from "uuid";
@@ -268,8 +268,7 @@ betsRouter.post("/", requireAuth, async (req, res) => {
     // Two simultaneous bets can never both pass on the same balance.
     const deducted = await db.update(usersTable)
       .set({ balance: sql`CAST((CAST(balance AS NUMERIC) - ${amount}) AS TEXT)` })
-      .where(eq(usersTable.id, user.id))
-      .where(sql`CAST(balance AS NUMERIC) >= ${amount}`)
+      .where(and(eq(usersTable.id, user.id), sql`CAST(balance AS NUMERIC) >= ${amount}`))
       .returning({ balance: usersTable.balance });
     if (deducted.length === 0) {
       res.status(400).json({ error: "Insufficient balance" });
@@ -285,12 +284,12 @@ betsRouter.post("/", requireAuth, async (req, res) => {
     const newTotalBets = user.totalBets + 1;
     const newTotalWon = parseFloat(user.totalWon) + (won ? payout : 0);
     const newTotalWagered = parseFloat(user.totalWageredAmount ?? "0") + amount;
-    await db.update(usersTable).set({
+    const [updatedUser] = await db.update(usersTable).set({
       balance: sql`CAST((CAST(balance AS NUMERIC) + ${payout}) AS TEXT)`,
       totalBets: newTotalBets,
       totalWon: String(newTotalWon),
       totalWageredAmount: String(newTotalWagered),
-    }).where(eq(usersTable.id, user.id));
+    }).where(eq(usersTable.id, user.id)).returning({ balance: usersTable.balance });
 
     const [bet] = await db.insert(betsTable).values({
       userId: user.id,
@@ -303,6 +302,8 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       clientSeed: clientSeedStr,
       meta: { ...resultMeta, userMeta: meta },
     }).returning();
+
+    const newBalance = parseFloat(updatedUser.balance);
 
     res.json({
       bet: {

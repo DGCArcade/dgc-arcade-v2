@@ -73,3 +73,17 @@ Use `tsc` only to HUNT pre-existing bugs, not to gate the deploy.
 `render.yaml` has `autoDeploy: true` on both services. Pushing to GitHub `main`
 (`DGC4/dgc-arcade-v2`) auto-rebuilds and redeploys production on Render.
 **How to apply:** Treat any `git push origin main` as a production deploy.
+
+## drizzle UPDATE/DELETE: a second chained `.where()` SILENTLY OVERWRITES the first (NOT an AND)
+In drizzle-orm pg-core, `.update(t).set(...).where(a).where(b)` keeps ONLY `b`; the first
+condition is discarded silently (no runtime error, no reliable type guard). The intended atomic
+"update row WHERE id = X AND balance >= amount" must be ONE call:
+`.where(and(eq(t.id, x), sql\`CAST(balance AS NUMERIC) >= ${amount}\`))`.
+The buggy `.where(eq(id)).where(sql\`balance>=amt\`)` dropped the id filter, so the UPDATE
+matched EVERY row with sufficient balance — a mass balance-deduct across all users.
+**Why:** real bug found in `bets.ts` (place bet) and `mines.ts` (start) deduct paths; the same
+pattern in `transactions.ts` withdrawal was masked only because it ALSO forgot to import `sql`
+and threw before the overwrite mattered.
+**How to apply:** never chain `.where()` twice on an UPDATE/DELETE — always combine with
+`and(...)`. If you find a shipped double-`.where()` on a mutation, AUDIT the affected table:
+it may have changed far more rows than intended.

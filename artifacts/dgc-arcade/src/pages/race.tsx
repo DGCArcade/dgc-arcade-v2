@@ -6,6 +6,8 @@ import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthModal } from "@/hooks/use-auth-modal";
 import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { formatCurrency } from "@/lib/format";
 import { ChevronLeft, Trophy, Star, Zap } from "lucide-react";
 
@@ -34,8 +36,10 @@ type RaceResult = {
 type TrackProgress = { racerId: number; pct: number; done: boolean };
 
 export default function RacePage() {
-  const { user, isAuthenticated, refreshUser } = useAuth();
-  const { openLogin } = useAuthModal();
+  const { user, isAuthenticated } = useAuth();
+  const { open } = useAuthModal();
+  const openLogin = () => open("login");
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const [selectedRacer, setSelectedRacer] = useState<number | null>(null);
   const [betAmount, setBetAmount] = useState("1");
@@ -112,7 +116,7 @@ export default function RacePage() {
         clearInterval(animRef.current!);
         setRacing(false);
         setResult(res);
-        refreshUser?.();
+        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         if (res.won) {
           toast({ title: "🏆 YOU WIN!", description: `+${formatCurrency(res.payout)} (${res.multiplier}x)` });
         } else {
