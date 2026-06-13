@@ -1,0 +1,175 @@
+PROJECT: NEXT-GENERATION SLOT PLATFORM
+
+GOAL
+
+Build a production-grade slot platform for an existing online casino. This is not a single slot game. The platform must support hundreds or thousands of future slot themes without requiring modifications to engine code.
+
+TECH STACK
+
+* TypeScript
+* PixiJS
+* GSAP
+* React
+* Node.js
+* WebSocket support
+* Mobile-first architecture
+* Desktop-enhanced layouts
+
+CORE PRINCIPLE
+
+Everything must be data-driven.
+
+No slot theme should contain custom gameplay code.
+
+Themes should be built using configuration, assets, and bonus plugins.
+
+ARCHITECTURE
+
+Engine Layer
+
+* Reel Engine
+* Symbol Engine
+* RNG Interface
+* Win Engine
+* Payline Engine
+* Ways-To-Win Engine
+* Cluster Engine
+* Cascading Engine
+* Jackpot Engine
+* Bonus Engine
+* Animation Engine
+* Audio Engine
+* Theme Engine
+* Layout Engine
+* Event Bus
+
+Content Layer
+
+* Theme Packs
+* Symbol Packs
+* Audio Packs
+* Animation Packs
+* Background Packs
+
+Presentation Layer
+
+* Mobile Portrait
+* Mobile Landscape
+* Tablet
+* Desktop Widescreen
+* Ultra-Wide Desktop
+
+BONUS FRAMEWORK
+
+Support:
+
+* Free Spins
+* Hold and Spin
+* Pick Bonus
+* Wheel Bonus
+* Mystery Bonus
+* Multi-Level Bonus
+* Progressive Bonus
+
+New bonuses must be installable as plugins.
+
+JACKPOT FRAMEWORK
+
+Support:
+
+* Mini
+* Minor
+* Major
+* Grand
+
+Configurable per slot.
+
+THEME SYSTEM
+
+A slot theme should be creatable using:
+
+* Background Assets
+* Symbols
+* Audio
+* Character Animations
+* Bonus Selection
+* Configuration File
+
+No engine modifications required.
+
+ANIMATION REQUIREMENTS
+
+Every screen should feel alive.
+
+Support:
+
+* Particle Systems
+* Coin Rain
+* Fire
+* Smoke
+* Lightning
+* Screen Shake
+* Symbol Explosions
+* Animated Backgrounds
+* Character Animations
+* Dynamic Lighting Effects
+
+DESKTOP EXPERIENCE
+
+Do not stretch mobile layouts.
+
+Desktop should feel like a premium video game.
+
+Support:
+
+* Full-screen backgrounds
+* Side panels
+* Live jackpots
+* Live win feed
+* Tournament widgets
+* Dynamic overlays
+
+MOBILE EXPERIENCE
+
+Mobile should feel like a native casino app.
+
+Support:
+
+* Portrait mode
+* Landscape mode
+* Gesture support
+* Large touch targets
+* Smooth 60 FPS animation
+
+ADMIN SYSTEM
+
+Future support for:
+
+* Create Slot
+* Upload Assets
+* Configure RTP
+* Configure Bonuses
+* Configure Jackpots
+* Publish Slot
+
+without code changes.
+
+FIRST DELIVERABLE
+
+Build one flagship slot demonstrating:
+
+* 5x3 reels
+* Wilds
+* Scatters
+* Free Spins
+* Hold and Spin
+* Mini Jackpot
+* Minor Jackpot
+* Major Jackpot
+* Grand Jackpot
+* Particle Effects
+* Audio
+* Mobile Layout
+* Desktop Layout
+
+This flagship slot becomes the reference implementation for all future themes.

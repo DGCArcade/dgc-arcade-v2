@@ -485,6 +485,15 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
       return;
     }
 
+    // A withdrawal must have a payout address; never silently mark it completed
+    // without sending funds. Fail loudly so the owner can reject + refund instead.
+    if (status === "completed" && tx.type === "withdrawal" && !tx.address) {
+      res.status(400).json({
+        error: "This withdrawal has no payout address; funds were NOT sent. Reject it to refund the user.",
+      });
+      return;
+    }
+
     // If approving a withdrawal, send via Plisio payout API
     if (status === "completed" && tx.type === "withdrawal" && tx.address) {
 
@@ -492,7 +501,7 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
     const PLISIO_PAYOUT_MAP: Record<string, string> = {
       BTC: "BTC", ETH: "ETH", LTC: "LTC", DOGE: "DOGE", SOL: "SOL",
       BCH: "BCH", TRX: "TRX", TON: "TON", XMR: "XMR", DASH: "DASH",
-      USDT_TRX: "USDT_TRC20", USDT_TON: "USDT_TRC20",
+      USDT_TRX: "USDT_TRX", USDT_TON: "USDT_TON",
     };
 
       const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
@@ -500,24 +509,52 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
         res.status(500).json({ error: "Plisio API key not configured. Payout NOT sent." });
         return;
       }
+
+      // Double-pay guard: atomically claim the row by flipping pending -> processing.
+      // Only the request that wins this guarded update may call Plisio, so a
+      // double-click or concurrent approval can never send the payout twice.
+      const claimed = await db
+        .update(transactionsTable)
+        .set({ status: "processing" })
+        .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "pending")))
+        .returning({ id: transactionsTable.id });
+      if (claimed.length === 0) {
+        res.status(409).json({ error: "This withdrawal is already being processed." });
+        return;
+      }
+      // Any failure after the claim reverts the row to pending so the owner can retry.
+      const revertToPending = () =>
+        db
+          .update(transactionsTable)
+          .set({ status: "pending" })
+          .where(eq(transactionsTable.id, txId));
+
       let payoutResponse: Response;
       try {
         const payoutCurrency = PLISIO_PAYOUT_MAP[tx.currency ?? "BTC"] ?? (tx.currency ?? "BTC");
         const params = new URLSearchParams({
           api_key: PLISIO_KEY,
-          psys_cid: payoutCurrency,
+          // Plisio's withdraw API takes the psys_cid in the `currency` param
+          // (matches the working deposit/invoice call). `source_amount` +
+          // `source_currency` let Plisio convert our USD amount to crypto.
+          currency: payoutCurrency,
           to: tx.address,
           source_amount: tx.amount,
           source_currency: "USD",
           type: "cash_out",
         });
+        // Plisio's withdraw endpoint is GET-only. The previous POST hit a 404
+        // HTML page, which broke JSON parsing and surfaced as a generic 500.
         payoutResponse = await fetch(`https://api.plisio.net/api/v1/operations/withdraw?${params.toString()}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          method: "GET",
         });
       } catch (fetchErr) {
         req.log.error({ fetchErr, txId }, "Plisio payout network error");
-        res.status(502).json({ error: "Could not reach Plisio. Payout NOT sent. Please try again." });
+        await revertToPending();
+        res.status(502).json({
+          error:
+            "Could not reach Plisio to confirm the payout. Check your Plisio dashboard to see whether it was sent BEFORE approving again.",
+        });
         return;
       }
       interface PlisioPayoutResponse {
@@ -526,13 +563,13 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
       }
       const rawText = await payoutResponse.text();
 
-      req.log.error(
+      req.log.info(
         {
           txId,
           status: payoutResponse.status,
           body: rawText.slice(0, 2000),
         },
-        "PLISIO RAW RESPONSE",
+        "Plisio payout response",
       );
 
       let payoutData: PlisioPayoutResponse;
@@ -543,13 +580,14 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
         req.log.error(
           {
             txId,
-            rawText,
+            rawText: rawText.slice(0, 2000),
           },
-          "PLISIO RETURNED NON JSON",
+          "Plisio returned non-JSON",
         );
-
+        await revertToPending();
         res.status(502).json({
-          error: "Plisio returned invalid response",
+          error:
+            "Plisio returned an unexpected response, so the payout is NOT confirmed. Check your Plisio dashboard to see whether it was sent BEFORE approving again.",
         });
 
         return;
@@ -557,6 +595,7 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
       if (payoutData.status !== "success") {
         const errMsg = payoutData.data?.message ?? JSON.stringify(payoutData).slice(0, 200);
         req.log.error({ txId, payoutData, errMsg }, "Plisio payout rejected");
+        await revertToPending();
         res.status(502).json({ error: `Payout failed: ${errMsg}. Balance NOT deducted. Try again.` });
         return;
       }
@@ -584,7 +623,10 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Admin update transaction error");
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({
+      error: "Internal server error",
+      detail: err instanceof Error ? err.message : String(err),
+    });
   }
 });
 
