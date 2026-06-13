@@ -297,7 +297,10 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       return;
     }
 
-    // Credit on "completed" OR "mismatch" (underpayment) statuses
+    // Credit on "completed" (Plisio marks as completed any payment ≥ 75% of invoice
+    // amount — this matches the "Underpayment allowed % = 75" setting in the Plisio
+    // merchant dashboard) or "mismatch" (edge-case where Plisio flags a discrepancy).
+    // The 75% minimum is enforced again server-side below as a safety net.
     const creditStatuses = new Set(["completed", "mismatch"]);
     if (!creditStatuses.has(status)) {
       req.log.info({ txn_id, status }, "Plisio IPN: non-credit status, acknowledging");
@@ -311,37 +314,58 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       return;
     }
 
+    // ── Parse actual received amounts ────────────────────────────────────────
+    const requestedUsd   = parseFloat(tx.amount);
+    const sourceUsd      = source_amount     != null ? parseFloat(String(source_amount))     : null;
+    const receivedCrypto = received_amount   != null ? parseFloat(String(received_amount))   : null;
+    const invoicedCrypto = invoice_total_sum != null ? parseFloat(String(invoice_total_sum)) : null;
+
+    // ── 75% underpayment threshold — backend safety net ──────────────────────
+    // Plisio merchant setting: "Underpayment allowed % = 75"
+    // This means Plisio marks invoices as "completed" when ≥ 75% of the crypto
+    // amount was received. We enforce the same rule server-side so a Plisio
+    // misconfiguration or unexpected edge-case can never credit a payment that
+    // is below the 75% minimum.
+    //
+    // When crypto amounts are available from the IPN:
+    //   ratio ≥ 0.75 → continue to credit calculation below
+    //   ratio < 0.75 → acknowledge Plisio but DO NOT credit the user
+    //
+    // When crypto amounts are NOT in the IPN (rare fallback path), we proceed
+    // with the source_amount and trust Plisio's own threshold enforcement.
+    if (receivedCrypto != null && invoicedCrypto != null && invoicedCrypto > 0) {
+      const receivedRatio = receivedCrypto / invoicedCrypto;
+      if (receivedRatio < 0.75) {
+        req.log.warn(
+          { txn_id, receivedRatio, receivedCrypto, invoicedCrypto, status },
+          "Plisio IPN: payment below 75% underpayment threshold — acknowledged but NOT credited",
+        );
+        res.json({ success: true }); // acknowledge Plisio; do not credit
+        return;
+      }
+    }
+
     // ── Exact credit calculation ─────────────────────────────────────────────
     // Credit the user with what ACTUALLY arrived in the merchant wallet — not the
-    // invoice face value. Network fees and partial payments mean received_amount
-    // can be less than invoice_total_sum. We scale the USD credit by that ratio so
-    // the house never covers blockchain or Plisio network fees for the user.
+    // invoice face value. When both crypto fields are present we scale the USD
+    // credit by the ratio of received vs invoiced crypto so the house never
+    // absorbs network fees or any shortfall above the 75% minimum.
     //
-    // Logic (in order of preference):
-    //  1. If Plisio sends both received_amount and invoice_total_sum (crypto values),
-    //     scale source_amount by the ratio of actual vs invoiced crypto. This is the
-    //     most accurate: $5 invoice, 97.4% received → credit $4.87.
-    //  2. If only source_amount is present (common for mismatch), use it directly —
-    //     for mismatch Plisio already sets source_amount to the actual received USD.
-    //  3. Fall back to the original invoice amount stored in tx.amount.
+    //   100% received → credit 100% of source_amount  (e.g. $5.00 — full payment)
+    //    97% received → credit  97% of source_amount  (e.g. $4.87 — network fee gap)
+    //    75% received → credit  75% of source_amount  (e.g. $3.75 — minimum threshold)
     //
-    // Safety: creditAmount is always capped at the original invoice amount so a
-    // rounding/data error can never over-credit the user.
-    const requestedUsd = parseFloat(tx.amount);
-    const sourceUsd    = source_amount    != null ? parseFloat(String(source_amount))    : null;
-    const receivedCrypto  = received_amount   != null ? parseFloat(String(received_amount))   : null;
-    const invoicedCrypto  = invoice_total_sum != null ? parseFloat(String(invoice_total_sum)) : null;
-
+    // Safety cap: creditAmount never exceeds the originally invoiced USD amount.
     let creditAmount: number;
     if (receivedCrypto != null && invoicedCrypto != null && invoicedCrypto > 0 && sourceUsd != null) {
-      // Most accurate: scale USD by actual-vs-invoiced crypto ratio
+      // Scale USD by actual-vs-invoiced crypto ratio (most accurate path)
       const ratio = Math.min(receivedCrypto / invoicedCrypto, 1.0);
       creditAmount = Math.min(Math.round(sourceUsd * ratio * 1e8) / 1e8, requestedUsd);
     } else if (sourceUsd != null) {
-      // Mismatch path: Plisio sets source_amount to actual received USD
+      // Plisio already sets source_amount to actual received USD on mismatch
       creditAmount = Math.min(sourceUsd, requestedUsd);
     } else {
-      // Last resort: use the invoice amount (never over-credits, may under-report)
+      // Last resort: use the invoice amount — never over-credits
       creditAmount = requestedUsd;
     }
 
