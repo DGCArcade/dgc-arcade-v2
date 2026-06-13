@@ -12,6 +12,9 @@ import { blackjackRouter } from "./blackjack.js";
 import { minesRouter } from "./mines.js";
 import { dailyBonusRouter } from "./daily-bonus.js";
 import { raceRouter } from "./race.js";
+import { referralsRouter } from "./referrals.js";
+import { creatorRouter } from "./creator.js";
+import { tournamentsRouter } from "./tournaments.js";
 
 const router: IRouter = Router();
 
@@ -28,5 +31,8 @@ router.use("/blackjack", blackjackRouter);
 router.use("/mines", minesRouter);
 router.use("/daily-bonus", dailyBonusRouter);
 router.use("/race", raceRouter);
+router.use("/referrals", referralsRouter);
+router.use("/creator", creatorRouter);
+router.use("/tournaments", tournamentsRouter);
 
 export default router;
