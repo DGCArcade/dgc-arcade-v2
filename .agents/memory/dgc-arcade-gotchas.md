@@ -145,37 +145,32 @@ an idempotency gate — that turned a "accidentally clobber to one credit" bug i
 money" bug under duplicate webhooks. Verified e2e: two identical deposit callbacks now credit exactly once.
 **How to apply:** any handler that moves real money on a state change (pending→completed/failed) must make
 the status transition ITSELF the idempotency key, in the SAME transaction as the balance mutation.
-The admin APPROVE→Plisio payout path uses this same pattern: a guarded `pending→processing` claim BEFORE
-the external call (concurrent loser gets 409). The outcome is then classified by CERTAINTY, never
-auto-reverted: an AMBIGUOUS result (network error, the bounded fetch timing out, non-JSON, or a Plisio error
-that still carries an operation id) parks the row in `needs_review` (payout MAY have gone out — never
-auto-retry); only an AUTHORITATIVE rejection with NO operation id reverts `processing→pending`; success writes
-`completed`+txHash guarded on `status='processing'`. Every post-claim write is guarded on `status='processing'`
-so a concurrent resolution can't be clobbered.
+The admin APPROVE→Plisio payout path adds outcome classification on top of this: a guarded
+`pending→processing` claim BEFORE the call, then the result is classified by CERTAINTY and NEVER
+auto-reverted — an AMBIGUOUS outcome (network error, timeout, non-JSON, or an error carrying an operation
+id) goes to `needs_review` (payout MAY have been sent — never auto-retry); only an AUTHORITATIVE rejection
+with NO operation id reverts to `pending`; success is guarded on the claimed state. Guard EVERY post-claim
+write on the claimed status so a concurrent resolution can't be clobbered.
 
-## Ambiguous payouts are resolved via a reconcile queue — never auto-refund money that MAY have been sent
-A self-serve reconcile flow exists (replaces the old "manual cleanup" gap): `GET /api/admin/transactions/needs-review`
-lists rows that are `needs_review` OR `processing` older than 5 min; `POST /api/admin/transactions/:id/reconcile`
-takes `mark_completed` (NO balance change — funds were deducted at request time), `cancel_refund` (atomic
-guarded flip→failed + refund), or `requeue` (requires `confirmedNotSent:true` → pending). Each resolution is
-guarded on `status IN ('needs_review', stale 'processing')` + RETURNING, so duplicates 409.
-**Why:** a payout outcome is often genuinely unknown; auto-refunding/auto-retrying real money on an unknown
-outcome causes double-pay or loss — so `cancel_refund`/`requeue` are HUMAN-gated (owner verifies in the Plisio
-dashboard first).
-**How to apply:** the local payout fetch is bounded (`AbortSignal.timeout(30_000)`) FAR below the 5-min reconcile
-cutoff, so `processing` is transient and a `processing` row older than 5 min can only mean a crashed handler (no
-live fetch can still overwrite a reconciliation). Never raise the fetch bound toward the cutoff. Residual:
-Plisio can settle server-side after our client aborts — a Plisio operation-status lookup before
-cancel_refund/requeue is the high-value future enhancement.
+## Ambiguous payouts: human-gated reconcile, never auto-refund money that MAY have been sent
+Ambiguous withdrawals are resolved through a reconcile flow (a queue of `needs_review` rows plus `processing`
+rows stuck past a stale cutoff, with resolutions to mark-sent / cancel+refund / requeue), not silent auto-retry.
+**Why:** a payout outcome is often genuinely unknown; auto-refunding or auto-retrying real money on an unknown
+outcome causes double-pay or loss — so cancel+refund and requeue MUST be human-gated (owner verifies in the
+Plisio dashboard first).
+**How to apply:** the local payout fetch is timeout-bounded FAR below the stale-`processing` reconcile cutoff,
+so `processing` is transient and a row stuck past the cutoff can only be a crashed handler (no live fetch can
+overwrite a reconciliation). Never raise the fetch bound toward the cutoff. Residual: Plisio can settle
+server-side after our client aborts — a Plisio operation-status lookup before refund/requeue is the
+high-value future enhancement.
 
 ## Plisio IPN verify_hash = hmac_sha1(PHP serialize(ksort(POST minus verify_hash)), secret) — NOT a query string
-Making the HMAC mandatory with the WRONG algorithm silently rejects every genuine callback (breaks ALL deposits)
-once the key is set — strictly worse than no check. Plisio signs PHP `serialize()` of the ksorted POST array:
-`a:N:{s:<utf8_bytelen>:"key";s:<utf8_bytelen>:"val";...}`, every value coerced to string, `tx_urls`
-html_entity_decoded, compared in constant time. The old `key=value&...` query-string hash would never match.
-**Why:** the IPN body is form-urlencoded (`express.urlencoded`), so PHP `$_POST` values are all strings — use
-`Buffer.byteLength` (UTF-8), not JS `.length`. Enforcement is mandatory only when `PLISIO_SECRET_KEY` is set;
-dev (no key) skips with a warning; the IP allowlist is a secondary check.
-**How to apply:** verified by unit vectors (byte-exact serialize + HMAC round-trip), but CANNOT be e2e-tested in
-dev (no key, and the IP allowlist 403s localhost before the HMAC runs). Confirm with ONE real Plisio deposit
-callback after deploy + secret config before trusting it.
+Making the HMAC mandatory with the WRONG algorithm silently rejects every genuine callback (breaks ALL
+deposits) once the key is set — strictly worse than no check. Plisio signs PHP `serialize()` of the ksorted
+POST array (`a:N:{s:<utf8_bytelen>:"k";s:<utf8_bytelen>:"v";...}`), values coerced to strings, `tx_urls`
+html-entity-decoded, compared constant-time. A `k=v&...` query-string hash never matches.
+**Why:** the IPN body is form-urlencoded, so PHP `$_POST` values are all strings — use UTF-8 BYTE length, not
+JS `.length`. Mandatory only when the secret is set; dev (no key) skips with a warning.
+**How to apply:** CANNOT be e2e-tested in dev (no key; the IP allowlist 403s localhost before the HMAC runs).
+Verify with byte-exact unit vectors, then ONE real Plisio deposit callback after deploy + secret config
+before trusting it.
