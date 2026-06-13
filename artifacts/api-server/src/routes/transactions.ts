@@ -214,8 +214,16 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     // secondary best-effort check). When the secret is configured (production), a VALID
     // verify_hash is REQUIRED — reject any callback that is missing or fails the signature.
     if (PLISIO_SECRET_KEY) {
+      // NOTE: this path can only be confirmed end-to-end against the LIVE Plisio service (dev
+      // has no key, and the IP allowlist above 403s localhost before we reach here). The
+      // diagnostics below make the FIRST real production callback conclusive: on any failure we
+      // log the sorted field names, the serialized length/preview, and both hex digests. None of
+      // these is the secret — the secret is PLISIO_SECRET_KEY, which is never logged.
+      const bodyKeys = Object.keys(req.body as Record<string, unknown>)
+        .filter((k) => k !== "verify_hash")
+        .sort();
       if (!verify_hash) {
-        req.log.warn({ txn_id }, "Plisio callback rejected: missing verify_hash");
+        req.log.warn({ txn_id, bodyKeys }, "Plisio callback rejected: missing verify_hash");
         res.status(400).json({ error: "Invalid signature" });
         return;
       }
@@ -227,10 +235,28 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       const want = Buffer.from(expectedHash, "utf8");
       const got = Buffer.from(String(verify_hash), "utf8");
       if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) {
-        req.log.warn({ txn_id }, "Plisio callback hash mismatch");
+        // Loud, secret-free diagnostics: a genuine callback failing here is almost always a
+        // serialization-format mismatch — these fields pinpoint it in a single real callback.
+        // Do NOT log the full server-computed HMAC: for this exact (attacker-controllable) body
+        // it IS a valid verify_hash, so a full value would turn the logs into a signing/replay
+        // oracle. An 8-char prefix is enough to eyeball "did my computation even run" without
+        // leaking a usable authenticator (the remaining 128 bits are unknown). The receivedHash
+        // is attacker-supplied (already wrong) so it is safe to log in full.
+        req.log.warn(
+          {
+            txn_id,
+            bodyKeys,
+            serializedLen: Buffer.byteLength(serialized, "utf8"),
+            serializedPreview: serialized.slice(0, 500),
+            expectedHashPrefix: expectedHash.slice(0, 8),
+            receivedHash: String(verify_hash),
+          },
+          "Plisio callback hash mismatch",
+        );
         res.status(400).json({ error: "Invalid signature" });
         return;
       }
+      req.log.info({ txn_id }, "Plisio callback signature verified");
     } else {
       req.log.warn("Plisio callback HMAC check skipped: PLISIO_SECRET_KEY not set (dev only)");
     }

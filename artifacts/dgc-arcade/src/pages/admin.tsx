@@ -188,6 +188,9 @@ export default function AdminDashboard() {
   // ── Reconcile queue (withdrawals stuck in needs_review / stale processing) ──
   const [needsReview, setNeedsReview] = useState<any[]>([]);
   const [needsReviewLoading, setNeedsReviewLoading] = useState(false);
+  const [plisioStatus, setPlisioStatus] = useState<
+    Record<number, { found: boolean; sent: boolean | null; status?: string; operationId?: string | null }>
+  >({});
   const [bankSettings, setBankSettings] = useState({
     aiSensitivity: 75,
     autoApproveUnder: 50,
@@ -518,6 +521,29 @@ export default function AdminDashboard() {
       loadStats();
     } catch (err: any) {
       toast({ title: "Reconcile failed", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  // Ask Plisio directly whether a payout actually went out, so the owner can reconcile from here
+  // instead of digging through the Plisio dashboard. Cached per-row; the same check is enforced
+  // server-side before cancel/refund or retry.
+  async function checkPlisioStatus(w: any) {
+    setLoadingAction(`plisio-${w.id}`);
+    try {
+      const res = await adminFetch(`/transactions/${w.id}/plisio-status`);
+      setPlisioStatus((prev) => ({ ...prev, [w.id]: res }));
+      const label = res.found
+        ? res.sent === true
+          ? "Plisio reports this payout WAS sent."
+          : res.sent === false
+            ? "Plisio reports this payout was NOT sent."
+            : `Plisio reports status: ${res.status ?? "pending"}.`
+        : "Plisio has no confirmable record for this payout — verify in your dashboard.";
+      toast({ title: `TX #${w.id}`, description: label });
+    } catch (err: any) {
+      toast({ title: "Plisio lookup failed", description: err?.message ?? "Could not reach Plisio", variant: "destructive" });
     } finally {
       setLoadingAction(null);
     }
@@ -1402,19 +1428,36 @@ export default function AdminDashboard() {
                                 </TableCell>
                                 <TableCell className="text-xs text-muted-foreground">{w.updatedAt ? new Date(w.updatedAt).toLocaleString() : "—"}</TableCell>
                                 <TableCell>
-                                  <div className="flex gap-1.5 flex-wrap">
-                                    <Button size="sm" className="bg-green-600 hover:bg-green-700 h-7 text-xs gap-1" disabled={loadingAction === `reconcile-${w.id}`}
-                                      onClick={() => handleReconcile(w, "mark_completed")}>
-                                      <CheckCircle2 className="h-3 w-3" /> Sent
-                                    </Button>
-                                    <Button size="sm" variant="destructive" className="h-7 text-xs gap-1" disabled={loadingAction === `reconcile-${w.id}`}
-                                      onClick={() => handleReconcile(w, "cancel_refund")}>
-                                      <XCircle className="h-3 w-3" /> Cancel &amp; Refund
-                                    </Button>
-                                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={loadingAction === `reconcile-${w.id}`}
-                                      onClick={() => handleReconcile(w, "requeue")}>
-                                      <RefreshCw className="h-3 w-3" /> Retry
-                                    </Button>
+                                  <div className="flex flex-col gap-1.5">
+                                    <div className="flex gap-1.5 flex-wrap">
+                                      <Button size="sm" variant="secondary" className="h-7 text-xs gap-1" disabled={loadingAction === `plisio-${w.id}`}
+                                        onClick={() => checkPlisioStatus(w)}>
+                                        <Search className={loadingAction === `plisio-${w.id}` ? "animate-spin h-3 w-3" : "h-3 w-3"} /> Check Plisio
+                                      </Button>
+                                      <Button size="sm" className="bg-green-600 hover:bg-green-700 h-7 text-xs gap-1" disabled={loadingAction === `reconcile-${w.id}`}
+                                        onClick={() => handleReconcile(w, "mark_completed")}>
+                                        <CheckCircle2 className="h-3 w-3" /> Sent
+                                      </Button>
+                                      <Button size="sm" variant="destructive" className="h-7 text-xs gap-1" disabled={loadingAction === `reconcile-${w.id}`}
+                                        onClick={() => handleReconcile(w, "cancel_refund")}>
+                                        <XCircle className="h-3 w-3" /> Cancel &amp; Refund
+                                      </Button>
+                                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={loadingAction === `reconcile-${w.id}`}
+                                        onClick={() => handleReconcile(w, "requeue")}>
+                                        <RefreshCw className="h-3 w-3" /> Retry
+                                      </Button>
+                                    </div>
+                                    {plisioStatus[w.id] && (
+                                      <span className={`text-xs ${plisioStatus[w.id].found ? (plisioStatus[w.id].sent === true ? "text-green-400" : plisioStatus[w.id].sent === false ? "text-red-400" : "text-yellow-400") : "text-muted-foreground"}`}>
+                                        {plisioStatus[w.id].found
+                                          ? plisioStatus[w.id].sent === true
+                                            ? "✓ Plisio: payout WAS sent — use \u201CSent\u201D"
+                                            : plisioStatus[w.id].sent === false
+                                              ? "✗ Plisio: NOT sent — safe to Cancel & Refund / Retry"
+                                              : `⏳ Plisio: ${plisioStatus[w.id].status ?? "pending"} — wait, not yet confirmed`
+                                          : "? Plisio has no confirmable record — verify in your dashboard"}
+                                      </span>
+                                    )}
                                   </div>
                                 </TableCell>
                               </TableRow>

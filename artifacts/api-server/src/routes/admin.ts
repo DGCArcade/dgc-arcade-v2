@@ -533,10 +533,12 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
       // payout reference) means the payout MAY have been sent. We must NOT auto-revert to
       // pending (that invites a double-pay on retry). Park it in needs_review so the owner
       // verifies in Plisio and resolves it via the reconcile flow.
-      const markNeedsReview = () =>
+      // When Plisio handed us a payout reference even on an error, persist it (in txHash) so the
+      // reconcile flow can later look the operation up by id and confirm whether it actually sent.
+      const markNeedsReview = (operationId?: string | null) =>
         db
           .update(transactionsTable)
-          .set({ status: "needs_review" })
+          .set({ status: "needs_review", ...(operationId ? { txHash: operationId } : {}) })
           .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "processing")));
 
       let payoutResponse: Response;
@@ -619,7 +621,7 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
         // NO operation id is safe to revert to pending for a clean retry.
         if (payoutData.data?.txn_id) {
           req.log.error({ txId, payoutData, errMsg }, "Plisio payout error WITH reference — needs review");
-          await markNeedsReview();
+          await markNeedsReview(payoutData.data.txn_id);
           res.status(502).json({
             error: `Plisio reported an error but returned a payout reference (${errMsg}). It may have been sent — check your Plisio dashboard. Left under review; resolve it from the Needs Review list.`,
           });
@@ -673,6 +675,38 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
 });
 
 
+// Look up a single Plisio operation by id to learn whether a payout actually went out. Used by
+// the reconcile flow as a server-side safety check before refunding/requeuing money (and surfaced
+// to the owner in the UI). Returns sent=true if Plisio reports it completed, sent=false if Plisio
+// reports it failed/cancelled, sent=null if pending/unknown, and found=false when there is no
+// reference or Plisio could not confirm. Only POSITIVE evidence (sent true/null) is acted on as a
+// hard stop — an inconclusive result falls back to the owner's dashboard-based judgement.
+type PlisioOpStatus = { found: boolean; status?: string; sent: boolean | null; reason?: string };
+async function fetchPlisioOperationStatus(operationId: string): Promise<PlisioOpStatus> {
+  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
+  if (!PLISIO_KEY) return { found: false, sent: null, reason: "no_key" };
+  if (!operationId) return { found: false, sent: null, reason: "no_reference" };
+  try {
+    const params = new URLSearchParams({ api_key: PLISIO_KEY });
+    const resp = await fetch(
+      `https://api.plisio.net/api/v1/operations/${encodeURIComponent(operationId)}?${params.toString()}`,
+      { method: "GET", signal: AbortSignal.timeout(15_000) },
+    );
+    const data = (await resp.json()) as { status?: string; data?: { status?: string } };
+    if (data.status !== "success" || !data.data) {
+      return { found: false, sent: null, reason: "not_found" };
+    }
+    const opStatus = String(data.data.status ?? "").toLowerCase();
+    let sent: boolean | null;
+    if (opStatus === "completed") sent = true;
+    else if (opStatus === "error" || opStatus === "cancelled" || opStatus === "canceled") sent = false;
+    else sent = null; // pending / new / unknown — not yet confirmed, unsafe to refund/requeue
+    return { found: true, status: opStatus, sent };
+  } catch {
+    return { found: false, sent: null, reason: "lookup_failed" };
+  }
+}
+
 // ── RECONCILE: withdrawals stuck in an ambiguous state ──────────────────────
 // A withdrawal lands in `needs_review` when a Plisio payout outcome was ambiguous (network
 // error, non-JSON, or an error that still returned a payout reference), or it can be left
@@ -711,6 +745,37 @@ adminRouter.get("/transactions/needs-review", requireBankSession, async (req, re
     res.json({ withdrawals: rows });
   } catch (err) {
     req.log.error({ err }, "Needs-review withdrawals error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/admin/transactions/:id/plisio-status — ask Plisio directly whether this payout went
+// out, so the owner can decide how to reconcile without leaving for the Plisio dashboard. Only
+// works when we retained a payout reference (txHash); otherwise reports found:false.
+adminRouter.get("/transactions/:id/plisio-status", requireBankSession, async (req, res) => {
+  const txId = parseInt(String(req.params.id), 10);
+  if (Number.isNaN(txId)) {
+    res.status(400).json({ error: "Invalid transaction id" });
+    return;
+  }
+  try {
+    const [tx] = await db
+      .select({ id: transactionsTable.id, txHash: transactionsTable.txHash, type: transactionsTable.type })
+      .from(transactionsTable)
+      .where(eq(transactionsTable.id, txId))
+      .limit(1);
+    if (!tx || tx.type !== "withdrawal") {
+      res.status(404).json({ error: "Withdrawal not found" });
+      return;
+    }
+    if (!tx.txHash) {
+      res.json({ found: false, sent: null, reason: "no_reference", operationId: null });
+      return;
+    }
+    const status = await fetchPlisioOperationStatus(tx.txHash);
+    res.json({ ...status, operationId: tx.txHash });
+  } catch (err) {
+    req.log.error({ err }, "Plisio operation status lookup error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -771,6 +836,32 @@ adminRouter.post("/transactions/:id/reconcile", requireBankSession, async (req, 
     // TOCTOU-safe — a duplicate or in-flight-racing request finds 0 rows and is rejected (409),
     // so there is no double refund / double state change / resolving a live payout.
     const reconcilable = sql`(${transactionsTable.status} = 'needs_review' OR (${transactionsTable.status} = 'processing' AND ${transactionsTable.updatedAt} < now() - interval '5 minutes'))`;
+
+    // Server-side safety net (on top of the owner's dashboard check): the two resolutions that
+    // move money on the assumption the payout did NOT go out — cancel_refund (refund) and requeue
+    // (pay again) — are the double-pay/loss risk. When we retained a Plisio reference, ask Plisio
+    // directly and HARD-STOP on positive evidence the payout went out (sent) or is still pending
+    // (unconfirmed). A confirmed failure, a missing reference, or an unreachable Plisio is
+    // inconclusive and falls through to the human-gated path below — we never auto-loosen.
+    if ((resolution === "cancel_refund" || resolution === "requeue") && tx.txHash) {
+      const op = await fetchPlisioOperationStatus(tx.txHash);
+      if (op.found && op.sent === true) {
+        req.log.warn({ txId, op }, "Reconcile blocked: Plisio reports payout was sent");
+        res.status(409).json({
+          error: 'Plisio shows this payout WAS sent. Do NOT cancel/refund or retry — use "Sent" to mark it completed.',
+          plisio: op,
+        });
+        return;
+      }
+      if (op.found && op.sent === null) {
+        req.log.warn({ txId, op }, "Reconcile blocked: Plisio payout still pending");
+        res.status(409).json({
+          error: `Plisio shows this payout is still '${op.status}'. Wait until it settles, then re-check before cancel/refund or retry.`,
+          plisio: op,
+        });
+        return;
+      }
+    }
 
     if (resolution === "mark_completed") {
       // Owner verified in Plisio the payout WAS sent. Funds were deducted at request time,

@@ -160,9 +160,12 @@ outcome causes double-pay or loss — so cancel+refund and requeue MUST be human
 Plisio dashboard first).
 **How to apply:** the local payout fetch is timeout-bounded FAR below the stale-`processing` reconcile cutoff,
 so `processing` is transient and a row stuck past the cutoff can only be a crashed handler (no live fetch can
-overwrite a reconciliation). Never raise the fetch bound toward the cutoff. Residual: Plisio can settle
-server-side after our client aborts — a Plisio operation-status lookup before refund/requeue is the
-high-value future enhancement.
+overwrite a reconciliation). Never raise the fetch bound toward the cutoff. The residual "Plisio settles
+server-side after our client aborts" gap is now closed: before cancel+refund or requeue we look the operation
+up by its retained id and HARD-STOP (409) if Plisio reports it `completed` (sent) or still pending/unknown;
+only a confirmed failure / missing reference / unreachable Plisio is inconclusive and falls through to the
+owner's dashboard judgement. The check only ADDS restrictions — never loosen it. The retained operation id is
+stored in the EXISTING payout-reference column (txHash) on the needs_review path — no schema change.
 
 ## Plisio IPN verify_hash = hmac_sha1(PHP serialize(ksort(POST minus verify_hash)), secret) — NOT a query string
 Making the HMAC mandatory with the WRONG algorithm silently rejects every genuine callback (breaks ALL
@@ -173,4 +176,7 @@ html-entity-decoded, compared constant-time. A `k=v&...` query-string hash never
 JS `.length`. Mandatory only when the secret is set; dev (no key) skips with a warning.
 **How to apply:** CANNOT be e2e-tested in dev (no key; the IP allowlist 403s localhost before the HMAC runs).
 Verify with byte-exact unit vectors, then ONE real Plisio deposit callback after deploy + secret config
-before trusting it.
+before trusting it. To make that first real callback conclusive, the mismatch path logs secret-free
+diagnostics (sorted field names, serialized byte-length + bounded preview, the attacker-supplied receivedHash).
+NEVER log the full server-computed `expectedHash`: for the attacker-controllable callback body it IS a valid
+`verify_hash`, so full-value logging turns logs into a signing/replay oracle — log only a short prefix.
