@@ -496,6 +496,26 @@ export default function AdminDashboard() {
     }
   }
 
+  // Manually credit a pending deposit when the Plisio IPN callback failed.
+  // Safe to call twice — the backend is idempotent (guarded status flip).
+  async function handleCompleteDeposit(tx: AdminTx) {
+    if (!window.confirm(`Manually credit deposit #${tx.id} (${formatCurrency(tx.amount)} ${tx.currency}) to ${tx.username ?? "user"}?\n\nOnly do this after confirming the payment landed in your Plisio merchant account.`)) return;
+    setLoadingAction(`dep-${tx.id}`);
+    try {
+      await adminFetch(`/transactions/${tx.id}/complete-deposit`, { method: "POST" });
+      toast({
+        title: "Deposit credited",
+        description: `${formatCurrency(tx.amount)} added to ${tx.username ?? "user"}'s balance.`,
+      });
+      loadTransactions();
+      loadStats();
+    } catch (err: any) {
+      toast({ title: "Credit failed", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
   // Resolve an ambiguous withdrawal. Every path requires the owner to verify in Plisio
   // first; the wording is deliberately blunt because each choice moves (or risks) real money.
   async function handleReconcile(w: any, resolution: "mark_completed" | "cancel_refund" | "requeue") {
@@ -1051,7 +1071,21 @@ export default function AdminDashboard() {
                         {new Date(tx.createdAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        {tx.status === "pending" && (
+                        {tx.status === "pending" && tx.type === "deposit" && (
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30"
+                              variant="outline"
+                              onClick={() => handleCompleteDeposit(tx)}
+                              disabled={loadingAction === `dep-${tx.id}`}
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                              Credit
+                            </Button>
+                          </div>
+                        )}
+                        {tx.status === "pending" && tx.type === "withdrawal" && (
                           <div className="flex justify-end gap-1">
                             <Button
                               size="sm"
