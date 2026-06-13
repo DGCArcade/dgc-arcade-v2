@@ -36,6 +36,7 @@ function Router() {
         <Route path="/responsible-gambling" component={ResponsibleGamblingPage} />
         <Route path="/aml" component={AmlPage} />
         <Route path="/settings" component={Settings} />
+        <Route path="/creator" component={CreatorPage} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
