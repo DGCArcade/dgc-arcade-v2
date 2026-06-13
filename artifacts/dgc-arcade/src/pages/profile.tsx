@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DepositForm } from "@/components/profile/deposit-form";
 import { WithdrawForm } from "@/components/profile/withdraw-form";
 import { useLocation } from "wouter";
-import { ArrowDownLeft, ArrowUpRight, Clock, CheckCircle2, XCircle, Landmark, RefreshCw } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Clock, CheckCircle2, XCircle, Landmark, RefreshCw, Users, Copy, CheckCheck, TrendingUp } from "lucide-react";
 import { CoinIcon } from "@/components/wallet/coin-icon";
 import { useState, useEffect, useCallback } from "react";
 
@@ -34,6 +34,8 @@ export default function Profile() {
   const [tipUsername, setTipUsername] = useState("");
   const [tipAmount, setTipAmount] = useState(5);
   const [tipLoading, setTipLoading] = useState(false);
+  const [refData, setRefData] = useState<{ code: string; link: string; tier: string; color: string; emoji: string; commissionPct: number; activeReferrals: number; pendingReferrals: number; totalEarned: number } | null>(null);
+  const [refCopied, setRefCopied] = useState(false);
 
   const handleProfileTip = async () => {
     if (!tipUsername.trim() || tipAmount <= 0) return;
@@ -85,7 +87,23 @@ export default function Profile() {
     }
   }, [user?.username, fetchPlisioBalance]);
 
-  if (isLoading || !user) return <div className="animate-pulse bg-secondary h-96 rounded-xl border border-border" />;
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const token = localStorage.getItem('dgc_token');
+    fetch('/api/referrals/my-code', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => { if (d.code) setRefData(d); })
+      .catch(() => {});
+  }, [isAuthenticated]);
+
+  const copyRefLink = async () => {
+    if (!refData) return;
+    await navigator.clipboard.writeText(refData.link);
+    setRefCopied(true);
+    setTimeout(() => setRefCopied(false), 2000);
+  };
+
+    if (isLoading || !user) return <div className="animate-pulse bg-secondary h-96 rounded-xl border border-border" />;
 
   const getStatusIcon = (status: string) => {
     switch(status) {
@@ -248,7 +266,55 @@ export default function Profile() {
         </div>
       </div>
 
-      {(user.role === "owner" || user.role === "admin") && (
+      {/* ── Referral Section ─────────────────────────────────────────────── */}
+      {refData && (
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2">
+              <Users className="w-5 h-5 text-primary" />
+              Referral Program
+              <span className="ml-2 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-bold" style={{ color: refData.color, backgroundColor: refData.color + '18', border: '1px solid ' + refData.color + '40' }}>
+                {refData.emoji} {refData.tier}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-secondary/50 rounded-lg p-3 text-center border border-border/50">
+                <div className="font-mono font-black text-lg text-green-400">{refData.activeReferrals}</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">Active</div>
+              </div>
+              <div className="bg-secondary/50 rounded-lg p-3 text-center border border-border/50">
+                <div className="font-mono font-black text-lg text-yellow-400">{refData.pendingReferrals}</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">Pending</div>
+              </div>
+              <div className="bg-secondary/50 rounded-lg p-3 text-center border border-border/50">
+                <div className="font-mono font-black text-lg text-primary">{refData.commissionPct}%</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">Commission</div>
+              </div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wider font-bold text-muted-foreground mb-1.5">Your Referral Link</div>
+              <div className="flex gap-2">
+                <div className="flex-1 bg-secondary/80 rounded-lg px-3 py-2 font-mono text-xs border border-border/50 break-all text-muted-foreground">{refData.link}</div>
+                <button onClick={copyRefLink} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground font-bold text-xs uppercase hover:bg-primary/90 transition-colors whitespace-nowrap">
+                  {refCopied ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {refCopied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">Earn <strong className="text-primary">{refData.commissionPct}%</strong> when a referred user deposits. <a href="/creator" className="text-primary hover:underline">Full creator dashboard →</a></p>
+            </div>
+            {refData.totalEarned > 0 && (
+              <div className="flex items-center justify-between bg-primary/5 rounded-lg p-3 border border-primary/20">
+                <div className="flex items-center gap-2 text-sm font-bold"><TrendingUp className="w-4 h-4 text-primary" /> Total Commission Earned</div>
+                <div className="font-mono font-black text-primary">{formatCurrency(refData.totalEarned)}</div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+            {(user.role === "owner" || user.role === "admin") && (
         <Card className="bg-card border-border border-yellow-500/30 shadow-[0_0_32px_rgba(255,215,0,0.08)]">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2">
