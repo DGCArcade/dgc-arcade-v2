@@ -146,9 +146,36 @@ money" bug under duplicate webhooks. Verified e2e: two identical deposit callbac
 **How to apply:** any handler that moves real money on a state change (pending→completed/failed) must make
 the status transition ITSELF the idempotency key, in the SAME transaction as the balance mutation.
 The admin APPROVE→Plisio payout path uses this same pattern: a guarded `pending→processing` claim BEFORE
-the external call (concurrent loser gets 409), revert to `pending` on any Plisio failure, `completed`+txHash
-only on success. Caveat: a crash between the claim and the result can strand a row in `processing` — rare,
-but there is no self-serve reconcile/recovery UI yet, so it needs manual/operational cleanup.
-**Still-open follow-up (NOT yet fixed):** Plisio IPN HMAC is verified only when `verify_hash` is present
-and the IP allowlist reads the raw `X-Forwarded-For[0]` — make a valid HMAC REQUIRED when
-`PLISIO_SECRET_KEY` is set.
+the external call (concurrent loser gets 409). The outcome is then classified by CERTAINTY, never
+auto-reverted: an AMBIGUOUS result (network error, the bounded fetch timing out, non-JSON, or a Plisio error
+that still carries an operation id) parks the row in `needs_review` (payout MAY have gone out — never
+auto-retry); only an AUTHORITATIVE rejection with NO operation id reverts `processing→pending`; success writes
+`completed`+txHash guarded on `status='processing'`. Every post-claim write is guarded on `status='processing'`
+so a concurrent resolution can't be clobbered.
+
+## Ambiguous payouts are resolved via a reconcile queue — never auto-refund money that MAY have been sent
+A self-serve reconcile flow exists (replaces the old "manual cleanup" gap): `GET /api/admin/transactions/needs-review`
+lists rows that are `needs_review` OR `processing` older than 5 min; `POST /api/admin/transactions/:id/reconcile`
+takes `mark_completed` (NO balance change — funds were deducted at request time), `cancel_refund` (atomic
+guarded flip→failed + refund), or `requeue` (requires `confirmedNotSent:true` → pending). Each resolution is
+guarded on `status IN ('needs_review', stale 'processing')` + RETURNING, so duplicates 409.
+**Why:** a payout outcome is often genuinely unknown; auto-refunding/auto-retrying real money on an unknown
+outcome causes double-pay or loss — so `cancel_refund`/`requeue` are HUMAN-gated (owner verifies in the Plisio
+dashboard first).
+**How to apply:** the local payout fetch is bounded (`AbortSignal.timeout(30_000)`) FAR below the 5-min reconcile
+cutoff, so `processing` is transient and a `processing` row older than 5 min can only mean a crashed handler (no
+live fetch can still overwrite a reconciliation). Never raise the fetch bound toward the cutoff. Residual:
+Plisio can settle server-side after our client aborts — a Plisio operation-status lookup before
+cancel_refund/requeue is the high-value future enhancement.
+
+## Plisio IPN verify_hash = hmac_sha1(PHP serialize(ksort(POST minus verify_hash)), secret) — NOT a query string
+Making the HMAC mandatory with the WRONG algorithm silently rejects every genuine callback (breaks ALL deposits)
+once the key is set — strictly worse than no check. Plisio signs PHP `serialize()` of the ksorted POST array:
+`a:N:{s:<utf8_bytelen>:"key";s:<utf8_bytelen>:"val";...}`, every value coerced to string, `tx_urls`
+html_entity_decoded, compared in constant time. The old `key=value&...` query-string hash would never match.
+**Why:** the IPN body is form-urlencoded (`express.urlencoded`), so PHP `$_POST` values are all strings — use
+`Buffer.byteLength` (UTF-8), not JS `.length`. Enforcement is mandatory only when `PLISIO_SECRET_KEY` is set;
+dev (no key) skips with a warning; the IP allowlist is a secondary check.
+**How to apply:** verified by unit vectors (byte-exact serialize + HMAC round-trip), but CANNOT be e2e-tested in
+dev (no key, and the IP allowlist 403s localhost before the HMAC runs). Confirm with ONE real Plisio deposit
+callback after deploy + secret config before trusting it.

@@ -160,6 +160,40 @@ const PLISIO_IPS = new Set([
   "138.201.43.212",
 ]);
 
+// ── Plisio IPN signature helpers ─────────────────────────────────────────────
+// Plisio computes verify_hash as hmac_sha1(serialize($post), secret_key), where $post is the
+// callback payload (minus verify_hash) after PHP ksort(), with every value treated as a string,
+// expire_utc cast to string, and tx_urls HTML-entity-decoded. PHP serialize of an associative
+// string array is: a:<n>:{s:<klen>:"k";s:<vlen>:"v";...} using UTF-8 BYTE lengths. A plain
+// "k=v&..." query string (the old implementation) would never match and would reject every
+// genuine callback once the secret is configured.
+function plisioHtmlEntityDecode(input: string): string {
+  return input
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_m, d) => String.fromCodePoint(parseInt(d, 10)))
+    .replace(/&amp;/g, "&");
+}
+
+export function plisioSerialize(body: Record<string, unknown>): string {
+  const params: Record<string, string> = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (k === "verify_hash") continue;
+    params[k] = v == null ? "" : String(v);
+  }
+  if (typeof params.tx_urls === "string") params.tx_urls = plisioHtmlEntityDecode(params.tx_urls);
+  const keys = Object.keys(params).sort();
+  let out = `a:${keys.length}:{`;
+  for (const k of keys) {
+    out += `s:${Buffer.byteLength(k, "utf8")}:"${k}";s:${Buffer.byteLength(params[k], "utf8")}:"${params[k]}";`;
+  }
+  return out + "}";
+}
+
 transactionsRouter.post("/deposit/callback", async (req, res) => {
   try {
     // IP allowlist check — reject anything not from Plisio's known servers
@@ -176,21 +210,33 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       source_amount?: string;
       verify_hash?: string;
     };
-    if (!txn_id || !status) {
-      res.json({ success: true });
-      return;
-    }
-    if (PLISIO_SECRET_KEY && verify_hash) {
+    // HMAC signature is the PRIMARY authenticity control (the IP allowlist above is a
+    // secondary best-effort check). When the secret is configured (production), a VALID
+    // verify_hash is REQUIRED — reject any callback that is missing or fails the signature.
+    if (PLISIO_SECRET_KEY) {
+      if (!verify_hash) {
+        req.log.warn({ txn_id }, "Plisio callback rejected: missing verify_hash");
+        res.status(400).json({ error: "Invalid signature" });
+        return;
+      }
       const crypto = await import("crypto");
-      const params = { ...req.body };
-      delete params.verify_hash;
-      const sortedParams = Object.keys(params).sort().map((k) => `${k}=${params[k]}`).join("&");
-      const expectedHash = crypto.createHmac("sha1", PLISIO_SECRET_KEY).update(sortedParams).digest("hex");
-      if (expectedHash !== verify_hash) {
+      // Reconstruct Plisio's exact signed string (see plisioSerialize) and compare in
+      // constant time. Mismatched lengths are treated as invalid (timingSafeEqual throws on them).
+      const serialized = plisioSerialize(req.body as Record<string, unknown>);
+      const expectedHash = crypto.createHmac("sha1", PLISIO_SECRET_KEY).update(serialized).digest("hex");
+      const want = Buffer.from(expectedHash, "utf8");
+      const got = Buffer.from(String(verify_hash), "utf8");
+      if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) {
         req.log.warn({ txn_id }, "Plisio callback hash mismatch");
         res.status(400).json({ error: "Invalid signature" });
         return;
       }
+    } else {
+      req.log.warn("Plisio callback HMAC check skipped: PLISIO_SECRET_KEY not set (dev only)");
+    }
+    if (!txn_id || !status) {
+      res.json({ success: true });
+      return;
     }
     if (status !== "completed") {
       res.json({ success: true });

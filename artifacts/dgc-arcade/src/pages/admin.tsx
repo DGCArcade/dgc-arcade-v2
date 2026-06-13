@@ -141,6 +141,8 @@ interface AdminStats {
   biggestWin: number;
   pendingWithdrawals: number;
   pendingWithdrawalAmount: number;
+  needsReviewWithdrawals: number;
+  needsReviewAmount: number;
   bannedUsers: number;
 }
 
@@ -183,6 +185,9 @@ export default function AdminDashboard() {
   const [bankLastRefresh, setBankLastRefresh] = useState<Date | null>(null);
   const [fraudAlerts, setFraudAlerts] = useState<any[]>([]);
   const [fraudLoading, setFraudLoading] = useState(false);
+  // ── Reconcile queue (withdrawals stuck in needs_review / stale processing) ──
+  const [needsReview, setNeedsReview] = useState<any[]>([]);
+  const [needsReviewLoading, setNeedsReviewLoading] = useState(false);
   const [bankSettings, setBankSettings] = useState({
     aiSensitivity: 75,
     autoApproveUnder: 50,
@@ -275,6 +280,19 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  const loadNeedsReview = useCallback(async () => {
+    setNeedsReviewLoading(true);
+    try {
+      const res = await adminFetch("/transactions/needs-review");
+      setNeedsReview(res.withdrawals ?? []);
+    } catch (err: any) {
+      toast({ title: "Reconcile queue error", description: err?.message ?? "Could not load needs-review queue", variant: "destructive" });
+      setNeedsReview([]);
+    } finally {
+      setNeedsReviewLoading(false);
+    }
+  }, [toast]);
+
   const loadBank = useCallback(async () => {
     setBankLoading(true);
     try {
@@ -357,9 +375,10 @@ export default function AdminDashboard() {
     if (activeTab === "bank" && isAdmin && bankUnlocked) {
       loadBank();
       loadFraudAlerts();
+      loadNeedsReview();
       if (isOwner) loadBankSettings();
     }
-  }, [activeTab, isAdmin, bankUnlocked, isOwner, loadBank, loadFraudAlerts, loadBankSettings]);
+  }, [activeTab, isAdmin, bankUnlocked, isOwner, loadBank, loadFraudAlerts, loadNeedsReview, loadBankSettings]);
 
   // Open the DGC Bank tab when navigated to /admin?tab=bank (e.g. from the header).
   useEffect(() => {
@@ -474,6 +493,36 @@ export default function AdminDashboard() {
     }
   }
 
+  // Resolve an ambiguous withdrawal. Every path requires the owner to verify in Plisio
+  // first; the wording is deliberately blunt because each choice moves (or risks) real money.
+  async function handleReconcile(w: any, resolution: "mark_completed" | "cancel_refund" | "requeue") {
+    const amt = `${parseFloat(w.amount).toFixed(8)} ${w.currency}`;
+    const body: { resolution: string; txHash?: string; confirmedNotSent?: boolean } = { resolution };
+    if (resolution === "mark_completed") {
+      if (!window.confirm(`Mark TX #${w.id} (${amt}) as COMPLETED?\n\nOnly do this after confirming in your Plisio dashboard that the payout WAS actually sent. The user is NOT refunded.`)) return;
+      const hash = window.prompt("Optional: paste the Plisio payout / transaction id to record (leave blank to skip):", w.txHash ?? "");
+      if (hash && hash.trim()) body.txHash = hash.trim();
+    } else if (resolution === "cancel_refund") {
+      if (!window.confirm(`Cancel TX #${w.id} and REFUND ${amt} to the user?\n\nOnly do this after confirming in Plisio that the payout was NOT sent.`)) return;
+    } else {
+      if (!window.confirm(`Re-queue TX #${w.id} (${amt}) for another payout attempt?\n\n⚠ ONLY if you have confirmed in Plisio the funds were NOT sent. Re-queuing a payout that already went out will pay the user TWICE.`)) return;
+      body.confirmedNotSent = true;
+    }
+    setLoadingAction(`reconcile-${w.id}`);
+    try {
+      await adminFetch(`/transactions/${w.id}/reconcile`, { method: "POST", body: JSON.stringify(body) });
+      const labels: Record<string, string> = { mark_completed: "marked completed", cancel_refund: "cancelled & refunded", requeue: "re-queued" };
+      toast({ title: "Resolved", description: `TX #${w.id} ${labels[resolution]}` });
+      await loadNeedsReview();
+      await loadBank();
+      loadStats();
+    } catch (err: any) {
+      toast({ title: "Reconcile failed", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
   async function fetchAdminPin(userId: number) {
     setPinLoading(true);
     setAdminPin(null);
@@ -581,7 +630,7 @@ export default function AdminDashboard() {
             loadStats();
             if (activeTab === "users") loadUsers();
             if (activeTab === "transactions") loadTransactions();
-            if (activeTab === "bank") { loadBank(); loadFraudAlerts(); }
+            if (activeTab === "bank") { loadBank(); loadFraudAlerts(); loadNeedsReview(); }
           }}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
@@ -956,16 +1005,20 @@ export default function AdminDashboard() {
                       </TableCell>
                       <TableCell>
                         <Badge
-                          variant={tx.status === "pending" ? "outline" : tx.status === "completed" ? "default" : "destructive"}
+                          variant={tx.status === "completed" ? "default" : tx.status === "failed" || tx.status === "declined" ? "destructive" : "outline"}
                           className={`text-xs ${
                             tx.status === "pending"
                               ? "text-amber-400 border-amber-500/30"
                               : tx.status === "completed"
                               ? "bg-green-500/20 text-green-400 border-green-500/30"
+                              : tx.status === "needs_review"
+                              ? "text-orange-400 border-orange-500/40"
+                              : tx.status === "processing"
+                              ? "text-blue-400 border-blue-500/40"
                               : ""
                           }`}
                         >
-                          {tx.status}
+                          {tx.status === "needs_review" ? "Under review" : tx.status === "processing" ? "Processing" : tx.status}
                         </Badge>
                       </TableCell>
                       <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
@@ -1056,7 +1109,7 @@ export default function AdminDashboard() {
                     )}
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => { loadBank(); loadFraudAlerts(); }} disabled={bankLoading} className="gap-2">
+                <Button size="sm" variant="outline" onClick={() => { loadBank(); loadFraudAlerts(); loadNeedsReview(); }} disabled={bankLoading} className="gap-2">
                   <RefreshCw className={bankLoading ? "animate-spin h-4 w-4" : "h-4 w-4"} />
                   {bankLoading ? "Loading..." : "Refresh All"}
                 </Button>
@@ -1285,6 +1338,92 @@ export default function AdminDashboard() {
                       </Table>
                     </div>
                   </Card>
+                )}
+              </div>
+
+              {/* ── Needs Review / Reconcile ── */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-orange-400" /> Needs Review
+                    {needsReview.length > 0 && (
+                      <span className="bg-orange-500 text-black text-xs font-bold px-2 py-0.5 rounded-full">{needsReview.length}</span>
+                    )}
+                  </h3>
+                  <Button size="sm" variant="ghost" onClick={loadNeedsReview} disabled={needsReviewLoading} className="h-7 text-xs gap-1">
+                    <RefreshCw className={needsReviewLoading ? "animate-spin h-3 w-3" : "h-3 w-3"} /> Refresh
+                  </Button>
+                </div>
+                {needsReview.length === 0 ? (
+                  <Card className="border-dashed border-border/40">
+                    <CardContent className="py-6 text-center text-sm text-green-400">
+                      ✓ No withdrawals awaiting review
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <>
+                    <Card className="border-orange-500/30 bg-orange-950/10 mb-3">
+                      <CardContent className="py-3 px-4 text-xs text-orange-200/80 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-orange-400" />
+                        <span>
+                          These payouts had an <strong>ambiguous outcome</strong> — they may or may not have been sent, and the user's balance is already held.
+                          Check each one in your <strong>Plisio dashboard first</strong>, then resolve: <strong>Sent</strong> if it went out,
+                          <strong> Cancel &amp; Refund</strong> if it did not, or <strong>Retry</strong> only after confirming it was NOT sent.
+                        </span>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-border/60">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="border-border/40">
+                              <TableHead className="text-xs">ID</TableHead>
+                              <TableHead className="text-xs">User</TableHead>
+                              <TableHead className="text-xs">Amount</TableHead>
+                              <TableHead className="text-xs">Currency</TableHead>
+                              <TableHead className="text-xs">Address</TableHead>
+                              <TableHead className="text-xs">State</TableHead>
+                              <TableHead className="text-xs">Updated</TableHead>
+                              <TableHead className="text-xs">Resolve</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {needsReview.map((w: any) => (
+                              <TableRow key={w.id} className="border-border/30">
+                                <TableCell className="font-mono text-xs text-muted-foreground">#{w.id}</TableCell>
+                                <TableCell className="font-bold text-sm">{w.username ? `@${w.username}` : `#${w.userId}`}</TableCell>
+                                <TableCell className="font-mono font-bold">{parseFloat(w.amount).toFixed(8)}</TableCell>
+                                <TableCell><Badge variant="outline" className="text-xs">{w.currency}</Badge></TableCell>
+                                <TableCell className="font-mono text-xs max-w-[100px] truncate text-muted-foreground" title={w.address}>{w.address ?? "—"}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className={`text-xs ${w.status === "needs_review" ? "text-orange-400 border-orange-500/40" : "text-blue-400 border-blue-500/40"}`}>
+                                    {w.status === "needs_review" ? "Review" : "Stuck"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-xs text-muted-foreground">{w.updatedAt ? new Date(w.updatedAt).toLocaleString() : "—"}</TableCell>
+                                <TableCell>
+                                  <div className="flex gap-1.5 flex-wrap">
+                                    <Button size="sm" className="bg-green-600 hover:bg-green-700 h-7 text-xs gap-1" disabled={loadingAction === `reconcile-${w.id}`}
+                                      onClick={() => handleReconcile(w, "mark_completed")}>
+                                      <CheckCircle2 className="h-3 w-3" /> Sent
+                                    </Button>
+                                    <Button size="sm" variant="destructive" className="h-7 text-xs gap-1" disabled={loadingAction === `reconcile-${w.id}`}
+                                      onClick={() => handleReconcile(w, "cancel_refund")}>
+                                      <XCircle className="h-3 w-3" /> Cancel &amp; Refund
+                                    </Button>
+                                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={loadingAction === `reconcile-${w.id}`}
+                                      onClick={() => handleReconcile(w, "requeue")}>
+                                      <RefreshCw className="h-3 w-3" /> Retry
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </Card>
+                  </>
                 )}
               </div>
 

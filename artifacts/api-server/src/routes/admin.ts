@@ -522,12 +522,22 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
         res.status(409).json({ error: "This withdrawal is already being processed." });
         return;
       }
-      // Any failure after the claim reverts the row to pending so the owner can retry.
+      // An AUTHORITATIVE Plisio rejection (no payout was created) reverts the row to
+      // pending so the owner can safely retry.
       const revertToPending = () =>
         db
           .update(transactionsTable)
           .set({ status: "pending" })
-          .where(eq(transactionsTable.id, txId));
+          .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "processing")));
+      // An AMBIGUOUS outcome (network error, non-JSON, or an error that still carries a
+      // payout reference) means the payout MAY have been sent. We must NOT auto-revert to
+      // pending (that invites a double-pay on retry). Park it in needs_review so the owner
+      // verifies in Plisio and resolves it via the reconcile flow.
+      const markNeedsReview = () =>
+        db
+          .update(transactionsTable)
+          .set({ status: "needs_review" })
+          .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "processing")));
 
       let payoutResponse: Response;
       try {
@@ -545,15 +555,25 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
         });
         // Plisio's withdraw endpoint is GET-only. The previous POST hit a 404
         // HTML page, which broke JSON parsing and surfaced as a generic 500.
+        //
+        // Bound the attempt well below the 5-minute reconcile cutoff (see needs-review GET /
+        // reconcile POST). This makes 'processing' transient: under normal operation the row
+        // leaves 'processing' within ~30s (resolved here, or aborted -> needs_review below), so
+        // by the time the 5-min window lets the owner reconcile a stuck 'processing' row, no
+        // local payout attempt can still be running and later overwrite their resolution.
         payoutResponse = await fetch(`https://api.plisio.net/api/v1/operations/withdraw?${params.toString()}`, {
           method: "GET",
+          signal: AbortSignal.timeout(30_000),
         });
       } catch (fetchErr) {
-        req.log.error({ fetchErr, txId }, "Plisio payout network error");
-        await revertToPending();
+        // Network error OR the 30s timeout above. Either way the request MAY have reached
+        // Plisio and triggered a payout, so this is ambiguous — park in needs_review, never
+        // auto-revert to pending (which would invite a double-pay on retry).
+        req.log.error({ fetchErr, txId }, "Plisio payout network error / timeout");
+        await markNeedsReview();
         res.status(502).json({
           error:
-            "Could not reach Plisio to confirm the payout. Check your Plisio dashboard to see whether it was sent BEFORE approving again.",
+            "Could not reach Plisio to confirm the payout. It may have been sent — check your Plisio dashboard. Left under review; resolve it from the Needs Review list instead of approving again.",
         });
         return;
       }
@@ -584,27 +604,52 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
           },
           "Plisio returned non-JSON",
         );
-        await revertToPending();
+        await markNeedsReview();
         res.status(502).json({
           error:
-            "Plisio returned an unexpected response, so the payout is NOT confirmed. Check your Plisio dashboard to see whether it was sent BEFORE approving again.",
+            "Plisio returned an unexpected response, so the payout could NOT be confirmed. It may have been sent — check your Plisio dashboard. Left under review; resolve it from the Needs Review list instead of approving again.",
         });
 
         return;
       }
       if (payoutData.status !== "success") {
         const errMsg = payoutData.data?.message ?? JSON.stringify(payoutData).slice(0, 200);
-        req.log.error({ txId, payoutData, errMsg }, "Plisio payout rejected");
+        // If Plisio returned a payout reference despite the error, the payout may already
+        // exist — treat as ambiguous (needs_review). Only an authoritative rejection with
+        // NO operation id is safe to revert to pending for a clean retry.
+        if (payoutData.data?.txn_id) {
+          req.log.error({ txId, payoutData, errMsg }, "Plisio payout error WITH reference — needs review");
+          await markNeedsReview();
+          res.status(502).json({
+            error: `Plisio reported an error but returned a payout reference (${errMsg}). It may have been sent — check your Plisio dashboard. Left under review; resolve it from the Needs Review list.`,
+          });
+          return;
+        }
+        req.log.error({ txId, payoutData, errMsg }, "Plisio payout rejected (no reference)");
         await revertToPending();
-        res.status(502).json({ error: `Payout failed: ${errMsg}. Balance NOT deducted. Try again.` });
+        res.status(502).json({ error: `Payout failed: ${errMsg}. Funds were NOT sent — you can approve again.` });
         return;
       }
       const plisioTxId = payoutData.data?.txn_id ?? null;
+      // Guard the success write on status='processing': never overwrite a row that was
+      // reconciled/changed out from under us between the claim and now.
       const [updated] = await db
         .update(transactionsTable)
         .set({ status: "completed", txHash: plisioTxId })
-        .where(eq(transactionsTable.id, txId))
+        .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "processing")))
         .returning();
+      if (!updated) {
+        // Extremely rare: the row left 'processing' (e.g. a concurrent reconcile) while the
+        // payout succeeded at Plisio. Log loudly; the payout DID go through.
+        req.log.error({ txId, plisioTxId }, "Plisio payout succeeded but row no longer 'processing'");
+        res.status(200).json({
+          id: txId,
+          status: "completed",
+          txHash: plisioTxId,
+          warning: "Payout succeeded at Plisio but the record had already changed — verify in the Needs Review list.",
+        });
+        return;
+      }
       res.json({ id: updated.id, status: updated.status, amount: parseFloat(updated.amount), txHash: updated.txHash });
       return;
     }
@@ -623,6 +668,176 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Admin update transaction error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+// ── RECONCILE: withdrawals stuck in an ambiguous state ──────────────────────
+// A withdrawal lands in `needs_review` when a Plisio payout outcome was ambiguous (network
+// error, non-JSON, or an error that still returned a payout reference), or it can be left
+// in `processing` if the server died mid-payout. These rows have ALREADY had the user's
+// balance deducted, so the owner must verify in Plisio and resolve them explicitly.
+
+// GET /api/admin/transactions/needs-review — the reconcile queue
+adminRouter.get("/transactions/needs-review", requireBankSession, async (req, res) => {
+  try {
+    const rows = await db
+      .select({
+        id: transactionsTable.id,
+        userId: transactionsTable.userId,
+        amount: transactionsTable.amount,
+        currency: transactionsTable.currency,
+        type: transactionsTable.type,
+        status: transactionsTable.status,
+        address: transactionsTable.address,
+        txHash: transactionsTable.txHash,
+        createdAt: transactionsTable.createdAt,
+        updatedAt: transactionsTable.updatedAt,
+        username: usersTable.username,
+      })
+      .from(transactionsTable)
+      .leftJoin(usersTable, eq(transactionsTable.userId, usersTable.id))
+      .where(
+        and(
+          eq(transactionsTable.type, "withdrawal"),
+          // `processing` rows younger than 5 min may be a payout in flight RIGHT NOW —
+          // exclude them so we never surface (or let the owner touch) an in-progress payout.
+          sql`(${transactionsTable.status} = 'needs_review' OR (${transactionsTable.status} = 'processing' AND ${transactionsTable.updatedAt} < now() - interval '5 minutes'))`,
+        ),
+      )
+      .orderBy(desc(transactionsTable.updatedAt))
+      .limit(100);
+    res.json({ withdrawals: rows });
+  } catch (err) {
+    req.log.error({ err }, "Needs-review withdrawals error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/admin/transactions/:id/reconcile — resolve an ambiguous withdrawal
+// Body: { resolution: "mark_completed" | "cancel_refund" | "requeue", txHash?, confirmedNotSent? }
+adminRouter.post("/transactions/:id/reconcile", requireBankSession, async (req, res) => {
+  const txId = parseInt(String(req.params.id), 10);
+  if (Number.isNaN(txId)) {
+    res.status(400).json({ error: "Invalid transaction id" });
+    return;
+  }
+  const { resolution, txHash, confirmedNotSent } = req.body as {
+    resolution?: string;
+    txHash?: string;
+    confirmedNotSent?: boolean;
+  };
+  if (!["mark_completed", "cancel_refund", "requeue"].includes(resolution ?? "")) {
+    res.status(400).json({ error: "Invalid resolution" });
+    return;
+  }
+  try {
+    const [tx] = await db
+      .select()
+      .from(transactionsTable)
+      .where(eq(transactionsTable.id, txId))
+      .limit(1);
+    if (!tx) {
+      res.status(404).json({ error: "Transaction not found" });
+      return;
+    }
+    if (tx.type !== "withdrawal") {
+      res.status(400).json({ error: "Only withdrawals can be reconciled" });
+      return;
+    }
+    if (tx.status !== "needs_review" && tx.status !== "processing") {
+      res.status(400).json({ error: "This withdrawal is not awaiting review." });
+      return;
+    }
+    // A 'processing' row may be an in-flight payout at Plisio right now. Only allow it to be
+    // reconciled once it's been stuck long enough (>5 min) that the payout call has certainly
+    // returned — mirrors the GET queue filter — so we never resolve a payout Plisio is about
+    // to confirm (which would risk a refund/cancel on money that actually went out).
+    if (tx.status === "processing") {
+      const updatedAtMs = tx.updatedAt ? new Date(tx.updatedAt).getTime() : 0;
+      if (Date.now() - updatedAtMs < 5 * 60 * 1000) {
+        res.status(409).json({
+          error:
+            "This payout may still be in flight (processing for under 5 minutes). Wait until it appears in the Needs Review list before reconciling.",
+        });
+        return;
+      }
+    }
+
+    // Shared guard: only a row STILL reconcilable may be resolved — needs_review always, but a
+    // 'processing' row only once it is older than 5 min (an in-flight payout is younger). Mirrors
+    // the GET queue filter. Combined with RETURNING, every resolution is idempotent and
+    // TOCTOU-safe — a duplicate or in-flight-racing request finds 0 rows and is rejected (409),
+    // so there is no double refund / double state change / resolving a live payout.
+    const reconcilable = sql`(${transactionsTable.status} = 'needs_review' OR (${transactionsTable.status} = 'processing' AND ${transactionsTable.updatedAt} < now() - interval '5 minutes'))`;
+
+    if (resolution === "mark_completed") {
+      // Owner verified in Plisio the payout WAS sent. Funds were deducted at request time,
+      // so there is NO balance change — just record the terminal state (+ optional txHash).
+      const [updated] = await db
+        .update(transactionsTable)
+        .set({ status: "completed", ...(txHash ? { txHash: String(txHash) } : {}) })
+        .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.type, "withdrawal"), reconcilable))
+        .returning();
+      if (!updated) {
+        res.status(409).json({ error: "This withdrawal is no longer awaiting review." });
+        return;
+      }
+      req.log.info({ txId, by: req.user!.userId }, "Reconcile: marked completed");
+      res.json({ id: updated.id, status: updated.status });
+      return;
+    }
+
+    if (resolution === "cancel_refund") {
+      // Owner verified the payout was NOT sent and wants to cancel it: flip to failed and
+      // refund the held balance ATOMICALLY. The guarded flip gates the refund, so concurrent
+      // duplicates block on the row lock and can never double-refund.
+      const refunded = await db.transaction(async (txn) => {
+        const flipped = await txn
+          .update(transactionsTable)
+          .set({ status: "failed" })
+          .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.type, "withdrawal"), reconcilable))
+          .returning({ id: transactionsTable.id });
+        if (flipped.length === 0) return false;
+        await txn
+          .update(usersTable)
+          .set({ balance: sql`balance + ${parseFloat(tx.amount)}` })
+          .where(eq(usersTable.id, tx.userId));
+        return true;
+      });
+      if (!refunded) {
+        res.status(409).json({ error: "This withdrawal is no longer awaiting review." });
+        return;
+      }
+      req.log.info({ txId, by: req.user!.userId, amount: tx.amount }, "Reconcile: cancelled + refunded");
+      res.json({ id: txId, status: "failed", amount: parseFloat(tx.amount) });
+      return;
+    }
+
+    // resolution === "requeue": back to pending so the normal approve flow can retry the
+    // payout. Only safe when the owner EXPLICITLY confirms Plisio did NOT send the funds —
+    // a blind requeue after an ambiguous outcome is a double-pay hole.
+    if (confirmedNotSent !== true) {
+      res.status(400).json({
+        error: "Requeue requires explicit confirmation that the payout was NOT sent (confirmedNotSent: true).",
+      });
+      return;
+    }
+    const [requeued] = await db
+      .update(transactionsTable)
+      .set({ status: "pending" })
+      .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.type, "withdrawal"), reconcilable))
+      .returning();
+    if (!requeued) {
+      res.status(409).json({ error: "This withdrawal is no longer awaiting review." });
+      return;
+    }
+    req.log.info({ txId, by: req.user!.userId }, "Reconcile: requeued to pending");
+    res.json({ id: requeued.id, status: requeued.status });
+    return;
+  } catch (err) {
+    req.log.error({ err }, "Reconcile transaction error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -1003,6 +1218,19 @@ adminRouter.get("/stats", async (req, res) => {
       .from(transactionsTable)
       .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")));
 
+    // Withdrawals stuck in an ambiguous state (needs_review, or processing for >5 min) that
+    // the owner must reconcile. Kept separate from the pending queue/counts on purpose.
+    const needsReviewFilter = sql`(${transactionsTable.status} = 'needs_review' OR (${transactionsTable.status} = 'processing' AND ${transactionsTable.updatedAt} < now() - interval '5 minutes'))`;
+    const [{ needsReviewWithdrawals }] = await db
+      .select({ needsReviewWithdrawals: sql<number>`count(*)` })
+      .from(transactionsTable)
+      .where(and(eq(transactionsTable.type, "withdrawal"), needsReviewFilter));
+
+    const [{ needsReviewAmount }] = await db
+      .select({ needsReviewAmount: sql<number>`coalesce(sum(amount::numeric), 0)` })
+      .from(transactionsTable)
+      .where(and(eq(transactionsTable.type, "withdrawal"), needsReviewFilter));
+
     const [{ bannedUsers }] = await db
       .select({ bannedUsers: sql<number>`count(*)` })
       .from(usersTable)
@@ -1037,6 +1265,8 @@ adminRouter.get("/stats", async (req, res) => {
       biggestWin: Number(biggestWin),
       pendingWithdrawals: Number(pendingWithdrawals),
       pendingWithdrawalAmount: Number(pendingWithdrawalAmount),
+      needsReviewWithdrawals: Number(needsReviewWithdrawals),
+      needsReviewAmount: Number(needsReviewAmount),
       bannedUsers: Number(bannedUsers),
       activeToday: Number(activeToday),
       totalDeposited: Number(totalDeposited),

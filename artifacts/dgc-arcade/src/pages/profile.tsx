@@ -71,7 +71,17 @@ export default function Profile() {
       case 'completed': return <CheckCircle2 className="w-4 h-4 text-green-500" />;
       case 'failed': return <XCircle className="w-4 h-4 text-destructive" />;
       case 'pending': return <Clock className="w-4 h-4 text-yellow-500" />;
+      case 'processing': return <Clock className="w-4 h-4 text-blue-400" />;
+      case 'needs_review': return <Clock className="w-4 h-4 text-amber-400" />;
       default: return null;
+    }
+  };
+
+  const statusLabel = (status: string) => {
+    switch (status) {
+      case 'needs_review': return 'Under review';
+      case 'processing': return 'Processing';
+      default: return status.replace(/_/g, ' ');
     }
   };
 
@@ -162,7 +172,7 @@ export default function Profile() {
                         </span>
                         <div className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
                           {getStatusIcon(tx.status)}
-                          <span className="uppercase">{tx.status}</span>
+                          <span className="uppercase">{statusLabel(tx.status)}</span>
                         </div>
                       </div>
                     </div>
