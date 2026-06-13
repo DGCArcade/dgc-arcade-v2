@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAuthModal } from "@/hooks/use-auth-modal";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
-import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound} from "lucide-react";
+import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound, Star} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +41,11 @@ export function Navbar() {
       <Link href="/leaderboard" className={`text-sm font-medium uppercase tracking-wider transition-colors ${location === "/leaderboard" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
         Leaderboard
       </Link>
+      {isAuthenticated && (
+        <Link href="/creator" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/creator" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+          <Star className="w-3.5 h-3.5" />Creator
+        </Link>
+      )}
       {isAdmin && (
         <Link href="/admin" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/admin" ? "text-primary" : "text-amber-500/80 hover:text-amber-400"}`}>
           <Shield className="w-3.5 h-3.5" />Admin
@@ -155,6 +160,9 @@ export function Navbar() {
                     </DropdownMenuItem>
                     <DropdownMenuItem className="cursor-pointer" onClick={() => setWalletOpen(true)}>
                       <Wallet className="mr-2 h-4 w-4" /><span>Wallet</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/creator")}>
+                      <Star className="mr-2 h-4 w-4" /><span>Creator Hub</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/settings")}>
                       <Settings className="mr-2 h-4 w-4" /><span>Settings</span>
