@@ -7,3 +7,6 @@ export * from "./mines";
 export * from "./daily-bonus";
 export * from "./platform-settings";
 export * from "./device-history";
+export * from "./referrals";
+export * from "./creator-bank";
+export * from "./tournaments";
