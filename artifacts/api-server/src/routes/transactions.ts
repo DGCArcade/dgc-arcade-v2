@@ -196,11 +196,24 @@ export function plisioSerialize(body: Record<string, unknown>): string {
 
 transactionsRouter.post("/deposit/callback", async (req, res) => {
   try {
-    // IP allowlist check — reject anything not from Plisio's known servers
+    // ── Diagnostic: log every incoming IPN hit before any checks ──────────────
+    // These appear in Render logs and let us identify IP / body issues quickly.
     const forwarded = req.headers["x-forwarded-for"];
-    const clientIp = (typeof forwarded === "string" ? forwarded.split(",")[0] : req.socket.remoteAddress ?? "").trim();
+    const socketIp = req.socket.remoteAddress ?? "";
+    const clientIp = (typeof forwarded === "string" ? forwarded.split(",")[0] : socketIp).trim();
+    req.log.info({
+      clientIp,
+      socketIp,
+      xForwardedFor: forwarded,
+      bodyKeys: Object.keys(req.body as Record<string, unknown> ?? {}).sort(),
+      status: (req.body as any)?.status,
+      txn_id: (req.body as any)?.txn_id,
+      hasVerifyHash: !!(req.body as any)?.verify_hash,
+      ipAllowed: PLISIO_IPS.has(clientIp),
+    }, "Plisio IPN deposit callback — incoming");
+    // ── IP allowlist check — reject anything not from Plisio's known servers ──
     if (clientIp && !PLISIO_IPS.has(clientIp)) {
-      req.log.warn({ clientIp }, "Deposit callback rejected: IP not in Plisio allowlist");
+      req.log.warn({ clientIp, xForwardedFor: forwarded, socketIp }, "Deposit callback rejected: IP not in Plisio allowlist");
       res.status(403).json({ error: "Forbidden" });
       return;
     }
