@@ -1280,6 +1280,56 @@ adminRouter.post("/payout-callback", async (req, res) => {
   res.json({ success: true });
 });
 
+// POST /api/admin/transactions/:id/complete-deposit
+// Owner-only: manually credit a stuck pending deposit to the user's balance.
+// Use this when Plisio confirmed the deposit but the automatic IPN callback failed.
+// Idempotent: safe to call twice — the second call is a no-op (already completed).
+adminRouter.post("/transactions/:id/complete-deposit", requireBankSession, async (req, res) => {
+  if (!(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Only the platform owner can manually complete deposits." });
+    return;
+  }
+  const txId = parseInt(req.params.id, 10);
+  if (isNaN(txId)) { res.status(400).json({ error: "Invalid transaction ID" }); return; }
+  try {
+    const [tx] = await db
+      .select()
+      .from(transactionsTable)
+      .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.type, "deposit")))
+      .limit(1);
+    if (!tx) { res.status(404).json({ error: "Deposit transaction not found" }); return; }
+    if (tx.status === "completed") {
+      res.json({ success: true, alreadyCompleted: true, creditAmount: parseFloat(tx.amount) });
+      return;
+    }
+    if (tx.status !== "pending") {
+      res.status(400).json({ error: `Cannot complete a deposit with status "${tx.status}"` });
+      return;
+    }
+    const creditAmount = parseFloat(tx.amount);
+    const WAGER_MULT = 1.0;
+    await db.transaction(async (txn) => {
+      // Guarded flip — idempotent against concurrent calls
+      const flipped = await txn
+        .update(transactionsTable)
+        .set({ status: "completed" })
+        .where(and(eq(transactionsTable.id, tx.id), eq(transactionsTable.status, "pending")))
+        .returning({ id: transactionsTable.id });
+      if (flipped.length === 0) return; // already completed by a concurrent call
+      await txn.update(usersTable).set({
+        balance: sql`balance + ${creditAmount}`,
+        totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
+        wagerRequirement: sql`(coalesce(total_deposited, 0) + ${creditAmount}) * ${WAGER_MULT}`,
+      }).where(eq(usersTable.id, tx.userId));
+    });
+    req.log.info({ txId, creditAmount, userId: tx.userId, by: req.user!.userId }, "Admin manually completed deposit — IPN bypass");
+    res.json({ success: true, creditAmount });
+  } catch (err) {
+    req.log.error({ err }, "Admin complete-deposit error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // GET /api/admin/stats
 adminRouter.get("/stats", async (req, res) => {
   try {
