@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, usersTable, transactionsTable } from "@workspace/db";
-import { eq, desc, and, ne, sql } from "drizzle-orm";
+import { db, usersTable, transactionsTable, referralsTable } from "@workspace/db";
+import { eq, desc, and, ne, sql, count } from "drizzle-orm";
 import {
   InitiateDepositBody,
   RequestWithdrawalBody,
@@ -390,6 +390,39 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     });
 
     req.log.info({ txn_id, creditAmount, userId: tx.userId, status }, "Plisio IPN: deposit credited");
+
+    // ── Referral commission ───────────────────────────────────────────────────
+    // If this depositor was referred by someone, credit the referrer a commission
+    // based on their affiliate tier. Runs outside the credit transaction — a failure
+    // here NEVER reverses a confirmed deposit (fire-and-forget, non-critical).
+    try {
+      const [depositor] = await db
+        .select({ referredBy: usersTable.referredBy })
+        .from(usersTable)
+        .where(eq(usersTable.id, tx.userId))
+        .limit(1);
+
+      if (depositor?.referredBy) {
+        const referrerId = depositor.referredBy;
+        const [activeRow] = await db.select({ n: count() })
+          .from(referralsTable)
+          .where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.status, 'active')));
+        const active = activeRow?.n ?? 0;
+        const commissionRate = active >= 50 ? 0.10 : active >= 20 ? 0.07 : active >= 5 ? 0.05 : 0.03;
+        const commission = Math.round(creditAmount * commissionRate * 1e8) / 1e8;
+        if (commission > 0) {
+          await db.update(usersTable)
+            .set({ balance: sql`balance + ${commission}` })
+            .where(eq(usersTable.id, referrerId));
+          await db.update(referralsTable)
+            .set({ status: 'active', earnedAmount: sql`CAST(earned_amount AS DECIMAL) + ${commission}` })
+            .where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.referredId, tx.userId)));
+          req.log.info({ referrerId, commission, commissionRate, creditAmount, active }, 'Plisio IPN: referral commission credited');
+        }
+      }
+    } catch (commErr) {
+      req.log.warn({ commErr }, 'Referral commission failed — deposit credited, non-critical');
+    }
 
     // ── ntfy.sh push notification ──
     const ntfyTopic = process.env.NTFY_TOPIC;
