@@ -34,8 +34,9 @@ The owner-approve payout (`PATCH /api/admin/transactions/:id` → `operations/wi
 like the working deposit/invoice call. Plisio accepts `source_amount` + `source_currency=USD` and
 converts USD→crypto, so we don't pre-convert. The payout psys_cid map MUST match the proven DEPOSIT
 map (`USDT_TRX`/`USDT_TON`, never `USDT_TRC20`) or funds can go to the wrong network.
-**Why:** the shipped withdraw code used POST + `psys_cid` + a wrong `USDT_TRC20` mapping — the POST/404
-was the real cause of BOTH the withdrawal-approve and AI-fraud-monitor 500s (both hit this one endpoint).
+**Why:** Plisio's withdraw endpoint behaves differently from its invoice endpoint (method + wrong-network
+mapping are easy to get wrong), and BOTH the owner withdrawal-approve and the AI-fraud-monitor approve
+hit this one endpoint — so any bug here breaks both at once.
 **How to apply:** can't be e2e-tested in dev (no key; a success moves real money) — confirm with a single
 tiny real withdrawal after deploy + secret rotation. Probe-safe checks: GET route = 401 (valid), POST = 404.
 
@@ -144,10 +145,10 @@ an idempotency gate — that turned a "accidentally clobber to one credit" bug i
 money" bug under duplicate webhooks. Verified e2e: two identical deposit callbacks now credit exactly once.
 **How to apply:** any handler that moves real money on a state change (pending→completed/failed) must make
 the status transition ITSELF the idempotency key, in the SAME transaction as the balance mutation.
-The admin APPROVE→Plisio payout path is NOW idempotent too: it atomically claims the row with a guarded
-`pending→processing` flip before calling Plisio (loser gets 409), and reverts to `pending` on any Plisio
-failure (network/non-JSON/rejected) so the owner can retry; only success sets `completed`+txHash. A
-transient `processing` state means a crash mid-payout can strand a row there (rare; recoverable manually).
+The admin APPROVE→Plisio payout path uses this same pattern: a guarded `pending→processing` claim BEFORE
+the external call (concurrent loser gets 409), revert to `pending` on any Plisio failure, `completed`+txHash
+only on success. Caveat: a crash between the claim and the result can strand a row in `processing` — rare,
+but there is no self-serve reconcile/recovery UI yet, so it needs manual/operational cleanup.
 **Still-open follow-up (NOT yet fixed):** Plisio IPN HMAC is verified only when `verify_hash` is present
 and the IP allowlist reads the raw `X-Forwarded-For[0]` — make a valid HMAC REQUIRED when
 `PLISIO_SECRET_KEY` is set.
