@@ -62,6 +62,38 @@ transactionsRouter.get("/", requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/transactions/coin-balances
+// Returns per-coin USD totals from all completed deposits for this user.
+// Withdrawal form uses this to restrict payouts to coins actually deposited.
+transactionsRouter.get("/coin-balances", requireAuth, async (req, res) => {
+  try {
+    const rows = await db
+      .select({
+        currency: transactionsTable.currency,
+        total: sql`COALESCE(SUM(${transactionsTable.amount}::numeric), 0)`,
+      })
+      .from(transactionsTable)
+      .where(
+        and(
+          eq(transactionsTable.userId, req.user!.userId),
+          eq(transactionsTable.type, "deposit"),
+          eq(transactionsTable.status, "completed"),
+        ),
+      )
+      .groupBy(transactionsTable.currency);
+
+    const balances: Record<string, number> = {};
+    for (const row of rows) {
+      balances[row.currency] = parseFloat(String(row.total));
+    }
+    res.json({ balances });
+  } catch (err) {
+    req.log.error({ err }, "Coin balances error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
 // POST /api/transactions/deposit/initiate
 transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
   const parsed = InitiateDepositBody.safeParse(req.body);
