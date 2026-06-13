@@ -87,3 +87,13 @@ and threw before the overwrite mattered.
 **How to apply:** never chain `.where()` twice on an UPDATE/DELETE — always combine with
 `and(...)`. If you find a shipped double-`.where()` on a mutation, AUDIT the affected table:
 it may have changed far more rows than intended.
+
+## Auditing the Neon PRODUCTION DB (read-only) from this repl
+The `code_execution` sandbox has `process.env` stripped (it's `undefined`), so it CANNOT read
+secrets. To query prod, run a Node `.mjs` via the `bash` tool (env vars ARE available there).
+Pattern: read `process.env.PROD_DATABASE_URL` (a user-provided secret — NOT the dev `DATABASE_URL`,
+which points at the Replit Helium DB), connect with `pg` resolved via
+`createRequire('/home/runner/workspace/lib/db/index.js')`, and force read-only:
+`SET default_transaction_read_only = on; BEGIN; SET TRANSACTION READ ONLY; …; ROLLBACK`.
+Neon needs `ssl: { rejectUnauthorized: false }`. Never print the connection string.
+**Why:** prod is external Neon, off-limits for writes; this is the only safe way to inspect it.
