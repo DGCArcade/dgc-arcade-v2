@@ -64,6 +64,11 @@ export const usersTable = pgTable("users", {
   // Tracks whether the owner has already viewed this admin PIN
   // Once true, PIN is hidden from owner view forever
   dgcBankPinRevealed: boolean("dgc_bank_pin_revealed").notNull().default(false),
+  // ── Referral system ─────────────────────────────────────────────
+  // Unique referral code auto-generated on registration. Share to earn commissions.
+  referralCode: text("referral_code").unique(),
+  // ID of the user who referred this user (self-referential, app-level enforced).
+  referredBy: integer("referred_by"),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({
