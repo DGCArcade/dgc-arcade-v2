@@ -17,6 +17,7 @@ import PrivacyPage from "@/pages/privacy";
 import ResponsibleGamblingPage from "@/pages/responsible-gambling";
 import AmlPage from "@/pages/aml";
 import Settings from "@/pages/settings";
+import CreatorPage from "@/pages/creator";
 
 const queryClient = new QueryClient();
 
