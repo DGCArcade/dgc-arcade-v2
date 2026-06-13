@@ -34,6 +34,20 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [depositResult, setDepositResult] = useState<{address: string; qrCode: string; paymentUrl: string} | null>(null);
   const [copied, setCopied] = useState(false);
+  const [coinBalances, setCoinBalances] = useState<Record<string, number>>({});
+  const [coinBalancesLoading, setCoinBalancesLoading] = useState(true);
+
+  // Fetch per-coin deposit balances so we can restrict withdraw to deposited coins
+  useEffect(() => {
+    const token = localStorage.getItem("dgc_token");
+    fetch("/api/transactions/coin-balances", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(d => { if (d.balances) setCoinBalances(d.balances); })
+      .catch(() => {})
+      .finally(() => setCoinBalancesLoading(false));
+  }, []);
 
   const selectedCurrency = CURRENCIES.find(c => c.value === currency) ?? CURRENCIES[0];
   // Creator / tester accounts have withdrawals disabled — they only see Deposit + Withdraw.
@@ -218,18 +232,36 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
               ) : (
               <>
               <div className="flex gap-2 flex-wrap">
-                {CURRENCIES.map(c => (
-                  <button key={c.value} onClick={() => setWithdrawCurrency(c.value)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                      withdrawCurrency === c.value ? "border-primary bg-primary/10 text-primary" : "border-border/50 bg-secondary/40 text-muted-foreground hover:border-primary/40"
-                    }`}
-                  >
-                    <CoinIcon currency={c.value} size={16} />
-                    <span>{c.name === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
-                    {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground">{c.network}</span>}
-                  </button>
-                ))}
+                {CURRENCIES.map(c => {
+                  const deposited = coinBalances[c.value] ?? 0;
+                  const isAvailable = deposited > 0;
+                  return (
+                    <button key={c.value}
+                      disabled={!isAvailable}
+                      onClick={() => { if (isAvailable) setWithdrawCurrency(c.value); }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                        !isAvailable
+                          ? "border-border/20 bg-secondary/20 text-muted-foreground/30 opacity-40 cursor-not-allowed"
+                          : withdrawCurrency === c.value
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border/50 bg-secondary/40 text-muted-foreground hover:border-primary/40"
+                      }`}
+                      title={isAvailable ? `Deposited: ${deposited.toFixed(2)}` : "No deposits in this currency"}
+                    >
+                      <CoinIcon currency={c.value} size={16} />
+                      <span>{c.name === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
+                      {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground">{c.network}</span>}
+                    </button>
+                  );
+                })}
               </div>
+
+              {(coinBalances[withdrawCurrency] ?? 0) > 0 && (
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Max for {withdrawCurrency.split("_")[0]}:</span>
+                  <span className="text-primary font-bold font-mono">${Math.min(coinBalances[withdrawCurrency] ?? 0, user?.balance ?? 0).toFixed(2)}</span>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider font-bold">Amount (USD)</Label>
