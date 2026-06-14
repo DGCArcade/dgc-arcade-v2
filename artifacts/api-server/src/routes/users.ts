@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, ilike, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 export const usersRouter = Router();
 
@@ -138,7 +138,7 @@ usersRouter.patch("/me/username", requireAuth, async (req, res) => {
 
     // Check uniqueness
     const [existing] = await db.select({ id: usersTable.id }).from(usersTable)
-      .where(eq(usersTable.username, username)).limit(1);
+      .where(ilike(usersTable.username, username)).limit(1);
     if (existing) { res.status(409).json({ error: "Username already taken" }); return; }
 
     const [updated] = await db.update(usersTable)
@@ -258,5 +258,124 @@ usersRouter.get("/:userId", async (req, res) => {
   }
 });
 
+// ── POST /api/users/me/vault/deposit — move from balance to vault ──
+usersRouter.post("/me/vault/deposit", requireAuth, async (req, res) => {
+  const { amount } = req.body as { amount?: number };
+  if (!amount || amount <= 0) { res.status(400).json({ error: "Amount must be positive" }); return; }
+  try {
+    const result = await db.update(usersTable)
+      .set({
+        balance: sql`balance - ${amount}`,
+        vaultBalance: sql`coalesce(vault_balance, 0) + ${amount}`,
+      })
+      .where(eq(usersTable.id, req.user!.userId))
+      .returning({ balance: usersTable.balance, vaultBalance: usersTable.vaultBalance });
+    if (!result[0]) { res.status(404).json({ error: "User not found" }); return; }
+    if (parseFloat(result[0].balance) < 0) {
+      // Rollback - insufficient balance
+      await db.update(usersTable)
+        .set({ balance: sql`balance + ${amount}`, vaultBalance: sql`coalesce(vault_balance, 0) - ${amount}` })
+        .where(eq(usersTable.id, req.user!.userId));
+      res.status(400).json({ error: "Insufficient balance" }); return;
+    }
+    res.json({ success: true, balance: parseFloat(result[0].balance), vaultBalance: parseFloat(result[0].vaultBalance ?? "0") });
+  } catch (err) {
+    req.log.error({ err }, "Vault deposit error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
+// ── POST /api/users/me/vault/withdraw — verify password, move from vault to balance ──
+usersRouter.post("/me/vault/withdraw", requireAuth, async (req, res) => {
+  const { amount, password } = req.body as { amount?: number; password?: string };
+  if (!amount || amount <= 0) { res.status(400).json({ error: "Amount must be positive" }); return; }
+  if (!password) { res.status(400).json({ error: "Password required to release vault funds" }); return; }
+  try {
+    const bcrypt = await import("bcryptjs");
+    const [user] = await db.select({ passwordHash: usersTable.passwordHash, vaultBalance: usersTable.vaultBalance })
+      .from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) { res.status(401).json({ error: "Incorrect password" }); return; }
+    const vaultAmt = parseFloat(user.vaultBalance ?? "0");
+    if (amount > vaultAmt) { res.status(400).json({ error: "Amount exceeds vault balance" }); return; }
+    const [updated] = await db.update(usersTable)
+      .set({ balance: sql`balance + ${amount}`, vaultBalance: sql`vault_balance - ${amount}` })
+      .where(eq(usersTable.id, req.user!.userId))
+      .returning({ balance: usersTable.balance, vaultBalance: usersTable.vaultBalance });
+    res.json({ success: true, balance: parseFloat(updated.balance), vaultBalance: parseFloat(updated.vaultBalance ?? "0") });
+  } catch (err) {
+    req.log.error({ err }, "Vault withdraw error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
+// ── GET /api/users/me/vault — get vault balance ──
+usersRouter.get("/me/vault", requireAuth, async (req, res) => {
+  try {
+    const [user] = await db.select({ vaultBalance: usersTable.vaultBalance })
+      .from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+    res.json({ vaultBalance: user.vaultBalance ?? "0" });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── GET /api/users/tournaments/active — public: active tournament + caller's rank ──
+usersRouter.get("/tournaments/active", async (req, res) => {
+  try {
+    const { tournamentsTable, tournamentEntriesTable } = await import("@workspace/db");
+    const { and, eq: deq, lte, gte } = await import("drizzle-orm");
+    const now = new Date();
+    const [tournament] = await db.select().from(tournamentsTable)
+      .where(and(deq(tournamentsTable.status, "active"), lte(tournamentsTable.startAt, now), gte(tournamentsTable.endAt, now)))
+      .limit(1);
+    if (!tournament) { res.json(null); return; }
+
+    const entries = await db.select({
+      userId: tournamentEntriesTable.userId,
+      score: tournamentEntriesTable.score,
+    }).from(tournamentEntriesTable)
+      .where(deq(tournamentEntriesTable.tournamentId, tournament.id));
+
+    const totalPlayers = entries.length;
+
+    // Try to get caller's userId from token (optional auth)
+    let callerId: number | null = null;
+    try {
+      const auth = req.headers.authorization;
+      if (auth?.startsWith("Bearer ")) {
+        const { verifyToken } = await import("../middlewares/auth.js");
+        const payload = verifyToken(auth.slice(7));
+        if (payload?.userId) callerId = payload.userId;
+      }
+    } catch { /* unauthenticated — skip rank */ }
+
+    let rank: number | null = null;
+    let userScore: string | null = null;
+    if (callerId) {
+      const sorted = [...entries].sort((a, b) => parseFloat(b.score) - parseFloat(a.score));
+      const idx = sorted.findIndex(e => e.userId === callerId);
+      if (idx !== -1) {
+        rank = idx + 1;
+        userScore = sorted[idx].score;
+      }
+    }
+
+    res.json({
+      tournament: {
+        id: tournament.id,
+        name: tournament.name,
+        description: tournament.description,
+        prize: tournament.prize,
+        endAt: tournament.endAt,
+      },
+      rank,
+      totalPlayers,
+      userScore,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
