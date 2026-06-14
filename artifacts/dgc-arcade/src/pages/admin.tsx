@@ -223,6 +223,16 @@ export default function AdminDashboard() {
   const [chatSending, setChatSending] = useState(false);
   const [chatLastId, setChatLastId] = useState(0);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
+  // ── Messaging (DMs + Broadcasts) ──
+  const [chatMode, setChatMode] = useState<"group" | "direct" | "broadcast">("group");
+  const [recipients, setRecipients] = useState<{ admins: any[]; creators: any[] }>({ admins: [], creators: [] });
+  const [selectedRecipient, setSelectedRecipient] = useState<{ id: number; username: string; type: "admin" | "creator" } | null>(null);
+  const [dmMessages, setDmMessages] = useState<any[]>([]);
+  const [broadcastType, setBroadcastType] = useState<"broadcast_all" | "broadcast_admins" | "broadcast_creators">("broadcast_all");
+  const [broadcastMessages, setBroadcastMessages] = useState<any[]>([]);
+  const [msgInput, setMsgInput] = useState("");
+  const [msgSending, setMsgSending] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
   // ── DGC Bank PIN session (gates the bank tab for owner and regular admins) ──
   const [bankUnlocked, setBankUnlocked] = useState<boolean>(() => bankSessionValid());
   const [bankPinInput, setBankPinInput] = useState("");
@@ -457,13 +467,52 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    if (activeTab !== "chat") return;
+    if (activeTab !== "chat" || chatMode !== "group") return;
     loadChat();
     const id = setInterval(() => {
       setChatLastId(prev => { loadChat(prev); return prev; });
     }, 3000);
     return () => clearInterval(id);
-  }, [activeTab, loadChat]);
+  }, [activeTab, chatMode, loadChat]);
+
+  // Poll unread count (even when not on Chat tab)
+  useEffect(() => {
+    if (!isAdmin) return;
+    const pollUnread = () => {
+      setChatLastId(prev => {
+        adminFetch(`/chat/unread?lastGroupId=${prev}`).then((d: any) => {
+          if (typeof d.total === "number") setUnreadChatCount(d.total);
+        }).catch(() => {});
+        return prev;
+      });
+    };
+    const id = setInterval(pollUnread, 8000);
+    return () => clearInterval(id);
+  }, [isAdmin]);
+
+  // Load recipients list when chat mode changes
+  useEffect(() => {
+    if (activeTab !== "chat" || chatMode === "group") return;
+    adminFetch("/chat/recipients").then((d: any) => {
+      if (d.admins || d.creators) setRecipients(d);
+    }).catch(() => {});
+  }, [activeTab, chatMode]);
+
+  // Load DM messages when recipient selected
+  useEffect(() => {
+    if (!selectedRecipient) return;
+    adminFetch(`/messages?recipientType=direct&recipientId=${selectedRecipient.id}`).then((d: any) => {
+      if (d.messages) setDmMessages(d.messages);
+    }).catch(() => {});
+  }, [selectedRecipient]);
+
+  // Load broadcast history
+  useEffect(() => {
+    if (activeTab !== "chat" || chatMode !== "broadcast") return;
+    adminFetch(`/messages?recipientType=${broadcastType}`).then((d: any) => {
+      if (d.messages) setBroadcastMessages(d.messages);
+    }).catch(() => {});
+  }, [activeTab, chatMode, broadcastType]);
 
   // Auto-refresh bank every 30 seconds while bank tab is active + unlocked
   useEffect(() => {
@@ -754,18 +803,18 @@ export default function AdminDashboard() {
 
   // Owner: Overview / Users / DGC Bank (in-panel, PIN-gated).
   // Regular admin: Overview / Users only — their DGC Bank lives on the header.
-  const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = isOwner
+  const TABS: { key: TabKey; label: string; icon: React.ElementType; badge?: number }[] = isOwner
     ? [
         { key: "overview", label: "Overview", icon: Activity },
         { key: "users", label: "Users", icon: Users },
         { key: "bank", label: "DGC Bank", icon: DollarSign },
         { key: "tournaments", label: "Tournaments", icon: Trophy },
-        { key: "chat", label: "Chat", icon: MessageSquare },
+        { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChatCount },
       ]
     : [
         { key: "overview", label: "Overview", icon: Activity },
         { key: "users", label: "Users", icon: Users },
-        { key: "chat", label: "Chat", icon: MessageSquare },
+        { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChatCount },
       ];
 
   return (
@@ -818,6 +867,11 @@ export default function AdminDashboard() {
             {tab.key === "bank" && newPendingDeposits > 0 && (
               <span className="ml-1 bg-amber-500 text-black text-xs rounded-full w-5 h-5 flex items-center justify-center font-mono animate-pulse font-bold">
                 {newPendingDeposits}
+              </span>
+            )}
+            {tab.key === "chat" && tab.badge != null && tab.badge > 0 && activeTab !== "chat" && (
+              <span className="ml-1 bg-primary text-primary-foreground text-xs rounded-full min-w-[20px] h-5 flex items-center justify-center font-mono animate-pulse font-bold px-1">
+                {tab.badge > 99 ? "99+" : tab.badge}
               </span>
             )}
           </button>
@@ -2490,91 +2544,257 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Admin Chat Tab ── */}
+      {/* ── Chat & Messaging Tab ── */}
       {activeTab === "chat" && (
-        <div className="flex flex-col h-[600px] max-h-[70vh]">
-          <div className="flex items-center justify-between mb-4">
+        <div className="space-y-4">
+          {/* Header + Mode Selector */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h2 className="font-display font-black uppercase tracking-widest text-xl text-white flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-purple-400" /> Admin Chat
+              <h2 className="font-display font-black uppercase tracking-widest text-xl flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-purple-400" /> Chat & Messages
               </h2>
-              <p className="text-muted-foreground text-sm mt-0.5">Private channel for admins and the owner</p>
+              <p className="text-muted-foreground text-sm mt-0.5">Admin group chat · DMs · Broadcast to creators</p>
+            </div>
+            <div className="flex gap-1 bg-secondary/50 rounded-lg p-1 border border-border/40">
+              {(["group", "direct", "broadcast"] as const).map(mode => (
+                <button key={mode} onClick={() => { setChatMode(mode); setSelectedRecipient(null); setUnreadChatCount(0); }}
+                  className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${
+                    chatMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}>
+                  {mode === "group" ? "🟣 Group" : mode === "direct" ? "💬 Direct" : "📣 Broadcast"}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Message list */}
-          <div className="flex-1 overflow-y-auto space-y-2 rounded-xl border border-border/40 bg-secondary/20 p-4 mb-4">
-            {chatMessages.length === 0 ? (
-              <div className="flex items-center justify-center h-full">
-                <p className="text-muted-foreground text-sm font-mono">No messages yet. Say something!</p>
-              </div>
-            ) : chatMessages.map((msg: any) => {
-              const isSelf = msg.userId === user?.id;
-              const isOwnerMsg = msg.role === "owner";
-              const nameColor = isOwnerMsg ? "text-yellow-400" : "text-purple-400";
-              return (
-                <div key={msg.id} className={`flex gap-2 ${isSelf ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[75%] ${isSelf ? "items-end" : "items-start"} flex flex-col gap-0.5`}>
-                    <div className={`flex items-center gap-1.5 text-[10px] font-mono ${isSelf ? "flex-row-reverse" : ""}`}>
-                      <span className={`font-bold uppercase ${nameColor}`}>{msg.username}</span>
-                      <span className="text-muted-foreground">{new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                    </div>
-                    <div className={`group relative flex items-start gap-1 ${isSelf ? "flex-row-reverse" : ""}`}>
-                      <div className={`rounded-2xl px-3 py-2 text-sm break-words ${
-                        isSelf
-                          ? "bg-primary text-primary-foreground rounded-tr-sm"
-                          : isOwnerMsg
-                            ? "bg-yellow-500/15 border border-yellow-500/30 text-foreground rounded-tl-sm"
-                            : "bg-secondary border border-border/60 text-foreground rounded-tl-sm"
-                      }`}>
-                        {msg.message}
+          {/* ── GROUP CHAT ── */}
+          {chatMode === "group" && (
+            <div className="flex flex-col h-[560px] max-h-[70vh]">
+              <div className="flex-1 overflow-y-auto space-y-2 rounded-xl border border-border/40 bg-secondary/20 p-4 mb-4">
+                {chatMessages.length === 0 ? (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-muted-foreground text-sm font-mono">No messages yet. Say something!</p>
+                  </div>
+                ) : chatMessages.map((msg: any) => {
+                  const isSelf = msg.userId === user?.id;
+                  const isOwnerMsg = msg.role === "owner";
+                  return (
+                    <div key={msg.id} className={`flex gap-2 ${isSelf ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[75%] ${isSelf ? "items-end" : "items-start"} flex flex-col gap-0.5`}>
+                        <div className={`flex items-center gap-1.5 text-[10px] font-mono ${isSelf ? "flex-row-reverse" : ""}`}>
+                          <span className={`font-bold uppercase ${isOwnerMsg ? "text-yellow-400" : "text-purple-400"}`}>{msg.username}</span>
+                          <span className="text-muted-foreground">{new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                        </div>
+                        <div className={`group relative flex items-start gap-1 ${isSelf ? "flex-row-reverse" : ""}`}>
+                          <div className={`rounded-2xl px-3 py-2 text-sm break-words ${
+                            isSelf ? "bg-primary text-primary-foreground rounded-tr-sm"
+                              : isOwnerMsg ? "bg-yellow-500/15 border border-yellow-500/30 text-foreground rounded-tl-sm"
+                              : "bg-secondary border border-border/60 text-foreground rounded-tl-sm"
+                          }`}>{msg.message}</div>
+                          {isOwner && (
+                            <button onClick={async () => { try { await adminFetch(`/chat/${msg.id}`, { method: "DELETE" }); setChatMessages(p => p.filter(m => m.id !== msg.id)); } catch {} }}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-muted-foreground hover:text-destructive mt-1">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      {isOwner && (
-                        <button
-                          onClick={async () => {
-                            try { await adminFetch(`/chat/${msg.id}`, { method: "DELETE" }); setChatMessages(p => p.filter(m => m.id !== msg.id)); } catch {}
-                          }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-muted-foreground hover:text-destructive mt-1"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
+                    </div>
+                  );
+                })}
+                <div ref={chatBottomRef} />
+              </div>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const msg = chatInput.trim();
+                if (!msg) return;
+                setChatSending(true);
+                try { await adminFetch("/chat", { method: "POST", body: JSON.stringify({ message: msg }) }); setChatInput(""); await loadChat(); }
+                catch {} finally { setChatSending(false); }
+              }} className="flex gap-2">
+                <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Type a message…" maxLength={1000}
+                  className="flex-1 rounded-xl border border-border/60 bg-secondary/60 px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors" />
+                <Button type="submit" disabled={chatSending || !chatInput.trim()} className="gap-2">
+                  <Send className="w-4 h-4" />Send
+                </Button>
+              </form>
+            </div>
+          )}
+
+          {/* ── DIRECT MESSAGES ── */}
+          {chatMode === "direct" && (
+            <div className="flex gap-4 h-[560px]">
+              {/* Recipient sidebar */}
+              <div className="w-56 flex-shrink-0 flex flex-col gap-1 overflow-y-auto rounded-xl border border-border/40 bg-secondary/20 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 px-1">Admins</p>
+                {recipients.admins.length === 0 && (
+                  <p className="text-xs text-muted-foreground font-mono px-1">No other admins</p>
+                )}
+                {recipients.admins.map((a: any) => (
+                  <button key={a.id} onClick={() => setSelectedRecipient({ id: a.id, username: a.username, type: "admin" })}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold transition-colors text-left ${selectedRecipient?.id === a.id ? "bg-primary/20 border border-primary/30 text-primary" : "hover:bg-secondary border border-transparent text-foreground"}`}>
+                    <div className="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-xs text-amber-400 font-black flex-shrink-0">
+                      {a.username.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="truncate">{a.username}</span>
+                  </button>
+                ))}
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mt-3 mb-2 px-1">Creators</p>
+                {recipients.creators.length === 0 && (
+                  <p className="text-xs text-muted-foreground font-mono px-1">No creators yet</p>
+                )}
+                {recipients.creators.map((c: any) => (
+                  <button key={c.id} onClick={() => setSelectedRecipient({ id: c.id, username: c.username, type: "creator" })}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold transition-colors text-left ${selectedRecipient?.id === c.id ? "bg-primary/20 border border-primary/30 text-primary" : "hover:bg-secondary border border-transparent text-foreground"}`}>
+                    <div className="w-7 h-7 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-xs text-purple-400 font-black flex-shrink-0">
+                      {c.username.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="truncate">{c.username}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Conversation */}
+              <div className="flex-1 flex flex-col">
+                {!selectedRecipient ? (
+                  <div className="flex-1 flex items-center justify-center rounded-xl border border-dashed border-border/40">
+                    <div className="text-center text-muted-foreground">
+                      <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      <p className="text-sm font-mono">Select a person to message</p>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-            <div ref={chatBottomRef} />
-          </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border/40">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm ${selectedRecipient.type === "admin" ? "bg-amber-500/20 text-amber-400" : "bg-purple-500/20 text-purple-400"}`}>
+                        {selectedRecipient.username.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm">{selectedRecipient.username}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{selectedRecipient.type === "creator" ? "Creator" : "Admin"}</p>
+                      </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-2 rounded-xl border border-border/40 bg-secondary/20 p-4 mb-3">
+                      {dmMessages.length === 0 ? (
+                        <div className="flex items-center justify-center h-full">
+                          <p className="text-muted-foreground text-sm font-mono">No messages yet. Start the conversation!</p>
+                        </div>
+                      ) : dmMessages.map((msg: any) => {
+                        const isSelf = msg.senderId === user?.id;
+                        const isOwnerMsg = msg.senderRole === "owner";
+                        return (
+                          <div key={msg.id} className={`flex ${isSelf ? "justify-end" : "justify-start"}`}>
+                            <div className={`max-w-[75%] flex flex-col gap-0.5 ${isSelf ? "items-end" : "items-start"}`}>
+                              <div className={`flex items-center gap-1.5 text-[10px] font-mono ${isSelf ? "flex-row-reverse" : ""}`}>
+                                <span className={`font-bold uppercase ${isOwnerMsg ? "text-yellow-400" : "text-purple-400"}`}>{msg.senderUsername}</span>
+                                <span className="text-muted-foreground">{new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                              </div>
+                              <div className={`group relative flex items-start gap-1 ${isSelf ? "flex-row-reverse" : ""}`}>
+                                <div className={`rounded-2xl px-3 py-2 text-sm break-words ${isSelf ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-secondary border border-border/60 text-foreground rounded-tl-sm"}`}>
+                                  {msg.message}
+                                </div>
+                                {isOwner && (
+                                  <button onClick={async () => { try { await adminFetch(`/messages/${msg.id}`, { method: "DELETE" }); setDmMessages(p => p.filter(m => m.id !== msg.id)); } catch {} }}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-muted-foreground hover:text-destructive mt-1">
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <form onSubmit={async (e) => {
+                      e.preventDefault();
+                      const msg = msgInput.trim();
+                      if (!msg || !selectedRecipient) return;
+                      setMsgSending(true);
+                      try {
+                        await adminFetch("/messages", { method: "POST", body: JSON.stringify({ recipientType: "direct", recipientId: selectedRecipient.id, message: msg }) });
+                        setMsgInput("");
+                        const d = await adminFetch(`/messages?recipientType=direct&recipientId=${selectedRecipient.id}`);
+                        if (d.messages) setDmMessages(d.messages);
+                      } catch {} finally { setMsgSending(false); }
+                    }} className="flex gap-2">
+                      <input type="text" value={msgInput} onChange={e => setMsgInput(e.target.value)} placeholder={`Message @${selectedRecipient.username}…`} maxLength={2000}
+                        className="flex-1 rounded-xl border border-border/60 bg-secondary/60 px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors" />
+                      <Button type="submit" disabled={msgSending || !msgInput.trim()} className="gap-2">
+                        <Send className="w-4 h-4" />Send
+                      </Button>
+                    </form>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
-          {/* Input */}
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const msg = chatInput.trim();
-              if (!msg) return;
-              setChatSending(true);
-              try {
-                await adminFetch("/chat", { method: "POST", body: JSON.stringify({ message: msg }) });
-                setChatInput("");
-                await loadChat();
-              } catch {} finally { setChatSending(false); }
-            }}
-            className="flex gap-2"
-          >
-            <input
-              type="text"
-              value={chatInput}
-              onChange={e => setChatInput(e.target.value)}
-              placeholder="Type a message…"
-              maxLength={1000}
-              className="flex-1 rounded-xl border border-border/60 bg-secondary/60 px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"
-            />
-            <Button type="submit" disabled={chatSending || !chatInput.trim()} className="gap-2">
-              <Send className="w-4 h-4" />
-              Send
-            </Button>
-          </form>
+          {/* ── BROADCAST ── */}
+          {chatMode === "broadcast" && (
+            <div className="space-y-4">
+              <div className="flex gap-2 flex-wrap">
+                {(["broadcast_all", "broadcast_creators", "broadcast_admins"] as const).map(t => (
+                  <button key={t} onClick={() => setBroadcastType(t)}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border transition-colors ${
+                      broadcastType === t ? "bg-primary/20 border-primary/40 text-primary" : "border-border/40 bg-secondary/30 text-muted-foreground hover:text-foreground"
+                    }`}>
+                    {t === "broadcast_all" ? "📣 Everyone (Admins + Creators)" : t === "broadcast_creators" ? "🎬 All Creators" : "🛡️ All Admins"}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const msg = msgInput.trim();
+                if (!msg) return;
+                setMsgSending(true);
+                try {
+                  await adminFetch("/messages", { method: "POST", body: JSON.stringify({ recipientType: broadcastType, message: msg }) });
+                  setMsgInput("");
+                  const d = await adminFetch(`/messages?recipientType=${broadcastType}`);
+                  if (d.messages) setBroadcastMessages(d.messages);
+                  toast({ title: "Broadcast sent!", description: `Message sent to ${broadcastType === "broadcast_all" ? "everyone" : broadcastType === "broadcast_creators" ? "all creators" : "all admins"}.` });
+                } catch {} finally { setMsgSending(false); }
+              }} className="flex gap-2">
+                <input type="text" value={msgInput} onChange={e => setMsgInput(e.target.value)}
+                  placeholder={`Broadcast to ${broadcastType === "broadcast_all" ? "everyone" : broadcastType === "broadcast_creators" ? "all creators" : "all admins"}…`}
+                  maxLength={2000}
+                  className="flex-1 rounded-xl border border-border/60 bg-secondary/60 px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors" />
+                <Button type="submit" disabled={msgSending || !msgInput.trim()} className="gap-2 bg-purple-600 hover:bg-purple-500">
+                  <Send className="w-4 h-4" />Broadcast
+                </Button>
+              </form>
+
+              <div className="space-y-2 max-h-[360px] overflow-y-auto">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Sent Broadcasts</p>
+                {broadcastMessages.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm font-mono border border-dashed border-border rounded-xl">No broadcasts sent yet.</div>
+                ) : broadcastMessages.map((msg: any) => (
+                  <div key={msg.id} className="flex items-start gap-3 p-3 rounded-xl border border-border/40 bg-secondary/20">
+                    <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center font-black text-sm ${msg.senderRole === "owner" ? "bg-yellow-500/20 text-yellow-400" : "bg-purple-500/20 text-purple-400"}`}>
+                      {msg.senderUsername.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`font-bold text-xs uppercase ${msg.senderRole === "owner" ? "text-yellow-400" : "text-purple-400"}`}>{msg.senderUsername}</span>
+                        <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded text-muted-foreground uppercase font-bold">
+                          {msg.recipientType === "broadcast_all" ? "All" : msg.recipientType === "broadcast_creators" ? "Creators" : "Admins"}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-mono ml-auto">{new Date(msg.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                      </div>
+                      <p className="text-sm leading-relaxed">{msg.message}</p>
+                    </div>
+                    {isOwner && (
+                      <button onClick={async () => { try { await adminFetch(`/messages/${msg.id}`, { method: "DELETE" }); setBroadcastMessages(p => p.filter(m => m.id !== msg.id)); } catch {} }}
+                        className="opacity-60 hover:opacity-100 transition-opacity p-1 rounded text-muted-foreground hover:text-destructive flex-shrink-0">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
