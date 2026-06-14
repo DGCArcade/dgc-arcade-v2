@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable, transactionsTable, referralsTable } from "@workspace/db";
-import { eq, desc, and, ne, sql, count } from "drizzle-orm";
+import { eq, desc, and, ne, sql, count, gte } from "drizzle-orm";
 import {
   InitiateDepositBody,
   RequestWithdrawalBody,
@@ -501,6 +501,40 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     }
     if (amount > balance) {
       res.status(400).json({ error: "Insufficient balance" });
+      return;
+    }
+
+    // Minimum withdrawal: $1
+    if (amount < 1) {
+      res.status(400).json({ error: "Minimum withdrawal is $1.00" });
+      return;
+    }
+
+    // Maximum single withdrawal: $100,000,000
+    if (amount > 100_000_000) {
+      res.status(400).json({ error: "Maximum single withdrawal is $100,000,000" });
+      return;
+    }
+
+    // Daily withdrawal limit: $1,000,000,000
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [dailyRow] = await db
+      .select({ total: sql`COALESCE(SUM(${transactionsTable.amount}::numeric), 0)` })
+      .from(transactionsTable)
+      .where(
+        and(
+          eq(transactionsTable.userId, user.id),
+          eq(transactionsTable.type, "withdrawal"),
+          ne(transactionsTable.status, "declined"),
+          gte(transactionsTable.createdAt, oneDayAgo),
+        )
+      );
+    const dailyTotal = parseFloat(String(dailyRow?.total ?? 0));
+    const DAILY_LIMIT = 1_000_000_000;
+    if (dailyTotal + amount > DAILY_LIMIT) {
+      res.status(400).json({
+        error: `Daily withdrawal limit is $1,000,000,000. You have ${(DAILY_LIMIT - dailyTotal).toFixed(2)} remaining today.`,
+      });
       return;
     }
     const fraudScore = flagReasons.length;
