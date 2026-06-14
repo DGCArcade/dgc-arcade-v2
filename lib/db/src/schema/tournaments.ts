@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, numeric, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, numeric, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 // Tournament — admin-created competitive events with a prize pool
@@ -22,7 +22,9 @@ export const tournamentEntriesTable = pgTable("tournament_entries", {
   userId: integer("user_id").notNull().references(() => usersTable.id),
   score: numeric("score", { precision: 18, scale: 8 }).notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  tournamentUserIdx: uniqueIndex("tournament_entries_tourney_user_idx").on(t.tournamentId, t.userId),
+}));
 
 export type Tournament = typeof tournamentsTable.$inferSelect;
 export type TournamentEntry = typeof tournamentEntriesTable.$inferSelect;
