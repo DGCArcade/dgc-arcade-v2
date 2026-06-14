@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable } from "@workspace/db";
+import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable } from "@workspace/db";
 import { eq, desc, ilike, and, sql, count } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
@@ -1808,6 +1808,72 @@ adminRouter.post("/tournaments/:id/award", async (req, res) => {
     res.json({ success: true, username: target.username, amount });
   } catch (err) {
     req.log.error({ err }, "Admin award tournament error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── Admin Chat ─────────────────────────────────────────────────────────────
+
+// GET /api/admin/chat?since=<id>  — poll for messages
+adminRouter.get("/chat", async (req, res) => {
+  const since = parseInt(String(req.query.since ?? "0"), 10) || 0;
+  try {
+    const msgs = await db
+      .select()
+      .from(adminMessagesTable)
+      .orderBy(desc(adminMessagesTable.createdAt))
+      .limit(100);
+    const ordered = msgs.reverse();
+    const result = since > 0 ? ordered.filter((m) => m.id > since) : ordered;
+    res.json({ messages: result });
+  } catch (err) {
+    req.log.error({ err }, "Admin chat get error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/admin/chat  — send a message
+adminRouter.post("/chat", async (req, res) => {
+  const { message } = req.body as { message?: string };
+  if (!message?.trim() || message.trim().length > 1000) {
+    res.status(400).json({ error: "Message required (max 1000 chars)" });
+    return;
+  }
+  try {
+    const [caller] = await db
+      .select({ username: usersTable.username, role: usersTable.role })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.user!.userId))
+      .limit(1);
+    const [msg] = await db
+      .insert(adminMessagesTable)
+      .values({
+        userId: req.user!.userId,
+        username: caller?.username ?? "Unknown",
+        role: caller?.role ?? "admin",
+        message: message.trim(),
+      })
+      .returning();
+    res.json({ message: msg });
+  } catch (err) {
+    req.log.error({ err }, "Admin chat post error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// DELETE /api/admin/chat/:id  — owner only
+adminRouter.delete("/chat/:id", async (req, res) => {
+  if (!(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Owner only" });
+    return;
+  }
+  const msgId = parseInt(req.params.id, 10);
+  if (isNaN(msgId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  try {
+    await db.delete(adminMessagesTable).where(eq(adminMessagesTable.id, msgId));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Admin chat delete error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
