@@ -183,6 +183,35 @@ usersRouter.get("/me/vault", requireAuth, async (req, res) => {
   } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
+// GET /api/users/me/device-history
+usersRouter.get("/me/device-history", requireAuth, async (req, res) => {
+  try {
+    const { deviceHistoryTable } = await import("@workspace/db");
+    const { desc } = await import("drizzle-orm");
+    const sessions = await db.select().from(deviceHistoryTable)
+      .where(eq(deviceHistoryTable.userId, req.user!.userId))
+      .orderBy(desc(deviceHistoryTable.lastSeen))
+      .limit(20);
+    res.json({ sessions });
+  } catch (err) {
+    req.log.error({ err }, "Device history error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/users/me/logout-all-devices
+usersRouter.post("/me/logout-all-devices", requireAuth, async (req, res) => {
+  try {
+    const { deviceHistoryTable } = await import("@workspace/db");
+    const { eq: deq } = await import("drizzle-orm");
+    await db.delete(deviceHistoryTable).where(deq(deviceHistoryTable.userId, req.user!.userId));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Logout all devices error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 usersRouter.get("/tournaments/active", async (req, res) => {
   try {
     const { tournamentsTable, tournamentEntriesTable } = await import("@workspace/db");
