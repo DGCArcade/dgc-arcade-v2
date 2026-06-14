@@ -572,6 +572,22 @@ export default function AdminDashboard() {
     }
   }
 
+
+  // Mark a pending deposit as declined — does NOT credit the user.
+  async function handleDeclineDeposit(tx: AdminTx) {
+    if (!window.confirm(
+      `Decline deposit #${tx.id} (${formatCurrency(tx.amount)} ${tx.currency}) for ${tx.username ?? "user"}?\n\nThis marks it DECLINED with no funds credited. Only do this if the payment did NOT arrive in your Plisio account.`
+    )) return;
+    setLoadingAction(`dep-decline-${tx.id}`);
+    try {
+      await adminFetch(`/transactions/${tx.id}/decline-deposit`, { method: "POST" });
+      toast({ title: "Deposit declined", description: `#${tx.id} marked declined — no funds added.`, variant: "destructive" });
+      loadBank(); loadStats();
+    } catch (err: any) {
+      toast({ title: "Decline failed", description: err.message, variant: "destructive" });
+    } finally { setLoadingAction(null); }
+  }
+
   // Resolve an ambiguous withdrawal. Every path requires the owner to verify in Plisio
   // first; the wording is deliberately blunt because each choice moves (or risks) real money.
   async function handleReconcile(w: any, resolution: "mark_completed" | "cancel_refund" | "requeue") {
@@ -1388,6 +1404,16 @@ export default function AdminDashboard() {
                                         >
                                           <CheckCircle2 className="h-3 w-3" />
                                           {loadingAction === `dep-${tx.id}` ? "Crediting…" : "Credit User"}
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="destructive"
+                                          className="h-7 text-xs gap-1 font-bold"
+                                          disabled={loadingAction === `dep-decline-${tx.id}`}
+                                          onClick={() => handleDeclineDeposit(tx)}
+                                        >
+                                          <XCircle className="h-3 w-3" />
+                                          {loadingAction === `dep-decline-${tx.id}` ? "Declining…" : "Don't Credit"}
                                         </Button>
                                         {tx.plisioTrackId && (
                                           <Button size="sm" variant="outline" className="h-7 text-xs px-2" title="View in Plisio dashboard"
