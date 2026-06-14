@@ -4,6 +4,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
+import { recordTournamentWager } from "../lib/tournament-tracker.js";
 
 export const minesRouter = Router();
 
@@ -69,6 +70,9 @@ minesRouter.post("/start", requireAuth, async (req, res) => {
       res.status(400).json({ error: "Insufficient balance" });
       return;
     }
+
+    // Track wager for any currently-active tournaments (fire-and-forget)
+    await recordTournamentWager(user.id, amount, req.log);
 
     const serverSeed = uuidv4().replace(/-/g, "");
     const mines = genMines(serverSeed, mineCount);
