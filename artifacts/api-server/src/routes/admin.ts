@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db, usersTable, betsTable, transactionsTable, platformSettingsTable } from "@workspace/db";
-import { eq, desc, ilike, and, sql } from "drizzle-orm";
+import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable } from "@workspace/db";
+import { eq, desc, ilike, and, sql, count } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
 
@@ -1591,3 +1591,158 @@ adminRouter.post("/verify-bank-pin", async (req, res) => {
   res.json({ success: true, sessionToken, expiresAt });
 });
 
+
+
+// ── Tournament Admin Management ───────────────────────────────────────────────
+
+// GET /api/admin/tournaments — list all with participant counts
+adminRouter.get("/tournaments", async (req, res) => {
+  try {
+    const rows = await db.select().from(tournamentsTable).orderBy(desc(tournamentsTable.startAt)).limit(50);
+    const now = new Date();
+    const enriched = await Promise.all(rows.map(async (t) => {
+      const [countRow] = await db.select({ n: count() }).from(tournamentEntriesTable).where(eq(tournamentEntriesTable.tournamentId, t.id));
+      const liveStatus = now >= new Date(t.endAt) ? "ended" : now >= new Date(t.startAt) ? "active" : "upcoming";
+      return {
+        id: t.id, name: t.name, description: t.description,
+        prize: parseFloat(t.prize), status: liveStatus,
+        startAt: t.startAt.toISOString(), endAt: t.endAt.toISOString(),
+        createdAt: t.createdAt.toISOString(), participants: Number(countRow?.n ?? 0),
+      };
+    }));
+    res.json(enriched);
+  } catch (err) {
+    req.log.error({ err }, "Admin list tournaments error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/admin/tournaments/:id/leaderboard
+adminRouter.get("/tournaments/:id/leaderboard", async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  try {
+    const [tournament] = await db.select().from(tournamentsTable).where(eq(tournamentsTable.id, id)).limit(1);
+    if (!tournament) { res.status(404).json({ error: "Tournament not found" }); return; }
+    const entries = await db
+      .select({ userId: tournamentEntriesTable.userId, score: tournamentEntriesTable.score, username: usersTable.username })
+      .from(tournamentEntriesTable)
+      .innerJoin(usersTable, eq(tournamentEntriesTable.userId, usersTable.id))
+      .where(eq(tournamentEntriesTable.tournamentId, id))
+      .orderBy(desc(sql`CAST(${tournamentEntriesTable.score} AS DECIMAL)`))
+      .limit(50);
+    res.json({
+      tournament: { id: tournament.id, name: tournament.name, prize: parseFloat(tournament.prize), status: tournament.status, startAt: tournament.startAt.toISOString(), endAt: tournament.endAt.toISOString() },
+      leaderboard: entries.map((e, i) => ({ rank: i + 1, userId: e.userId, username: e.username, score: parseFloat(e.score) })),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Admin tournament leaderboard error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/admin/tournaments — create a tournament
+adminRouter.post("/tournaments", async (req, res) => {
+  const { name, description, prize, startAt, endAt } = req.body as { name?: string; description?: string; prize?: number; startAt?: string; endAt?: string };
+  if (!name?.trim() || !startAt || !endAt) { res.status(400).json({ error: "name, startAt and endAt are required" }); return; }
+  if (isNaN(Date.parse(startAt)) || isNaN(Date.parse(endAt))) { res.status(400).json({ error: "Invalid date format" }); return; }
+  if (new Date(endAt) <= new Date(startAt)) { res.status(400).json({ error: "endAt must be after startAt" }); return; }
+  try {
+    const [created] = await db.insert(tournamentsTable).values({
+      name: name.trim(),
+      description: description?.trim() || null,
+      prize: String(prize ?? 0),
+      status: new Date(startAt) > new Date() ? "upcoming" : "active",
+      startAt: new Date(startAt),
+      endAt: new Date(endAt),
+    }).returning();
+    req.log.info({ tournamentId: created.id, name: created.name }, "Admin created tournament");
+    res.json({ success: true, tournament: { ...created, prize: parseFloat(created.prize) } });
+  } catch (err) {
+    req.log.error({ err }, "Admin create tournament error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// PATCH /api/admin/tournaments/:id — update tournament fields
+adminRouter.patch("/tournaments/:id", async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  const { name, description, prize, startAt, endAt, status } = req.body as { name?: string; description?: string; prize?: number; startAt?: string; endAt?: string; status?: string };
+  try {
+    const updates: Record<string, unknown> = {};
+    if (name) updates.name = name.trim();
+    if (description !== undefined) updates.description = description?.trim() || null;
+    if (prize !== undefined) updates.prize = String(prize);
+    if (startAt) updates.startAt = new Date(startAt);
+    if (endAt) updates.endAt = new Date(endAt);
+    if (status) updates.status = status;
+    const [updated] = await db.update(tournamentsTable).set(updates).where(eq(tournamentsTable.id, id)).returning();
+    if (!updated) { res.status(404).json({ error: "Tournament not found" }); return; }
+    req.log.info({ tournamentId: id }, "Admin updated tournament");
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Admin update tournament error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// DELETE /api/admin/tournaments/:id
+adminRouter.delete("/tournaments/:id", async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  try {
+    await db.delete(tournamentEntriesTable).where(eq(tournamentEntriesTable.tournamentId, id));
+    await db.delete(tournamentsTable).where(eq(tournamentsTable.id, id));
+    req.log.info({ tournamentId: id }, "Admin deleted tournament");
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Admin delete tournament error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/admin/tournaments/:id/end — force-end a tournament now
+adminRouter.post("/tournaments/:id/end", async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  try {
+    const [tournament] = await db.select().from(tournamentsTable).where(eq(tournamentsTable.id, id)).limit(1);
+    if (!tournament) { res.status(404).json({ error: "Tournament not found" }); return; }
+    await db.update(tournamentsTable).set({ status: "ended", endAt: new Date() }).where(eq(tournamentsTable.id, id));
+    const [top] = await db
+      .select({ userId: tournamentEntriesTable.userId, score: tournamentEntriesTable.score, username: usersTable.username })
+      .from(tournamentEntriesTable)
+      .innerJoin(usersTable, eq(tournamentEntriesTable.userId, usersTable.id))
+      .where(eq(tournamentEntriesTable.tournamentId, id))
+      .orderBy(desc(sql`CAST(${tournamentEntriesTable.score} AS DECIMAL)`))
+      .limit(1);
+    req.log.info({ tournamentId: id, winner: top?.username }, "Admin force-ended tournament");
+    res.json({ success: true, winner: top ? { userId: top.userId, username: top.username, score: parseFloat(top.score) } : null });
+  } catch (err) {
+    req.log.error({ err }, "Admin end tournament error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/admin/tournaments/:id/award — credit prize to a winner's balance
+adminRouter.post("/tournaments/:id/award", async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  const { userId, amount } = req.body as { userId?: number; amount?: number };
+  if (!userId || !amount || amount <= 0) { res.status(400).json({ error: "userId and amount > 0 are required" }); return; }
+  try {
+    const [target] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (!target) { res.status(404).json({ error: "User not found" }); return; }
+    await db.update(usersTable).set({ balance: sql`balance + ${amount}` }).where(eq(usersTable.id, userId));
+    await db.insert(transactionsTable).values({
+      userId, type: "bet_win", amount: String(amount), currency: "USD", status: "completed",
+      metadata: JSON.stringify({ source: "tournament_prize", tournamentId: id, awardedBy: req.user!.userId }),
+    });
+    req.log.info({ tournamentId: id, userId, amount, username: target.username }, "Admin awarded tournament prize");
+    res.json({ success: true, username: target.username, amount });
+  } catch (err) {
+    req.log.error({ err }, "Admin award tournament error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
