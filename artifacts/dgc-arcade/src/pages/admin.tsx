@@ -43,6 +43,8 @@ import {
   Plus,
   Calendar,
   Award,
+  MessageSquare,
+  Send,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -156,7 +158,7 @@ interface UserDetail {
   transactions: { id: number; type: string; amount: number; currency: string; status: string; address: string | null; createdAt: string }[];
 }
 
-type TabKey = "overview" | "users" | "transactions" | "bank" | "tournaments";
+type TabKey = "overview" | "users" | "transactions" | "bank" | "tournaments" | "chat";
 
 export default function AdminDashboard() {
   const { user, isLoading } = useAuth();
@@ -215,6 +217,12 @@ export default function AdminDashboard() {
   const [newTourney, setNewTourney] = useState({ name: "", description: "", prize: "0", startAt: "", endAt: "" });
   const [tourneyLeaderboard, setTourneyLeaderboard] = useState<{ tournament: any; leaderboard: any[] } | null>(null);
   const [awardingTourney, setAwardingTourney] = useState<{ tournamentId: number; userId: number; username: string; amount: string } | null>(null);
+  // ── Admin Chat state ──
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [chatLastId, setChatLastId] = useState(0);
+  const chatBottomRef = useRef<HTMLDivElement | null>(null);
   // ── DGC Bank PIN session (gates the bank tab for owner and regular admins) ──
   const [bankUnlocked, setBankUnlocked] = useState<boolean>(() => bankSessionValid());
   const [bankPinInput, setBankPinInput] = useState("");
@@ -428,6 +436,34 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (activeTab === "tournaments" && isAdmin) loadTournaments();
   }, [activeTab, isAdmin, loadTournaments]);
+
+  const loadChat = useCallback(async (since?: number) => {
+    try {
+      const data = await adminFetch(`/chat${since ? `?since=${since}` : ""}`);
+      if (data.messages?.length > 0) {
+        setChatMessages(prev => {
+          const existingIds = new Set(prev.map((m: any) => m.id));
+          const newMsgs = data.messages.filter((m: any) => !existingIds.has(m.id));
+          if (!newMsgs.length) return prev;
+          const merged = since ? [...prev, ...newMsgs] : data.messages;
+          setChatLastId(merged[merged.length - 1]?.id ?? 0);
+          return merged;
+        });
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      } else if (!since) {
+        setChatMessages(data.messages ?? []);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== "chat") return;
+    loadChat();
+    const id = setInterval(() => {
+      setChatLastId(prev => { loadChat(prev); return prev; });
+    }, 3000);
+    return () => clearInterval(id);
+  }, [activeTab, loadChat]);
 
   // Auto-refresh bank every 30 seconds while bank tab is active + unlocked
   useEffect(() => {
@@ -724,10 +760,12 @@ export default function AdminDashboard() {
         { key: "users", label: "Users", icon: Users },
         { key: "bank", label: "DGC Bank", icon: DollarSign },
         { key: "tournaments", label: "Tournaments", icon: Trophy },
+        { key: "chat", label: "Chat", icon: MessageSquare },
       ]
     : [
         { key: "overview", label: "Overview", icon: Activity },
         { key: "users", label: "Users", icon: Users },
+        { key: "chat", label: "Chat", icon: MessageSquare },
       ];
 
   return (
@@ -751,6 +789,7 @@ export default function AdminDashboard() {
             if (activeTab === "transactions") loadTransactions();
             if (activeTab === "bank") { loadBank(); loadFraudAlerts(); loadNeedsReview(); }
             if (activeTab === "tournaments") loadTournaments();
+            if (activeTab === "chat") loadChat();
           }}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
@@ -2450,6 +2489,94 @@ export default function AdminDashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Admin Chat Tab ── */}
+      {activeTab === "chat" && (
+        <div className="flex flex-col h-[600px] max-h-[70vh]">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="font-display font-black uppercase tracking-widest text-xl text-white flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-purple-400" /> Admin Chat
+              </h2>
+              <p className="text-muted-foreground text-sm mt-0.5">Private channel for admins and the owner</p>
+            </div>
+          </div>
+
+          {/* Message list */}
+          <div className="flex-1 overflow-y-auto space-y-2 rounded-xl border border-border/40 bg-secondary/20 p-4 mb-4">
+            {chatMessages.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-muted-foreground text-sm font-mono">No messages yet. Say something!</p>
+              </div>
+            ) : chatMessages.map((msg: any) => {
+              const isSelf = msg.userId === user?.id;
+              const isOwnerMsg = msg.role === "owner";
+              const nameColor = isOwnerMsg ? "text-yellow-400" : "text-purple-400";
+              return (
+                <div key={msg.id} className={`flex gap-2 ${isSelf ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[75%] ${isSelf ? "items-end" : "items-start"} flex flex-col gap-0.5`}>
+                    <div className={`flex items-center gap-1.5 text-[10px] font-mono ${isSelf ? "flex-row-reverse" : ""}`}>
+                      <span className={`font-bold uppercase ${nameColor}`}>{msg.username}</span>
+                      <span className="text-muted-foreground">{new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                    <div className={`group relative flex items-start gap-1 ${isSelf ? "flex-row-reverse" : ""}`}>
+                      <div className={`rounded-2xl px-3 py-2 text-sm break-words ${
+                        isSelf
+                          ? "bg-primary text-primary-foreground rounded-tr-sm"
+                          : isOwnerMsg
+                            ? "bg-yellow-500/15 border border-yellow-500/30 text-foreground rounded-tl-sm"
+                            : "bg-secondary border border-border/60 text-foreground rounded-tl-sm"
+                      }`}>
+                        {msg.message}
+                      </div>
+                      {isOwner && (
+                        <button
+                          onClick={async () => {
+                            try { await adminFetch(`/chat/${msg.id}`, { method: "DELETE" }); setChatMessages(p => p.filter(m => m.id !== msg.id)); } catch {}
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-muted-foreground hover:text-destructive mt-1"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={chatBottomRef} />
+          </div>
+
+          {/* Input */}
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const msg = chatInput.trim();
+              if (!msg) return;
+              setChatSending(true);
+              try {
+                await adminFetch("/chat", { method: "POST", body: JSON.stringify({ message: msg }) });
+                setChatInput("");
+                await loadChat();
+              } catch {} finally { setChatSending(false); }
+            }}
+            className="flex gap-2"
+          >
+            <input
+              type="text"
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              placeholder="Type a message…"
+              maxLength={1000}
+              className="flex-1 rounded-xl border border-border/60 bg-secondary/60 px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"
+            />
+            <Button type="submit" disabled={chatSending || !chatInput.trim()} className="gap-2">
+              <Send className="w-4 h-4" />
+              Send
+            </Button>
+          </form>
+        </div>
+      )}
 
       {/* ── Delete Confirm Dialog ── */}
       <Dialog open={!!confirmDelete} onOpenChange={() => setConfirmDelete(null)}>
