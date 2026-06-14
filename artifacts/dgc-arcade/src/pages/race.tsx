@@ -22,17 +22,7 @@ const RACERS = [
   { id: 6, name: "Phantom", color: "#ec4899", bg: "bg-pink-500/20",   border: "border-pink-500", emoji: "🩷" },
 ];
 
-type RaceResult = {
-  won: boolean;
-  winnerRacerId: number;
-  finishOrder: number[];
-  playerPlace: number;
-  multiplier: number;
-  payout: number;
-  profit: number;
-  newBalance: number;
-};
-
+type RaceResult = { won: boolean; winnerRacerId: number; finishOrder: number[]; playerPlace: number; multiplier: number; payout: number; profit: number; newBalance: number; };
 type TrackProgress = { racerId: number; pct: number; done: boolean };
 
 export default function RacePage() {
@@ -41,13 +31,12 @@ export default function RacePage() {
   const openLogin = () => open("login");
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [selectedRacer, setSelectedRacer] = useState<number | null>(null);
+  // Blaze pre-selected so the Start Race button is immediately active
+  const [selectedRacer, setSelectedRacer] = useState<number | null>(1);
   const [betAmount, setBetAmount] = useState("1");
   const [racing, setRacing] = useState(false);
   const [result, setResult] = useState<RaceResult | null>(null);
-  const [trackProgress, setTrackProgress] = useState<TrackProgress[]>(
-    RACERS.map(r => ({ racerId: r.id, pct: 0, done: false }))
-  );
+  const [trackProgress, setTrackProgress] = useState<TrackProgress[]>(RACERS.map(r => ({ racerId: r.id, pct: 0, done: false })));
   const animRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   function resetRace() {
@@ -60,10 +49,8 @@ export default function RacePage() {
     if (!selectedRacer) { toast({ title: "Pick a racer!", variant: "destructive" }); return; }
     const amt = parseFloat(betAmount);
     if (isNaN(amt) || amt <= 0) { toast({ title: "Invalid bet", variant: "destructive" }); return; }
-
     resetRace();
     setRacing(true);
-
     const token = getToken();
     let res: RaceResult;
     try {
@@ -80,261 +67,151 @@ export default function RacePage() {
       return;
     }
 
-    const { finishOrder } = res;
-    const speeds: Record<number, number> = {};
-    RACERS.forEach(r => {
-      const place = finishOrder.indexOf(r.id);
-      speeds[r.id] = 1.5 + (5 - place) * 0.3 + Math.random() * 0.4;
-    });
-
-    const progress: Record<number, number> = {};
+    const finishOrder = res.finishOrder;
+    const racerSpeeds: Record<number, number> = {};
+    RACERS.forEach(r => { racerSpeeds[r.id] = 0.8 + Math.random() * 0.8; });
+    racerSpeeds[finishOrder[0]] = 1.8 + Math.random() * 0.4;
+    let progress: Record<number, number> = {};
     RACERS.forEach(r => { progress[r.id] = 0; });
-    const finished: Set<number> = new Set();
-    const finishTimes: number[] = [];
+    let finishedCount = 0;
 
     animRef.current = setInterval(() => {
-      let allDone = true;
       RACERS.forEach(r => {
-        if (finished.has(r.id)) return;
-        const targetPct = (6 - finishOrder.indexOf(r.id)) / 6 * 100;
-        progress[r.id] = Math.min(progress[r.id] + speeds[r.id], 100);
-        if (progress[r.id] >= 100) {
-          finished.add(r.id);
-          finishTimes.push(r.id);
-        } else {
-          allDone = false;
-        }
+        if (progress[r.id] >= 100) return;
+        progress[r.id] = Math.min(100, progress[r.id] + racerSpeeds[r.id] * (0.7 + Math.random() * 0.6));
+        if (progress[r.id] >= 100) { finishedCount++; }
       });
-
-      setTrackProgress(RACERS.map(r => ({
-        racerId: r.id,
-        pct: progress[r.id],
-        done: finished.has(r.id),
-      })));
-
-      if (allDone || (finishTimes.length === 6)) {
+      setTrackProgress(RACERS.map(r => ({ racerId: r.id, pct: progress[r.id], done: progress[r.id] >= 100 })));
+      if (finishedCount >= RACERS.length) {
         clearInterval(animRef.current!);
-        setRacing(false);
         setResult(res);
+        setRacing(false);
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-        if (res.won) {
-          toast({ title: "🏆 YOU WIN!", description: `+${formatCurrency(res.payout)} (${res.multiplier}x)` });
-        } else {
-          toast({ title: `#${res.playerPlace} place`, description: `${RACERS.find(r => r.id === res.winnerRacerId)?.name} wins!`, variant: "destructive" });
-        }
       }
-    }, 40);
+    }, 50);
   }
 
   useEffect(() => () => { if (animRef.current) clearInterval(animRef.current); }, []);
-
-  const balance = user ? Number(user.balance) : 0;
+  const selectedRacerData = RACERS.find(r => r.id === selectedRacer);
 
   return (
-    <div className="max-w-4xl mx-auto flex flex-col gap-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-3">
-        <Link href="/games" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronLeft className="w-4 h-4" /> Back to Games
+        <Link href="/games">
+          <button className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
+            <ChevronLeft className="w-4 h-4" /> Games
+          </button>
         </Link>
+        <h1 className="font-display font-black text-3xl uppercase tracking-widest">🏇 Horse Racing</h1>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div>
-          <h1 className="text-4xl font-display font-black uppercase tracking-tight" style={{ color: "var(--theme-glow)" }}>
-            🏇 DGC RACE
-          </h1>
-          <p className="text-muted-foreground mt-1">Pick your horse. Place your bet. First to cross the line wins 5.5×!</p>
-        </div>
-        <div className="ml-auto text-right hidden sm:block">
-          <div className="text-xs text-muted-foreground uppercase tracking-widest">House Edge</div>
-          <div className="text-sm font-mono font-bold">8.3%</div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Race Track */}
-        <Card className="lg:col-span-2 bg-card border-border p-5 flex flex-col gap-4">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            Race Track
-          </div>
-
-          <div className="flex flex-col gap-2">
-            {RACERS.map((racer) => {
-              const prog = trackProgress.find(t => t.racerId === racer.id);
-              const pct = prog?.pct ?? 0;
-              const place = result ? result.finishOrder.indexOf(racer.id) + 1 : null;
-              const isWinner = result && racer.id === result.winnerRacerId;
-              const isMyRacer = racer.id === selectedRacer;
-
-              return (
-                <div key={racer.id} className="relative">
-                  <div className={`flex items-center gap-2 rounded-lg p-2 transition-all border ${isMyRacer ? racer.border + " border-2" : "border-border/30"}`}>
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black text-white flex-shrink-0`}
-                      style={{ backgroundColor: racer.color }}>
-                      {racer.id}
-                    </div>
-                    <div className="w-16 text-xs font-bold hidden sm:block flex-shrink-0" style={{ color: racer.color }}>
-                      {racer.name}
-                    </div>
-                    <div className="flex-1 h-6 bg-secondary/40 rounded-full overflow-hidden relative">
-                      <div
-                        className="h-full rounded-full transition-none flex items-center justify-end pr-1"
-                        style={{ width: `${pct}%`, backgroundColor: racer.color, minWidth: pct > 0 ? "24px" : "0" }}
-                      >
-                        {pct > 8 && <span className="text-xs">🐎</span>}
-                      </div>
-                    </div>
-                    <div className="w-8 text-center flex-shrink-0">
-                      {place && (
-                        <span className={`text-sm font-black ${isWinner ? "text-yellow-400" : "text-muted-foreground"}`}>
-                          {place === 1 ? "🏆" : place === 2 ? "🥈" : place === 3 ? "🥉" : `#${place}`}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {result && (
-            <div className={`mt-2 rounded-xl p-4 text-center border-2 ${result.won ? "border-yellow-500 bg-yellow-500/10" : "border-red-500/40 bg-red-500/10"}`}>
-              {result.won ? (
-                <div>
-                  <div className="text-2xl font-black text-yellow-400 animate-bounce">🏆 WINNER!</div>
-                  <div className="text-lg font-bold text-green-400">+{formatCurrency(result.payout)}</div>
-                  <div className="text-sm text-muted-foreground">{result.multiplier}× multiplier</div>
-                </div>
-              ) : (
-                <div>
-                  <div className="text-xl font-black text-red-400">#{result.playerPlace} Place</div>
-                  <div className="text-sm text-muted-foreground mt-1">
-                    {RACERS.find(r => r.id === result.winnerRacerId)?.name} takes the gold!
-                  </div>
-                </div>
-              )}
-              <Button onClick={resetRace} variant="outline" size="sm" className="mt-3">
-                Race Again
-              </Button>
-            </div>
-          )}
-        </Card>
-
-        {/* Bet Panel */}
-        <Card className="bg-card border-border p-5 flex flex-col gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="bg-card border-border p-5 space-y-5">
           <div>
-            <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold mb-3">Pick Your Racer</div>
-            <div className="grid grid-cols-3 gap-2">
-              {RACERS.map(racer => (
-                <button
-                  key={racer.id}
-                  onClick={() => !racing && setSelectedRacer(racer.id)}
-                  disabled={racing}
-                  className={`rounded-xl p-3 flex flex-col items-center gap-1 border-2 transition-all ${
-                    selectedRacer === racer.id
-                      ? racer.border + " " + racer.bg + " scale-105"
-                      : "border-border/40 hover:border-border bg-secondary/20"
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  <span className="text-xl">🐎</span>
-                  <span className="text-xs font-bold" style={{ color: racer.color }}>{racer.name}</span>
-                  <span className="text-xs text-muted-foreground">5.5×</span>
+            <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-3">Pick Your Racer</div>
+            <div className="grid grid-cols-2 gap-2">
+              {RACERS.map(r => (
+                <button key={r.id} disabled={racing} onClick={() => setSelectedRacer(r.id)}
+                  className={`flex items-center gap-2 p-2.5 rounded-lg border transition-all font-bold text-sm ${selectedRacer === r.id ? `${r.bg} ${r.border} border-2` : "border-border/50 hover:border-border bg-secondary/30"} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                  <span>{r.emoji}</span><span>{r.name}</span>
                 </button>
               ))}
             </div>
           </div>
-
           <div>
-            <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold mb-2">Bet Amount</div>
-            <div className="flex rounded-lg border border-border bg-input overflow-hidden">
-              <span className="px-3 py-2 text-muted-foreground text-sm border-r border-border">$</span>
-              <Input
-                type="number"
-                value={betAmount}
-                onChange={e => setBetAmount(e.target.value)}
-                className="border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-                disabled={racing}
-                min={1}
-              />
-            </div>
-            <div className="flex gap-2 mt-2">
-              {["1","5","10","50"].map(v => (
-                <button key={v} onClick={() => setBetAmount(v)} disabled={racing}
-                  className="flex-1 text-xs font-bold bg-secondary/60 hover:bg-secondary rounded-lg py-1.5 border border-border/50 transition-colors disabled:opacity-50">
+            <label className="text-xs uppercase tracking-widest font-bold text-muted-foreground block mb-2">Bet Amount (USD)</label>
+            <Input type="number" min="0.01" step="0.01" value={betAmount} onChange={e => setBetAmount(e.target.value)} disabled={racing} className="font-mono bg-secondary border-border" />
+            <div className="grid grid-cols-4 gap-1.5 mt-2">
+              {[1, 5, 10, 25].map(v => (
+                <button key={v} onClick={() => setBetAmount(String(v))} disabled={racing}
+                  className="flex-1 text-xs font-bold bg-secondary/60 hover:bg-secondary rounded-lg py-1.5 border border-border/50 hover:border-border transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                   ${v}
                 </button>
               ))}
             </div>
+            {user && <p className="text-xs text-muted-foreground font-mono mt-1.5">Balance: <span className="text-primary font-bold">{formatCurrency(user.balance)}</span></p>}
           </div>
-
-          <div className="bg-secondary/30 rounded-xl p-3 text-xs space-y-1.5 font-mono">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Win Pays</span>
-              <span className="font-bold text-green-400">5.5×</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">To Win</span>
-              <span className="font-bold">{formatCurrency(parseFloat(betAmount || "0") * 5.5)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Racers</span>
-              <span className="font-bold">6</span>
-            </div>
-            {isAuthenticated && (
-              <div className="flex justify-between border-t border-border/50 pt-1.5">
-                <span className="text-muted-foreground">Balance</span>
-                <span className="font-bold">{formatCurrency(balance)}</span>
-              </div>
-            )}
-          </div>
-
-          <Button
-            onClick={runRace}
-            disabled={racing || !selectedRacer}
-            className="w-full font-black uppercase tracking-widest text-lg py-6"
-            style={{ background: racing ? undefined : "var(--theme-glow)" }}
-          >
-            {racing ? (
-              <span className="flex items-center gap-2">
-                <span className="animate-spin">🐎</span> RACING…
-              </span>
-            ) : (
-              <span className="flex items-center gap-2">
-                <Zap className="w-5 h-5" /> START RACE
-              </span>
-            )}
+          <Button className="w-full font-display font-black uppercase tracking-widest text-base h-12" disabled={racing} onClick={runRace}>
+            <Zap className="w-5 h-5" /> {racing ? "Racing…" : "START RACE"}
           </Button>
-
-          {!isAuthenticated && (
-            <p className="text-xs text-center text-muted-foreground">
-              <button onClick={openLogin} className="text-primary hover:underline font-bold">Log in</button> to place real bets
-            </p>
+          {selectedRacerData && !racing && (
+            <div className="text-xs text-center text-muted-foreground font-mono">
+              Betting on <span style={{ color: selectedRacerData.color }} className="font-bold">{selectedRacerData.emoji} {selectedRacerData.name}</span>
+            </div>
           )}
         </Card>
-      </div>
 
-      {/* Recent Race History placeholder */}
-      <Card className="bg-card border-border p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Trophy className="w-4 h-4 text-yellow-400" />
-          <span className="font-bold uppercase tracking-widest text-sm">How to Play</span>
+        <div className="lg:col-span-2 space-y-4">
+          <Card className="bg-card border-border p-5">
+            <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-4">Live Track</div>
+            <div className="space-y-3">
+              {RACERS.map(r => {
+                const prog = trackProgress.find(p => p.racerId === r.id);
+                const pct = prog?.pct ?? 0;
+                const isWinner = result?.winnerRacerId === r.id;
+                const isMyPick = r.id === selectedRacer;
+                return (
+                  <div key={r.id} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs font-bold">
+                      <span className={`flex items-center gap-1.5 ${isMyPick ? "text-foreground" : "text-muted-foreground"}`}>
+                        {r.emoji} {r.name}
+                        {isMyPick && <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full uppercase tracking-wider">Your pick</span>}
+                        {isWinner && <Trophy className="w-3.5 h-3.5 text-yellow-400" />}
+                      </span>
+                      <span className="font-mono text-[10px] text-muted-foreground">{Math.round(pct)}%</span>
+                    </div>
+                    <div className="w-full h-3 rounded-full bg-secondary overflow-hidden border border-border/30">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: r.color, boxShadow: pct > 0 ? `0 0 6px ${r.color}80` : "none" }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+
+          {result && (
+            <Card className={`border-2 p-5 ${result.won ? "border-green-500/60 bg-green-500/5" : "border-destructive/40 bg-destructive/5"}`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  {result.won ? <Trophy className="w-5 h-5 text-yellow-400" /> : <Star className="w-5 h-5 text-muted-foreground" />}
+                  <h3 className="font-display font-black uppercase tracking-widest text-lg">{result.won ? "Winner! 🏆" : `Finished #${result.playerPlace}`}</h3>
+                </div>
+                <Button variant="outline" size="sm" className="font-bold uppercase text-xs" onClick={resetRace} disabled={racing}>Race Again</Button>
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="bg-secondary/50 rounded-lg p-2.5">
+                  <div className={`font-mono font-black text-lg ${result.profit >= 0 ? "text-green-400" : "text-destructive"}`}>{result.profit >= 0 ? "+" : ""}{formatCurrency(result.profit)}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Profit</div>
+                </div>
+                <div className="bg-secondary/50 rounded-lg p-2.5">
+                  <div className="font-mono font-black text-lg text-primary">{result.multiplier}×</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Multiplier</div>
+                </div>
+                <div className="bg-secondary/50 rounded-lg p-2.5">
+                  <div className="font-mono font-black text-lg">{formatCurrency(result.newBalance)}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">New Balance</div>
+                </div>
+              </div>
+              <div className="mt-3 text-xs text-muted-foreground font-mono text-center">
+                Finish order: {result.finishOrder.map(id => { const r = RACERS.find(x => x.id === id); return r ? r.emoji + " " + r.name : ""; }).join(" → ")}
+              </div>
+            </Card>
+          )}
+
+          {!result && !racing && (
+            <Card className="bg-secondary/20 border-border/50 p-4">
+              <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-3">How it works</div>
+              <div className="space-y-2">
+                {[["🐴 Pick a Horse","Choose one of 6 racers to bet on"],["💰 Set Your Bet","Enter how much you want to wager"],["🏁 Watch Them Race","Hit START and watch all 6 horses race to the finish"],["🏆 Win Up To 4×","1st pays 4×, 2nd pays 2.5×, 3rd pays 1.5×"]].map(([title, desc]) => (
+                  <div key={String(title)} className="flex gap-3 items-start">
+                    <div><strong className="text-foreground text-xs">{title}</strong><br /><span className="text-muted-foreground text-xs">{desc}</span></div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-muted-foreground">
-          <div className="flex gap-3 items-start">
-            <span className="text-2xl">1️⃣</span>
-            <div><strong className="text-foreground">Pick a Racer</strong><br />Choose one of 6 horses — Blaze, Thunder, Shadow, Storm, Bolt, or Phantom.</div>
-          </div>
-          <div className="flex gap-3 items-start">
-            <span className="text-2xl">2️⃣</span>
-            <div><strong className="text-foreground">Place Your Bet</strong><br />Enter your bet amount. If your horse wins, you get 5.5× your bet back!</div>
-          </div>
-          <div className="flex gap-3 items-start">
-            <span className="text-2xl">3️⃣</span>
-            <div><strong className="text-foreground">Watch Them Race</strong><br />Hit START and watch all 6 horses race to the finish line in real time.</div>
-          </div>
-        </div>
-      </Card>
+      </div>
     </div>
   );
 }
