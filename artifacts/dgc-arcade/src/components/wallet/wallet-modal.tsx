@@ -71,6 +71,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const selectedCurrency = CURRENCIES.find(c => c.value === currency) ?? CURRENCIES[0];
   // Creator accounts (withdrawalsEnabled === false) only see Vault
   const isCreator = user?.withdrawalsEnabled === false;
+  const hasBalance = (user?.balance ?? 0) > 0;
 
   const handleDeposit = () => {
     initiateDeposit.mutate({ data: { amount, currency } } as any, {
@@ -329,7 +330,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
               <div className="flex gap-2 flex-wrap">
                 {CURRENCIES.map(c => {
                   const deposited = coinBalances[c.value] ?? 0;
-                  const isAvailable = deposited > 0 && (user?.balance ?? 0) >= 1;
+                  const isAvailable = !hasBalance || deposited > 0;
                   return (
                     <button key={c.value}
                       disabled={!isAvailable}
@@ -341,7 +342,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                             ? "border-primary bg-primary/10 text-primary"
                             : "border-border/50 bg-secondary/40 text-muted-foreground hover:border-primary/40"
                       }`}
-                      title={isAvailable ? `Deposited: ${deposited.toFixed(2)}` : "No deposits in this currency"}
+                      title={isAvailable ? (deposited > 0 ? `Deposited: ${deposited.toFixed(2)}` : `Available`) : "Must withdraw in your deposit currency"}
                     >
                       <CoinIcon currency={c.value} size={16} />
                       <span>{c.name === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
@@ -351,7 +352,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                 })}
               </div>
 
-              {(coinBalances[withdrawCurrency] ?? 0) > 0 && (
+              {hasBalance && (coinBalances[withdrawCurrency] ?? 0) > 0 && (
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>Max for {withdrawCurrency.split("_")[0]}:</span>
                   <span className="text-primary font-bold font-mono">${Math.min(coinBalances[withdrawCurrency] ?? 0, user?.balance ?? 0).toFixed(2)}</span>
@@ -387,7 +388,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
               <Button
                 className="w-full font-bold uppercase tracking-widest h-11"
                 onClick={handleWithdraw}
-                disabled={requestWithdrawal.isPending || withdrawAmount < 1}
+                disabled={requestWithdrawal.isPending || withdrawAmount < 1 || !hasBalance}
               >
                 {requestWithdrawal.isPending ? "Processing…" : "Request Withdrawal"}
               </Button>
