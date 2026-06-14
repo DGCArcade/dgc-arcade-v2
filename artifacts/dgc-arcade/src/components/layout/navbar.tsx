@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAuthModal } from "@/hooks/use-auth-modal";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
-import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound, Star, X} from "lucide-react";
+import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound, Star, X, ArrowLeftRight, MessageSquare} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +16,7 @@ import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import { WalletModal } from "@/components/wallet/wallet-modal";
 import { DailyBonusModal } from "@/components/ui/daily-bonus-modal";
 import { VipModal, getVipProgress } from "@/components/vip/vip-modal";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -33,9 +33,34 @@ export function Navbar() {
   const [bankPinError, setBankPinError] = useState("");
   const [bankPinLoading, setBankPinLoading] = useState(false);
   const [creatorApplyOpen, setCreatorApplyOpen] = useState(false);
+  const [creatorUnread, setCreatorUnread] = useState(0);
+
+  const altToken = typeof localStorage !== "undefined" ? localStorage.getItem("dgc_alt_token") : null;
+  const altProfileType = typeof localStorage !== "undefined" ? localStorage.getItem("dgc_alt_profile_type") : null;
+  const hasAltProfile = !!altToken;
+
+  function switchProfile() {
+    if (!altToken) return;
+    const currentToken = localStorage.getItem("dgc_token") ?? "";
+    const currentType = altProfileType === "personal" ? "creator" : "personal";
+    localStorage.setItem("dgc_alt_token", currentToken);
+    localStorage.setItem("dgc_alt_profile_type", currentType);
+    localStorage.setItem("dgc_token", altToken);
+    window.location.href = altProfileType === "personal" ? "/profile" : "/creator";
+  }
 
   const wagered = (user as any)?.totalWageredAmount ?? 0;
   const { tier: vipTier, next: vipNext, pct: vipPct } = getVipProgress(wagered);
+
+  useEffect(() => {
+    if (!isCreator || !isAuthenticated) return;
+    const token = typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
+    const poll = () => fetch("/api/creator/messages/unread-count", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(d => { if (typeof d.unread === "number") setCreatorUnread(d.unread); }).catch(() => {});
+    poll();
+    const id = setInterval(poll, 20000);
+    return () => clearInterval(id);
+  }, [isCreator, isAuthenticated]);
 
   const NavLinks = () => (
     <>
@@ -152,9 +177,26 @@ export function Navbar() {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/profile")}><User className="mr-2 h-4 w-4" /><span>Profile</span></DropdownMenuItem>
                     <DropdownMenuItem className="cursor-pointer" onClick={() => setWalletOpen(true)}><Wallet className="mr-2 h-4 w-4" /><span>Wallet</span></DropdownMenuItem>
-                    <DropdownMenuItem className="cursor-pointer" onClick={handleCreatorHubClick}><Star className="mr-2 h-4 w-4" /><span>Creator Hub</span></DropdownMenuItem>
+                    <DropdownMenuItem className="cursor-pointer" onClick={handleCreatorHubClick}>
+                      <Star className="mr-2 h-4 w-4" />
+                      <span>Creator Hub</span>
+                      {isCreator && creatorUnread > 0 && (
+                        <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center px-1 animate-pulse">
+                          {creatorUnread > 9 ? "9+" : creatorUnread}
+                        </span>
+                      )}
+                    </DropdownMenuItem>
                     <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/settings")}><Settings className="mr-2 h-4 w-4" /><span>Settings</span></DropdownMenuItem>
                     {isAdmin && (<><DropdownMenuSeparator /><DropdownMenuItem className="cursor-pointer text-amber-400 focus:text-amber-300" onClick={() => setLocation("/admin")}><Shield className="mr-2 h-4 w-4" /><span>Admin Panel</span></DropdownMenuItem></>)}
+                    {hasAltProfile && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="cursor-pointer text-purple-400 focus:text-purple-300 focus:bg-purple-500/10" onClick={switchProfile}>
+                          <ArrowLeftRight className="mr-2 h-4 w-4" />
+                          <span>Switch to {altProfileType === "personal" ? "Personal Account" : "Creator Account"}</span>
+                        </DropdownMenuItem>
+                      </>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={logout} className="text-destructive focus:bg-destructive/10 cursor-pointer"><LogOut className="mr-2 h-4 w-4" /><span>Log out</span></DropdownMenuItem>
                   </DropdownMenuContent>
