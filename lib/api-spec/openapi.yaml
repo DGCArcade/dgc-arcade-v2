@@ -602,6 +602,8 @@ components:
       properties:
         amount:
           type: number
+          minimum: 1
+          maximum: 100000000
         currency:
           type: string
         address:
