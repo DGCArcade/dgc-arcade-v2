@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAuthModal } from "@/hooks/use-auth-modal";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
-import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound, Star} from "lucide-react";
+import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound, Star, X} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,10 +25,12 @@ export function Navbar() {
   const [bonusOpen, setBonusOpen] = useState(false);
   const isAdmin = user?.role === "admin" || user?.role === "owner";
   const isOwner = (user?.username ?? "").toLowerCase() === "fanodgc";
+  const isCreator = user?.accountType === "creator";
   const [bankPinOpen, setBankPinOpen] = useState(false);
   const [bankPin, setBankPin] = useState("");
   const [bankPinError, setBankPinError] = useState("");
   const [bankPinLoading, setBankPinLoading] = useState(false);
+  const [creatorApplyOpen, setCreatorApplyOpen] = useState(false);
 
   const NavLinks = () => (
     <>
@@ -41,11 +43,6 @@ export function Navbar() {
       <Link href="/leaderboard" className={`text-sm font-medium uppercase tracking-wider transition-colors ${location === "/leaderboard" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
         Leaderboard
       </Link>
-      {isAuthenticated && (
-        <Link href="/creator" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/creator" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
-          <Star className="w-3.5 h-3.5" />Creator
-        </Link>
-      )}
       {isAdmin && (
         <Link href="/admin" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/admin" ? "text-primary" : "text-amber-500/80 hover:text-amber-400"}`}>
           <Shield className="w-3.5 h-3.5" />Admin
@@ -82,7 +79,6 @@ export function Navbar() {
         setBankPinError(data.error ?? "Incorrect PIN");
         setBankPin("");
       } else {
-        // PIN correct — store session token and navigate to admin DGC Bank tab
         sessionStorage.setItem("dgcBankSession", data.sessionToken);
         sessionStorage.setItem("dgcBankExpires", data.expiresAt);
         setBankPinOpen(false);
@@ -93,6 +89,14 @@ export function Navbar() {
       setBankPinError("Connection error. Try again.");
     } finally {
       setBankPinLoading(false);
+    }
+  }
+
+  function handleCreatorHubClick() {
+    if (isCreator) {
+      setLocation("/creator");
+    } else {
+      setCreatorApplyOpen(true);
     }
   }
 
@@ -152,6 +156,7 @@ export function Navbar() {
                         <p className="font-medium text-sm">{user.username}</p>
                         <p className="text-xs text-muted-foreground font-mono text-primary sm:hidden">{formatCurrency(user.balance)}</p>
                         {isAdmin && <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Admin</span>}
+                        {isCreator && !isAdmin && <span className="text-xs font-bold uppercase tracking-wider text-purple-400">Creator</span>}
                       </div>
                     </div>
                     <DropdownMenuSeparator />
@@ -161,7 +166,7 @@ export function Navbar() {
                     <DropdownMenuItem className="cursor-pointer" onClick={() => setWalletOpen(true)}>
                       <Wallet className="mr-2 h-4 w-4" /><span>Wallet</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/creator")}>
+                    <DropdownMenuItem className="cursor-pointer" onClick={handleCreatorHubClick}>
                       <Star className="mr-2 h-4 w-4" /><span>Creator Hub</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/settings")}>
@@ -274,6 +279,46 @@ export function Navbar() {
                   {bankPinLoading ? "Verifying..." : "Enter"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Creator Hub Apply Modal ─────────────────────────────────── */}
+      {creatorApplyOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setCreatorApplyOpen(false)}>
+          <div className="bg-card border border-border/60 rounded-2xl p-8 w-full max-w-sm shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-purple-500/10 border border-purple-500/30 flex items-center justify-center">
+                  <Star className="w-5 h-5 text-purple-400" />
+                </div>
+                <div>
+                  <h2 className="font-display font-black uppercase tracking-widest text-lg">Creator Hub</h2>
+                  <p className="text-xs text-muted-foreground">Exclusive for approved creators</p>
+                </div>
+              </div>
+              <button onClick={() => setCreatorApplyOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                The Creator Hub is available to approved streamers and content creators on DGC Arcade. As a creator you get access to promotional tools, custom referral links, and exclusive bonuses.
+              </p>
+              <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-4 space-y-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-purple-400">How to Apply</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Contact us via Discord or email <span className="text-foreground font-medium">support@dgcarcade.com</span> with your channel link and follower count. Our team reviews all applications within 48 hours.
+                </p>
+              </div>
+              <button
+                onClick={() => setCreatorApplyOpen(false)}
+                className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-sm font-bold uppercase tracking-wider text-white transition-colors"
+              >
+                Got it
+              </button>
             </div>
           </div>
         </div>
