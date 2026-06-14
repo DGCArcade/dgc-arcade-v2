@@ -329,7 +329,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
               <div className="flex gap-2 flex-wrap">
                 {CURRENCIES.map(c => {
                   const deposited = coinBalances[c.value] ?? 0;
-                  const isAvailable = deposited > 0;
+                  const isAvailable = deposited > 0 && (user?.balance ?? 0) >= 1;
                   return (
                     <button key={c.value}
                       disabled={!isAvailable}
@@ -368,7 +368,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                     if (v === "" || v === ".") setWithdrawAmount(0);
                     else { const n = parseFloat(v); if (!isNaN(n)) setWithdrawAmount(n); }
                   }}
-                  onBlur={() => { if (!withdrawAmount || withdrawAmount < 5) setWithdrawAmount(5); }}
+                  onBlur={() => { if (!withdrawAmount || withdrawAmount < 1) setWithdrawAmount(1); }}
                   placeholder="50"
                   className="pl-8 font-mono bg-secondary"/>
                 </div>
@@ -381,13 +381,13 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
 
               <div className="bg-secondary/40 rounded-lg p-3 text-xs text-muted-foreground border border-border/40">
                 Available: <span className="text-foreground font-mono font-bold">{formatCurrency(user?.balance ?? 0)}</span>
-                {" · "}Min withdrawal: <span className="text-foreground font-mono">$5.00</span>
+                {" · "}Min: <span className="text-foreground font-mono">$1.00</span>{" · "}Max/tx: <span className="text-foreground font-mono">$100M</span>{" · "}Daily: <span className="text-foreground font-mono">$1B</span>
               </div>
 
               <Button
                 className="w-full font-bold uppercase tracking-widest h-11"
                 onClick={handleWithdraw}
-                disabled={requestWithdrawal.isPending || withdrawAmount < 5}
+                disabled={requestWithdrawal.isPending || withdrawAmount < 1}
               >
                 {requestWithdrawal.isPending ? "Processing…" : "Request Withdrawal"}
               </Button>
