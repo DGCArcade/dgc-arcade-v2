@@ -32,9 +32,9 @@ export function getCurrencyMeta(value: string): CurrencyMeta {
   );
 }
 
-// Real brand logos from CDN — transparent background, no disc/circle.
-// Falls back to colored disc + symbol if CDN fails.
-const CDN = "https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/svg/color";
+// "icon" set — just the coin logo/symbol on a transparent background,
+// colored in each coin's brand color. No disc or circle background.
+const CDN = "https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/svg/icon";
 
 const LOGO_URL: Record<string, string> = {
   BTC:      `${CDN}/btc.svg`,
