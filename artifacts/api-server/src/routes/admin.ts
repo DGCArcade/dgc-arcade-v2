@@ -1241,7 +1241,7 @@ adminRouter.post("/tip", async (req, res) => {
       return;
     }
     // Get recipient
-    const [recipient] = await db.select().from(usersTable).where(eq(usersTable.username, toUsername)).limit(1);
+    const [recipient] = await db.select().from(usersTable).where(ilike(usersTable.username, toUsername)).limit(1);
     if (!recipient) { res.status(404).json({ error: "User not found: " + toUsername }); return; }
     if (recipient.id === sender.id) { res.status(400).json({ error: "Cannot tip yourself" }); return; }
     // The platform owner account is never externally mutable — block tips into it.
