@@ -6,25 +6,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DepositForm } from "@/components/profile/deposit-form";
 import { WithdrawForm } from "@/components/profile/withdraw-form";
 import { useLocation } from "wouter";
-import { ArrowDownLeft, ArrowUpRight, Clock, CheckCircle2, XCircle, Landmark, RefreshCw, Users, Copy, CheckCheck, TrendingUp } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Clock, CheckCircle2, XCircle, Landmark, RefreshCw, Users, Copy, CheckCheck, TrendingUp, Shield, Save, MessageCircle, Zap, Lock } from "lucide-react";
 import { CoinIcon } from "@/components/wallet/coin-icon";
 import { useState, useEffect, useCallback } from "react";
+import { VipModal, getVipProgress } from "@/components/vip/vip-modal";
 
 export default function Profile() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const [, setLocation] = useLocation();
 
   const { data: transactions } = useListTransactions({ limit: 50 }, {
-    query: {
-      queryKey: getListTransactionsQueryKey({ limit: 50 }),
-      enabled: isAuthenticated,
-    }
+    query: { queryKey: getListTransactionsQueryKey({ limit: 50 }), enabled: isAuthenticated }
   });
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      setLocation("/");
-    }
+    if (!isLoading && !isAuthenticated) setLocation("/");
   }, [isLoading, isAuthenticated, setLocation]);
 
   const [plisioBalances, setPlisioBalances] = useState<Record<string,string> | null>(null);
@@ -36,45 +32,104 @@ export default function Profile() {
   const [tipLoading, setTipLoading] = useState(false);
   const [refData, setRefData] = useState<{ code: string; link: string; tier: string; color: string; emoji: string; commissionPct: number; activeReferrals: number; pendingReferrals: number; totalEarned: number } | null>(null);
   const [refCopied, setRefCopied] = useState(false);
+  const [vipOpen, setVipOpen] = useState(false);
+  const [telegramInput, setTelegramInput] = useState("");
+  const [telegramSaving, setTelegramSaving] = useState(false);
+  const [telegramMsg, setTelegramMsg] = useState<{ok: boolean; text: string} | null>(null);
+  const [vaultBalance, setVaultBalance] = useState<number | null>(null);
+  const [vaultDepositAmt, setVaultDepositAmt] = useState("");
+  const [vaultWithdrawAmt, setVaultWithdrawAmt] = useState("");
+  const [vaultPassword, setVaultPassword] = useState("");
+  const [vaultLoading, setVaultLoading] = useState(false);
+  const [vaultMsg, setVaultMsg] = useState<{ok: boolean; text: string} | null>(null);
+
+  useEffect(() => { if (user) setTelegramInput((user as any).telegramUsername ?? ""); }, [user?.username]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const token = localStorage.getItem("dgc_token");
+    fetch("/api/users/me/vault", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(d => setVaultBalance(parseFloat(d.vaultBalance ?? "0"))).catch(() => {});
+  }, [isAuthenticated]);
+
+  const saveTelegram = async () => {
+    setTelegramSaving(true); setTelegramMsg(null);
+    try {
+      const token = localStorage.getItem("dgc_token");
+      const res = await fetch("/api/users/me/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ telegramUsername: telegramInput.replace(/^@/, "").trim() }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setTelegramMsg({ ok: false, text: d.error ?? "Save failed" }); return; }
+      setTelegramMsg({ ok: true, text: "Saved!" });
+    } catch { setTelegramMsg({ ok: false, text: "Network error" }); }
+    finally { setTelegramSaving(false); }
+  };
+
+  const handleVaultDeposit = async () => {
+    const amt = parseFloat(vaultDepositAmt);
+    if (!amt || amt <= 0) return;
+    setVaultLoading(true); setVaultMsg(null);
+    try {
+      const token = localStorage.getItem("dgc_token");
+      const res = await fetch("/api/users/me/vault/deposit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ amount: amt }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setVaultMsg({ ok: false, text: d.error ?? "Failed" }); return; }
+      setVaultBalance(d.vaultBalance); setVaultDepositAmt("");
+      setVaultMsg({ ok: true, text: `Deposited ${formatCurrency(amt)} to vault` });
+    } catch { setVaultMsg({ ok: false, text: "Network error" }); }
+    finally { setVaultLoading(false); }
+  };
+
+  const handleVaultWithdraw = async () => {
+    const amt = parseFloat(vaultWithdrawAmt);
+    if (!amt || amt <= 0 || !vaultPassword) return;
+    setVaultLoading(true); setVaultMsg(null);
+    try {
+      const token = localStorage.getItem("dgc_token");
+      const res = await fetch("/api/users/me/vault/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ amount: amt, password: vaultPassword }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setVaultMsg({ ok: false, text: d.error ?? "Failed" }); return; }
+      setVaultBalance(d.vaultBalance); setVaultWithdrawAmt(""); setVaultPassword("");
+      setVaultMsg({ ok: true, text: `Released ${formatCurrency(amt)} from vault` });
+    } catch { setVaultMsg({ ok: false, text: "Network error" }); }
+    finally { setVaultLoading(false); }
+  };
 
   const handleProfileTip = async () => {
     if (!tipUsername.trim() || tipAmount <= 0) return;
     setTipLoading(true);
     try {
       const token = localStorage.getItem("dgc_token");
-      const res = await fetch("/api/admin/tip", {
+      await fetch("/api/admin/tip", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ toUsername: tipUsername.trim(), amount: tipAmount }),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setTipUsername("");
-        setTipAmount(5);
-      }
+      }).then(res => { if (res.ok) { setTipUsername(""); setTipAmount(5); } });
     } finally { setTipLoading(false); }
   };
 
   const fetchPlisioBalance = useCallback(async () => {
     if (user?.role !== "owner" && user?.role !== "admin") return;
-    setPlisioLoading(true);
-    setPlisioError(null);
+    setPlisioLoading(true); setPlisioError(null);
     try {
       const token = localStorage.getItem("dgc_token");
       const apiUrl = (import.meta.env.VITE_API_URL ?? "") + "/api/users/owner/plisio-balance";
       const res = await fetch(apiUrl, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      if (!res.ok) {
-        const detail = data.detail ? ` (${data.detail})` : "";
-        setPlisioError((data.error ?? "Failed to load") + detail);
-        return;
-      }
-      if (!data.balances || Object.keys(data.balances).length === 0) {
-        setPlisioError("No balances returned — your Plisio account may need the Balance API enabled. Go to Plisio → API Settings → enable Balance access.");
-        return;
-      }
-      setPlisioBalances(data.balances);
-      setLastRefresh(new Date());
+      if (!res.ok) { setPlisioError((data.error ?? "Failed to load")); return; }
+      if (!data.balances || Object.keys(data.balances).length === 0) { setPlisioError("No balances returned."); return; }
+      setPlisioBalances(data.balances); setLastRefresh(new Date());
     } catch (e: any) { setPlisioError("Network error: " + (e?.message ?? "unknown")); }
     finally { setPlisioLoading(false); }
   }, [user?.username]);
@@ -91,19 +146,22 @@ export default function Profile() {
     if (!isAuthenticated) return;
     const token = localStorage.getItem('dgc_token');
     fetch('/api/referrals/my-code', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(d => { if (d.code) setRefData(d); })
-      .catch(() => {});
+      .then(r => r.json()).then(d => { if (d.code) setRefData(d); }).catch(() => {});
   }, [isAuthenticated]);
 
   const copyRefLink = async () => {
     if (!refData) return;
     await navigator.clipboard.writeText(refData.link);
-    setRefCopied(true);
-    setTimeout(() => setRefCopied(false), 2000);
+    setRefCopied(true); setTimeout(() => setRefCopied(false), 2000);
   };
 
-    if (isLoading || !user) return <div className="animate-pulse bg-secondary h-96 rounded-xl border border-border" />;
+  if (isLoading || !user) return <div className="animate-pulse bg-secondary h-96 rounded-xl border border-border" />;
+
+  const wagered = (user as any)?.totalWageredAmount ?? 0;
+  const rakebackClaimed = (user as any)?.rakebackClaimed ?? 0;
+  const { tier: vipTier, next: vipNext, pct: vipPct } = getVipProgress(wagered);
+  const claimableRakeback = Math.max(0, wagered * (vipTier.rakebackPct / 100) - rakebackClaimed);
+  const lastLoginAt = (user as any)?.lastLoginAt;
 
   const getStatusIcon = (status: string) => {
     switch(status) {
@@ -115,7 +173,6 @@ export default function Profile() {
       default: return null;
     }
   };
-
   const statusLabel = (status: string) => {
     switch (status) {
       case 'needs_review': return 'Under review';
@@ -126,6 +183,7 @@ export default function Profile() {
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto w-full">
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-border/50 pb-6">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-full bg-secondary border-2 border-primary flex items-center justify-center font-display font-black text-3xl text-primary">
@@ -134,17 +192,58 @@ export default function Profile() {
           <div>
             <h1 className="font-display font-black text-3xl uppercase tracking-widest">{user.username}</h1>
             <p className="text-muted-foreground font-mono text-sm">Joined {new Date(user.createdAt).toLocaleDateString()}</p>
+            {lastLoginAt && (
+              <p className="text-muted-foreground/70 font-mono text-xs">Last login: {new Date(lastLoginAt).toLocaleString()}</p>
+            )}
+            {/* Telegram field */}
+            <div className="flex items-center gap-2 mt-2">
+              <MessageCircle className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+              <input
+                type="text" value={telegramInput}
+                onChange={e => setTelegramInput(e.target.value)}
+                placeholder="@telegram_username"
+                className="bg-transparent border-b border-border/50 focus:border-sky-400 outline-none font-mono text-xs text-muted-foreground focus:text-foreground transition-colors w-36 pb-0.5"
+              />
+              <button onClick={saveTelegram} disabled={telegramSaving}
+                className="p-1 rounded text-sky-400 hover:text-sky-300 transition-colors disabled:opacity-40" title="Save Telegram">
+                <Save className="w-3 h-3" />
+              </button>
+              {telegramMsg && (
+                <span className={`text-[10px] font-mono ${telegramMsg.ok ? "text-green-400" : "text-red-400"}`}>{telegramMsg.text}</span>
+              )}
+            </div>
           </div>
         </div>
-        
-        <div className="bg-secondary/50 border border-primary/20 rounded-xl p-4 flex flex-col items-end min-w-[200px]">
-          <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Available Balance</span>
-          <span className="font-mono font-bold text-3xl text-primary">{formatCurrency(user.balance)}</span>
+
+        <div className="flex flex-col items-end gap-2">
+          <div className="bg-secondary/50 border border-primary/20 rounded-xl p-4 flex flex-col items-end min-w-[200px]">
+            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Available Balance</span>
+            <span className="font-mono font-bold text-3xl text-primary">{formatCurrency(user.balance)}</span>
+          </div>
+          {/* VIP badge */}
+          <button onClick={() => setVipOpen(true)}
+            className="flex items-center gap-2 rounded-xl px-3 py-2 border transition-all w-full justify-between"
+            style={{ borderColor: vipTier.color + "50", background: vipTier.color + "10" }}>
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{vipTier.icon}</span>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-widest" style={{ color: vipTier.color }}>{vipTier.name}</div>
+                <div className="text-[9px] text-muted-foreground font-mono">{vipTier.rakebackPct}% rakeback</div>
+              </div>
+            </div>
+            <div className="w-20">
+              <div className="w-full h-1.5 rounded-full bg-black/30 overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${vipPct}%`, backgroundColor: vipNext?.color ?? vipTier.color }} />
+              </div>
+              <div className="text-[9px] text-muted-foreground font-mono mt-0.5 text-right">{vipPct.toFixed(0)}%</div>
+            </div>
+          </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         <div className="md:col-span-1 space-y-6">
+          {/* DGC Bank */}
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2"><span className="text-glow-shift">DGC Bank · Wallet</span></CardTitle>
@@ -156,35 +255,21 @@ export default function Profile() {
                   <TabsTrigger value="withdraw" className="font-bold uppercase text-xs">Withdraw</TabsTrigger>
                   <TabsTrigger value="tip" className="font-bold uppercase text-xs">Tip</TabsTrigger>
                 </TabsList>
-                <TabsContent value="deposit">
-                  <DepositForm />
-                </TabsContent>
-                <TabsContent value="withdraw">
-                  <WithdrawForm />
-                </TabsContent>
+                <TabsContent value="deposit"><DepositForm /></TabsContent>
+                <TabsContent value="withdraw"><WithdrawForm /></TabsContent>
                 <TabsContent value="tip" className="space-y-4">
                   <div className="space-y-3">
                     <div>
                       <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Recipient Username</label>
-                      <input
-                        type="text"
-                        value={tipUsername}
-                        onChange={e => setTipUsername(e.target.value)}
-                        placeholder="username"
-                        className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm font-mono"
-                      />
+                      <input type="text" value={tipUsername} onChange={e => setTipUsername(e.target.value)} placeholder="username"
+                        className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm font-mono" />
                     </div>
                     <div>
                       <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Amount (USD)</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
-                        <input
-                          type="number"
-                          min={1}
-                          value={tipAmount}
-                          onChange={e => setTipAmount(Number(e.target.value))}
-                          className="w-full rounded-md border border-border bg-secondary pl-8 pr-3 py-2 text-sm font-mono"
-                        />
+                        <input type="number" min={1} value={tipAmount} onChange={e => setTipAmount(Number(e.target.value))}
+                          className="w-full rounded-md border border-border bg-secondary pl-8 pr-3 py-2 text-sm font-mono" />
                       </div>
                       <div className="flex gap-1 mt-2">
                         {[1,5,10,25,50].map(v => (
@@ -195,11 +280,8 @@ export default function Profile() {
                         ))}
                       </div>
                     </div>
-                    <button
-                      onClick={handleProfileTip}
-                      disabled={tipLoading || !tipUsername.trim() || tipAmount <= 0}
-                      className="w-full h-10 rounded-md bg-primary text-primary-foreground font-bold uppercase tracking-widest text-sm disabled:opacity-50 hover:bg-primary/90 transition-colors"
-                    >
+                    <button onClick={handleProfileTip} disabled={tipLoading || !tipUsername.trim() || tipAmount <= 0}
+                      className="w-full h-10 rounded-md bg-primary text-primary-foreground font-bold uppercase tracking-widest text-sm disabled:opacity-50 hover:bg-primary/90 transition-colors">
                       {tipLoading ? "Sending…" : `Send ${formatCurrency(tipAmount)} Tip`}
                     </button>
                   </div>
@@ -207,29 +289,99 @@ export default function Profile() {
               </Tabs>
             </CardContent>
           </Card>
-          
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="font-display uppercase tracking-widest text-lg">Stats</CardTitle>
+
+          {/* Vault */}
+          <Card className="bg-card border-border border-cyan-500/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2">
+                <Shield className="w-5 h-5 text-cyan-400" />
+                <span className="text-cyan-400">Vault</span>
+                {vaultBalance !== null && (
+                  <span className="ml-auto font-mono font-black text-base text-cyan-400">{formatCurrency(vaultBalance)}</span>
+                )}
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground">Lock funds for safekeeping. Withdrawal requires your account password.</p>
+              <Tabs defaultValue="deposit" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 bg-secondary mb-3">
+                  <TabsTrigger value="deposit" className="font-bold uppercase text-xs">Deposit</TabsTrigger>
+                  <TabsTrigger value="withdraw" className="font-bold uppercase text-xs">Withdraw</TabsTrigger>
+                </TabsList>
+                <TabsContent value="deposit" className="space-y-2">
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
+                    <input type="number" min={0.01} step={0.01} value={vaultDepositAmt}
+                      onChange={e => setVaultDepositAmt(e.target.value)} placeholder="0.00"
+                      className="w-full rounded-md border border-border bg-secondary pl-8 pr-3 py-2 text-sm font-mono" />
+                  </div>
+                  <button onClick={handleVaultDeposit} disabled={vaultLoading || !vaultDepositAmt}
+                    className="w-full h-9 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white font-bold uppercase tracking-widest text-xs disabled:opacity-50 transition-colors">
+                    {vaultLoading ? "…" : "Lock in Vault"}
+                  </button>
+                </TabsContent>
+                <TabsContent value="withdraw" className="space-y-2">
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
+                    <input type="number" min={0.01} step={0.01} value={vaultWithdrawAmt}
+                      onChange={e => setVaultWithdrawAmt(e.target.value)} placeholder="0.00"
+                      className="w-full rounded-md border border-border bg-secondary pl-8 pr-3 py-2 text-sm font-mono" />
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                    <input type="password" value={vaultPassword} onChange={e => setVaultPassword(e.target.value)}
+                      placeholder="Account password"
+                      className="w-full rounded-md border border-border bg-secondary pl-9 pr-3 py-2 text-sm font-mono" />
+                  </div>
+                  <button onClick={handleVaultWithdraw} disabled={vaultLoading || !vaultWithdrawAmt || !vaultPassword}
+                    className="w-full h-9 rounded-md bg-secondary border border-cyan-500/40 text-cyan-400 font-bold uppercase tracking-widest text-xs disabled:opacity-50 hover:border-cyan-500 transition-colors">
+                    {vaultLoading ? "…" : "Release from Vault"}
+                  </button>
+                </TabsContent>
+              </Tabs>
+              {vaultMsg && (
+                <p className={`text-xs font-mono ${vaultMsg.ok ? "text-green-400" : "text-red-400"}`}>{vaultMsg.text}</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Stats */}
+          <Card className="bg-card border-border">
+            <CardHeader><CardTitle className="font-display uppercase tracking-widest text-lg">Stats</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
               <div className="flex justify-between border-b border-border/50 pb-2">
                 <span className="text-muted-foreground text-sm font-medium">Total Bets</span>
                 <span className="font-mono font-bold">{user.totalBets || 0}</span>
               </div>
-              <div className="flex justify-between pb-2">
+              <div className="flex justify-between border-b border-border/50 pb-2">
                 <span className="text-muted-foreground text-sm font-medium">Total Won</span>
                 <span className="font-mono font-bold text-primary">{formatCurrency(user.totalWon || 0)}</span>
+              </div>
+              <div className="flex justify-between border-b border-border/50 pb-2">
+                <span className="text-muted-foreground text-sm font-medium">Total Wagered</span>
+                <span className="font-mono font-bold">{formatCurrency(wagered)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground text-sm font-medium flex items-center gap-1">
+                  <Zap className="w-3.5 h-3.5 text-primary" /> Rakeback
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold text-primary">{formatCurrency(claimableRakeback)}</span>
+                  {claimableRakeback >= 0.01 && (
+                    <button onClick={() => setVipOpen(true)}
+                      className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full font-bold uppercase hover:bg-primary/30 transition-colors">
+                      Claim
+                    </button>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
         </div>
-        
+
         <div className="md:col-span-2">
           <Card className="bg-card border-border h-full">
-            <CardHeader>
-              <CardTitle className="font-display uppercase tracking-widest text-lg">Transaction History</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="font-display uppercase tracking-widest text-lg">Transaction History</CardTitle></CardHeader>
             <CardContent>
               {!transactions?.length ? (
                 <div className="text-center py-12 text-muted-foreground font-mono text-sm border border-dashed border-border rounded-lg bg-secondary/20">
@@ -253,8 +405,7 @@ export default function Profile() {
                           {tx.type === 'deposit' || tx.type === 'bet_win' ? '+' : '-'}{formatCurrency(tx.amount)}
                         </span>
                         <div className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
-                          {getStatusIcon(tx.status)}
-                          <span className="uppercase">{statusLabel(tx.status)}</span>
+                          {getStatusIcon(tx.status)}<span className="uppercase">{statusLabel(tx.status)}</span>
                         </div>
                       </div>
                     </div>
@@ -266,7 +417,7 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* ── Referral Section ─────────────────────────────────────────────── */}
+      {/* Referral Section */}
       {refData && (
         <Card className="bg-card border-border">
           <CardHeader className="pb-3">
@@ -314,7 +465,7 @@ export default function Profile() {
         </Card>
       )}
 
-            {(user.role === "owner" || user.role === "admin") && (
+      {(user.role === "owner" || user.role === "admin") && (
         <Card className="bg-card border-border border-yellow-500/30 shadow-[0_0_32px_rgba(255,215,0,0.08)]">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2">
@@ -347,6 +498,8 @@ export default function Profile() {
           </CardContent>
         </Card>
       )}
+
+      <VipModal open={vipOpen} onClose={() => setVipOpen(false)} />
     </div>
   );
 }
