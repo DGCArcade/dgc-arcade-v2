@@ -12,7 +12,85 @@ import { Keno } from "@/components/games/keno";
 import { DiceGame } from "@/components/games/dice-game";
 import { formatCurrency } from "@/lib/format";
 import { Card } from "@/components/ui/card";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Trophy, Timer } from "lucide-react";
+import { useEffect, useState } from "react";
+
+interface TournamentInfo {
+  tournament: { id: number; name: string; description: string | null; prize: string; endAt: string };
+  rank: number | null;
+  totalPlayers: number;
+  userScore: string | null;
+}
+
+function TournamentBanner() {
+  const [info, setInfo] = useState<TournamentInfo | null>(null);
+  const [timeLeft, setTimeLeft] = useState("");
+
+  useEffect(() => {
+    const token = localStorage.getItem("dgc_token");
+    fetch("/api/users/tournaments/active", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.tournament) setInfo(d); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!info?.tournament?.endAt) return;
+    function tick() {
+      const diff = new Date(info!.tournament.endAt).getTime() - Date.now();
+      if (diff <= 0) { setTimeLeft("Ended"); return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setTimeLeft(`${h}h ${m}m ${s}s`);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [info]);
+
+  if (!info) return null;
+
+  const { tournament, rank, totalPlayers, userScore } = info;
+
+  return (
+    <div className="rounded-xl border border-yellow-500/30 bg-gradient-to-r from-yellow-500/10 via-amber-500/5 to-transparent p-4 flex flex-wrap items-center gap-4">
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center shrink-0">
+          <Trophy className="w-5 h-5 text-yellow-400" />
+        </div>
+        <div className="min-w-0">
+          <p className="font-display font-black uppercase tracking-widest text-yellow-400 text-sm leading-tight truncate">{tournament.name}</p>
+          <p className="text-xs text-muted-foreground">Prize: <span className="text-yellow-300 font-bold font-mono">{formatCurrency(parseFloat(tournament.prize))}</span></p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-6 text-xs">
+        {rank !== null && (
+          <div className="text-center">
+            <p className="text-muted-foreground uppercase tracking-wider">Your Rank</p>
+            <p className="font-black text-xl text-yellow-400">#{rank}</p>
+            <p className="text-muted-foreground">of {totalPlayers}</p>
+          </div>
+        )}
+        {userScore && (
+          <div className="text-center">
+            <p className="text-muted-foreground uppercase tracking-wider">Wagered</p>
+            <p className="font-bold text-foreground font-mono">{formatCurrency(parseFloat(userScore))}</p>
+          </div>
+        )}
+        <div className="text-center">
+          <div className="flex items-center gap-1 text-muted-foreground uppercase tracking-wider justify-center">
+            <Timer className="w-3 h-3" /> Ends in
+          </div>
+          <p className="font-mono font-bold text-amber-400">{timeLeft}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function GamePage() {
   const params = useParams();
@@ -71,10 +149,13 @@ export default function GamePage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <Link href="/games" className="inline-flex items-center text-sm font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
         <ChevronLeft className="w-4 h-4 mr-1" />Back to Games
       </Link>
+
+      {/* Tournament Banner */}
+      <TournamentBanner />
 
       <div className="flex justify-between items-end border-b border-border/50 pb-6">
         <div>
