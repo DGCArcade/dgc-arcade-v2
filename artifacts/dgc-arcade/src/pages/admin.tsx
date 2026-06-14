@@ -484,9 +484,9 @@ export default function AdminDashboard() {
     try {
       await adminFetch(`/users/${u.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ role: u.role === "admin" ? "player" : "admin" }),
+        body: JSON.stringify({ role: u.role === "admin" ? "creator" : u.role === "creator" ? "player" : "admin" }),
       });
-      toast({ title: "Role updated", description: `${u.username} is now ${u.role === "admin" ? "player" : "admin"}` });
+      toast({ title: "Role updated", description: `${u.username} is now ${u.role === "admin" ? "creator" : u.role === "creator" ? "player" : "admin"}` });
       loadUsers();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -774,10 +774,10 @@ export default function AdminDashboard() {
         <div className="space-y-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             {[
-              { label: "Total Users", value: stats?.totalUsers ?? "—", icon: Users, color: "text-blue-400", bg: "from-blue-500/10 to-transparent", tab: "users" as TabKey },
-              { label: "Total Bets", value: stats?.totalBets ?? "—", icon: Activity, color: "text-purple-400", bg: "from-purple-500/10 to-transparent", tab: "users" as TabKey },
-              { label: "Total Wagered", value: stats ? formatCurrency(stats.totalWagered) : "—", icon: TrendingUp, color: "text-green-400", bg: "from-green-500/10 to-transparent", tab: "users" as TabKey },
-              { label: "Biggest Win", value: stats ? formatCurrency(stats.biggestWin) : "—", icon: TrendingUp, color: "text-primary", bg: "from-primary/10 to-transparent", tab: "users" as TabKey },
+              { label: "Total Users", value: stats?.totalUsers ?? "—", icon: Users, color: "text-blue-400", bg: "from-blue-500/10 to-transparent", tab: "users" as TabKey, detail: "Total registered accounts on the platform." },
+              { label: "Total Bets", value: stats?.totalBets ?? "—", icon: Activity, color: "text-purple-400", bg: "from-purple-500/10 to-transparent", tab: "users" as TabKey, detail: "Lifetime bets placed across all games. Click a user to see their full history." },
+              { label: "Total Wagered", value: stats ? formatCurrency(stats.totalWagered) : "—", icon: TrendingUp, color: "text-green-400", bg: "from-green-500/10 to-transparent", tab: "users" as TabKey, detail: "Total USD-equivalent wagered by all players. See Users tab for per-player wager totals." },
+              { label: "Biggest Win", value: stats ? formatCurrency(stats.biggestWin) : "—", icon: TrendingUp, color: "text-primary", bg: "from-primary/10 to-transparent", tab: "users" as TabKey, detail: "Largest single payout ever recorded. Sort Users by 'Total Won' to see top winners." },
             ].map((s) => (
               <Card
                 key={s.label}
@@ -796,6 +796,9 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                     <p className={`font-black leading-none break-all ${String(s.value).length > 10 ? "text-xl" : "text-3xl"} ${s.color}`}>{String(s.value)}</p>
+                    {"detail" in s && s.detail && (
+                      <p className="text-xs text-muted-foreground mt-2 leading-relaxed opacity-70">{s.detail as string}</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
