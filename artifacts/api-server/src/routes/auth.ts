@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable } from "@workspace/db";
-import { eq, ilike, sql } from "drizzle-orm";
+import { db, usersTable, deviceHistoryTable } from "@workspace/db";
+import { eq, ilike, and } from "drizzle-orm";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { requireAuth, signToken } from "../middlewares/auth.js";
 import { logger } from "../lib/logger.js";
@@ -28,6 +28,25 @@ function formatUser(user: typeof usersTable.$inferSelect) {
     telegramUsername: user.telegramUsername ?? null,
     rakebackClaimed: parseFloat(user.rakebackClaimed ?? "0"),
   };
+}
+
+function parseUserAgent(ua: string): { deviceType: string; deviceBrowser: string; deviceOs: string } {
+  const isPhone = /iPhone|Android.*Mobile|IEMobile/i.test(ua);
+  const isTablet = /iPad|Android(?!.*Mobile)/i.test(ua);
+  const deviceType = isPhone ? "mobile" : isTablet ? "tablet" : "desktop";
+  const browser =
+    /Edg\/(\d+)/i.test(ua) ? "Edge" :
+    /OPR\/(\d+)/i.test(ua) ? "Opera" :
+    /Chrome\/(\d+)/i.test(ua) && !/Chromium/i.test(ua) ? "Chrome" :
+    /Firefox\/(\d+)/i.test(ua) ? "Firefox" :
+    /Safari\/(\d+)/i.test(ua) && !/Chrome/i.test(ua) ? "Safari" : "Unknown";
+  const os =
+    /Windows NT/i.test(ua) ? "Windows" :
+    /Mac OS X/i.test(ua) && !/iPhone|iPad/i.test(ua) ? "macOS" :
+    /Android/i.test(ua) ? "Android" :
+    /iPhone|iPad/i.test(ua) ? "iOS" :
+    /Linux/i.test(ua) ? "Linux" : "Unknown";
+  return { deviceType, deviceBrowser: browser, deviceOs: os };
 }
 
 // POST /api/auth/register
@@ -85,12 +104,63 @@ authRouter.post("/login", async (req, res) => {
     if (!valid) { res.status(401).json({ error: "Invalid username or password" }); return; }
     if (user.isBanned) { res.status(403).json({ error: "Your account has been suspended. Contact support." }); return; }
 
-    // Record last login time (fire-and-forget)
+    // ── Return the PREVIOUS lastLoginAt BEFORE overwriting it ──
+    // formatUser(user) captures user.lastLoginAt as it was in the DB (the previous session's login).
+    // We update it AFTER building the response, so the client sees "last time you logged in", not "right now".
+    const responseUser = formatUser(user);
+
+    // Update lastLoginAt to NOW (fire-and-forget)
     db.update(usersTable).set({ lastLoginAt: new Date() }).where(eq(usersTable.id, user.id))
       .catch((e) => logger.warn({ e }, "lastLoginAt update failed"));
 
+    // Record device history (fire-and-forget — never block the login response)
+    try {
+      const ua = req.headers["user-agent"] ?? "";
+      const clientIp = (req.ip ?? "").replace(/^::ffff:/, "").trim() || null;
+      const { deviceType, deviceBrowser, deviceOs } = parseUserAgent(ua);
+      const fingerprint = typeof req.headers["x-device-fingerprint"] === "string"
+        ? req.headers["x-device-fingerprint"] : null;
+
+      // Check if this fingerprint already has a record for this user
+      if (fingerprint) {
+        const [existing] = await db.select({ id: deviceHistoryTable.id, loginCount: deviceHistoryTable.loginCount })
+          .from(deviceHistoryTable)
+          .where(and(eq(deviceHistoryTable.userId, user.id), eq(deviceHistoryTable.fingerprint, fingerprint)))
+          .limit(1);
+
+        if (existing) {
+          db.update(deviceHistoryTable)
+            .set({ lastSeen: new Date(), loginCount: (existing.loginCount ?? 1) + 1, ip: clientIp })
+            .where(eq(deviceHistoryTable.id, existing.id))
+            .catch(() => {});
+        } else {
+          db.insert(deviceHistoryTable).values({
+            userId: user.id,
+            fingerprint,
+            deviceType,
+            deviceBrowser,
+            deviceOs,
+            deviceName: `${deviceOs} / ${deviceBrowser}`,
+            ip: clientIp,
+            loginCount: 1,
+          }).catch(() => {});
+        }
+      } else {
+        // No fingerprint — always insert (IP + UA record)
+        db.insert(deviceHistoryTable).values({
+          userId: user.id,
+          deviceType,
+          deviceBrowser,
+          deviceOs,
+          deviceName: `${deviceOs} / ${deviceBrowser}`,
+          ip: clientIp,
+          loginCount: 1,
+        }).catch(() => {});
+      }
+    } catch {}
+
     const token = signToken({ userId: user.id, username: user.username, role: user.role });
-    res.json({ user: { ...formatUser(user), lastLoginAt: new Date().toISOString() }, token });
+    res.json({ user: responseUser, token });
   } catch (err) { req.log.error({ err }, "Login error"); res.status(500).json({ error: "Internal server error" }); }
 });
 
