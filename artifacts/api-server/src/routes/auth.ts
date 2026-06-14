@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, ilike, sql } from "drizzle-orm";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { requireAuth, signToken } from "../middlewares/auth.js";
 import { logger } from "../lib/logger.js";
@@ -41,7 +41,7 @@ authRouter.post("/register", async (req, res) => {
     const existing = await db
       .select({ id: usersTable.id })
       .from(usersTable)
-      .where(eq(usersTable.username, username))
+      .where(ilike(usersTable.username, username))
       .limit(1);
 
     if (existing.length > 0) {
@@ -126,7 +126,7 @@ authRouter.post("/login", async (req, res) => {
     const [user] = await db
       .select()
       .from(usersTable)
-      .where(eq(usersTable.username, username))
+      .where(ilike(usersTable.username, username))
       .limit(1);
 
     if (!user) {
