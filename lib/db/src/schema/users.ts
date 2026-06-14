@@ -54,6 +54,11 @@ export const usersTable = pgTable("users", {
   // Cannot be withdrawn under any circumstances
   promoBalance: numeric("promo_balance", { precision: 18, scale: 8 }).notNull().default("0"),
 
+  // ── Vault system ───────────────────────────────────────────────
+  // Locked balance requiring account password to release
+  // Available to all users as a savings/security feature
+  vaultBalance: numeric("vault_balance", { precision: 18, scale: 8 }).notNull().default("0"),
+
   // Hard withdrawal gate — false for creator and tester accounts
   withdrawalsEnabled: boolean("withdrawals_enabled").notNull().default(true),
 
