@@ -942,10 +942,7 @@ adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
     return;
   }
   try {
-    // Plisio's /currencies/{cid} balance endpoint currently only returns valid
-    // data for BTC — other currencies return server errors on Plisio's side.
-    // Deposits/withdrawals in other currencies (via /invoices) are unaffected.
-    const currencies = ["BTC"];
+    const currencies = ["BTC", "ETH", "LTC", "DOGE", "SOL", "BCH", "TRX", "XMR", "DASH", "TON"];
     const balances: Record<string, { balance: string; allowed: number }> = {};
     await Promise.all(
       currencies.map(async (cur) => {
@@ -962,6 +959,26 @@ adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
     res.json({ balances });
   } catch (err) {
     req.log.error({ err }, "Bank balances error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/admin/transactions/:id/decline-deposit — mark pending deposit as declined, no credit
+adminRouter.post("/transactions/:id/decline-deposit", requireAdmin, async (req, res) => {
+  const txId = parseInt(req.params.id, 10);
+  if (isNaN(txId)) { res.status(400).json({ error: "Invalid transaction ID" }); return; }
+  try {
+    const [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.id, txId)).limit(1);
+    if (!tx) { res.status(404).json({ error: "Transaction not found" }); return; }
+    if (tx.type !== "deposit" || tx.status !== "pending") {
+      res.status(400).json({ error: "Only pending deposits can be declined" });
+      return;
+    }
+    await db.update(transactionsTable).set({ status: "declined" }).where(eq(transactionsTable.id, txId));
+    req.log.info({ txId, userId: tx.userId }, "Admin declined deposit without credit");
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Decline deposit error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -1170,6 +1187,54 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
         if (balance > 0 && amount / balance > 0.9) {
           flags.push("full_balance_withdrawal");
           riskScore += 15;
+        }
+
+
+        // ── Rule 7: Same withdrawal address used by multiple users ───
+        // Classic multi-account fraud / coordinated cash-out ring
+        if (tx.address) {
+          const [{ addrCount }] = await db
+            .select({ addrCount: sql<number>`count(distinct user_id)` })
+            .from(transactionsTable)
+            .where(and(
+              eq(transactionsTable.address, tx.address),
+              eq(transactionsTable.type, "withdrawal"),
+            ));
+          if (Number(addrCount) > 1) {
+            flags.push("shared_withdrawal_address");
+            riskScore += Number(addrCount) > 3 ? 50 : 35;
+          }
+        }
+
+        // ── Rule 8: Withdrawal within 30 min of first/latest deposit ──
+        // Deposit-then-immediately-withdraw bonus-hunt pattern
+        const [latestDeposit] = await db
+          .select({ createdAt: transactionsTable.createdAt })
+          .from(transactionsTable)
+          .where(and(
+            eq(transactionsTable.userId, tx.userId),
+            eq(transactionsTable.type, "deposit"),
+            eq(transactionsTable.status, "completed"),
+          ))
+          .orderBy(desc(transactionsTable.createdAt))
+          .limit(1);
+        if (latestDeposit) {
+          const minsAfterDeposit = (new Date(tx.createdAt).getTime() - new Date(latestDeposit.createdAt).getTime()) / 60000;
+          if (minsAfterDeposit < 30 && minsAfterDeposit >= 0) {
+            flags.push("immediate_withdrawal_after_deposit");
+            riskScore += minsAfterDeposit < 5 ? 40 : 25;
+          }
+        }
+
+        // ── Rule 9: Never played — deposit straight to withdrawal ─────
+        // No bets ever placed; deposited and trying to withdraw immediately
+        const [{ betCount }] = await db
+          .select({ betCount: sql<number>`count(*)` })
+          .from(betsTable)
+          .where(eq(betsTable.userId, tx.userId));
+        if (Number(betCount) === 0) {
+          flags.push("no_play_withdrawal");
+          riskScore += 30;
         }
 
         // Apply AI sensitivity multiplier, then cap at 99
