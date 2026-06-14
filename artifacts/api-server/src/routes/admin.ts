@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable } from "@workspace/db";
-import { eq, desc, ilike, and, sql, count } from "drizzle-orm";
+import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable, creatorMessagesTable, creatorMessageReadsTable } from "@workspace/db";
+import { eq, desc, ilike, and, sql, count, or, gt, ne } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
 
@@ -1874,6 +1874,204 @@ adminRouter.delete("/chat/:id", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Admin chat delete error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── Messaging (DMs + Broadcasts to Creators/Admins) ─────────────────────────
+
+// GET /api/admin/chat/recipients  — list all admins + creators for DM selection
+adminRouter.get("/chat/recipients", async (req, res) => {
+  try {
+    const admins = await db
+      .select({ id: usersTable.id, username: usersTable.username, role: usersTable.role })
+      .from(usersTable)
+      .where(or(eq(usersTable.role, "admin"), eq(usersTable.role, "owner")));
+
+    const creators = await db
+      .select({ id: usersTable.id, username: usersTable.username, accountType: usersTable.accountType })
+      .from(usersTable)
+      .where(eq(usersTable.accountType, "creator"));
+
+    const myId = req.user!.userId;
+    res.json({
+      admins: admins.filter(a => a.id !== myId).map(a => ({ id: a.id, username: a.username, role: a.role })),
+      creators: creators.map(c => ({ id: c.id, username: c.username, accountType: c.accountType })),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Admin chat recipients error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/admin/messages  — send a DM or broadcast
+adminRouter.post("/messages", async (req, res) => {
+  const { recipientType, recipientId, message } = req.body as {
+    recipientType?: string;
+    recipientId?: number;
+    message?: string;
+  };
+
+  const validTypes = ["direct", "broadcast_all", "broadcast_admins", "broadcast_creators"];
+  if (!recipientType || !validTypes.includes(recipientType)) {
+    res.status(400).json({ error: "recipientType must be one of: " + validTypes.join(", ") });
+    return;
+  }
+  if (recipientType === "direct" && !recipientId) {
+    res.status(400).json({ error: "recipientId required for direct messages" });
+    return;
+  }
+  if (!message?.trim() || message.trim().length > 2000) {
+    res.status(400).json({ error: "Message required (max 2000 chars)" });
+    return;
+  }
+
+  try {
+    const [caller] = await db
+      .select({ username: usersTable.username, role: usersTable.role })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.user!.userId))
+      .limit(1);
+
+    const [msg] = await db
+      .insert(creatorMessagesTable)
+      .values({
+        senderId: req.user!.userId,
+        senderUsername: caller?.username ?? "Admin",
+        senderRole: caller?.role ?? "admin",
+        recipientType,
+        recipientId: recipientType === "direct" ? recipientId : null,
+        message: message.trim(),
+      })
+      .returning();
+
+    res.json({ message: msg });
+  } catch (err) {
+    req.log.error({ err }, "Admin messages post error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/admin/messages?recipientType=direct&recipientId=x  — fetch DM thread or broadcast history
+adminRouter.get("/messages", async (req, res) => {
+  const { recipientType, recipientId } = req.query as { recipientType?: string; recipientId?: string };
+  const myId = req.user!.userId;
+
+  try {
+    let msgs: any[];
+
+    if (recipientType === "direct" && recipientId) {
+      const targetId = parseInt(recipientId, 10);
+      msgs = await db
+        .select()
+        .from(creatorMessagesTable)
+        .where(
+          and(
+            eq(creatorMessagesTable.recipientType, "direct"),
+            or(
+              and(eq(creatorMessagesTable.senderId, myId), eq(creatorMessagesTable.recipientId, targetId)),
+              and(eq(creatorMessagesTable.senderId, targetId), eq(creatorMessagesTable.recipientId, myId)),
+            ),
+          ),
+        )
+        .orderBy(desc(creatorMessagesTable.createdAt))
+        .limit(100);
+    } else if (recipientType) {
+      msgs = await db
+        .select()
+        .from(creatorMessagesTable)
+        .where(eq(creatorMessagesTable.recipientType, recipientType))
+        .orderBy(desc(creatorMessagesTable.createdAt))
+        .limit(100);
+    } else {
+      msgs = await db
+        .select()
+        .from(creatorMessagesTable)
+        .orderBy(desc(creatorMessagesTable.createdAt))
+        .limit(100);
+    }
+
+    res.json({ messages: msgs.reverse() });
+  } catch (err) {
+    req.log.error({ err }, "Admin messages get error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/admin/chat/unread  — unread count: group chat + DMs for this admin
+adminRouter.get("/chat/unread", async (req, res) => {
+  const lastGroupId = parseInt(String(req.query.lastGroupId ?? "0"), 10) || 0;
+  const myId = req.user!.userId;
+
+  try {
+    const [{ groupUnread }] = await db
+      .select({ groupUnread: count() })
+      .from(adminMessagesTable)
+      .where(
+        and(
+          gt(adminMessagesTable.id, lastGroupId),
+          ne(adminMessagesTable.userId, myId),
+        ),
+      );
+
+    const dmMessages = await db
+      .select({ id: creatorMessagesTable.id })
+      .from(creatorMessagesTable)
+      .where(
+        and(
+          eq(creatorMessagesTable.recipientType, "direct"),
+          eq(creatorMessagesTable.recipientId, myId),
+        ),
+      );
+
+    const dmIds = dmMessages.map(m => m.id);
+    let dmUnread = 0;
+    if (dmIds.length > 0) {
+      const reads = await db
+        .select({ messageId: creatorMessageReadsTable.messageId })
+        .from(creatorMessageReadsTable)
+        .where(eq(creatorMessageReadsTable.userId, myId));
+      const readSet = new Set(reads.map(r => r.messageId));
+      dmUnread = dmIds.filter(id => !readSet.has(id)).length;
+    }
+
+    res.json({ groupUnread, dmUnread, total: groupUnread + dmUnread });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/admin/messages/read  — mark DMs as read
+adminRouter.post("/messages/read", async (req, res) => {
+  const { messageIds } = req.body as { messageIds?: number[] };
+  if (!Array.isArray(messageIds) || messageIds.length === 0) {
+    res.status(400).json({ error: "messageIds array required" });
+    return;
+  }
+  try {
+    for (const messageId of messageIds) {
+      await db.insert(creatorMessageReadsTable)
+        .values({ messageId, userId: req.user!.userId })
+        .onConflictDoNothing();
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// DELETE /api/admin/messages/:id  — owner only
+adminRouter.delete("/messages/:id", async (req, res) => {
+  if (!(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Owner only" });
+    return;
+  }
+  const msgId = parseInt(req.params.id, 10);
+  if (isNaN(msgId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  try {
+    await db.delete(creatorMessagesTable).where(eq(creatorMessagesTable.id, msgId));
+    res.json({ success: true });
+  } catch (err) {
     res.status(500).json({ error: "Internal server error" });
   }
 });
