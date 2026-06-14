@@ -39,6 +39,10 @@ import {
   Activity,
   Clock,
   MapPin,
+  Trophy,
+  Plus,
+  Calendar,
+  Award,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -152,7 +156,7 @@ interface UserDetail {
   transactions: { id: number; type: string; amount: number; currency: string; status: string; address: string | null; createdAt: string }[];
 }
 
-type TabKey = "overview" | "users" | "transactions" | "bank";
+type TabKey = "overview" | "users" | "transactions" | "bank" | "tournaments";
 
 export default function AdminDashboard() {
   const { user, isLoading } = useAuth();
@@ -203,6 +207,14 @@ export default function AdminDashboard() {
   });
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
+  // ── Tournament state ──
+  const [tournaments, setTournaments] = useState<any[]>([]);
+  const [tourneyLoading, setTourneyLoading] = useState(false);
+  const [createTourneyOpen, setCreateTourneyOpen] = useState(false);
+  const [editTourney, setEditTourney] = useState<any | null>(null);
+  const [newTourney, setNewTourney] = useState({ name: "", description: "", prize: "0", startAt: "", endAt: "" });
+  const [tourneyLeaderboard, setTourneyLeaderboard] = useState<{ tournament: any; leaderboard: any[] } | null>(null);
+  const [awardingTourney, setAwardingTourney] = useState<{ tournamentId: number; userId: number; username: string; amount: string } | null>(null);
   // ── DGC Bank PIN session (gates the bank tab for owner and regular admins) ──
   const [bankUnlocked, setBankUnlocked] = useState<boolean>(() => bankSessionValid());
   const [bankPinInput, setBankPinInput] = useState("");
@@ -272,7 +284,20 @@ export default function AdminDashboard() {
 
 
 
-  const loadFraudAlerts = useCallback(async () => {
+
+  const loadTournaments = useCallback(async () => {
+    setTourneyLoading(true);
+    try {
+      const data = await adminFetch("/tournaments");
+      setTournaments(data);
+    } catch (err: any) {
+      toast({ title: "Tournaments error", description: err.message, variant: "destructive" });
+    } finally {
+      setTourneyLoading(false);
+    }
+  }, [toast]);
+
+    const loadFraudAlerts = useCallback(async () => {
     setFraudLoading(true);
     try {
       const res = await adminFetch("/bank/fraud-alerts");
@@ -399,6 +424,10 @@ export default function AdminDashboard() {
       if (isOwner) loadBankSettings();
     }
   }, [activeTab, isAdmin, bankUnlocked, isOwner, loadBank, loadFraudAlerts, loadNeedsReview, loadBankSettings]);
+
+  useEffect(() => {
+    if (activeTab === "tournaments" && isAdmin) loadTournaments();
+  }, [activeTab, isAdmin, loadTournaments]);
 
   // Auto-refresh bank every 30 seconds while bank tab is active + unlocked
   useEffect(() => {
@@ -678,6 +707,7 @@ export default function AdminDashboard() {
         { key: "overview", label: "Overview", icon: Activity },
         { key: "users", label: "Users", icon: Users },
         { key: "bank", label: "DGC Bank", icon: DollarSign },
+        { key: "tournaments", label: "Tournaments", icon: Trophy },
       ]
     : [
         { key: "overview", label: "Overview", icon: Activity },
@@ -704,6 +734,7 @@ export default function AdminDashboard() {
             if (activeTab === "users") loadUsers();
             if (activeTab === "transactions") loadTransactions();
             if (activeTab === "bank") { loadBank(); loadFraudAlerts(); loadNeedsReview(); }
+            if (activeTab === "tournaments") loadTournaments();
           }}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
@@ -1876,6 +1907,256 @@ export default function AdminDashboard() {
             </div>
           )}
 
+      {/* ── Tournaments Tab ── */}
+      {activeTab === "tournaments" && isOwner && (
+        <div className="space-y-6">
+          {/* Header row */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-display font-black uppercase tracking-widest text-xl text-white flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-yellow-400" /> Tournaments
+              </h2>
+              <p className="text-muted-foreground text-sm mt-0.5">Create and manage competitive events with prize pools</p>
+            </div>
+            <Button
+              className="gap-2 bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
+              onClick={() => { setNewTourney({ name: "", description: "", prize: "0", startAt: "", endAt: "" }); setCreateTourneyOpen(true); }}
+            >
+              <Plus className="w-4 h-4" /> New Tournament
+            </Button>
+          </div>
+
+          {/* Tournament list */}
+          {tourneyLoading ? (
+            <div className="space-y-3">
+              {[1,2,3].map(i => <div key={i} className="h-24 bg-secondary/40 rounded-xl animate-pulse" />)}
+            </div>
+          ) : tournaments.length === 0 ? (
+            <Card className="border-dashed border-border/40">
+              <CardContent className="py-16 text-center">
+                <Trophy className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                <p className="text-muted-foreground font-medium">No tournaments yet</p>
+                <p className="text-muted-foreground/60 text-sm mt-1">Create your first tournament to get started</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {tournaments.map((t: any) => {
+                const statusColor = t.status === "active" ? "text-green-400 bg-green-500/10 border-green-500/30" : t.status === "upcoming" ? "text-blue-400 bg-blue-500/10 border-blue-500/30" : "text-muted-foreground bg-secondary/50 border-border/40";
+                return (
+                  <Card key={t.id} className="border-border/60 overflow-hidden">
+                    <CardContent className="p-5">
+                      <div className="flex items-start justify-between gap-4 flex-wrap">
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${statusColor}`}>
+                              {t.status === "active" ? "🟢 Live" : t.status === "upcoming" ? "🔵 Upcoming" : "⚫ Ended"}
+                            </span>
+                            <h3 className="font-bold text-white text-lg leading-tight">{t.name}</h3>
+                          </div>
+                          {t.description && <p className="text-muted-foreground text-sm">{t.description}</p>}
+                          <div className="flex flex-wrap gap-4 text-sm">
+                            <div className="flex items-center gap-1.5">
+                              <Award className="w-4 h-4 text-yellow-400" />
+                              <span className="font-mono font-bold text-yellow-300">{formatCurrency(t.prize)} prize pool</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Users className="w-4 h-4 text-blue-400" />
+                              <span className="text-muted-foreground">{t.participants} participants</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="w-4 h-4 text-muted-foreground" />
+                              <span className="text-muted-foreground text-xs">
+                                {new Date(t.startAt).toLocaleDateString()} — {new Date(t.endAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex flex-wrap gap-2 shrink-0">
+                          {/* View Leaderboard */}
+                          <Button size="sm" variant="outline" className="h-8 text-xs gap-1"
+                            disabled={loadingAction === `lb-${t.id}`}
+                            onClick={async () => {
+                              setLoadingAction(`lb-${t.id}`);
+                              try {
+                                const data = await adminFetch(`/tournaments/${t.id}/leaderboard`);
+                                setTourneyLeaderboard(data);
+                              } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+                              finally { setLoadingAction(null); }
+                            }}>
+                            <Trophy className="w-3 h-3" /> Leaderboard
+                          </Button>
+
+                          {/* Edit */}
+                          {t.status !== "ended" && (
+                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1"
+                              onClick={() => {
+                                setEditTourney(t);
+                                setNewTourney({
+                                  name: t.name, description: t.description ?? "",
+                                  prize: String(t.prize),
+                                  startAt: t.startAt.slice(0, 16),
+                                  endAt: t.endAt.slice(0, 16),
+                                });
+                                setCreateTourneyOpen(true);
+                              }}>
+                              Edit
+                            </Button>
+                          )}
+
+                          {/* End Now */}
+                          {t.status === "active" && (
+                            <Button size="sm" variant="destructive" className="h-8 text-xs gap-1"
+                              disabled={loadingAction === `end-${t.id}`}
+                              onClick={async () => {
+                                setLoadingAction(`end-${t.id}`);
+                                try {
+                                  const res = await adminFetch(`/tournaments/${t.id}/end`, { method: "POST" });
+                                  toast({ title: "Tournament ended", description: res.winner ? `Winner: ${res.winner.username}` : "No participants yet" });
+                                  if (res.winner) {
+                                    setAwardingTourney({ tournamentId: t.id, userId: res.winner.userId, username: res.winner.username, amount: String(t.prize) });
+                                  }
+                                  await loadTournaments();
+                                } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+                                finally { setLoadingAction(null); }
+                              }}>
+                              End Now
+                            </Button>
+                          )}
+
+                          {/* Delete */}
+                          <Button size="sm" variant="ghost" className="h-8 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            disabled={loadingAction === `del-t-${t.id}`}
+                            onClick={async () => {
+                              if (!confirm(`Delete tournament "${t.name}"? This cannot be undone.`)) return;
+                              setLoadingAction(`del-t-${t.id}`);
+                              try {
+                                await adminFetch(`/tournaments/${t.id}`, { method: "DELETE" });
+                                toast({ title: "Tournament deleted" });
+                                await loadTournaments();
+                              } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+                              finally { setLoadingAction(null); }
+                            }}>
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Leaderboard modal */}
+          {tourneyLeaderboard && (
+            <Dialog open={!!tourneyLeaderboard} onOpenChange={() => setTourneyLeaderboard(null)}>
+              <DialogContent className="bg-card border-border/60 max-w-lg max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Trophy className="w-4 h-4 text-yellow-400" />
+                    {tourneyLeaderboard.tournament.name} — Leaderboard
+                  </DialogTitle>
+                  <DialogDescription>
+                    Prize pool: {formatCurrency(tourneyLeaderboard.tournament.prize)} · Status: {tourneyLeaderboard.tournament.status}
+                  </DialogDescription>
+                </DialogHeader>
+                {tourneyLeaderboard.leaderboard.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No participants yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {tourneyLeaderboard.leaderboard.map((e: any) => (
+                      <div key={e.userId} className={`flex items-center justify-between p-3 rounded-lg ${e.rank === 1 ? "bg-yellow-500/10 border border-yellow-500/30" : "bg-secondary/40"}`}>
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono font-black text-lg w-8 text-center">
+                            {e.rank === 1 ? "🥇" : e.rank === 2 ? "🥈" : e.rank === 3 ? "🥉" : `#${e.rank}`}
+                          </span>
+                          <span className="font-bold text-white">{e.username}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-sm text-muted-foreground">{formatCurrency(e.score)} wagered</span>
+                          {e.rank === 1 && tourneyLeaderboard.tournament.status === "ended" && (
+                            <Button size="sm" className="h-7 text-xs gap-1 bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
+                              disabled={loadingAction === `award-${e.userId}`}
+                              onClick={() => setAwardingTourney({ tournamentId: tourneyLeaderboard.tournament.id, userId: e.userId, username: e.username, amount: String(tourneyLeaderboard.tournament.prize) })}>
+                              <Award className="w-3 h-3" /> Award Prize
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
+          )}
+
+          {/* Award prize confirm modal */}
+          {awardingTourney && (
+            <Dialog open={!!awardingTourney} onOpenChange={() => setAwardingTourney(null)}>
+              <DialogContent className="bg-card border-border/60 max-w-sm">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-yellow-400">
+                    <Award className="w-5 h-5" /> Award Tournament Prize
+                  </DialogTitle>
+                  <DialogDescription>
+                    Credit the prize to the winner's balance. This action creates a transaction record.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 mt-2">
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Winner</span>
+                      <span className="font-bold text-white">@{awardingTourney.username}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Prize amount</span>
+                      <span className="font-mono font-bold text-yellow-300">{formatCurrency(parseFloat(awardingTourney.amount))}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Override Amount ($)</label>
+                    <Input
+                      type="number"
+                      value={awardingTourney.amount}
+                      onChange={e => setAwardingTourney(prev => prev ? { ...prev, amount: e.target.value } : null)}
+                      className="bg-secondary border-border/60"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-4">
+                  <Button variant="outline" className="flex-1" onClick={() => setAwardingTourney(null)}>Cancel</Button>
+                  <Button
+                    className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-black font-bold gap-1"
+                    disabled={loadingAction === `award-${awardingTourney.userId}`}
+                    onClick={async () => {
+                      if (!awardingTourney) return;
+                      const amt = parseFloat(awardingTourney.amount);
+                      if (isNaN(amt) || amt <= 0) { toast({ title: "Invalid amount", variant: "destructive" }); return; }
+                      setLoadingAction(`award-${awardingTourney.userId}`);
+                      try {
+                        const res = await adminFetch(`/tournaments/${awardingTourney.tournamentId}/award`, {
+                          method: "POST",
+                          body: JSON.stringify({ userId: awardingTourney.userId, amount: amt }),
+                        });
+                        toast({ title: "Prize awarded!", description: `${formatCurrency(res.amount)} credited to @${res.username}` });
+                        setAwardingTourney(null);
+                        setTourneyLeaderboard(null);
+                        await loadTournaments();
+                      } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+                      finally { setLoadingAction(null); }
+                    }}>
+                    <Award className="w-4 h-4" /> Confirm & Award
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
+      )}
+
       {/* ── User Detail Dialog ── */}
       <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>
         <DialogContent className="bg-card border-border/60 max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -2021,6 +2302,73 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Create / Edit Tournament Dialog ── */}
+      <Dialog open={createTourneyOpen} onOpenChange={(open) => { setCreateTourneyOpen(open); if (!open) setEditTourney(null); }}>
+        <DialogContent className="bg-card border-border/60 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-yellow-400" />
+              {editTourney ? "Edit Tournament" : "Create Tournament"}
+            </DialogTitle>
+            <DialogDescription>
+              {editTourney ? "Update the tournament details below." : "Set up a new competitive event with a prize pool."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Tournament Name</label>
+              <Input placeholder="e.g. Weekend Warriors" value={newTourney.name} onChange={e => setNewTourney(p => ({ ...p, name: e.target.value }))} className="bg-secondary border-border/60" />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Description (optional)</label>
+              <Input placeholder="Brief description shown to players" value={newTourney.description} onChange={e => setNewTourney(p => ({ ...p, description: e.target.value }))} className="bg-secondary border-border/60" />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Prize Pool ($)</label>
+              <Input type="number" min="0" step="0.01" placeholder="0.00" value={newTourney.prize} onChange={e => setNewTourney(p => ({ ...p, prize: e.target.value }))} className="bg-secondary border-border/60" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Start Date & Time</label>
+                <Input type="datetime-local" value={newTourney.startAt} onChange={e => setNewTourney(p => ({ ...p, startAt: e.target.value }))} className="bg-secondary border-border/60 text-xs" />
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">End Date & Time</label>
+                <Input type="datetime-local" value={newTourney.endAt} onChange={e => setNewTourney(p => ({ ...p, endAt: e.target.value }))} className="bg-secondary border-border/60 text-xs" />
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-3 mt-4">
+            <Button variant="outline" className="flex-1" onClick={() => { setCreateTourneyOpen(false); setEditTourney(null); }}>Cancel</Button>
+            <Button
+              className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-black font-bold gap-1"
+              disabled={loadingAction === "save-tourney"}
+              onClick={async () => {
+                if (!newTourney.name.trim()) { toast({ title: "Name required", variant: "destructive" }); return; }
+                if (!newTourney.startAt || !newTourney.endAt) { toast({ title: "Start and end dates required", variant: "destructive" }); return; }
+                if (new Date(newTourney.endAt) <= new Date(newTourney.startAt)) { toast({ title: "End must be after start", variant: "destructive" }); return; }
+                setLoadingAction("save-tourney");
+                try {
+                  const body = { name: newTourney.name.trim(), description: newTourney.description, prize: parseFloat(newTourney.prize) || 0, startAt: new Date(newTourney.startAt).toISOString(), endAt: new Date(newTourney.endAt).toISOString() };
+                  if (editTourney) {
+                    await adminFetch(`/tournaments/${editTourney.id}`, { method: "PATCH", body: JSON.stringify(body) });
+                    toast({ title: "Tournament updated" });
+                  } else {
+                    await adminFetch("/tournaments", { method: "POST", body: JSON.stringify(body) });
+                    toast({ title: "Tournament created!" });
+                  }
+                  setCreateTourneyOpen(false);
+                  setEditTourney(null);
+                  await loadTournaments();
+                } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+                finally { setLoadingAction(null); }
+              }}>
+              {loadingAction === "save-tourney" ? "Saving…" : editTourney ? "Save Changes" : "Create Tournament"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
