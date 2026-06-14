@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DepositForm } from "@/components/profile/deposit-form";
 import { WithdrawForm } from "@/components/profile/withdraw-form";
 import { useLocation } from "wouter";
-import { ArrowDownLeft, ArrowUpRight, Clock, CheckCircle2, XCircle, Landmark, RefreshCw, Users, Copy, CheckCheck, TrendingUp, Shield, Save, MessageCircle, Zap, Lock } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Clock, CheckCircle2, XCircle, Landmark, RefreshCw, Users, Copy, CheckCheck, TrendingUp, Shield, Save, MessageCircle, Zap, Lock, Monitor, Smartphone, Tablet, Globe, LogOut, X, ChevronRight } from "lucide-react";
 import { CoinIcon } from "@/components/wallet/coin-icon";
 import { useState, useEffect, useCallback } from "react";
 import { VipModal, getVipProgress } from "@/components/vip/vip-modal";
@@ -42,6 +42,15 @@ export default function Profile() {
   const [vaultPassword, setVaultPassword] = useState("");
   const [vaultLoading, setVaultLoading] = useState(false);
   const [vaultMsg, setVaultMsg] = useState<{ok: boolean; text: string} | null>(null);
+  // ── Device history modal ──
+  const [deviceHistoryOpen, setDeviceHistoryOpen] = useState(false);
+  const [deviceHistory, setDeviceHistory] = useState<any[]>([]);
+  const [deviceHistoryLoading, setDeviceHistoryLoading] = useState(false);
+  const [logoutAllLoading, setLogoutAllLoading] = useState(false);
+  // ── View All Transactions modal ──
+  const [txAllOpen, setTxAllOpen] = useState(false);
+  const [txAll, setTxAll] = useState<any[]>([]);
+  const [txAllLoading, setTxAllLoading] = useState(false);
 
   useEffect(() => { if (user) setTelegramInput((user as any).telegramUsername ?? ""); }, [user?.username]);
 
@@ -155,6 +164,44 @@ export default function Profile() {
     setRefCopied(true); setTimeout(() => setRefCopied(false), 2000);
   };
 
+  const openDeviceHistory = async () => {
+    setDeviceHistoryOpen(true);
+    if (deviceHistory.length > 0) return;
+    setDeviceHistoryLoading(true);
+    try {
+      const token = localStorage.getItem("dgc_token");
+      const res = await fetch("/api/users/me/device-history", { headers: { Authorization: `Bearer ${token}` } });
+      const d = await res.json();
+      setDeviceHistory(d.sessions ?? []);
+    } catch { setDeviceHistory([]); }
+    finally { setDeviceHistoryLoading(false); }
+  };
+
+  const handleLogoutAll = async () => {
+    if (!confirm("Log out of all devices? You will need to sign back in.")) return;
+    setLogoutAllLoading(true);
+    try {
+      const token = localStorage.getItem("dgc_token");
+      await fetch("/api/users/me/logout-all-devices", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      localStorage.removeItem("dgc_token");
+      setDeviceHistoryOpen(false);
+      setLocation("/");
+    } catch { setLogoutAllLoading(false); }
+  };
+
+  const openAllTransactions = async () => {
+    setTxAllOpen(true);
+    if (txAll.length > 0) return;
+    setTxAllLoading(true);
+    try {
+      const token = localStorage.getItem("dgc_token");
+      const res = await fetch("/api/transactions?limit=200", { headers: { Authorization: `Bearer ${token}` } });
+      const d = await res.json();
+      setTxAll(Array.isArray(d) ? d : (d.transactions ?? []));
+    } catch { setTxAll([]); }
+    finally { setTxAllLoading(false); }
+  };
+
   if (isLoading || !user) return <div className="animate-pulse bg-secondary h-96 rounded-xl border border-border" />;
 
   const wagered = (user as any)?.totalWageredAmount ?? 0;
@@ -181,8 +228,121 @@ export default function Profile() {
     }
   };
 
+  const TxRow = ({ tx }: { tx: any }) => (
+    <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-secondary/30 hover:bg-secondary/60 transition-colors">
+      <div className="flex items-center gap-3">
+        <div className={`p-2 rounded-full ${tx.type === 'deposit' || tx.type === 'bet_win' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
+          {tx.type === 'deposit' || tx.type === 'bet_win' ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+        </div>
+        <div>
+          <p className="font-bold text-sm uppercase">{tx.type.replace('_', ' ')}</p>
+          <p className="text-xs text-muted-foreground font-mono">{new Date(tx.createdAt).toLocaleString()}</p>
+        </div>
+      </div>
+      <div className="flex flex-col items-end gap-1">
+        <span className={`font-mono font-bold ${tx.type === 'deposit' || tx.type === 'bet_win' ? 'text-green-500' : 'text-foreground'}`}>
+          {tx.type === 'deposit' || tx.type === 'bet_win' ? '+' : '-'}{formatCurrency(tx.amount)}
+        </span>
+        <div className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
+          {getStatusIcon(tx.status)}<span className="uppercase">{statusLabel(tx.status)}</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  const DeviceIcon = ({ type }: { type?: string }) => {
+    if (type === "mobile") return <Smartphone className="w-4 h-4 text-muted-foreground" />;
+    if (type === "tablet") return <Tablet className="w-4 h-4 text-muted-foreground" />;
+    return <Monitor className="w-4 h-4 text-muted-foreground" />;
+  };
+
   return (
     <div className="space-y-8 max-w-5xl mx-auto w-full">
+      {/* ── Device History Modal ── */}
+      {deviceHistoryOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setDeviceHistoryOpen(false)}>
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <div>
+                <h2 className="font-display font-black uppercase tracking-widest text-lg">Login Sessions</h2>
+                <p className="text-xs text-muted-foreground font-mono mt-0.5">Devices that have accessed your account</p>
+              </div>
+              <button onClick={() => setDeviceHistoryOpen(false)} className="p-2 rounded-lg hover:bg-secondary transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {deviceHistoryLoading ? (
+                <div className="space-y-3">
+                  {[1,2,3].map(i => <div key={i} className="h-16 bg-secondary/50 rounded-lg animate-pulse" />)}
+                </div>
+              ) : deviceHistory.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground font-mono text-sm">No session history yet.</div>
+              ) : deviceHistory.map((s: any) => (
+                <div key={s.id} className="flex items-start gap-3 p-3 rounded-lg border border-border/50 bg-secondary/30">
+                  <div className="p-2 rounded-lg bg-secondary mt-0.5">
+                    <DeviceIcon type={s.deviceType} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-sm">{s.deviceName ?? `${s.deviceOs ?? "Unknown OS"} · ${s.deviceBrowser ?? "Unknown Browser"}`}</div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                      {s.ip && <span className="text-xs text-muted-foreground font-mono">{s.ip}</span>}
+                      {(s.country || s.city) && (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Globe className="w-3 h-3" />{[s.city, s.country].filter(Boolean).join(", ")}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-3 mt-1">
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        Last: {new Date(s.lastSeen).toLocaleDateString()}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {s.loginCount ?? 1} login{(s.loginCount ?? 1) !== 1 ? "s" : ""}
+                      </span>
+                      {s.vpnDetected && <span className="text-[10px] text-amber-400 font-mono font-bold">VPN</span>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="p-4 border-t border-border">
+              <button
+                onClick={handleLogoutAll}
+                disabled={logoutAllLoading}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-destructive/50 text-destructive hover:bg-destructive/10 transition-colors font-bold text-sm uppercase tracking-wider disabled:opacity-50"
+              >
+                <LogOut className="w-4 h-4" />
+                {logoutAllLoading ? "Logging out…" : "Log Out of All Devices"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── View All Transactions Modal ── */}
+      {txAllOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setTxAllOpen(false)}>
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <h2 className="font-display font-black uppercase tracking-widest text-lg">Full Transaction History</h2>
+              <button onClick={() => setTxAllOpen(false)} className="p-2 rounded-lg hover:bg-secondary transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {txAllLoading ? (
+                <div className="space-y-2">
+                  {[...Array(8)].map((_,i) => <div key={i} className="h-14 bg-secondary/50 rounded-lg animate-pulse" />)}
+                </div>
+              ) : txAll.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground font-mono text-sm">No transactions found.</div>
+              ) : txAll.map(tx => <TxRow key={tx.id} tx={tx} />)}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-border/50 pb-6">
         <div className="flex items-center gap-4">
@@ -192,8 +352,19 @@ export default function Profile() {
           <div>
             <h1 className="font-display font-black text-3xl uppercase tracking-widest">{user.username}</h1>
             <p className="text-muted-foreground font-mono text-sm">Joined {new Date(user.createdAt).toLocaleDateString()}</p>
-            {lastLoginAt && (
-              <p className="text-muted-foreground/70 font-mono text-xs">Last login: {new Date(lastLoginAt).toLocaleString()}</p>
+            {lastLoginAt ? (
+              <button
+                onClick={openDeviceHistory}
+                className="flex items-center gap-1 text-muted-foreground/70 hover:text-primary font-mono text-xs mt-0.5 transition-colors cursor-pointer group"
+              >
+                <Clock className="w-3 h-3 group-hover:text-primary transition-colors" />
+                Last login: {new Date(lastLoginAt).toLocaleString()}
+                <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            ) : (
+              <button onClick={openDeviceHistory} className="text-muted-foreground/50 font-mono text-xs mt-0.5 hover:text-primary transition-colors cursor-pointer">
+                View login history
+              </button>
             )}
             {/* Telegram field */}
             <div className="flex items-center gap-2 mt-2">
@@ -220,9 +391,9 @@ export default function Profile() {
             <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Available Balance</span>
             <span className="font-mono font-bold text-3xl text-primary">{formatCurrency(user.balance)}</span>
           </div>
-          {/* VIP badge */}
+          {/* VIP badge — cursor-pointer so it's obviously clickable */}
           <button onClick={() => setVipOpen(true)}
-            className="flex items-center gap-2 rounded-xl px-3 py-2 border transition-all w-full justify-between"
+            className="flex items-center gap-2 rounded-xl px-3 py-2 border transition-all w-full justify-between cursor-pointer hover:brightness-125"
             style={{ borderColor: vipTier.color + "50", background: vipTier.color + "10" }}>
             <div className="flex items-center gap-2">
               <span className="text-lg">{vipTier.icon}</span>
@@ -241,9 +412,10 @@ export default function Profile() {
         </div>
       </div>
 
+      {/* ── Main 2-column grid ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="md:col-span-1 space-y-6">
-          {/* DGC Bank */}
+        {/* Left col — DGC Bank only */}
+        <div className="md:col-span-1">
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2"><span className="text-glow-shift">DGC Bank · Wallet</span></CardTitle>
@@ -287,6 +459,33 @@ export default function Profile() {
                   </div>
                 </TabsContent>
               </Tabs>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right col — Transaction History + Vault + Stats stacked */}
+        <div className="md:col-span-2 space-y-6">
+          {/* Transaction History */}
+          <Card className="bg-card border-border">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="font-display uppercase tracking-widest text-lg">Transaction History</CardTitle>
+              <button
+                onClick={openAllTransactions}
+                className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-bold uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                View All <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </CardHeader>
+            <CardContent>
+              {!transactions?.length ? (
+                <div className="text-center py-10 text-muted-foreground font-mono text-sm border border-dashed border-border rounded-lg bg-secondary/20">
+                  No transactions found.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 rounded-lg border border-primary/10 shadow-[0_0_24px_var(--theme-glow)] p-1">
+                  {transactions.map(tx => <TxRow key={tx.id} tx={tx} />)}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -375,43 +574,6 @@ export default function Profile() {
                   )}
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="md:col-span-2">
-          <Card className="bg-card border-border h-full">
-            <CardHeader><CardTitle className="font-display uppercase tracking-widest text-lg">Transaction History</CardTitle></CardHeader>
-            <CardContent>
-              {!transactions?.length ? (
-                <div className="text-center py-12 text-muted-foreground font-mono text-sm border border-dashed border-border rounded-lg bg-secondary/20">
-                  No transactions found.
-                </div>
-              ) : (
-                <div className="space-y-4 max-h-[520px] overflow-y-auto pr-2 rounded-lg border border-primary/10 shadow-[0_0_24px_var(--theme-glow)] p-1">
-                  {transactions.map(tx => (
-                    <div key={tx.id} className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-secondary/30 hover:bg-secondary/60 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-full ${tx.type === 'deposit' || tx.type === 'bet_win' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
-                          {tx.type === 'deposit' || tx.type === 'bet_win' ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
-                        </div>
-                        <div>
-                          <p className="font-bold text-sm uppercase">{tx.type.replace('_', ' ')}</p>
-                          <p className="text-xs text-muted-foreground font-mono">{new Date(tx.createdAt).toLocaleString()}</p>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <span className={`font-mono font-bold ${tx.type === 'deposit' || tx.type === 'bet_win' ? 'text-green-500' : 'text-foreground'}`}>
-                          {tx.type === 'deposit' || tx.type === 'bet_win' ? '+' : '-'}{formatCurrency(tx.amount)}
-                        </span>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
-                          {getStatusIcon(tx.status)}<span className="uppercase">{statusLabel(tx.status)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </CardContent>
           </Card>
         </div>
