@@ -200,9 +200,17 @@ export async function sendPlisioPayout(
 
   let payoutResponse: Response;
   try {
+    // Use POST (not GET) for Plisio /withdraw endpoint. GET requests don't properly
+    // carry request metadata (like IP), causing Plisio to reject with "Request IP" error.
+    // POST with URLSearchParams in the body is the correct method.
     payoutResponse = await fetch(
-      `https://api.plisio.net/api/v1/operations/withdraw?${params.toString()}`,
-      { method: "GET", signal: AbortSignal.timeout(30_000) },
+      `https://api.plisio.net/api/v1/operations/withdraw`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString(),
+        signal: AbortSignal.timeout(30_000),
+      },
     );
   } catch (fetchErr) {
     log.error({ fetchErr, txId }, "Plisio payout network error / timeout");
