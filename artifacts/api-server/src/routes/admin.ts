@@ -879,12 +879,19 @@ adminRouter.post("/transactions/:id/reconcile", requireBankSession, async (req, 
 
 
 // ── OWNER BANK: GET /api/admin/bank/balances — live balances ──
-// Strategy: try Plisio single-coin endpoint for each coin (gives wallet balance + allowed).
-// Simultaneously query our own DB to see which coins have had real deposit activity.
+// Strategy:
+//   1. Fetch the Plisio /balances endpoint (returns all wallet balances at once — most reliable).
+//   2. Also fetch individual /currencies/{coin} endpoints for rate_usd and allowed flag.
+//   3. Query our own DB to see which coins have had real deposit activity.
 // A coin is shown as "Active" (allowed=1) if:
 //   • Plisio reports allowed=1, OR
-//   • We have at least one completed deposit in that currency in the last 90 days.
-// This means ETH/DOGE will always show Live even if Plisio's allowed field is unreliable.
+//   • We have at least one completed deposit in that currency in the last 90 days, OR
+//   • The coin is ETH or DOGE (always shown as Live — these are our primary currencies).
+// Balance is taken from the Plisio /balances endpoint first (most accurate), then falls back
+// to the individual /currencies/{coin} balance field.
+// ETH and DOGE are ALWAYS shown as Live regardless of Plisio's allowed flag.
+const ALWAYS_LIVE_COINS = new Set(["ETH", "DOGE"]);
+
 adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
   const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
 
@@ -894,7 +901,9 @@ adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
   ];
 
   try {
-    // ── Query 1: our DB — which coins have seen real completed deposits ──────
+    // ── Query 1: our DB — which coins have seen real deposit activity (any status) ──
+    // Use a broader window and include pending deposits so ETH/DOGE show active even
+    // before a deposit is confirmed.
     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
     const dbActivity = await db
       .select({
@@ -906,7 +915,9 @@ adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
       .where(
         and(
           eq(transactionsTable.type, "deposit"),
-          eq(transactionsTable.status, "completed"),
+          // Include completed AND pending deposits so coins show Live as soon as a user
+          // initiates a deposit, not only after it clears.
+          sql`${transactionsTable.status} IN ('completed', 'pending')`,
           sql`${transactionsTable.createdAt} >= ${ninetyDaysAgo.toISOString()}`,
         )
       )
@@ -919,7 +930,42 @@ adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
       dbTotals[c] = { count: Number(row.depositCount), totalUsd: row.totalUsd };
     }
 
-    // ── Query 2: Plisio individual coin endpoints (best-effort, 12 in parallel) ──
+    // ── Query 2a: Plisio /balances endpoint — most reliable source for wallet balances ──
+    // This returns all coin balances in one call.
+    const plisioWalletBalances: Record<string, string> = {};
+    if (PLISIO_KEY) {
+      try {
+        const params = new URLSearchParams({ api_key: PLISIO_KEY });
+        const resp = await fetch(
+          `https://api.plisio.net/api/v1/balances?${params.toString()}`,
+          { signal: AbortSignal.timeout(12_000) },
+        );
+        const data = await resp.json() as {
+          status?: string;
+          data?: Record<string, { balance?: string; psys_cid?: string }>;
+        };
+        if (data.status === "success" && data.data) {
+          // The /balances response uses Plisio's internal coin IDs as keys.
+          // Map them to our uppercase coin names.
+          const plisioToOurCoin: Record<string, string> = {
+            BTC: "BTC", ETH: "ETH", LTC: "LTC", DOGE: "DOGE", SOL: "SOL",
+            BCH: "BCH", TRX: "TRX", XMR: "XMR", DASH: "DASH", TON: "TON",
+            USDT_TRX: "USDT_TRX", USDT_TON: "USDT_TON",
+          };
+          for (const [key, val] of Object.entries(data.data)) {
+            const upperKey = key.toUpperCase();
+            const ourCoin = plisioToOurCoin[upperKey] ?? upperKey;
+            if (val?.balance && parseFloat(val.balance) > 0) {
+              plisioWalletBalances[ourCoin] = val.balance;
+            }
+          }
+        }
+      } catch (balErr) {
+        req.log.warn({ balErr }, "Plisio /balances endpoint failed — falling back to per-coin");
+      }
+    }
+
+    // ── Query 2b: Plisio individual coin endpoints (for rate_usd + allowed flag) ──
     const plisioResults: Record<string, { balance: string; allowed: number; rate_usd?: string }> = {};
     if (PLISIO_KEY) {
       const fetches = await Promise.allSettled(
@@ -955,10 +1001,16 @@ adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
     for (const coin of ACCEPTED_COINS) {
       const plisio = plisioResults[coin];
       const isDbActive = dbActiveCoins.has(coin);
-      // allowed=1 if Plisio says so, OR if we have real deposits for this coin
-      const allowed = (plisio?.allowed === 1 || isDbActive) ? 1 : 0;
+      const isAlwaysLive = ALWAYS_LIVE_COINS.has(coin);
+      // allowed=1 if:
+      //   • ETH or DOGE (always live — our primary currencies), OR
+      //   • Plisio reports allowed=1, OR
+      //   • We have real deposit activity for this coin in the last 90 days
+      const allowed = (isAlwaysLive || plisio?.allowed === 1 || isDbActive) ? 1 : 0;
+      // Balance priority: /balances endpoint > /currencies/{coin} balance field
+      const balance = plisioWalletBalances[coin] ?? plisio?.balance ?? "0";
       balances[coin] = {
-        balance: plisio?.balance ?? "0",
+        balance,
         allowed,
         rate_usd: plisio?.rate_usd,
         depositCount: dbTotals[coin]?.count ?? 0,

@@ -237,8 +237,15 @@ export default function AdminDashboard() {
   const [msgInput, setMsgInput] = useState("");
   const [msgSending, setMsgSending] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
-  // ── DGC Bank PIN session (gates the bank tab for owner and regular admins) ──
-  const [bankUnlocked, setBankUnlocked] = useState<boolean>(() => bankSessionValid());
+  // ── DGC Bank PIN session (gates the bank tab for regular admins) ──
+  // The platform owner (fanodgc) always has the bank unlocked — no PIN ever required.
+  // For non-owner admins, the bank is unlocked only when a valid session token is stored.
+  const [bankUnlocked, setBankUnlocked] = useState<boolean>(() => {
+    // We can't read `user` here (not yet available at init time), so we start with
+    // session-storage check. The owner bypass is applied in the useEffect below once
+    // the user object is loaded.
+    return bankSessionValid();
+  });
   const [bankPinInput, setBankPinInput] = useState("");
   const [bankPinError, setBankPinError] = useState("");
   const [bankPinVerifying, setBankPinVerifying] = useState(false);
@@ -276,6 +283,14 @@ export default function AdminDashboard() {
 
   const isOwner = (user?.username ?? "").toLowerCase() === "fanodgc";
   const isAdmin = user?.role === "admin" || user?.role === "owner" || isOwner;
+
+  // Owner bypass: fanodgc never needs to enter a PIN — unlock the bank automatically
+  // as soon as the user object is available and confirmed to be the owner.
+  useEffect(() => {
+    if (isOwner && !bankUnlocked) {
+      setBankUnlocked(true);
+    }
+  }, [isOwner, bankUnlocked]);
 
   useEffect(() => {
     if (!isLoading && (!user || !isAdmin)) {
@@ -537,13 +552,15 @@ export default function AdminDashboard() {
   }, []);
 
   // Relock automatically if the bank session expires while the page is open.
+  // The owner (fanodgc) is never relocked — they don't use session tokens.
   useEffect(() => {
     if (!bankUnlocked) return;
     const id = setInterval(() => {
-      if (!bankSessionValid()) setBankUnlocked(false);
+      // Owner never expires — skip the session check for fanodgc
+      if (!isOwner && !bankSessionValid()) setBankUnlocked(false);
     }, 30000);
     return () => clearInterval(id);
-  }, [bankUnlocked]);
+  }, [bankUnlocked, isOwner]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1297,8 +1314,8 @@ export default function AdminDashboard() {
         </div>
       )}
 
-          {/* ── BANK TAB: PIN GATE ── */}
-          {activeTab === "bank" && !bankUnlocked && (
+          {/* ── BANK TAB: PIN GATE — never shown to the owner (fanodgc) ── */}
+          {activeTab === "bank" && !bankUnlocked && !isOwner && (
             <div className="max-w-md mx-auto mt-10">
               <Card className="border-emerald-500/30 bg-emerald-950/20">
                 <CardContent className="p-8 space-y-5 text-center">
