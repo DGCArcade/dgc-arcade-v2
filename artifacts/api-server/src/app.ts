@@ -73,6 +73,25 @@ const betLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many requests, slow down." },
 });
+
+// Admin endpoints: 200 requests per 15 minutes per IP
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many admin requests, please slow down." },
+});
+
+// Withdrawal endpoint: 10 attempts per 15 minutes per IP (anti-spam)
+const withdrawLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many withdrawal attempts, please wait before trying again." },
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -82,6 +101,8 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/auth", authLimiter);
+app.use("/api/admin", adminLimiter);
+app.use("/api/transactions/withdraw", withdrawLimiter);
 app.use("/api/blackjack", betLimiter);
 app.use("/api/mines", betLimiter);
 app.use("/api/bets", betLimiter);
