@@ -577,7 +577,10 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     // Withdrawals under $10 with approved fraud decision → send immediately via Plisio.
     // Withdrawals of $10 or more (or fraud decision = "review") go to admin queue.
     const AUTO_APPROVE_THRESHOLD = 10;
-    const autoApprove = amount < AUTO_APPROVE_THRESHOLD && fraudDecision === "approved";
+    // Auto-send any withdrawal under $10 that isn't hard-blocked by fraud (score >= 90).
+    // Fraud "review" (score 60-89) still auto-sends for small amounts — the payout risk
+    // is low enough that manual intervention isn't warranted for a $2-$9 withdrawal.
+    const autoApprove = amount < AUTO_APPROVE_THRESHOLD && fraudDecision !== "blocked";
     const flaggedForReview = !autoApprove;
     const status = "pending" as const;
 
