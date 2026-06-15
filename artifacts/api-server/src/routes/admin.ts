@@ -1156,7 +1156,7 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
         status: r.txStatus ?? "unknown",
         address: r.address,
         riskScore: Number(r.score ?? 0),
-        flags: (r.flags as string[] | null) ?? [],
+        flags: (() => { try { return JSON.parse(r.flags ?? "[]") as string[]; } catch { return []; } })(),
         decision: r.decision,
         createdAt: r.createdAt,
         source: "history" as const,
