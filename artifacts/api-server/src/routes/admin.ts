@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable, creatorMessagesTable, creatorMessageReadsTable } from "@workspace/db";
+import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable, creatorMessagesTable, creatorMessageReadsTable, fraudReviewsTable } from "@workspace/db";
 import { eq, desc, ilike, and, sql, count, or, gt, ne } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
@@ -49,15 +49,25 @@ async function generateUniqueBankPin(): Promise<string> {
 }
 
 // ── DGC Bank PIN session gate ──
-// Requires a valid, non-expired bank session (issued by /verify-bank-pin) that
-// belongs to the authenticated user. The session token is sent via the
-// "x-bank-session" request header. This enforces — server-side — that bank data
-// and withdrawal approvals are only reachable after the admin enters their PIN.
-function requireBankSession(
+// The platform owner (fanodgc) has permanent, PIN-free access to the bank.
+// All other admins must present a valid bank session token (from /verify-bank-pin).
+async function requireBankSession(
   req: import("express").Request,
   res: import("express").Response,
   next: import("express").NextFunction,
-): void {
+): Promise<void> {
+  // Owner bypass — no PIN ever required for fanodgc
+  const [caller] = await db
+    .select({ username: usersTable.username })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.user!.userId))
+    .limit(1);
+  if ((caller?.username ?? "").toLowerCase() === OWNER_USERNAME) {
+    next();
+    return;
+  }
+
+  // Non-owner admins require a live bank session token
   const token = req.header("x-bank-session");
   if (!token) {
     res.status(401).json({ error: "DGC Bank locked. Enter your PIN to continue.", code: "BANK_LOCKED" });
@@ -868,65 +878,92 @@ adminRouter.post("/transactions/:id/reconcile", requireBankSession, async (req, 
 });
 
 
-// ── OWNER BANK: GET /api/admin/bank/balances — live Plisio balances ──
-// Fetches each coin individually in parallel. The bulk /currencies endpoint
-// does NOT return `balance` or `allowed` — only the single-coin endpoint has
-// those fields, so we must call /currencies/{coin} for every coin we accept.
+// ── OWNER BANK: GET /api/admin/bank/balances — live balances ──
+// Strategy: try Plisio single-coin endpoint for each coin (gives wallet balance + allowed).
+// Simultaneously query our own DB to see which coins have had real deposit activity.
+// A coin is shown as "Active" (allowed=1) if:
+//   • Plisio reports allowed=1, OR
+//   • We have at least one completed deposit in that currency in the last 90 days.
+// This means ETH/DOGE will always show Live even if Plisio's allowed field is unreliable.
 adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
   const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
-  if (!PLISIO_KEY) {
-    res.status(500).json({ error: "PLISIO_SECRET_KEY not set" });
-    return;
-  }
 
-  // All coins we accept — must match PLISIO_PAYOUT_MAP in plisio-payout.ts
   const ACCEPTED_COINS = [
     "BTC", "ETH", "LTC", "DOGE", "SOL", "BCH",
     "TRX", "XMR", "DASH", "TON", "USDT_TRX", "USDT_TON",
   ];
 
   try {
-    // Fetch all 12 coins in parallel — each call returns balance + allowed + rate
-    const results = await Promise.allSettled(
-      ACCEPTED_COINS.map(async (coin) => {
-        const params = new URLSearchParams({ api_key: PLISIO_KEY });
-        const resp = await fetch(
-          `https://api.plisio.net/api/v1/currencies/${coin}?${params.toString()}`,
-          { signal: AbortSignal.timeout(12_000) },
-        );
-        const data = await resp.json() as {
-          status?: string;
-          data?: {
-            balance?: string;
-            allowed?: number;
-            rate_usd?: string;
-            price_usd?: string;
-            wallet_hash?: string;
-          };
-        };
-        if (data.status === "success" && data.data) {
-          return {
-            coin,
-            balance: data.data.balance ?? "0",
-            allowed: data.data.allowed ?? 0,
-            rate_usd: data.data.rate_usd ?? data.data.price_usd ?? undefined,
-          };
-        }
-        // Plisio returned non-success — coin not enabled or not set up
-        return { coin, balance: "0", allowed: 0 as number, rate_usd: undefined };
+    // ── Query 1: our DB — which coins have seen real completed deposits ──────
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const dbActivity = await db
+      .select({
+        currency: transactionsTable.currency,
+        depositCount: sql<number>`count(*)`,
+        totalUsd: sql<string>`coalesce(sum(${transactionsTable.amount}::numeric), 0)`,
       })
-    );
+      .from(transactionsTable)
+      .where(
+        and(
+          eq(transactionsTable.type, "deposit"),
+          eq(transactionsTable.status, "completed"),
+          sql`${transactionsTable.createdAt} >= ${ninetyDaysAgo.toISOString()}`,
+        )
+      )
+      .groupBy(transactionsTable.currency);
 
-    const balances: Record<string, { balance: string; allowed: number; rate_usd?: string }> = {};
-    for (const result of results) {
-      if (result.status === "fulfilled") {
-        const { coin, ...rest } = result.value;
-        balances[coin] = rest;
+    const dbActiveCoins = new Set(dbActivity.map(r => (r.currency ?? "").toUpperCase()));
+    const dbTotals: Record<string, { count: number; totalUsd: string }> = {};
+    for (const row of dbActivity) {
+      const c = (row.currency ?? "").toUpperCase();
+      dbTotals[c] = { count: Number(row.depositCount), totalUsd: row.totalUsd };
+    }
+
+    // ── Query 2: Plisio individual coin endpoints (best-effort, 12 in parallel) ──
+    const plisioResults: Record<string, { balance: string; allowed: number; rate_usd?: string }> = {};
+    if (PLISIO_KEY) {
+      const fetches = await Promise.allSettled(
+        ACCEPTED_COINS.map(async (coin) => {
+          const params = new URLSearchParams({ api_key: PLISIO_KEY });
+          const resp = await fetch(
+            `https://api.plisio.net/api/v1/currencies/${coin}?${params.toString()}`,
+            { signal: AbortSignal.timeout(10_000) },
+          );
+          const data = await resp.json() as {
+            status?: string;
+            data?: { balance?: string; allowed?: number; rate_usd?: string; price_usd?: string };
+          };
+          return { coin, data };
+        })
+      );
+      for (const result of fetches) {
+        if (result.status === "fulfilled") {
+          const { coin, data } = result.value;
+          if (data.status === "success" && data.data) {
+            plisioResults[coin] = {
+              balance: data.data.balance ?? "0",
+              allowed: data.data.allowed ?? 0,
+              rate_usd: data.data.rate_usd ?? data.data.price_usd ?? undefined,
+            };
+          }
+        }
       }
     }
-    // Ensure all accepted coins appear in the response even if a fetch threw
+
+    // ── Merge: Plisio data + DB activity ──────────────────────────────────────
+    const balances: Record<string, { balance: string; allowed: number; rate_usd?: string; depositCount?: number; totalUsd?: string }> = {};
     for (const coin of ACCEPTED_COINS) {
-      if (!balances[coin]) balances[coin] = { balance: "0", allowed: 0 };
+      const plisio = plisioResults[coin];
+      const isDbActive = dbActiveCoins.has(coin);
+      // allowed=1 if Plisio says so, OR if we have real deposits for this coin
+      const allowed = (plisio?.allowed === 1 || isDbActive) ? 1 : 0;
+      balances[coin] = {
+        balance: plisio?.balance ?? "0",
+        allowed,
+        rate_usd: plisio?.rate_usd,
+        depositCount: dbTotals[coin]?.count ?? 0,
+        totalUsd: dbTotals[coin]?.totalUsd ?? "0",
+      };
     }
 
     res.json({ balances });
@@ -956,28 +993,47 @@ adminRouter.post("/transactions/:id/decline-deposit", requireAdmin, async (req, 
   }
 });
 
-// GET /api/admin/bank/invoices — recent Plisio invoices (OWNER ONLY)
+// GET /api/admin/bank/invoices — real deposit invoice feed from our database (OWNER ONLY)
+// Reads directly from our Neon DB (no Plisio API call) so it always shows real invoices.
 adminRouter.get("/bank/invoices", requireBankSession, async (req, res) => {
   if (!(await callerIsOwner(req))) {
     res.status(403).json({ error: "Invoices are visible to the owner only." });
     return;
   }
-  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
-  if (!PLISIO_KEY) {
-    res.status(500).json({ error: "PLISIO_SECRET_KEY not set" });
-    return;
-  }
   try {
-    const page = String(req.query.page ?? 1);
-    const limit = String(req.query.limit ?? 20);
-    const params = new URLSearchParams({ api_key: PLISIO_KEY, page, limit });
-    const resp = await fetch(`https://api.plisio.net/api/v1/operations?${params.toString()}`);
-    const data = await resp.json() as { status: string; data?: { items?: unknown[]; count?: number } };
-    if (data.status !== "success") {
-      res.status(502).json({ error: "Plisio invoices fetch failed", detail: data });
-      return;
-    }
-    res.json({ invoices: data.data?.items ?? [], total: data.data?.count ?? 0 });
+    const pageNum = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
+    const limitNum = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? "25"), 10)));
+    const offset = (pageNum - 1) * limitNum;
+
+    const invoices = await db
+      .select({
+        id: transactionsTable.id,
+        txn_id: transactionsTable.plisioTrackId,
+        order_id: transactionsTable.orderId,
+        type: transactionsTable.type,
+        status: transactionsTable.status,
+        amount: transactionsTable.amount,
+        currency: transactionsTable.currency,
+        address: transactionsTable.address,
+        txHash: transactionsTable.txHash,
+        createdAt: transactionsTable.createdAt,
+        updatedAt: transactionsTable.updatedAt,
+        username: usersTable.username,
+        userId: transactionsTable.userId,
+      })
+      .from(transactionsTable)
+      .leftJoin(usersTable, eq(transactionsTable.userId, usersTable.id))
+      .where(eq(transactionsTable.type, "deposit"))
+      .orderBy(desc(transactionsTable.createdAt))
+      .limit(limitNum)
+      .offset(offset);
+
+    const [{ total }] = await db
+      .select({ total: sql<number>`count(*)` })
+      .from(transactionsTable)
+      .where(eq(transactionsTable.type, "deposit"));
+
+    res.json({ invoices, total: Number(total) });
   } catch (err) {
     req.log.error({ err }, "Bank invoices error");
     res.status(500).json({ error: "Internal server error" });
@@ -1052,14 +1108,61 @@ adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
 });
 
 // ── OWNER BANK: GET /api/admin/bank/fraud-alerts ─────────────────────────────
-// Real AI fraud detection — scores every pending withdrawal using behavioral rules
+// Two data sources merged for a comprehensive real-time fraud monitor:
+//   Source A: fraudReviewsTable — saved AI decisions from auto-approval runs (history)
+//   Source B: live scoring of ALL pending withdrawals (real-time queue)
 adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
   try {
     const settings = await getPlatformSettings();
-    // Sensitivity 0-100 maps to a multiplier of 0.5x - 1.5x on raw risk scores
     const sensitivityMultiplier = 0.5 + (settings.aiSensitivity / 100);
 
-    // Step 1 — Pull all pending withdrawals with user info
+    // ── Source A: fraudReviewsTable — recent AI review records ───────────────
+    // These represent decisions already made by the auto-processor (blocked, approved, etc.)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const fraudHistoryRows = await db
+      .select({
+        reviewId: fraudReviewsTable.id,
+        withdrawalId: fraudReviewsTable.withdrawalId,
+        userId: fraudReviewsTable.userId,
+        amount: fraudReviewsTable.amount,
+        score: fraudReviewsTable.score,
+        flags: fraudReviewsTable.flags,
+        decision: fraudReviewsTable.decision,
+        metadata: fraudReviewsTable.metadata,
+        createdAt: fraudReviewsTable.createdAt,
+        username: usersTable.username,
+        txStatus: transactionsTable.status,
+        currency: transactionsTable.currency,
+        address: transactionsTable.address,
+      })
+      .from(fraudReviewsTable)
+      .leftJoin(usersTable, eq(fraudReviewsTable.userId, usersTable.id))
+      .leftJoin(transactionsTable, eq(fraudReviewsTable.withdrawalId, transactionsTable.id))
+      .where(sql`${fraudReviewsTable.createdAt} >= ${thirtyDaysAgo.toISOString()}`)
+      .orderBy(desc(fraudReviewsTable.createdAt))
+      .limit(100);
+
+    // Map fraud history into alert shape — only show blocked/review decisions (not clean approvals)
+    const historyAlerts = fraudHistoryRows
+      .filter(r => r.decision === "blocked" || r.decision === "review" || (r.score ?? 0) >= 40)
+      .map(r => ({
+        id: r.withdrawalId ?? r.reviewId,
+        reviewId: r.reviewId,
+        userId: r.userId,
+        username: r.username ?? `user_${r.userId}`,
+        amount: String(r.amount ?? "0"),
+        currency: r.currency ?? "?",
+        type: "withdrawal" as const,
+        status: r.txStatus ?? "unknown",
+        address: r.address,
+        riskScore: Number(r.score ?? 0),
+        flags: (r.flags as string[] | null) ?? [],
+        decision: r.decision,
+        createdAt: r.createdAt,
+        source: "history" as const,
+      }));
+
+    // ── Source B: Live scoring of ALL current pending withdrawals ────────────
     const pending = await db
       .select({
         id: transactionsTable.id,
@@ -1085,27 +1188,17 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
       .orderBy(desc(transactionsTable.createdAt))
       .limit(50);
 
-    if (pending.length === 0) {
-      res.json({ alerts: [] });
-      return;
-    }
-
-    // Step 2 — For each withdrawal, run AI scoring
-    const alerts = await Promise.all(
+    const liveAlerts = await Promise.all(
       pending.map(async (tx) => {
         const flags: string[] = [];
         let riskScore = 0;
         const amount = parseFloat(tx.amount ?? "0");
 
-        // ── Rule 1: Large amount ──────────────────────────────────
-        // Flag withdrawals over $500 equivalent
         if (amount > 500) {
           flags.push("large_amount");
           riskScore += amount > 2000 ? 35 : amount > 1000 ? 25 : 15;
         }
 
-        // ── Rule 2: New account ───────────────────────────────────
-        // Account less than 7 days old making a withdrawal
         const accountAgeDays = tx.userCreatedAt
           ? (Date.now() - new Date(tx.userCreatedAt).getTime()) / (1000 * 60 * 60 * 24)
           : 999;
@@ -1114,57 +1207,45 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
           riskScore += accountAgeDays < 1 ? 40 : accountAgeDays < 3 ? 30 : 20;
         }
 
-        // ── Rule 3: Velocity — multiple withdrawals in 24h ────────
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const [{ recentCount }] = await db
           .select({ recentCount: sql<number>`count(*)` })
           .from(transactionsTable)
-          .where(
-            and(
-              eq(transactionsTable.userId, tx.userId),
-              eq(transactionsTable.type, "withdrawal"),
-              sql`created_at > ${oneDayAgo.toISOString()}`
-            )
-          );
+          .where(and(
+            eq(transactionsTable.userId, tx.userId),
+            eq(transactionsTable.type, "withdrawal"),
+            sql`created_at > ${oneDayAgo.toISOString()}`
+          ));
         if (Number(recentCount) > 2) {
           flags.push("velocity");
           riskScore += Number(recentCount) > 5 ? 35 : Number(recentCount) > 3 ? 25 : 15;
         }
 
-        // ── Rule 4: Suspicious pattern — big loss then withdraw ───
-        // User lost over $200 in bets in last 6 hours then immediately withdrew
         const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
         const [{ recentLoss }] = await db
           .select({ recentLoss: sql<number>`coalesce(sum(amount::numeric), 0)` })
           .from(betsTable)
-          .where(
-            and(
-              eq(betsTable.userId, tx.userId),
-              eq(betsTable.won, false),
-              sql`created_at > ${sixHoursAgo.toISOString()}`
-            )
-          );
+          .where(and(
+            eq(betsTable.userId, tx.userId),
+            eq(betsTable.won, false),
+            sql`created_at > ${sixHoursAgo.toISOString()}`
+          ));
         if (Number(recentLoss) > 200) {
           flags.push("suspicious_pattern");
           riskScore += Number(recentLoss) > 1000 ? 30 : Number(recentLoss) > 500 ? 20 : 12;
         }
 
-        // ── Rule 5: Round number amounts (common in fraud) ────────
         if (amount > 100 && amount % 100 === 0) {
           flags.push("round_amount");
           riskScore += 8;
         }
 
-        // ── Rule 6: Balance mismatch — withdrawing more than 90% of balance ──
         const balance = parseFloat(tx.userBalance ?? "0");
         if (balance > 0 && amount / balance > 0.9) {
           flags.push("full_balance_withdrawal");
           riskScore += 15;
         }
 
-
-        // ── Rule 7: Same withdrawal address used by multiple users ───
-        // Classic multi-account fraud / coordinated cash-out ring
         if (tx.address) {
           const [{ addrCount }] = await db
             .select({ addrCount: sql<number>`count(distinct user_id)` })
@@ -1179,8 +1260,6 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
           }
         }
 
-        // ── Rule 8: Withdrawal within 30 min of first/latest deposit ──
-        // Deposit-then-immediately-withdraw bonus-hunt pattern
         const [latestDeposit] = await db
           .select({ createdAt: transactionsTable.createdAt })
           .from(transactionsTable)
@@ -1199,8 +1278,6 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
           }
         }
 
-        // ── Rule 9: Never played — deposit straight to withdrawal ─────
-        // No bets ever placed; deposited and trying to withdraw immediately
         const [{ betCount }] = await db
           .select({ betCount: sql<number>`count(*)` })
           .from(betsTable)
@@ -1210,23 +1287,15 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
           riskScore += 30;
         }
 
-        // Apply AI sensitivity multiplier, then cap at 99
         riskScore = Math.min(Math.round(riskScore * sensitivityMultiplier), 99);
 
-        // Auto-approve very small amounts under the configured threshold,
-        // unless they're already high risk
-        if (amount <= settings.autoApproveUnder && riskScore < 50) {
-          return null;
-        }
+        if (amount <= settings.autoApproveUnder && riskScore < 50) return null;
 
-        // Amounts over the manual-review threshold are always flagged,
-        // even if no rules triggered (minimum baseline risk)
         if (amount > settings.requireManualOver && flags.length === 0) {
           flags.push("manual_review_threshold");
           riskScore = Math.max(riskScore, Math.round(20 * sensitivityMultiplier));
         }
 
-        // Only return if actually flagged (at least 1 rule triggered)
         if (flags.length === 0) return null;
 
         return {
@@ -1240,18 +1309,43 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
           address: tx.address,
           riskScore,
           flags,
+          decision: "pending_review" as const,
           createdAt: tx.createdAt,
+          source: "live" as const,
         };
       })
     );
 
-    // Filter out nulls (transactions that passed all checks)
-    const flagged = alerts.filter(Boolean);
+    // ── Merge: deduplicate by transaction ID, live takes priority over history ──
+    const seenTxIds = new Set<number>();
+    const merged: typeof liveAlerts[number][] = [];
 
-    // Sort by risk score descending — highest risk first
-    flagged.sort((a, b) => (b?.riskScore ?? 0) - (a?.riskScore ?? 0));
+    // Add live alerts first (highest priority — these need action NOW)
+    for (const alert of liveAlerts) {
+      if (alert) {
+        seenTxIds.add(alert.id);
+        merged.push(alert);
+      }
+    }
+    // Add history alerts that aren't already shown live
+    for (const alert of historyAlerts) {
+      if (!seenTxIds.has(alert.id)) {
+        merged.push(alert as typeof liveAlerts[number]);
+      }
+    }
 
-    res.json({ alerts: flagged });
+    // Sort: live pending first, then by risk score descending
+    merged.sort((a, b) => {
+      if (a?.source === "live" && b?.source !== "live") return -1;
+      if (b?.source === "live" && a?.source !== "live") return 1;
+      return (b?.riskScore ?? 0) - (a?.riskScore ?? 0);
+    });
+
+    res.json({ alerts: merged, stats: {
+      livePending: liveAlerts.filter(Boolean).length,
+      historyShown: historyAlerts.length,
+      total: merged.length,
+    }});
   } catch (err) {
     req.log.error({ err }, "Fraud alerts error");
     res.status(500).json({ error: "Internal server error" });
