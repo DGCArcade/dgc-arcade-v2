@@ -869,27 +869,93 @@ adminRouter.post("/transactions/:id/reconcile", requireBankSession, async (req, 
 
 
 // ── OWNER BANK: GET /api/admin/bank/balances — live Plisio balances ──
+// Uses the bulk /currencies endpoint (one call, all coins) so no single-coin
+// fetch can silently fail and leave coins missing from the dashboard.
 adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
   const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
   if (!PLISIO_KEY) {
     res.status(500).json({ error: "PLISIO_SECRET_KEY not set" });
     return;
   }
+
+  // All coins we accept — matches PLISIO_PAYOUT_MAP in plisio-payout.ts
+  const ACCEPTED_COINS = new Set([
+    "BTC", "ETH", "LTC", "DOGE", "SOL", "BCH",
+    "TRX", "XMR", "DASH", "TON", "USDT_TRX", "USDT_TON",
+  ]);
+
   try {
-    const currencies = ["BTC", "ETH", "LTC", "DOGE", "SOL", "BCH", "TRX", "XMR", "DASH", "TON"];
-    const balances: Record<string, { balance: string; allowed: number }> = {};
-    await Promise.all(
-      currencies.map(async (cur) => {
-        try {
-          const params = new URLSearchParams({ api_key: PLISIO_KEY });
-          const resp = await fetch("https://api.plisio.net/api/v1/currencies/" + cur + "?" + params.toString());
-          const data = await resp.json() as { status?: string; data?: { balance?: string; allowed?: number } };
-          if (data.status === "success" && data.data) {
-            balances[cur] = { balance: data.data.balance ?? "0", allowed: data.data.allowed ?? 0 };
+    const balances: Record<string, { balance: string; allowed: number; rate_usd?: string }> = {};
+
+    // ── Primary: bulk /currencies endpoint (returns all at once) ──
+    try {
+      const params = new URLSearchParams({ api_key: PLISIO_KEY });
+      const resp = await fetch(
+        `https://api.plisio.net/api/v1/currencies?${params.toString()}`,
+        { signal: AbortSignal.timeout(15_000) },
+      );
+      const data = await resp.json() as {
+        status?: string;
+        data?: Array<{
+          cid?: string;
+          currency?: string;
+          psys_cid?: string;
+          balance?: string;
+          allowed?: number;
+          rate_usd?: string;
+          price_usd?: string;
+        }>;
+      };
+
+      if (data.status === "success" && Array.isArray(data.data)) {
+        for (const item of data.data) {
+          // Plisio uses different field names depending on endpoint version
+          const cid = (item.cid ?? item.psys_cid ?? item.currency ?? "").toUpperCase();
+          if (ACCEPTED_COINS.has(cid)) {
+            balances[cid] = {
+              balance: item.balance ?? "0",
+              allowed: item.allowed ?? 0,
+              rate_usd: item.rate_usd ?? item.price_usd ?? undefined,
+            };
           }
-        } catch (e) { /* skip */ }
-      })
-    );
+        }
+      }
+    } catch (bulkErr) {
+      req.log.error({ bulkErr }, "Bulk /currencies fetch failed, falling back to individual fetches");
+    }
+
+    // ── Fallback: individual per-coin fetches for any coin not returned by bulk ──
+    const missing = [...ACCEPTED_COINS].filter((c) => !balances[c]);
+    if (missing.length > 0) {
+      await Promise.all(
+        missing.map(async (cur) => {
+          try {
+            const params = new URLSearchParams({ api_key: PLISIO_KEY });
+            const resp = await fetch(
+              `https://api.plisio.net/api/v1/currencies/${cur}?${params.toString()}`,
+              { signal: AbortSignal.timeout(10_000) },
+            );
+            const data = await resp.json() as {
+              status?: string;
+              data?: { balance?: string; allowed?: number; rate_usd?: string; price_usd?: string };
+            };
+            if (data.status === "success" && data.data) {
+              balances[cur] = {
+                balance: data.data.balance ?? "0",
+                allowed: data.data.allowed ?? 0,
+                rate_usd: data.data.rate_usd ?? data.data.price_usd ?? undefined,
+              };
+            } else {
+              // Coin not returned by Plisio — show as inactive with 0 balance
+              balances[cur] = { balance: "0", allowed: 0 };
+            }
+          } catch {
+            balances[cur] = { balance: "0", allowed: 0 };
+          }
+        }),
+      );
+    }
+
     res.json({ balances });
   } catch (err) {
     req.log.error({ err }, "Bank balances error");
