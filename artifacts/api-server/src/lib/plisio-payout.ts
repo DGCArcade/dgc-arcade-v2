@@ -200,14 +200,12 @@ export async function sendPlisioPayout(
 
   let payoutResponse: Response;
   try {
-    // Use POST for Plisio /payout endpoint.
-    // NOTE: The endpoint is /payout, not /withdraw.
+    // Use GET for Plisio /withdraw endpoint as per official documentation.
+    // NOTE: For the correct work of the service it is necessary to set Request IP.
     payoutResponse = await fetch(
-      `https://api.plisio.net/api/v1/operations/payout`,
+      `https://api.plisio.net/api/v1/operations/withdraw?${params.toString()}`,
       {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params.toString(),
+        method: "GET",
         signal: AbortSignal.timeout(30_000),
       },
     );
