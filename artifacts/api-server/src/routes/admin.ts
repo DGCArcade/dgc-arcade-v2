@@ -4,6 +4,8 @@ import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, to
 import { eq, desc, ilike, and, sql, count, or, gt, ne } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
+import { logAudit } from "../services/audit.js";
+import { recordLedger, recordLedgerStandalone } from "../services/ledger.js";
 
 export const adminRouter = Router();
 
@@ -335,6 +337,8 @@ adminRouter.patch("/users/:id", async (req, res) => {
       return;
     }
 
+    const [before] = await db.select({ balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+
     const [updated] = await db
       .update(usersTable)
       .set(updates)
@@ -344,6 +348,32 @@ adminRouter.patch("/users/:id", async (req, res) => {
     if (!updated) {
       res.status(404).json({ error: "User not found" });
       return;
+    }
+
+    // Audit log — fire-and-forget
+    logAudit({
+      adminId: req.user!.userId,
+      adminUsername: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1))[0]?.username ?? "admin",
+      action: isBanned !== undefined ? (isBanned ? "ban_user" : "unban_user") : role !== undefined ? "change_role" : "adjust_balance",
+      targetType: "user",
+      targetId: userId,
+      oldValue: { balance: parseFloat(before?.balance ?? "0"), role: target?.role, isBanned: false },
+      newValue: { balance: parseFloat(updated.balance), role: updated.role, isBanned: updated.isBanned },
+      ip: req.ip,
+    }).catch(() => {});
+
+    // If balance was manually set, record a ledger entry
+    if (balance !== undefined && before) {
+      const oldBal = parseFloat(before.balance);
+      const newBal = parseFloat(updated.balance);
+      recordLedgerStandalone({
+        userId,
+        amount: newBal - oldBal,
+        balanceBefore: oldBal,
+        balanceAfter: newBal,
+        reason: "admin_adjustment",
+        note: `Admin balance set to ${newBal} by admin #${req.user!.userId}`,
+      }).catch(() => {});
     }
 
     res.json({
@@ -464,6 +494,7 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
     // guarded status flip (pending -> failed) gates the refund inside one DB transaction,
     // so concurrent/duplicate rejects block on the row lock and can't double-refund.
     if (status === "failed" && tx.type === "withdrawal") {
+      const refundAmount = parseFloat(tx.amount);
       const refunded = await db.transaction(async (txn) => {
         const flipped = await txn
           .update(transactionsTable)
@@ -471,17 +502,43 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
           .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "pending")))
           .returning({ id: transactionsTable.id });
         if (flipped.length === 0) return false;
-        await txn
+        const [userAfter] = await txn
           .update(usersTable)
-          .set({ balance: sql`balance + ${parseFloat(tx.amount)}` })
-          .where(eq(usersTable.id, tx.userId));
+          .set({ balance: sql`balance + ${refundAmount}` })
+          .where(eq(usersTable.id, tx.userId))
+          .returning({ balance: usersTable.balance });
+        if (userAfter) {
+          const balanceAfter = parseFloat(userAfter.balance);
+          await recordLedger(txn, {
+            userId: tx.userId,
+            amount: refundAmount,
+            balanceBefore: balanceAfter - refundAmount,
+            balanceAfter,
+            reason: "withdrawal_refund",
+            referenceId: txId,
+            referenceType: "transaction",
+            note: `Withdrawal rejected by admin #${req.user!.userId}`,
+          });
+        }
         return true;
       });
       if (!refunded) {
         res.status(400).json({ error: "Transaction is not pending" });
         return;
       }
-      res.json({ id: txId, status: "failed", amount: parseFloat(tx.amount) });
+      // Audit log
+      logAudit({
+        adminId: req.user!.userId,
+        adminUsername: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1))[0]?.username ?? "admin",
+        action: "reject_withdrawal",
+        targetType: "transaction",
+        targetId: txId,
+        oldValue: { status: "pending", amount: refundAmount },
+        newValue: { status: "failed" },
+        ip: req.ip,
+        note: `Refunded $${refundAmount} to user #${tx.userId}`,
+      }).catch(() => {});
+      res.json({ id: txId, status: "failed", amount: refundAmount });
       return;
     }
 
@@ -652,6 +709,17 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
         });
         return;
       }
+      // Audit log — withdrawal approved via Plisio
+      logAudit({
+        adminId: req.user!.userId,
+        adminUsername: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1))[0]?.username ?? "admin",
+        action: "approve_withdrawal",
+        targetType: "transaction",
+        targetId: txId,
+        oldValue: { status: "pending", amount: parseFloat(tx.amount) },
+        newValue: { status: "completed", txHash: plisioTxId },
+        ip: req.ip,
+      }).catch(() => {});
       res.json({ id: updated.id, status: updated.status, amount: parseFloat(updated.amount), txHash: updated.txHash });
       return;
     }
@@ -1381,12 +1449,37 @@ adminRouter.post("/transactions/:id/complete-deposit", requireBankSession, async
         .where(and(eq(transactionsTable.id, tx.id), eq(transactionsTable.status, "pending")))
         .returning({ id: transactionsTable.id });
       if (flipped.length === 0) return; // already completed by a concurrent call
-      await txn.update(usersTable).set({
+      const [userAfter] = await txn.update(usersTable).set({
         balance: sql`balance + ${creditAmount}`,
         totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
         wagerRequirement: sql`(coalesce(total_deposited, 0) + ${creditAmount}) * ${WAGER_MULT}`,
-      }).where(eq(usersTable.id, tx.userId));
+      }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
+      if (userAfter) {
+        const balanceAfter = parseFloat(userAfter.balance);
+        await recordLedger(txn, {
+          userId: tx.userId,
+          amount: creditAmount,
+          balanceBefore: balanceAfter - creditAmount,
+          balanceAfter,
+          reason: "admin_deposit_manual",
+          referenceId: txId,
+          referenceType: "transaction",
+          note: `Manual deposit by admin #${req.user!.userId}`,
+        });
+      }
     });
+    // Audit log
+    logAudit({
+      adminId: req.user!.userId,
+      adminUsername: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1))[0]?.username ?? "admin",
+      action: "manual_complete_deposit",
+      targetType: "transaction",
+      targetId: txId,
+      oldValue: { status: "pending" },
+      newValue: { status: "completed", creditAmount },
+      ip: req.ip,
+      note: `IPN bypass — manually credited $${creditAmount} to user #${tx.userId}`,
+    }).catch(() => {});
     req.log.info({ txId, creditAmount, userId: tx.userId, by: req.user!.userId }, "Admin manually completed deposit — IPN bypass");
     res.json({ success: true, creditAmount });
   } catch (err) {
