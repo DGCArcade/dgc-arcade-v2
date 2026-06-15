@@ -7,21 +7,23 @@ const PLISIO_PAYOUT_MAP: Record<string, string> = {
   USDT_TRX: "USDT_TRX", USDT_TON: "USDT_TON",
 };
 
-// CoinGecko IDs for each supported currency (free API, no key required)
-const COINGECKO_ID_MAP: Record<string, string> = {
-  BTC:      "bitcoin",
-  ETH:      "ethereum",
-  LTC:      "litecoin",
-  DOGE:     "dogecoin",
-  SOL:      "solana",
-  BCH:      "bitcoin-cash",
-  TRX:      "tron",
-  XMR:      "monero",
-  DASH:     "dash",
-  TON:      "the-open-network",
-  USDT_TRX: "tether",
-  USDT_TON: "tether",
+// Coinbase base symbols — their public /v2/prices/{BASE}-USD/spot endpoint
+const COINBASE_SYMBOL_MAP: Record<string, string> = {
+  BTC:  "BTC",  ETH:  "ETH",  LTC: "LTC",  DOGE: "DOGE",
+  SOL:  "SOL",  BCH:  "BCH",  TRX: "TRX",  XMR:  "XMR",
+  DASH: "DASH", TON:  "TON",
 };
+
+// CoinGecko IDs (free API, used as secondary fallback)
+const COINGECKO_ID_MAP: Record<string, string> = {
+  BTC:  "bitcoin",       ETH:  "ethereum",        LTC:  "litecoin",
+  DOGE: "dogecoin",      SOL:  "solana",           BCH:  "bitcoin-cash",
+  TRX:  "tron",          XMR:  "monero",           DASH: "dash",
+  TON:  "the-open-network",
+};
+
+// Stablecoins — always worth exactly $1 USD, no API call needed
+const STABLECOINS = new Set(["USDT_TRX", "USDT_TON", "USDC", "DAI"]);
 
 interface MinLogger {
   info(obj: Record<string, unknown>, msg: string): void;
@@ -37,9 +39,12 @@ export type PayoutOutcome =
   | { outcome: "no_address" };
 
 /**
- * Fetches the current USD exchange rate via CoinGecko (primary, free, no key).
- * Falls back to Plisio's currency endpoint if CoinGecko is unavailable.
- * Returns the crypto amount equivalent to the given USD value.
+ * Converts a USD amount to crypto using live exchange rates.
+ * Rate source priority:
+ *   1. Hardcoded $1.00 for stablecoins (instant, no network call)
+ *   2. Coinbase public API (no key, reliable, production-grade)
+ *   3. CoinGecko free API (backup)
+ *   4. Plisio currency endpoint (last resort)
  */
 async function usdToCrypto(
   usdAmount: number,
@@ -47,7 +52,37 @@ async function usdToCrypto(
   apiKey: string,
   log: MinLogger,
 ): Promise<{ cryptoAmount: string; rate: number } | null> {
-  // ── Primary: CoinGecko free API ──────────────────────────────────────────
+
+  // ── 1. Stablecoins: $1.00 always ─────────────────────────────────────────
+  if (STABLECOINS.has(currency)) {
+    const cryptoAmount = usdAmount.toFixed(8);
+    log.info({ currency, rateUsd: 1, usdAmount, cryptoAmount, source: "hardcoded_stablecoin" }, "Stablecoin rate: $1.00");
+    return { cryptoAmount, rate: 1 };
+  }
+
+  // ── 2. Coinbase public API (primary — no key, no rate limit issues) ──────
+  const coinbaseSymbol = COINBASE_SYMBOL_MAP[currency];
+  if (coinbaseSymbol) {
+    try {
+      const resp = await fetch(
+        `https://api.coinbase.com/v2/prices/${coinbaseSymbol}-USD/spot`,
+        { signal: AbortSignal.timeout(8_000), headers: { "Accept": "application/json" } },
+      );
+      if (resp.ok) {
+        const data = await resp.json() as { data?: { amount?: string } };
+        const rateUsd = parseFloat(data.data?.amount ?? "0");
+        if (rateUsd > 0) {
+          const cryptoAmount = (usdAmount / rateUsd).toFixed(8);
+          log.info({ currency, rateUsd, usdAmount, cryptoAmount, source: "coinbase" }, "Rate fetched from Coinbase");
+          return { cryptoAmount, rate: rateUsd };
+        }
+      }
+    } catch (err) {
+      log.error({ err, currency }, "Coinbase rate fetch failed, trying CoinGecko");
+    }
+  }
+
+  // ── 3. CoinGecko free API (secondary fallback) ────────────────────────────
   const geckoId = COINGECKO_ID_MAP[currency];
   if (geckoId) {
     try {
@@ -66,49 +101,44 @@ async function usdToCrypto(
         }
       }
     } catch (geckoErr) {
-      log.error({ geckoErr, currency }, "CoinGecko rate fetch failed, trying Plisio fallback");
+      log.error({ geckoErr, currency }, "CoinGecko rate fetch failed, trying Plisio");
     }
   }
 
-  // ── Fallback: Plisio /currencies/{currency} ───────────────────────────────
+  // ── 4. Plisio /currencies/{currency} (last resort) ───────────────────────
   try {
     const params = new URLSearchParams({ api_key: apiKey });
     const resp = await fetch(
       `https://api.plisio.net/api/v1/currencies/${currency}?${params.toString()}`,
-      { signal: AbortSignal.timeout(15_000) },
+      { signal: AbortSignal.timeout(12_000) },
     );
     const data = await resp.json() as {
       status?: string;
       data?: { rate_usd?: string; price_usd?: string; fiat_rate?: string };
     };
-    if (data.status !== "success" || !data.data) {
-      log.error({ currency, data }, "Plisio fallback: bad response");
-      return null;
+    if (data.status === "success" && data.data) {
+      const rateUsd = parseFloat(
+        data.data.rate_usd ?? data.data.price_usd ?? data.data.fiat_rate ?? "0"
+      );
+      if (rateUsd > 0) {
+        const cryptoAmount = (usdAmount / rateUsd).toFixed(8);
+        log.info({ currency, rateUsd, usdAmount, cryptoAmount, source: "plisio" }, "Rate fetched from Plisio");
+        return { cryptoAmount, rate: rateUsd };
+      }
     }
-    const rateUsd = parseFloat(
-      data.data.rate_usd ?? data.data.price_usd ?? data.data.fiat_rate ?? "0"
-    );
-    if (!rateUsd || rateUsd <= 0) {
-      log.error({ currency, data }, "Plisio fallback: invalid rate");
-      return null;
-    }
-    const cryptoAmount = (usdAmount / rateUsd).toFixed(8);
-    log.info({ currency, rateUsd, usdAmount, cryptoAmount, source: "plisio" }, "Rate fetched from Plisio fallback");
-    return { cryptoAmount, rate: rateUsd };
+    log.error({ currency, data }, "Plisio rate: bad response or zero rate");
   } catch (err) {
-    log.error({ err, currency }, "Both CoinGecko and Plisio rate fetch failed");
-    return null;
+    log.error({ err, currency }, "Plisio rate fetch failed");
   }
+
+  log.error({ currency, usdAmount }, "All rate sources exhausted — cannot convert USD to crypto");
+  return null;
 }
 
 /**
  * Sends a Plisio payout for an existing withdrawal transaction row (must be "pending").
  * Handles the full double-pay guard, error/ambiguous-outcome logic, and DB state updates.
  * Safe to call from both the admin approval path and the automatic-approval path.
- *
- * The Plisio withdraw API requires `amount` in cryptocurrency (not USD).
- * We first convert the USD amount to crypto using current exchange rates,
- * then send the payout with the crypto amount.
  */
 export async function sendPlisioPayout(
   txId: number,
@@ -128,7 +158,6 @@ export async function sendPlisioPayout(
   const payoutCurrency = PLISIO_PAYOUT_MAP[tx.currency ?? "BTC"] ?? (tx.currency ?? "BTC");
   const usdAmount = parseFloat(tx.amount);
 
-  // Convert USD to crypto amount using current exchange rate
   const conversion = await usdToCrypto(usdAmount, payoutCurrency, PLISIO_KEY, log);
   if (!conversion) {
     return {
@@ -205,7 +234,7 @@ export async function sendPlisioPayout(
     return {
       outcome: "needs_review",
       message:
-        "Plisio returned an unexpected response, so the payout could NOT be confirmed. It may have been sent — check your Plisio dashboard. Left under review.",
+        "Plisio returned an unexpected response. The payout status is unknown — check your Plisio dashboard. Left under review.",
     };
   }
 
