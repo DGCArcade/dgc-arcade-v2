@@ -229,20 +229,31 @@ export async function sendPlisioPayout(
 
   const rawText = await payoutResponse.text();
   log.info(
-    { txId, httpStatus: payoutResponse.status, body: rawText.slice(0, 2000) },
+    { txId, httpStatus: payoutResponse.status, contentType: payoutResponse.headers.get("content-type"), bodyLength: rawText.length, body: rawText.slice(0, 2000) },
     "Plisio payout response",
   );
 
-  let payoutData: PlisioPayoutResponse;
-  try {
-    payoutData = JSON.parse(rawText);
-  } catch {
-    log.error({ txId, rawText: rawText.slice(0, 2000) }, "Plisio returned non-JSON");
+  // Check if response is HTML (error page) instead of JSON
+  if (rawText.trim().startsWith("<")) {
+    log.error({ txId, htmlResponse: rawText.slice(0, 500) }, "Plisio returned HTML (likely an error page)");
     await markNeedsReview();
     return {
       outcome: "needs_review",
       message:
-        "Plisio returned an unexpected response. The payout status is unknown — check your Plisio dashboard. Left under review.",
+        "Plisio server returned an error page. Check your API key, withdrawal settings, and balance. Left under review.",
+    };
+  }
+
+  let payoutData: PlisioPayoutResponse;
+  try {
+    payoutData = JSON.parse(rawText);
+  } catch (parseErr) {
+    log.error({ txId, parseErr, rawText: rawText.slice(0, 2000) }, "Plisio returned non-JSON");
+    await markNeedsReview();
+    return {
+      outcome: "needs_review",
+      message:
+        "Plisio returned an unexpected response format. The payout status is unknown — check your Plisio dashboard. Left under review.",
     };
   }
 
