@@ -574,9 +574,9 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     }
 
     // ── Auto-approve threshold ──────────────────────────────────────────────────
-    // Withdrawals under $10,000 with approved fraud decision → send immediately via Plisio.
-    // Withdrawals of $10,000 or more (or fraud decision = "review") go to admin queue.
-    const AUTO_APPROVE_THRESHOLD = 10_000;
+    // Withdrawals under $10 with approved fraud decision → send immediately via Plisio.
+    // Withdrawals of $10 or more (or fraud decision = "review") go to admin queue.
+    const AUTO_APPROVE_THRESHOLD = 10;
     const autoApprove = amount < AUTO_APPROVE_THRESHOLD && fraudDecision === "approved";
     const flaggedForReview = !autoApprove;
     const status = "pending" as const;
@@ -627,7 +627,7 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
 
-    // ── Auto-approve: < $10,000, no fraud flags → send via Plisio immediately ──
+    // ── Auto-approve: < $10, no fraud flags → send via Plisio immediately ──
     if (autoApprove && insertedTxId) {
       const result = await sendPlisioPayout(insertedTxId, req.log);
       switch (result.outcome) {
@@ -646,9 +646,9 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
 
-    // ── Manual review: >= $10,000 or fraud-flagged ─────────────────────────────
+    // ── Manual review: >= $10 or fraud-flagged ─────────────────────────────────
     const msg = flaggedForReview
-      ? "Withdrawal of $10,000 or more requires manual review. Our team will process it within 24 hours."
+      ? "Withdrawal requires manual review. Our team will process it within 24 hours."
       : "Withdrawal request submitted. Under review.";
     res.json({ success: true, message: msg, status });
   } catch (err) {

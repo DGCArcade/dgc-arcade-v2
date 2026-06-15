@@ -26,7 +26,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
 
   const [currency, setCurrency] = useState("BTC");
   const [amount, setAmount] = useState(50);
-  const [withdrawAmount, setWithdrawAmount] = useState(50);
+  const [withdrawAmount, setWithdrawAmount] = useState(1);
   const [withdrawAddress, setWithdrawAddress] = useState("");
   const [withdrawCurrency, setWithdrawCurrency] = useState("BTC");
   const [tipUsername, setTipUsername] = useState("");
@@ -94,7 +94,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
     if (!withdrawAddress) { toast({ title: "Address required", variant: "destructive" }); return; }
     requestWithdrawal.mutate({ data: { amount: withdrawAmount, currency: withdrawCurrency, address: withdrawAddress } }, {
       onSuccess: () => {
-        toast({ title: "Withdrawal Requested", description: "Pending admin approval." });
+        toast({ title: "Withdrawal Requested", description: "Your withdrawal is being processed." });
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         setWithdrawAddress("");
       },

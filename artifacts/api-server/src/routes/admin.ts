@@ -6,6 +6,7 @@ import { requireAdmin } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
 import { logAudit } from "../services/audit.js";
 import { recordLedger, recordLedgerStandalone } from "../services/ledger.js";
+import { sendPlisioPayout } from "../lib/plisio-payout.js";
 
 export const adminRouter = Router();
 
@@ -441,6 +442,8 @@ adminRouter.get("/transactions", requireBankSession, async (req, res) => {
         status: transactionsTable.status,
         address: transactionsTable.address,
         txHash: transactionsTable.txHash,
+        plisioTrackId: transactionsTable.plisioTrackId,
+        orderId: transactionsTable.orderId,
         createdAt: transactionsTable.createdAt,
       })
       .from(transactionsTable)
@@ -551,177 +554,40 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
       return;
     }
 
-    // If approving a withdrawal, send via Plisio payout API
+    // If approving a withdrawal, send via Plisio payout API (shared helper)
     if (status === "completed" && tx.type === "withdrawal" && tx.address) {
-
-    // Plisio payout uses different currency codes than invoice API
-    const PLISIO_PAYOUT_MAP: Record<string, string> = {
-      BTC: "BTC", ETH: "ETH", LTC: "LTC", DOGE: "DOGE", SOL: "SOL",
-      BCH: "BCH", TRX: "TRX", TON: "TON", XMR: "XMR", DASH: "DASH",
-      USDT_TRX: "USDT_TRX", USDT_TON: "USDT_TON",
-    };
-
-      const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
-      if (!PLISIO_KEY) {
-        res.status(500).json({ error: "Plisio API key not configured. Payout NOT sent." });
-        return;
-      }
-
-      // Double-pay guard: atomically claim the row by flipping pending -> processing.
-      // Only the request that wins this guarded update may call Plisio, so a
-      // double-click or concurrent approval can never send the payout twice.
-      const claimed = await db
-        .update(transactionsTable)
-        .set({ status: "processing" })
-        .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "pending")))
-        .returning({ id: transactionsTable.id });
-      if (claimed.length === 0) {
-        res.status(409).json({ error: "This withdrawal is already being processed." });
-        return;
-      }
-      // An AUTHORITATIVE Plisio rejection (no payout was created) reverts the row to
-      // pending so the owner can safely retry.
-      const revertToPending = () =>
-        db
-          .update(transactionsTable)
-          .set({ status: "pending" })
-          .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "processing")));
-      // An AMBIGUOUS outcome (network error, non-JSON, or an error that still carries a
-      // payout reference) means the payout MAY have been sent. We must NOT auto-revert to
-      // pending (that invites a double-pay on retry). Park it in needs_review so the owner
-      // verifies in Plisio and resolves it via the reconcile flow.
-      // When Plisio handed us a payout reference even on an error, persist it (in txHash) so the
-      // reconcile flow can later look the operation up by id and confirm whether it actually sent.
-      const markNeedsReview = (operationId?: string | null) =>
-        db
-          .update(transactionsTable)
-          .set({ status: "needs_review", ...(operationId ? { txHash: operationId } : {}) })
-          .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "processing")));
-
-      let payoutResponse: Response;
-      try {
-        const payoutCurrency = PLISIO_PAYOUT_MAP[tx.currency ?? "BTC"] ?? (tx.currency ?? "BTC");
-        const params = new URLSearchParams({
-          api_key: PLISIO_KEY,
-          // Plisio's withdraw API takes the psys_cid in the `currency` param
-          // (matches the working deposit/invoice call). `source_amount` +
-          // `source_currency` let Plisio convert our USD amount to crypto.
-          currency: payoutCurrency,
-          to: tx.address,
-          source_amount: tx.amount,
-          source_currency: "USD",
-          type: "cash_out",
-        });
-        // Plisio's withdraw endpoint is GET-only. The previous POST hit a 404
-        // HTML page, which broke JSON parsing and surfaced as a generic 500.
-        //
-        // Bound the attempt well below the 5-minute reconcile cutoff (see needs-review GET /
-        // reconcile POST). This makes 'processing' transient: under normal operation the row
-        // leaves 'processing' within ~30s (resolved here, or aborted -> needs_review below), so
-        // by the time the 5-min window lets the owner reconcile a stuck 'processing' row, no
-        // local payout attempt can still be running and later overwrite their resolution.
-        payoutResponse = await fetch(`https://api.plisio.net/api/v1/operations/withdraw?${params.toString()}`, {
-          method: "GET",
-          signal: AbortSignal.timeout(30_000),
-        });
-      } catch (fetchErr) {
-        // Network error OR the 30s timeout above. Either way the request MAY have reached
-        // Plisio and triggered a payout, so this is ambiguous — park in needs_review, never
-        // auto-revert to pending (which would invite a double-pay on retry).
-        req.log.error({ fetchErr, txId }, "Plisio payout network error / timeout");
-        await markNeedsReview();
-        res.status(502).json({
-          error:
-            "Could not reach Plisio to confirm the payout. It may have been sent — check your Plisio dashboard. Left under review; resolve it from the Needs Review list instead of approving again.",
-        });
-        return;
-      }
-      interface PlisioPayoutResponse {
-        status: string;
-        data?: { txn_id?: string; message?: string };
-      }
-      const rawText = await payoutResponse.text();
-
-      req.log.info(
-        {
-          txId,
-          status: payoutResponse.status,
-          body: rawText.slice(0, 2000),
-        },
-        "Plisio payout response",
-      );
-
-      let payoutData: PlisioPayoutResponse;
-
-      try {
-        payoutData = JSON.parse(rawText);
-      } catch {
-        req.log.error(
-          {
-            txId,
-            rawText: rawText.slice(0, 2000),
-          },
-          "Plisio returned non-JSON",
-        );
-        await markNeedsReview();
-        res.status(502).json({
-          error:
-            "Plisio returned an unexpected response, so the payout could NOT be confirmed. It may have been sent — check your Plisio dashboard. Left under review; resolve it from the Needs Review list instead of approving again.",
-        });
-
-        return;
-      }
-      if (payoutData.status !== "success") {
-        const errMsg = payoutData.data?.message ?? JSON.stringify(payoutData).slice(0, 200);
-        // If Plisio returned a payout reference despite the error, the payout may already
-        // exist — treat as ambiguous (needs_review). Only an authoritative rejection with
-        // NO operation id is safe to revert to pending for a clean retry.
-        if (payoutData.data?.txn_id) {
-          req.log.error({ txId, payoutData, errMsg }, "Plisio payout error WITH reference — needs review");
-          await markNeedsReview(payoutData.data.txn_id);
-          res.status(502).json({
-            error: `Plisio reported an error but returned a payout reference (${errMsg}). It may have been sent — check your Plisio dashboard. Left under review; resolve it from the Needs Review list.`,
-          });
+      const result = await sendPlisioPayout(txId, req.log);
+      switch (result.outcome) {
+        case "completed":
+          // Audit log — withdrawal approved via Plisio
+          logAudit({
+            adminId: req.user!.userId,
+            adminUsername: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1))[0]?.username ?? "admin",
+            action: "approve_withdrawal",
+            targetType: "transaction",
+            targetId: txId,
+            oldValue: { status: "pending", amount: parseFloat(tx.amount) },
+            newValue: { status: "completed", txHash: result.txHash },
+            ip: req.ip,
+          }).catch(() => {});
+          res.json({ id: result.id, status: "completed", amount: result.amount, txHash: result.txHash });
           return;
-        }
-        req.log.error({ txId, payoutData, errMsg }, "Plisio payout rejected (no reference)");
-        await revertToPending();
-        res.status(502).json({ error: `Payout failed: ${errMsg}. Funds were NOT sent — you can approve again.` });
-        return;
+        case "needs_review":
+          res.status(502).json({ error: result.message });
+          return;
+        case "reverted_pending":
+          res.status(502).json({ error: result.message });
+          return;
+        case "already_processing":
+          res.status(409).json({ error: "This withdrawal is already being processed." });
+          return;
+        case "no_key":
+          res.status(500).json({ error: "Plisio API key not configured. Payout NOT sent." });
+          return;
+        case "no_address":
+          res.status(400).json({ error: "This withdrawal has no payout address." });
+          return;
       }
-      const plisioTxId = payoutData.data?.txn_id ?? null;
-      // Guard the success write on status='processing': never overwrite a row that was
-      // reconciled/changed out from under us between the claim and now.
-      const [updated] = await db
-        .update(transactionsTable)
-        .set({ status: "completed", txHash: plisioTxId })
-        .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "processing")))
-        .returning();
-      if (!updated) {
-        // Extremely rare: the row left 'processing' (e.g. a concurrent reconcile) while the
-        // payout succeeded at Plisio. Log loudly; the payout DID go through.
-        req.log.error({ txId, plisioTxId }, "Plisio payout succeeded but row no longer 'processing'");
-        res.status(200).json({
-          id: txId,
-          status: "completed",
-          txHash: plisioTxId,
-          warning: "Payout succeeded at Plisio but the record had already changed — verify in the Needs Review list.",
-        });
-        return;
-      }
-      // Audit log — withdrawal approved via Plisio
-      logAudit({
-        adminId: req.user!.userId,
-        adminUsername: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1))[0]?.username ?? "admin",
-        action: "approve_withdrawal",
-        targetType: "transaction",
-        targetId: txId,
-        oldValue: { status: "pending", amount: parseFloat(tx.amount) },
-        newValue: { status: "completed", txHash: plisioTxId },
-        ip: req.ip,
-      }).catch(() => {});
-      res.json({ id: updated.id, status: updated.status, amount: parseFloat(updated.amount), txHash: updated.txHash });
-      return;
     }
 
     // Default: update status without Plisio call

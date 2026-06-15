@@ -27,7 +27,7 @@ JWT stored in `localStorage` as `dgc_token`. All new game components use `requir
 
 ## Wallet Modal
 - Duel-style, opened from navbar balance button
-- Tabs: Deposit (currency selector + QR + OxaPay), Withdraw, Buy Crypto, Tip
+- Tabs: Deposit (currency selector + QR + Plisio), Withdraw, Buy Crypto, Tip
 - Component: `src/components/wallet/wallet-modal.tsx`
 
 ## Live Feed Tabs

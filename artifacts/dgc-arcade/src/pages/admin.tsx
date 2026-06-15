@@ -133,6 +133,9 @@ interface AdminTx {
   currency: string;
   status: string;
   address: string | null;
+  txHash?: string | null;
+  plisioTrackId?: string | null;
+  orderId?: string | null;
   createdAt: string;
 }
 
@@ -186,6 +189,7 @@ export default function AdminDashboard() {
   // ── Bank state ──
   const [bankBalances, setBankBalances] = useState<Record<string, { balance: string; allowed: number }>>({});
   const [bankInvoices, setBankInvoices] = useState<any[]>([]);
+  const [invoicePage, setInvoicePage] = useState(1);
   const [bankWithdrawals, setBankWithdrawals] = useState<any[]>([]);
   const [pendingDeposits, setPendingDeposits] = useState<any[]>([]);
   const [allLiveTx, setAllLiveTx] = useState<any[]>([]);
@@ -353,7 +357,7 @@ export default function AdminDashboard() {
         adminFetch("/transactions?status=pending&type=deposit&limit=50"),
         adminFetch("/transactions?limit=50"),
       ];
-      if (isOwner) tasks.push(adminFetch("/bank/invoices?limit=25"));
+      if (isOwner) tasks.push(adminFetch(`/bank/invoices?limit=25&page=${invoicePage}`));
       const [balR, wdR, depR, liveR, invR] = await Promise.allSettled(tasks);
 
       if (balR.status === "fulfilled") setBankBalances(balR.value.balances ?? {});
@@ -385,7 +389,7 @@ export default function AdminDashboard() {
     } finally {
       setBankLoading(false);
     }
-  }, [isOwner, toast]);
+  }, [isOwner, invoicePage, toast]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -514,12 +518,12 @@ export default function AdminDashboard() {
     }).catch(() => {});
   }, [activeTab, chatMode, broadcastType]);
 
-  // Auto-refresh bank every 30 seconds while bank tab is active + unlocked
+  // Auto-refresh bank every 15 seconds while bank tab is active + unlocked
   useEffect(() => {
     if (activeTab !== "bank" || !bankUnlocked) return;
     const id = setInterval(() => {
       loadBank();
-    }, 30000);
+    }, 15000);
     return () => clearInterval(id);
   }, [activeTab, bankUnlocked, loadBank]);
 
@@ -1246,17 +1250,16 @@ export default function AdminDashboard() {
                         {new Date(tx.createdAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        {tx.status === "pending" && tx.type === "deposit" && (
+                        {tx.type === "deposit" && tx.plisioTrackId && (
                           <div className="flex justify-end gap-1">
                             <Button
                               size="sm"
-                              className="h-7 text-xs bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30"
+                              className="h-7 text-xs"
                               variant="outline"
-                              onClick={() => handleCompleteDeposit(tx)}
-                              disabled={loadingAction === `dep-${tx.id}`}
+                              onClick={() => window.open(`https://plisio.net/invoice/${tx.plisioTrackId}`, "_blank")}
                             >
-                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                              Credit
+                              <Eye className="w-3.5 h-3.5 mr-1" />
+                              View Invoice
                             </Button>
                           </div>
                         )}
@@ -1470,51 +1473,14 @@ export default function AdminDashboard() {
                                   {tx.createdAt ? new Date(tx.createdAt).toLocaleString() : "—"}
                                 </TableCell>
                                 <TableCell>
-                                  {tx.type === "deposit" && tx.status === "pending" && isOwner && (
-                                    <div className="flex flex-col gap-1">
-                                      {(tx.plisioTrackId || tx.orderId) && (
-                                        <div className="text-[10px] font-mono text-muted-foreground space-y-0.5 max-w-[180px]">
-                                          {tx.plisioTrackId && (
-                                            <div className="flex items-center gap-1 truncate" title={tx.plisioTrackId}>
-                                              <span className="text-amber-400 font-bold shrink-0">TxID:</span>
-                                              <span className="truncate">{tx.plisioTrackId.slice(0,14)}…</span>
-                                            </div>
-                                          )}
-                                          {tx.orderId && (
-                                            <div className="flex items-center gap-1 truncate" title={tx.orderId}>
-                                              <span className="text-blue-400 font-bold shrink-0">Order:</span>
-                                              <span className="truncate">{tx.orderId.slice(0,14)}…</span>
-                                            </div>
-                                          )}
-                                        </div>
+                                  {tx.type === "deposit" && (
+                                    <div className="flex gap-1">
+                                      {tx.plisioTrackId && (
+                                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" title="View Invoice"
+                                          onClick={() => window.open(`https://plisio.net/invoice/${tx.plisioTrackId}`, "_blank")}>
+                                          <Eye className="h-3 w-3" /> View Invoice
+                                        </Button>
                                       )}
-                                      <div className="flex gap-1">
-                                        <Button
-                                          size="sm"
-                                          className="bg-green-600 hover:bg-green-700 h-7 text-xs gap-1 font-bold"
-                                          disabled={loadingAction === `dep-${tx.id}`}
-                                          onClick={() => handleCompleteDeposit(tx)}
-                                        >
-                                          <CheckCircle2 className="h-3 w-3" />
-                                          {loadingAction === `dep-${tx.id}` ? "Crediting…" : "Credit User"}
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="destructive"
-                                          className="h-7 text-xs gap-1 font-bold"
-                                          disabled={loadingAction === `dep-decline-${tx.id}`}
-                                          onClick={() => handleDeclineDeposit(tx)}
-                                        >
-                                          <XCircle className="h-3 w-3" />
-                                          {loadingAction === `dep-decline-${tx.id}` ? "Declining…" : "Don't Credit"}
-                                        </Button>
-                                        {tx.plisioTrackId && (
-                                          <Button size="sm" variant="outline" className="h-7 text-xs px-2" title="View in Plisio dashboard"
-                                            onClick={() => window.open(`https://plisio.net/invoice/${tx.plisioTrackId}`, "_blank")}>
-                                            🔗
-                                          </Button>
-                                        )}
-                                      </div>
                                     </div>
                                   )}
                                   {tx.type === "withdrawal" && tx.status === "pending" && (
@@ -1852,9 +1818,22 @@ export default function AdminDashboard() {
               {/* ── Live Invoice Feed (OWNER ONLY) ── */}
               {isOwner && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
-                  <TrendingUp className="w-3.5 h-3.5" /> Live Plisio Invoice Feed
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                    <TrendingUp className="w-3.5 h-3.5" /> Live Plisio Invoice Feed
+                  </h3>
+                  <div className="flex gap-2">
+                    {invoicePage > 1 && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setInvoicePage(p => Math.max(1, p - 1))}>
+                        ← Newer
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setInvoicePage(p => p + 1)}>
+                      Older →
+                    </Button>
+                    <span className="text-xs text-muted-foreground self-center">Page {invoicePage}</span>
+                  </div>
+                </div>
                 {bankInvoices.length === 0 ? (
                   <Card className="border-dashed border-border/40">
                     <CardContent className="py-6 text-center text-muted-foreground text-sm">
@@ -1873,6 +1852,7 @@ export default function AdminDashboard() {
                             <TableHead className="text-xs">Currency</TableHead>
                             <TableHead className="text-xs">Status</TableHead>
                             <TableHead className="text-xs">Date</TableHead>
+                            <TableHead className="text-xs">Action</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1883,12 +1863,20 @@ export default function AdminDashboard() {
                               <TableCell className="font-mono font-bold">{inv.source_amount ?? inv.amount ?? "—"}</TableCell>
                               <TableCell className="text-sm">{inv.source_currency ?? inv.currency ?? "—"}</TableCell>
                               <TableCell>
-                                <Badge className="text-xs" variant={inv.status === "completed" ? "default" : inv.status === "pending" ? "secondary" : "destructive"}>
+                                <Badge className="text-xs" variant={inv.status === "completed" ? "default" : inv.status === "pending" || inv.status === "new" ? "secondary" : "destructive"}>
                                   {inv.status ?? "unknown"}
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-xs text-muted-foreground">
                                 {inv.created_utc ? new Date(inv.created_utc * 1000).toLocaleString() : "—"}
+                              </TableCell>
+                              <TableCell>
+                                {inv.txn_id && (
+                                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" title="View Invoice"
+                                    onClick={() => window.open(`https://plisio.net/invoice/${inv.txn_id}`, "_blank")}>
+                                    <Eye className="h-3 w-3" /> View Invoice
+                                  </Button>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))}

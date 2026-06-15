@@ -13,7 +13,7 @@ import { CoinIcon, CURRENCIES } from "@/components/wallet/coin-icon";
 import { formatCurrency } from "@/lib/format";
 
 const withdrawSchema = z.object({
-  amount: z.coerce.number().min(10, "Minimum withdrawal is $10"),
+  amount: z.coerce.number().min(1, "Minimum withdrawal is $1"),
   currency: z.string().min(1, "Please select a currency"),
   address: z.string().min(10, "Please enter a valid wallet address"),
 });
@@ -45,7 +45,7 @@ export function WithdrawForm() {
 
   const form = useForm<z.infer<typeof withdrawSchema>>({
     resolver: zodResolver(withdrawSchema),
-    defaultValues: { amount: 10, currency: "", address: "" },
+    defaultValues: { amount: 1, currency: "", address: "" },
   });
 
   // Auto-select first available coin once balances load
@@ -75,8 +75,8 @@ export function WithdrawForm() {
       { data: values },
       {
         onSuccess: () => {
-          toast({ title: "Withdrawal Requested", description: "Your withdrawal is now under review." });
-          form.reset({ amount: 10, currency: firstAvailable, address: "" });
+          toast({ title: "Withdrawal Requested", description: "Your withdrawal is being processed." });
+          form.reset({ amount: 1, currency: firstAvailable, address: "" });
           queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
         },
         onError: (err) => {
@@ -130,7 +130,7 @@ export function WithdrawForm() {
                             // Reset amount to valid range for this coin
                             const currentAmt = form.getValues("amount");
                             const newMax = Math.min(deposited, user?.balance ?? 0);
-                            if (currentAmt > newMax) form.setValue("amount", Math.max(10, newMax));
+                            if (currentAmt > newMax) form.setValue("amount", Math.max(1, newMax));
                           }}
                           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
                             !isAvailable
