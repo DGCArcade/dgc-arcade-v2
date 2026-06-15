@@ -10,6 +10,8 @@ import { requireAuth } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
 import { sendPlisioPayout } from "../lib/plisio-payout.js";
 import { v4 as uuidv4 } from "uuid";
+import { recordLedger, recordLedgerStandalone } from "../services/ledger.js";
+import { evaluateWithdrawal } from "../services/fraud.js";
 
 export const transactionsRouter = Router();
 
@@ -382,11 +384,23 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
         .where(and(eq(transactionsTable.id, tx.id), ne(transactionsTable.status, "completed")))
         .returning({ id: transactionsTable.id });
       if (flipped.length === 0) return;
-      await txn.update(usersTable).set({
+      const [updatedUser] = await txn.update(usersTable).set({
         balance: sql`balance + ${creditAmount}`,
         totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
         wagerRequirement: sql`(coalesce(total_deposited, 0) + ${creditAmount}) * ${WAGER_MULTIPLIER}`,
-      }).where(eq(usersTable.id, tx.userId));
+      }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
+      if (updatedUser) {
+        const balanceAfter = parseFloat(updatedUser.balance);
+        await recordLedger(txn, {
+          userId: tx.userId,
+          amount: creditAmount,
+          balanceBefore: balanceAfter - creditAmount,
+          balanceAfter,
+          reason: "deposit",
+          referenceId: tx.id,
+          referenceType: "transaction",
+        });
+      }
     });
 
     req.log.info({ txn_id, creditAmount, userId: tx.userId, status }, "Plisio IPN: deposit credited");
@@ -537,14 +551,15 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       });
       return;
     }
-    const fraudScore = flagReasons.length;
-
     const settings = await getPlatformSettings();
-    const sensitivityMultiplier = 0.5 + settings.aiSensitivity / 100;
-    const effectiveScore = fraudScore * sensitivityMultiplier;
 
-    const autoDecline = effectiveScore >= 2 || (withdrawRatio > 0.95 && accountAgeHours < 1);
-    if (autoDecline) {
+    // ── Fraud evaluation via unified fraud service ────────────────────────────
+    const fraudResult = await evaluateWithdrawal({ userId: user.id, amount });
+    const { score: fraudScore, flags: fraudFlags, decision: fraudDecision } = fraudResult;
+    // Merge legacy flags with scored flags (dedup)
+    const allFlags = [...new Set([...flagReasons, ...fraudFlags])];
+
+    if (fraudDecision === "blocked") {
       await db.insert(transactionsTable).values({
         userId: user.id,
         type: "withdrawal",
@@ -552,18 +567,18 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
         currency,
         status: "declined",
         address,
-        metadata: JSON.stringify({ fraudFlags: flagReasons, fraudScore, effectiveScore, autoDeclined: true }),
+        metadata: JSON.stringify({ fraudFlags: allFlags, fraudScore, decision: "blocked", autoDeclined: true }),
       });
       res.status(403).json({ error: "Withdrawal declined. Please contact support if you believe this is an error." });
       return;
     }
 
     // ── Auto-approve threshold ──────────────────────────────────────────────────
-    // Withdrawals under $10,000 with no fraud flags are sent immediately via Plisio.
-    // Withdrawals of $10,000 or more (or any flagged withdrawal) go to admin queue.
+    // Withdrawals under $10,000 with approved fraud decision → send immediately via Plisio.
+    // Withdrawals of $10,000 or more (or fraud decision = "review") go to admin queue.
     const AUTO_APPROVE_THRESHOLD = 10_000;
-    const autoApprove = amount < AUTO_APPROVE_THRESHOLD && effectiveScore < 1;
-    const flaggedForReview = !autoApprove && (amount >= AUTO_APPROVE_THRESHOLD || effectiveScore >= 1);
+    const autoApprove = amount < AUTO_APPROVE_THRESHOLD && fraudDecision === "approved";
+    const flaggedForReview = !autoApprove;
     const status = "pending" as const;
 
     let insertedTxId = 0;
@@ -581,9 +596,9 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
         status,
         address,
         metadata: JSON.stringify({
-          fraudFlags: flagReasons,
+          fraudFlags: allFlags,
           fraudScore,
-          effectiveScore,
+          fraudDecision,
           flaggedForReview,
           autoApproved: autoApprove,
           thresholds: {
@@ -594,6 +609,17 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
         }),
       }).returning({ id: transactionsTable.id });
       insertedTxId = inserted.id;
+      // Ledger: debit the withdrawal amount
+      const balanceAfter = parseFloat(d[0].balance);
+      await recordLedger(txn, {
+        userId: user.id,
+        amount: -amount,
+        balanceBefore: balanceAfter + amount,
+        balanceAfter,
+        reason: "withdrawal",
+        referenceId: inserted.id,
+        referenceType: "transaction",
+      });
       return d;
     });
     if (deducted.length === 0) {
