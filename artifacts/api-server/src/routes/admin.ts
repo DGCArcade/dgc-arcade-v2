@@ -965,7 +965,7 @@ adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
 
 // POST /api/admin/transactions/:id/decline-deposit — mark pending deposit as declined, no credit
 adminRouter.post("/transactions/:id/decline-deposit", requireAdmin, async (req, res) => {
-  const txId = parseInt(req.params.id, 10);
+  const txId = parseInt(req.params.id as string, 10);
   if (isNaN(txId)) { res.status(400).json({ error: "Invalid transaction ID" }); return; }
   try {
     const [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.id, txId)).limit(1);
@@ -1354,7 +1354,7 @@ adminRouter.post("/transactions/:id/complete-deposit", requireBankSession, async
     res.status(403).json({ error: "Only the platform owner can manually complete deposits." });
     return;
   }
-  const txId = parseInt(req.params.id, 10);
+  const txId = parseInt(req.params.id as string, 10);
   if (isNaN(txId)) { res.status(400).json({ error: "Invalid transaction ID" }); return; }
   try {
     const [tx] = await db
