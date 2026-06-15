@@ -5,6 +5,8 @@ import { BetBody, ListBetsQueryParams } from "@workspace/api-zod";
 import { requireAuth, optionalAuth } from "../middlewares/auth.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
+import { recordTournamentWager } from "../lib/tournament-tracker.js";
+import { recordLedgerStandalone } from "../services/ledger.js";
 
 export const betsRouter = Router();
 
@@ -303,6 +305,34 @@ betsRouter.post("/", requireAuth, async (req, res) => {
     }).returning();
 
     const newBalance = parseFloat(updatedUser.balance);
+
+    // Fire-and-forget: record ledger entries for this bet
+    const balanceAfterDeduct = newBalance - payout + amount; // balance right after deduct, before payout
+    recordLedgerStandalone({
+      userId: user.id,
+      amount: -amount,
+      balanceBefore: balanceAfterDeduct + amount,
+      balanceAfter: balanceAfterDeduct,
+      reason: "bet_loss",
+      referenceId: bet.id,
+      referenceType: "bet",
+      note: `${game.slug} bet`,
+    }).catch(() => {});
+    if (payout > 0) {
+      recordLedgerStandalone({
+        userId: user.id,
+        amount: payout,
+        balanceBefore: balanceAfterDeduct,
+        balanceAfter: newBalance,
+        reason: "bet_win",
+        referenceId: bet.id,
+        referenceType: "bet",
+        note: `${game.slug} payout x${multiplier}`,
+      }).catch(() => {});
+    }
+
+    // Fire-and-forget: track wager in any active tournament
+    recordTournamentWager(user.id, amount, req.log).catch(() => {});
 
     res.json({
       bet: {
