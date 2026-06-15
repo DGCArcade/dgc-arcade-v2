@@ -1,10 +1,10 @@
-import { pgTable, serial, integer, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, numeric } from "drizzle-orm/pg-core";
 
 export const fraudReviewsTable = pgTable("fraud_reviews", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
   withdrawalId: integer("withdrawal_id"),
-  amount: text("amount").notNull(),
+  amount: numeric("amount", { precision: 18, scale: 8 }).notNull(),
   score: integer("score").notNull().default(0),
   flags: text("flags").notNull().default("[]"),
   decision: text("decision").notNull(),

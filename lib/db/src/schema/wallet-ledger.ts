@@ -1,11 +1,11 @@
-import { pgTable, serial, integer, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, numeric } from "drizzle-orm/pg-core";
 
 export const walletLedgerTable = pgTable("wallet_ledger", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
-  amount: text("amount").notNull(),
-  balanceBefore: text("balance_before").notNull(),
-  balanceAfter: text("balance_after").notNull(),
+  amount: numeric("amount", { precision: 18, scale: 8 }).notNull(),
+  balanceBefore: numeric("balance_before", { precision: 18, scale: 8 }).notNull(),
+  balanceAfter: numeric("balance_after", { precision: 18, scale: 8 }).notNull(),
   reason: text("reason").notNull(),
   referenceId: integer("reference_id"),
   referenceType: text("reference_type"),

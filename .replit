@@ -48,10 +48,6 @@ externalPort = 3002
 localPort = 20720
 externalPort = 3000
 
-[userenv]
-
-[userenv.shared]
-JWT_SECRET = "dgc-arcade-jwt-9axm46zd2f2dm9zz7f6ta2l5gwlu140m"
 
 [nix]
 channel = "stable-25_05"
