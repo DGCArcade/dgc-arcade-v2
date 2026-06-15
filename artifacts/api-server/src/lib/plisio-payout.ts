@@ -200,11 +200,10 @@ export async function sendPlisioPayout(
 
   let payoutResponse: Response;
   try {
-    // Use POST (not GET) for Plisio /withdraw endpoint. GET requests don't properly
-    // carry request metadata (like IP), causing Plisio to reject with "Request IP" error.
-    // POST with URLSearchParams in the body is the correct method.
+    // Use POST for Plisio /payout endpoint.
+    // NOTE: The endpoint is /payout, not /withdraw.
     payoutResponse = await fetch(
-      `https://api.plisio.net/api/v1/operations/withdraw`,
+      `https://api.plisio.net/api/v1/operations/payout`,
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -237,10 +236,18 @@ export async function sendPlisioPayout(
   if (rawText.trim().startsWith("<")) {
     log.error({ txId, htmlResponse: rawText.slice(0, 500) }, "Plisio returned HTML (likely an error page)");
     await markNeedsReview();
+    // Fetch our public IP to help user with whitelisting
+    let publicIp = "unknown";
+    try {
+      const ipResp = await fetch("https://api.ipify.org?format=json");
+      const ipData = await ipResp.json() as { ip: string };
+      publicIp = ipData.ip;
+    } catch {}
+
     return {
       outcome: "needs_review",
       message:
-        "Plisio server returned an error page. Check your API key, withdrawal settings, and balance. Left under review.",
+        `Plisio returned an error page (404/500). If this is an IP error, your server IP is ${publicIp}. Add it to Plisio whitelist.`,
     };
   }
 
