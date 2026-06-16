@@ -1226,6 +1226,86 @@ adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
   }
 });
 
+// POST /api/admin/bank/force-complete/:id — manually force a deposit to complete (OWNER ONLY)
+adminRouter.post("/bank/force-complete/:id", requireBankSession, async (req, res) => {
+  if (!(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Only the platform owner can force complete transactions." });
+    return;
+  }
+  
+  const txId = parseInt(req.params.id, 10);
+  if (isNaN(txId)) {
+    res.status(400).json({ error: "Invalid transaction ID" });
+    return;
+  }
+
+  try {
+    const [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.id, txId)).limit(1);
+    if (!tx) {
+      res.status(404).json({ error: "Transaction not found" });
+      return;
+    }
+
+    if (tx.status === "completed") {
+      res.status(400).json({ error: "Transaction is already completed" });
+      return;
+    }
+
+    const creditAmount = parseFloat(tx.amount);
+
+    await db.transaction(async (txn) => {
+      await txn.update(transactionsTable)
+        .set({ 
+          status: "completed",
+          metadata: JSON.stringify({
+            force_completed_by: req.user!.userId,
+            force_completed_at: new Date().toISOString(),
+            original_amount: tx.amount
+          })
+        })
+        .where(eq(transactionsTable.id, tx.id));
+
+      const cryptoCurrency = tx.currency || "ETH";
+      await txn.insert(userBalancesTable).values({ userId: tx.userId, currency: cryptoCurrency, amount: "0" })
+        .onConflictDoUpdate({ target: [userBalancesTable.userId, userBalancesTable.currency], set: { amount: sql`amount + 0` } });
+
+      const [updatedUser] = await txn.update(usersTable).set({
+        balance: sql`balance + ${creditAmount}`,
+        totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
+        wagerRequirement: sql`(coalesce(total_deposited, 0) + ${creditAmount}) * 1.0`,
+      }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
+
+      if (updatedUser) {
+        await recordLedger(txn, {
+          userId: tx.userId, amount: creditAmount, balanceBefore: parseFloat(updatedUser.balance) - creditAmount,
+          balanceAfter: parseFloat(updatedUser.balance), reason: "deposit", referenceId: tx.id, referenceType: "transaction",
+          note: `MANUALLY FORCE COMPLETED by owner`
+        });
+      }
+      
+      // Handle Referral
+      const [depositor] = await txn.select({ referredBy: usersTable.referredBy }).from(usersTable).where(eq(usersTable.id, tx.userId)).limit(1);
+      if (depositor?.referredBy) {
+        const referrerId = depositor.referredBy;
+        const [activeRow] = await txn.select({ n: count() }).from(referralsTable).where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.status, "active")));
+        const active = activeRow?.n ?? 0;
+        const commissionRate = active >= 50 ? 0.10 : active >= 20 ? 0.07 : active >= 5 ? 0.05 : 0.03;
+        const commission = Math.round(creditAmount * commissionRate * 1e8) / 1e8;
+        if (commission > 0) {
+          await txn.update(usersTable).set({ balance: sql`balance + ${commission}` }).where(eq(usersTable.id, referrerId));
+          await txn.update(referralsTable).set({ status: "active", earnedAmount: sql`CAST(earned_amount AS DECIMAL) + ${commission}` }).where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.referredId, tx.userId)));
+          await txn.insert(creatorBankTxnsTable).values({ creatorId: referrerId, type: "referral_commission", amount: String(commission), toUserId: tx.userId, description: `Manual commission from force-completed deposit ${tx.id}` });
+        }
+      }
+    });
+
+    res.json({ success: true, message: "Transaction force-completed and user credited." });
+  } catch (err) {
+    req.log.error({ err, txId }, "Force complete error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // GET /api/admin/bank/pending-withdrawals — our pending withdrawal queue
 adminRouter.get("/bank/pending-withdrawals", requireBankSession, async (req, res) => {
   try {

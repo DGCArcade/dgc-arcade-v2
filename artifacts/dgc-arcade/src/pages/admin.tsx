@@ -1939,22 +1939,41 @@ export default function AdminDashboard() {
                                     </Button>
                                   )}
                                   {inv.type === "deposit" && inv.status === "pending" && (
-                                    <Button size="sm" variant="secondary" className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white"
-                                      onClick={async () => {
-                                        try {
-                                          const res = await adminFetch('/bank/reconcile', { method: 'POST' });
-                                          if (res.reconciledCount > 0) {
-                                            alert("Deposit synced and credited!");
-                                            window.location.reload();
-                                          } else {
-                                            alert("Plisio still reports this as pending or failed.");
+                                    <>
+                                      <Button size="sm" variant="secondary" className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white"
+                                        onClick={async () => {
+                                          try {
+                                            const res = await adminFetch('/bank/reconcile', { method: 'POST' });
+                                            if (res.reconciledCount > 0) {
+                                              alert("Deposit synced and credited!");
+                                              window.location.reload();
+                                            } else {
+                                              alert("Plisio still reports this as pending or failed. Use 'Force' if you've verified it manually.");
+                                            }
+                                          } catch (err) {
+                                            alert("Sync failed.");
                                           }
-                                        } catch (err) {
-                                          alert("Sync failed.");
-                                        }
-                                      }}>
-                                      Sync
-                                    </Button>
+                                        }}>
+                                        Sync
+                                      </Button>
+                                      <Button size="sm" variant="destructive" className="h-7 text-xs gap-1 bg-red-600 hover:bg-red-700"
+                                        onClick={async () => {
+                                          if (!confirm(`FORCE COMPLETE deposit #${inv.id} for user ${inv.username}? This will credit the user immediately without checking Plisio.`)) return;
+                                          try {
+                                            const res = await adminFetch(`/bank/force-complete/${inv.id}`, { method: 'POST' });
+                                            if (res.success) {
+                                              alert("Transaction force-completed and user credited!");
+                                              window.location.reload();
+                                            } else {
+                                              alert(`Error: ${res.error}`);
+                                            }
+                                          } catch (err) {
+                                            alert("Force complete failed.");
+                                          }
+                                        }}>
+                                        Force
+                                      </Button>
+                                    </>
                                   )}
                                 </div>
                               </TableCell>
