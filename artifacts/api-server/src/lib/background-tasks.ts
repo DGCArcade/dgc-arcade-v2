@@ -80,17 +80,25 @@ export async function syncPlisioDeposits() {
       if (!tx.plisioTrackId) continue;
 
       try {
-        const resp = await fetch(
+        let resp = await fetch(
           `https://api.plisio.net/api/v1/operations/${tx.plisioTrackId}?api_key=${PLISIO_KEY}`,
           { signal: AbortSignal.timeout(10_000) }
         );
 
-        if (!resp.ok) {
-          logger.warn({ txId: tx.id, status: resp.status }, "Plisio API error during sync");
-          continue;
+        let data = await resp.json() as any;
+        
+        // Fallback to order_number if trackId fails
+        if ((data.status !== "success" || !data.data) && tx.orderId) {
+          resp = await fetch(
+            `https://api.plisio.net/api/v1/operations?api_key=${PLISIO_KEY}&order_number=${tx.orderId}`,
+            { signal: AbortSignal.timeout(10_000) }
+          );
+          const listData = await resp.json() as any;
+          if (listData.status === "success" && listData.data && listData.data.length > 0) {
+            data = { status: "success", data: listData.data[0] };
+          }
         }
 
-        const data = await resp.json() as any;
         if (data.status !== "success" || !data.data) continue;
 
         const pStatus = String(data.data.status).toLowerCase();

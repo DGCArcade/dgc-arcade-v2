@@ -1251,11 +1251,14 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
     if (txId) {
       [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.id, txId)).limit(1);
     } else if (plisioId) {
-      [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.plisioTrackId, plisioId)).limit(1);
+      // Try searching by Plisio ID (txn_id) or Order ID (order_number)
+      [tx] = await db.select().from(transactionsTable)
+        .where(or(eq(transactionsTable.plisioTrackId, plisioId), eq(transactionsTable.orderId, plisioId)))
+        .limit(1);
     }
 
     if (!tx) {
-      res.status(404).json({ error: "Transaction not found in our system" });
+      res.status(404).json({ error: "Transaction not found in our system. Make sure you are pasting the correct Plisio ID or Order ID." });
       return;
     }
 
@@ -1266,11 +1269,22 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
     }
 
     // Fetch REAL data from Plisio
-    const resp = await fetch(`https://api.plisio.net/api/v1/operations/${trackId}?api_key=${PLISIO_KEY}`);
-    const data = await resp.json() as any;
+    // Try searching by trackId (txn_id) first
+    let resp = await fetch(`https://api.plisio.net/api/v1/operations/${trackId}?api_key=${PLISIO_KEY}`);
+    let data = await resp.json() as any;
+    
+    // If not found by trackId, try searching by order_number if we have one
+    if ((data.status !== "success" || !data.data) && tx.orderId) {
+      req.log.info({ orderId: tx.orderId }, "Smart sync: not found by trackId, trying order_number");
+      resp = await fetch(`https://api.plisio.net/api/v1/operations?api_key=${PLISIO_KEY}&order_number=${tx.orderId}`);
+      const listData = await resp.json() as any;
+      if (listData.status === "success" && listData.data && listData.data.length > 0) {
+        data = { status: "success", data: listData.data[0] };
+      }
+    }
     
     if (data.status !== "success" || !data.data) {
-      res.status(400).json({ error: "Could not find invoice on Plisio", plisioResponse: data });
+      res.status(400).json({ error: "Could not find invoice on Plisio. Please verify the ID in your Plisio dashboard.", plisioResponse: data });
       return;
     }
 
