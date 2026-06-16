@@ -434,7 +434,7 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
         })
         .onConflictDoUpdate({
           target: [userBalancesTable.userId, userBalancesTable.currency],
-          set: { amount: sql`amount + ${cryptoAmountReceived}` },
+          set: { amount: sql`user_balances.amount + ${cryptoAmountReceived}` },
         });
 
       const [updatedUser] = await txn.update(usersTable).set({

@@ -1342,7 +1342,7 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
 
       const cryptoCurrency = tx.currency || data.data.currency || "ETH";
       await txn.insert(userBalancesTable).values({ userId: tx.userId, currency: cryptoCurrency, amount: String(receivedAmount) })
-        .onConflictDoUpdate({ target: [userBalancesTable.userId, userBalancesTable.currency], set: { amount: sql`amount + ${String(receivedAmount)}` } });
+        .onConflictDoUpdate({ target: [userBalancesTable.userId, userBalancesTable.currency], set: { amount: sql`user_balances.amount + ${String(receivedAmount)}` } });
 
       const [updatedUser] = await txn.update(usersTable).set({
         balance: sql`balance + ${creditAmount}`,
