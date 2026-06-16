@@ -120,7 +120,10 @@ dailyBonusRouter.post("/claim", requireAuth, async (req, res) => {
     const base = getBaseBonusAmount(user.totalBets, parseFloat(user.totalWon));
     const bonusAmount = applyStreakMultiplier(base, streakDay);
     const [updatedUser] = await db.update(usersTable)
-      .set({ balance: sql`balance + ${bonusAmount}` })
+      .set({ 
+        balance: sql`balance + ${bonusAmount}`,
+        wagerRequirement: sql`coalesce(wager_requirement, 0) + ${bonusAmount}`
+      })
       .where(eq(usersTable.id, user.id))
       .returning({ balance: usersTable.balance });
     const newBalance = parseFloat(updatedUser?.balance ?? "0");

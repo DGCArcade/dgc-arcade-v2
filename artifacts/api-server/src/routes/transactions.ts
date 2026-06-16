@@ -444,7 +444,7 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       const [updatedUser] = await txn.update(usersTable).set({
         balance: sql`balance + ${creditAmount}`,
         totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
-        wagerRequirement: sql`(coalesce(total_deposited, 0) + ${creditAmount}) * ${WAGER_MULTIPLIER}`,
+        wagerRequirement: sql`coalesce(wager_requirement, 0) + ${creditAmount * WAGER_MULTIPLIER}`,
       }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
       if (updatedUser) {
         const balanceAfter = parseFloat(updatedUser.balance);
@@ -555,13 +555,16 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
 
-    const totalDeposited = parseFloat(user.totalDeposited ?? "0");
     const totalWageredAmount = parseFloat(user.totalWageredAmount ?? "0");
-    const requiredWager = totalDeposited * WAGER_MULTIPLIER;
-    if (totalDeposited > 0 && totalWageredAmount < requiredWager) {
+    const requiredWager = parseFloat(user.wagerRequirement ?? "0");
+    
+    // Strict enforcement: totalWageredAmount must meet the total accumulated wagerRequirement
+    // (This includes 100% of signup bonus, daily bonuses, and deposits)
+    if (totalWageredAmount < (requiredWager - 0.01)) { // 1 cent buffer for rounding
       const remaining = (requiredWager - totalWageredAmount).toFixed(2);
       res.status(403).json({
-        error: `Wagering requirement not met. You must wager ${remaining} more before withdrawing.`,
+        error: `Wagering requirement not met. You must wager $${remaining} more before withdrawing.`,
+        detail: "All bonuses and deposits require 100% rollover (wagering) before withdrawal.",
         required: requiredWager,
         wagered: totalWageredAmount,
         remaining: parseFloat(remaining),

@@ -165,7 +165,7 @@ export async function syncPlisioDeposits() {
             const [updatedUser] = await txn.update(usersTable).set({
               balance: sql`balance + ${creditAmount}`,
               totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
-              wagerRequirement: sql`(coalesce(total_deposited, 0) + ${creditAmount}) * 1.0`,
+              wagerRequirement: sql`coalesce(wager_requirement, 0) + ${creditAmount}`,
             }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
 
             if (updatedUser) {
