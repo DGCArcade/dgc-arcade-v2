@@ -362,16 +362,23 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     const requestedUsd   = parseFloat(tx.amount);
     
     // ROBUST AMOUNT EXTRACTION: Check every possible field Plisio might use for different coins/statuses
-    const sourceUsd      = parseFloat(String(source_amount || req.body.invoice_amount || req.body.source_amount_usd || tx.amount));
-    const receivedCrypto = parseFloat(String(received_amount || req.body.amount || req.body.received_sum || req.body.received_amount_usd || "0"));
-    const invoicedCrypto = parseFloat(String(invoice_total_sum || req.body.total_sum || req.body.amount || req.body.invoice_amount || "0"));
+    const sourceUsd       = parseFloat(String(source_amount || req.body.invoice_amount || req.body.source_amount_usd || tx.amount));
+    const receivedCrypto  = parseFloat(String(received_amount || req.body.amount || req.body.received_sum || req.body.received_amount_usd || "0"));
+    const invoicedCrypto  = parseFloat(String(invoice_total_sum || req.body.total_sum || req.body.amount || req.body.invoice_amount || "0"));
+    // Some Plisio payloads provide the actual USD value received directly
+    const receivedUsdValue = parseFloat(String(req.body.received_amount_usd || req.body.received_sum_usd || "0"));
 
     let creditAmount: number;
     let ratioUsed: number;
+    
     // REAL AMOUNT CALCULATION: Credit the real received amount after fees.
-    // If Plisio provides both received and invoiced crypto amounts, use the ratio.
-    // If received_amount is missing/zero (some coins/statuses), fall back to sourceUsd (invoice amount).
-    if (receivedCrypto > 0 && invoicedCrypto > 0 && sourceUsd > 0) {
+    if (receivedUsdValue > 0) {
+      // Best case: Plisio tells us exactly how much USD was received
+      creditAmount = Math.round(receivedUsdValue * 1e8) / 1e8;
+      ratioUsed = sourceUsd > 0 ? (creditAmount / sourceUsd) : 1;
+      req.log.info({ txn_id, receivedUsdValue, creditAmount, sourceUsd }, "Plisio IPN: Crediting based on direct USD received value");
+    } else if (receivedCrypto > 0 && invoicedCrypto > 0 && sourceUsd > 0) {
+      // Ratio case: Calculate USD value based on the ratio of crypto received vs invoiced
       ratioUsed = receivedCrypto / invoicedCrypto;
       creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
       req.log.info({ 
@@ -381,13 +388,13 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
         sourceUsd, 
         ratio: ratioUsed, 
         creditAmount 
-      }, "Plisio IPN: Calculated credit from actual received amount (ratio method)");
+      }, "Plisio IPN: Calculated credit from actual received crypto ratio");
     } else if (sourceUsd > 0) {
-      // Fallback: use the invoice USD amount directly (no ratio available)
+      // Fallback: use the invoice USD amount directly (no better data available)
       ratioUsed = 1;
       creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
       req.log.warn({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd, creditAmount }, 
-        "Plisio IPN: received_amount or invoiced_amount missing — crediting full invoice amount as fallback");
+        "Plisio IPN: Missing received data — crediting invoice amount as fallback");
     } else {
       req.log.error({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd }, "Plisio IPN: CRITICAL - No amount data at all for paid transaction.");
       res.status(400).json({ error: "Missing payment amount data" });

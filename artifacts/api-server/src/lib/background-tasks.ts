@@ -107,23 +107,27 @@ export async function syncPlisioDeposits() {
         
         if (creditStatuses.includes(pStatus)) {
           // ROBUST AMOUNT EXTRACTION: Check every possible field Plisio might use for different coins/statuses
-          const receivedAmount = parseFloat(String(data.data.received_amount || data.data.amount || data.data.received_sum || data.data.received_amount_usd || "0"));
-          const invoicedAmount = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || data.data.invoice_amount || "0"));
-          const sourceUsd = parseFloat(String(data.data.source_amount || data.data.invoice_amount || data.data.source_amount_usd || tx.amount));
+          const receivedAmount  = parseFloat(String(data.data.received_amount || data.data.amount || data.data.received_sum || "0"));
+          const invoicedAmount  = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || data.data.invoice_amount || "0"));
+          const sourceUsd       = parseFloat(String(data.data.source_amount || data.data.invoice_amount || data.data.source_amount_usd || tx.amount));
+          const receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
           
           let ratioUsed: number;
           let creditAmount: number;
+          
           // REAL AMOUNT CALCULATION: Credit the real received amount after fees.
-          // If Plisio provides both received and invoiced crypto amounts, use the ratio.
-          // If received_amount is missing/zero, fall back to sourceUsd (invoice amount).
-          if (receivedAmount > 0 && invoicedAmount > 0 && sourceUsd > 0) {
+          if (receivedUsdValue > 0) {
+            creditAmount = Math.round(receivedUsdValue * 1e8) / 1e8;
+            ratioUsed = sourceUsd > 0 ? (creditAmount / sourceUsd) : 1;
+            logger.info({ txId: tx.id, receivedUsdValue, creditAmount, sourceUsd }, "Plisio sync: Crediting based on direct USD received value");
+          } else if (receivedAmount > 0 && invoicedAmount > 0 && sourceUsd > 0) {
             ratioUsed = receivedAmount / invoicedAmount;
             creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
             logger.info({ txId: tx.id, pStatus, creditAmount, ratio: ratioUsed, receivedAmount, invoicedAmount }, "Plisio sync: crediting with ratio method");
           } else if (sourceUsd > 0) {
             ratioUsed = 1;
             creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
-            logger.warn({ txId: tx.id, pStatus, receivedAmount, invoicedAmount, sourceUsd, creditAmount }, "Plisio sync: received_amount missing — crediting full invoice amount as fallback");
+            logger.warn({ txId: tx.id, pStatus, receivedAmount, invoicedAmount, sourceUsd, creditAmount }, "Plisio sync: Missing received data — crediting invoice amount as fallback");
           } else {
             logger.warn({ txId: tx.id, pStatus }, "Plisio sync: no amount data, skipping");
             continue;

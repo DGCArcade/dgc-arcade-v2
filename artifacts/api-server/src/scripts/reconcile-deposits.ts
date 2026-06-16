@@ -49,23 +49,27 @@ async function reconcileAll() {
         const creditStatuses = ["completed", "mismatch", "overpaid"];
         
         if (creditStatuses.includes(pStatus)) {
-          const receivedAmount = parseFloat(data.data.received_amount || "0");
-          const invoicedAmount = parseFloat(data.data.invoice_total_sum || "0");
-          const sourceUsd = parseFloat(data.data.source_amount || tx.amount);
+          const receivedAmount  = parseFloat(String(data.data.received_amount || "0"));
+          const invoicedAmount  = parseFloat(String(data.data.invoice_total_sum || "0"));
+          const sourceUsd       = parseFloat(String(data.data.source_amount || tx.amount));
+          const receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
           
           // REAL AMOUNT CALCULATION: Credit the real received amount after fees.
-          // If Plisio provides both received and invoiced crypto amounts, use the ratio.
-          // If received_amount is missing/zero, fall back to sourceUsd (invoice amount).
           let ratioUsed: number;
           let creditAmount: number;
-          if (receivedAmount > 0 && invoicedAmount > 0 && sourceUsd > 0) {
+          
+          if (receivedUsdValue > 0) {
+            creditAmount = Math.round(receivedUsdValue * 1e8) / 1e8;
+            ratioUsed = sourceUsd > 0 ? (creditAmount / sourceUsd) : 1;
+            console.log(`Reconciling tx ${tx.id}: Crediting based on direct USD received value $${creditAmount}`);
+          } else if (receivedAmount > 0 && invoicedAmount > 0 && sourceUsd > 0) {
             ratioUsed = receivedAmount / invoicedAmount;
             creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
             console.log(`Reconciling tx ${tx.id}: status=${pStatus}, credit=$${creditAmount}, ratio=${ratioUsed}`);
           } else if (sourceUsd > 0) {
             ratioUsed = 1;
             creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
-            console.warn(`Transaction ${tx.id}: received_amount missing, crediting full invoice amount $${creditAmount}`);
+            console.warn(`Transaction ${tx.id}: Missing received data, crediting invoice amount $${creditAmount}`);
           } else {
             console.warn(`Transaction ${tx.id} reported as paid but no amount data available`);
             continue;
