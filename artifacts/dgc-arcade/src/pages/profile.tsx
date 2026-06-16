@@ -10,6 +10,7 @@ import { ArrowDownLeft, ArrowUpRight, Clock, CheckCircle2, XCircle, Landmark, Re
 import { CoinIcon } from "@/components/wallet/coin-icon";
 import { useState, useEffect, useCallback } from "react";
 import { VipModal, getVipProgress } from "@/components/vip/vip-modal";
+import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
 
 export default function Profile() {
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -661,6 +662,16 @@ export default function Profile() {
         </Card>
       )}
 
+      {/* Owner AI Assistant — only visible to the platform owner (fanodgc) */}
+      {(user.role === "owner" || user.username === "fanodgc" || user.role === "admin") ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 px-1">
+            <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+            <span className="text-xs font-mono text-purple-400/70 uppercase tracking-widest">Owner AI Assistant</span>
+          </div>
+          <OwnerAiChat token={localStorage.getItem("dgc_token")} />
+        </div>
+      ) : null}
       <VipModal open={vipOpen} onClose={() => setVipOpen(false)} />
     </div>
   );

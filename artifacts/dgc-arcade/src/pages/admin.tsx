@@ -45,8 +45,10 @@ import {
   Award,
   MessageSquare,
   Send,
+  Bot,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
 
 const API_BASE = "/api/admin";
 
@@ -161,7 +163,7 @@ interface UserDetail {
   transactions: { id: number; type: string; amount: number; currency: string; status: string; address: string | null; createdAt: string }[];
 }
 
-type TabKey = "overview" | "users" | "transactions" | "bank" | "tournaments" | "chat";
+type TabKey = "overview" | "users" | "transactions" | "bank" | "tournaments" | "chat" | "ai";
 
 export default function AdminDashboard() {
   const { user, isLoading } = useAuth();
@@ -831,6 +833,7 @@ export default function AdminDashboard() {
         { key: "bank", label: "DGC Bank", icon: DollarSign },
         { key: "tournaments", label: "Tournaments", icon: Trophy },
         { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChatCount },
+        { key: "ai", label: "Owner AI", icon: Bot },
       ]
     : [
         { key: "overview", label: "Overview", icon: Activity },
@@ -2907,6 +2910,19 @@ export default function AdminDashboard() {
         </div>
       )}
 
+
+      {/* ── Owner AI Tab ── */}
+      {activeTab === "ai" && isOwner && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="font-display font-black uppercase tracking-widest text-xl flex items-center gap-2">
+              <Bot className="w-5 h-5 text-purple-400" /> Owner AI Assistant
+            </h2>
+            <p className="text-muted-foreground text-sm mt-0.5">Connected to live Neon DB · Voice + text commands · Real-time platform control</p>
+          </div>
+          <OwnerAiChat token={getToken()} />
+        </div>
+      )}
       {/* ── Delete Confirm Dialog ── */}
       <Dialog open={!!confirmDelete} onOpenChange={() => setConfirmDelete(null)}>
         <DialogContent className="bg-card border-border/60 max-w-sm">
