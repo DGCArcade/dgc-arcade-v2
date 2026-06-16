@@ -220,7 +220,9 @@ export function WithdrawForm() {
           className="w-full font-bold uppercase tracking-widest h-12"
           disabled={requestWithdrawal.isPending || availableCurrencies.length === 0 || !selectedCurrency}
         >
-          {requestWithdrawal.isPending ? "Submitting Request..." : "Request Withdrawal"}
+          {requestWithdrawal.isPending 
+            ? "Submitting Request..." 
+            : (form.watch("amount") >= 10000 ? "Request Withdrawal" : "Instant Withdrawal")}
         </Button>
       </form>
     </Form>

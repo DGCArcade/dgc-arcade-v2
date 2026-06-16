@@ -587,7 +587,7 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
 
-    const AUTO_APPROVE_THRESHOLD = 10_000;
+    const AUTO_APPROVE_THRESHOLD = 10000;
     const autoApprove = amount < AUTO_APPROVE_THRESHOLD && fraudDecision !== "blocked";
     const flaggedForReview = !autoApprove;
     const txStatus = "pending" as const;
