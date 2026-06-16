@@ -1953,7 +1953,7 @@ export default function AdminDashboard() {
                                             } else if (res.alreadyDone) {
                                               alert("This transaction was already completed.");
                                             } else {
-                                              alert(res.message || "Plisio still reports this as pending or failed.");
+                                              alert(`${res.message || "Sync issue"}\n\nRaw Plisio Status: ${res.plisioData?.status || 'Unknown'}\nReceived: ${res.plisioData?.received_amount || '0'}`);
                                             }
                                           } catch (err) {
                                             alert("Sync failed.");

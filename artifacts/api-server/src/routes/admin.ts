@@ -1288,10 +1288,14 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
       return;
     }
 
+    req.log.info({ plisioData: data.data }, "Smart Sync: Deep Debug Plisio Data");
+
     const pStatus = String(data.data.status).toLowerCase();
-    const receivedAmount = parseFloat(String(data.data.received_amount || "0"));
-    const invoicedAmount = parseFloat(String(data.data.invoice_total_sum || "0"));
-    const sourceUsd = parseFloat(String(data.data.source_amount || tx.amount));
+    
+    // Plisio sometimes uses different field names or nested structures for amounts
+    const receivedAmount = parseFloat(String(data.data.received_amount || data.data.amount || data.data.received_sum || "0"));
+    const invoicedAmount = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || "0"));
+    const sourceUsd = parseFloat(String(data.data.source_amount || data.data.invoice_amount || tx.amount));
     
     // Logic to determine if we should credit
     const isPaid = ["completed", "mismatch", "overpaid", "finished"].includes(pStatus);

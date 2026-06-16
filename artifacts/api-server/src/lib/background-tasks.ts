@@ -106,9 +106,9 @@ export async function syncPlisioDeposits() {
         const creditStatuses = ["completed", "mismatch", "overpaid", "finished"];
         
         if (creditStatuses.includes(pStatus)) {
-          const receivedAmount = parseFloat(String(data.data.received_amount || "0"));
-          const invoicedAmount = parseFloat(String(data.data.invoice_total_sum || "0"));
-          const sourceUsd = parseFloat(String(data.data.source_amount || tx.amount));
+          const receivedAmount = parseFloat(String(data.data.received_amount || data.data.amount || data.data.received_sum || "0"));
+          const invoicedAmount = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || "0"));
+          const sourceUsd = parseFloat(String(data.data.source_amount || data.data.invoice_amount || tx.amount));
           
           // STRICT RATIO CALCULATION: Only credit what was actually received.
           // If they send $79 instead of $100, ratio will be 0.79, and they get $79.
