@@ -539,7 +539,14 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
 
-    const balance = parseFloat(user.balance);
+    // Check Crypto-Native Balance
+    const [cryptoBalance] = await db.select().from(userBalancesTable).where(and(eq(userBalancesTable.userId, user.id), eq(userBalancesTable.currency, currency))).limit(1);
+    const cryptoPrice = await getCryptoPrice(currency);
+    const liveUsdBalance = (parseFloat(cryptoBalance?.amount || "0") * cryptoPrice);
+    
+    // If they have a crypto-native balance for this coin, use it. Otherwise fallback to static balance.
+    const effectiveBalance = cryptoBalance ? liveUsdBalance : parseFloat(user.balance);
+
     const withdrawRatio = amount / (totalDeposited || 1);
     const timeSinceCreated = Date.now() - new Date(user.createdAt).getTime();
     const accountAgeHours = timeSinceCreated / (1000 * 60 * 60);
@@ -547,7 +554,7 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     if (withdrawRatio > 0.90 && accountAgeHours < 2) flagReasons.push("Immediate high-value withdrawal on new account");
     if (withdrawRatio > 0.95 && totalWageredAmount < totalDeposited * WAGER_MULTIPLIER) flagReasons.push("Withdrawal exceeds 95% of deposit with minimal play");
     if (accountAgeHours < 1 && amount > 100) flagReasons.push("Large withdrawal within 1 hour of account creation");
-    if (amount > balance) {
+    if (amount > (effectiveBalance + 0.01)) { // Small buffer for price fluctuations
       res.status(400).json({ error: "Insufficient balance" });
       return;
     }
@@ -593,12 +600,26 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     const txStatus = "pending" as const;
 
     let insertedTxId = 0;
+    const cryptoAmountToDeduct = amount / cryptoPrice;
+    
     const deducted = await db.transaction(async (txn) => {
-      const d = await txn.update(usersTable)
-        .set({ balance: sql`${usersTable.balance} - ${amount}` })
-        .where(and(eq(usersTable.id, user.id), sql`${usersTable.balance} >= ${amount}`))
-        .returning({ balance: usersTable.balance });
-      if (d.length === 0) return d;
+      // Deduct from Crypto Balance if it exists
+      if (cryptoBalance) {
+        const updatedCrypto = await txn.update(userBalancesTable)
+          .set({ amount: sql`amount - ${cryptoAmountToDeduct.toFixed(8)}` })
+          .where(and(eq(userBalancesTable.userId, user.id), eq(userBalancesTable.currency, currency), sql`amount >= ${cryptoAmountToDeduct.toFixed(8)}`))
+          .returning({ amount: userBalancesTable.amount });
+        
+        if (updatedCrypto.length === 0) return [];
+      } else {
+        // Fallback to static balance
+        const d = await txn.update(usersTable)
+          .set({ balance: sql`${usersTable.balance} - ${amount}` })
+          .where(and(eq(usersTable.id, user.id), sql`${usersTable.balance} >= ${amount}`))
+          .returning({ balance: usersTable.balance });
+        if (d.length === 0) return [];
+      }
+
       const [inserted] = await txn.insert(transactionsTable).values({
         userId: user.id, type: "withdrawal", amount: String(amount),
         currency, status: txStatus, address,
