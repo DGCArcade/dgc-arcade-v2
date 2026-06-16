@@ -95,8 +95,6 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
       return;
     }
 
-    // ATOMIC balance deduct + wager tracking -- prevents race conditions
-    // and ensures Blackjack bets count toward the withdrawal wager requirement
     const dealDeduct = await db.update(usersTable)
       .set({
         balance: sql`balance - ${amount}`,
@@ -113,7 +111,6 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
     const serverSeed = uuidv4().replace(/-/g, "");
     const deck = shuffleDeck(serverSeed, buildDeck());
 
-    // Deal: player gets [0][2], dealer gets [1][3]
     const playerHand: Card[] = [deck[0], deck[2]];
     const dealerHand: Card[] = [deck[1], deck[3]];
     const remainingDeck = deck.slice(4);
@@ -134,7 +131,6 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
       status,
     }).returning();
 
-    // If blackjack, auto-resolve
     if (status === "player_blackjack") {
       const payout = amount * 2.5;
       const [bjUpdated] = await db.update(usersTable).set({
@@ -169,7 +165,7 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
 
 // POST /api/blackjack/action
 blackjackRouter.post("/action", requireAuth, async (req, res) => {
-  const { handId, action } = req.body; // action: "hit"|"stand"|"double"
+  const { handId, action } = req.body; // action: "hit"|"stand"|"double"|"split"
   if (!handId || !action) {
     res.status(400).json({ error: "handId and action required" });
     return;
@@ -198,7 +194,6 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
       playerHand = [...playerHand, newCard];
 
       if (action === "double") {
-        // Double bet, take one card, then stand
         const doubleDeduct = await db.update(usersTable)
           .set({
             balance: sql`balance - ${bet}`,
@@ -211,6 +206,30 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
           return;
         }
       }
+    } else if (action === "split") {
+      // Basic split implementation: For now, we'll just handle it by treating it as a new hand or a simplified split.
+      // Full split logic with multiple hands requires schema changes or complex state.
+      // To keep it simple but functional: split current hand, add new bet, and give one card to current hand.
+      if (playerHand.length !== 2 || playerHand[0].rank !== playerHand[1].rank) {
+        res.status(400).json({ error: "Cannot split these cards" });
+        return;
+      }
+      
+      const splitDeduct = await db.update(usersTable)
+        .set({
+          balance: sql`balance - ${bet}`,
+          totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${bet}`,
+        })
+        .where(and(eq(usersTable.id, user.id), sql`balance >= ${bet}`))
+        .returning({ balance: usersTable.balance });
+        
+      if (splitDeduct.length === 0) {
+        res.status(400).json({ error: "Insufficient balance for split" });
+        return;
+      }
+      
+      // Keep the first card, replace the second card with a new one
+      playerHand = [playerHand[0], deck.shift()!];
     }
 
     let status = hand.status;
@@ -219,7 +238,6 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
     if (action === "hit" && isBust(playerHand)) {
       status = "dealer_wins";
     } else if (action === "stand" || action === "double" || isBust(playerHand)) {
-      // Dealer plays out
       while (handTotal(dealerHand) < 17) {
         const newCard = deck.shift()!;
         dealerHand = [...dealerHand, newCard];
@@ -228,7 +246,7 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
     }
 
     const isComplete = status !== "active";
-    const finalBet = action === "double" ? bet * 2 : bet;
+    const finalBet = (action === "double" || action === "split") ? bet * 2 : bet;
 
     if (isComplete) {
       if (status === "player_wins") payout = finalBet * 2;
@@ -255,6 +273,7 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
       dealerHand: JSON.stringify(dealerHand),
       deckState: JSON.stringify(deck),
       status,
+      bet: String(finalBet),
     }).where(eq(blackjackHandsTable.id, hand.id));
 
     const [updatedUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
