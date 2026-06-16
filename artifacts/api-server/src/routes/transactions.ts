@@ -374,14 +374,18 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     // 'source_amount' is the USD amount of the invoice.
     
     let creditAmount: number;
+    // STRICT RATIO CALCULATION: Only credit what was actually received.
+    // We NO LONGER fallback to requestedUsd if fields are missing.
     if (receivedCrypto != null && invoicedCrypto != null && invoicedCrypto > 0 && sourceUsd != null) {
-      // Calculate USD value based on the actual crypto received vs expected crypto
       const ratio = receivedCrypto / invoicedCrypto;
-      // We use the real received ratio to calculate the USD credit. 
-      // If they overpaid (ratio > 1), we give them the extra credit.
-      // If they underpaid (ratio < 1), we give them partial credit.
       creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
       
+      if (creditAmount <= 0) {
+        req.log.warn({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd }, "Plisio IPN: calculated credit is zero or negative, skipping");
+        res.json({ success: true });
+        return;
+      }
+
       req.log.info({ 
         txn_id, 
         receivedCrypto, 
@@ -389,11 +393,11 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
         sourceUsd, 
         ratio, 
         creditAmount 
-      }, "Plisio IPN: Calculated credit from actual received amount");
+      }, "Plisio IPN: Calculated credit from actual received amount (Strict Ratio)");
     } else {
-      // Fallback if fields are missing (shouldn't happen on completed/mismatch)
-      req.log.warn({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd }, "Plisio IPN: Missing amount fields, falling back to requested amount");
-      creditAmount = requestedUsd;
+      req.log.error({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd }, "Plisio IPN: CRITICAL - Missing amount fields for paid transaction. Cannot credit safely.");
+      res.status(400).json({ error: "Missing payment amount data" });
+      return;
     }
 
     req.log.info({ txn_id, creditAmount, sourceUsd, receivedCrypto, invoicedCrypto, requestedUsd, status },

@@ -1305,9 +1305,18 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
       return;
     }
 
-    // Calculate real credit based on what was actually received
-    const ratio = invoicedAmount > 0 ? (receivedAmount / invoicedAmount) : 1;
+    // STRICT RATIO CALCULATION: Only credit what was actually received.
+    if (invoicedAmount <= 0) {
+      res.status(400).json({ error: "Plisio invoice has 0 invoiced amount. Cannot credit safely." });
+      return;
+    }
+    const ratio = receivedAmount / invoicedAmount;
     const creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
+    
+    if (creditAmount <= 0) {
+      res.status(400).json({ error: `Calculated credit is $${creditAmount} based on ${receivedAmount} received. Not crediting.` });
+      return;
+    }
 
     if (tx.status === "completed") {
       res.json({ success: true, message: "Transaction was already completed.", alreadyDone: true, plisioData: data.data });

@@ -110,15 +110,23 @@ export async function syncPlisioDeposits() {
           const invoicedAmount = parseFloat(String(data.data.invoice_total_sum || "0"));
           const sourceUsd = parseFloat(String(data.data.source_amount || tx.amount));
           
-          // If it's paid, we should credit it. If ratio is 0 because of missing info, default to 1
-          const ratio = invoicedAmount > 0 ? (receivedAmount / invoicedAmount) : 1;
-          const creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
-          
-          if (creditAmount <= 0 && pStatus === "completed") {
-            logger.warn({ txId: tx.id, pStatus }, "Plisio sync: payment reported as paid but calculated credit is zero");
+          // STRICT RATIO CALCULATION: Only credit what was actually received.
+          // If they send $79 instead of $100, ratio will be 0.79, and they get $79.
+          // We NO LONGER default to 1 if info is missing; we must have the real numbers.
+          if (invoicedAmount <= 0) {
+            logger.warn({ txId: tx.id, pStatus }, "Plisio sync: invoicedAmount is 0, skipping to avoid over-crediting");
+            continue;
           }
 
-          logger.info({ txId: tx.id, pStatus, creditAmount, ratio }, "Plisio sync: verified payment, crediting user");
+          const ratio = receivedAmount / invoicedAmount;
+          const creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
+          
+          if (creditAmount <= 0) {
+            logger.warn({ txId: tx.id, pStatus, receivedAmount, invoicedAmount }, "Plisio sync: calculated credit is zero or negative, skipping");
+            continue;
+          }
+
+          logger.info({ txId: tx.id, pStatus, creditAmount, ratio, receivedAmount, invoicedAmount }, "Plisio sync: verified payment with strict ratio, crediting user");
 
           await db.transaction(async (txn) => {
             const flipped = await txn
