@@ -1045,7 +1045,8 @@ adminRouter.post("/transactions/:id/decline-deposit", requireAdmin, async (req, 
   }
 });
 
-// GET /api/admin/bank/invoices — real deposit invoice feed from our database (OWNER ONLY)
+// GET /api/admin/bank/invoices — real invoice feed from our database (OWNER ONLY)
+// Shows both deposits and withdrawals with all their real data.
 // Reads directly from our Neon DB (no Plisio API call) so it always shows real invoices.
 adminRouter.get("/bank/invoices", requireBankSession, async (req, res) => {
   if (!(await callerIsOwner(req))) {
@@ -1075,15 +1076,13 @@ adminRouter.get("/bank/invoices", requireBankSession, async (req, res) => {
       })
       .from(transactionsTable)
       .leftJoin(usersTable, eq(transactionsTable.userId, usersTable.id))
-      .where(eq(transactionsTable.type, "deposit"))
       .orderBy(desc(transactionsTable.createdAt))
       .limit(limitNum)
       .offset(offset);
 
     const [{ total }] = await db
       .select({ total: sql<number>`count(*)` })
-      .from(transactionsTable)
-      .where(eq(transactionsTable.type, "deposit"));
+      .from(transactionsTable);
 
     res.json({ invoices, total: Number(total) });
   } catch (err) {
