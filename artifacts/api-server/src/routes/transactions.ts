@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, usersTable, transactionsTable, referralsTable } from "@workspace/db";
+import { db, usersTable, transactionsTable, referralsTable, userBalancesTable } from "@workspace/db";
 import { eq, desc, and, ne, sql, count, gte } from "drizzle-orm";
 import {
   InitiateDepositBody,
@@ -12,6 +12,7 @@ import { sendPlisioPayout } from "../lib/plisio-payout.js";
 import { v4 as uuidv4 } from "uuid";
 import { recordLedger } from "../services/ledger.js";
 import { evaluateWithdrawal } from "../services/fraud.js";
+import { getCryptoPrice } from "../lib/price-service.js";
 
 export const transactionsRouter = Router();
 
