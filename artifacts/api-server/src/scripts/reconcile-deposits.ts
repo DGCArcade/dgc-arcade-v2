@@ -49,8 +49,8 @@ async function reconcileAll() {
         const creditStatuses = ["completed", "mismatch", "overpaid"];
         
         if (creditStatuses.includes(pStatus)) {
-          const receivedAmount  = parseFloat(String(data.data.received_amount || "0"));
-          const invoicedAmount  = parseFloat(String(data.data.invoice_total_sum || "0"));
+          const receivedAmount  = parseFloat(String(data.data.received_amount || data.data.received_sum || "0"));
+          const invoicedAmount  = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || "0"));
           const sourceUsd       = parseFloat(String(data.data.source_amount || tx.amount));
           const receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
           

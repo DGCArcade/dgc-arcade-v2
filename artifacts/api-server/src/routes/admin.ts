@@ -1298,7 +1298,7 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
     const pStatus = String(data.data.status).toLowerCase();
     
     // ROBUST AMOUNT EXTRACTION: Check every possible field Plisio might use for different coins/statuses
-    const receivedAmount  = parseFloat(String(data.data.received_amount || data.data.amount || data.data.received_sum || "0"));
+    const receivedAmount  = parseFloat(String(data.data.received_amount || data.data.received_sum || data.data.amount || "0"));
     const invoicedAmount  = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || data.data.invoice_amount || "0"));
     const sourceUsd       = parseFloat(String(data.data.source_amount || data.data.invoice_amount || data.data.source_amount_usd || tx.amount));
     const receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));

@@ -363,9 +363,10 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     
     // ROBUST AMOUNT EXTRACTION: Check every possible field Plisio might use for different coins/statuses
     const sourceUsd       = parseFloat(String(source_amount || req.body.invoice_amount || req.body.source_amount_usd || tx.amount));
-    const receivedCrypto  = parseFloat(String(received_amount || req.body.amount || req.body.received_sum || req.body.received_amount_usd || "0"));
+    // We prioritize received_amount (net after fees) over amount (gross)
+    const receivedCrypto  = parseFloat(String(received_amount || req.body.received_sum || req.body.amount || "0"));
     const invoicedCrypto  = parseFloat(String(invoice_total_sum || req.body.total_sum || req.body.amount || req.body.invoice_amount || "0"));
-    // Some Plisio payloads provide the actual USD value received directly
+    // Prioritize direct USD net received value (after fees)
     const receivedUsdValue = parseFloat(String(req.body.received_amount_usd || req.body.received_sum_usd || "0"));
 
     let creditAmount: number;
