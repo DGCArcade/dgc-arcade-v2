@@ -4,6 +4,7 @@ import rateLimit from "express-rate-limit";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { startBackgroundTasks } from "./lib/background-tasks.js";
 
 const app: Express = express();
 
@@ -107,5 +108,8 @@ app.use("/api/blackjack", betLimiter);
 app.use("/api/mines", betLimiter);
 app.use("/api/bets", betLimiter);
 app.use("/api", router);
+
+// Start background tasks (cleanup, etc.)
+startBackgroundTasks();
 
 export default app;
