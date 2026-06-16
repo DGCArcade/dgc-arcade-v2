@@ -884,13 +884,14 @@ adminRouter.post("/transactions/:id/reconcile", requireBankSession, async (req, 
 //   1. Fetch the Plisio /balances endpoint (returns all wallet balances at once — most reliable).
 //   2. Also fetch individual /currencies/{coin} endpoints for rate_usd and allowed flag.
 //   3. Query our own DB to see which coins have had real deposit activity.
-// A coin is shown as "Active" (allowed=1) if:
+// A coin is shown as "Live" (allowed=1) if:
+//   • It has a non-zero balance from Plisio, OR
 //   • Plisio reports allowed=1, OR
 //   • We have at least one completed deposit in that currency in the last 90 days, OR
 //   • The coin is ETH or DOGE (always shown as Live — these are our primary currencies).
 // Balance is taken from the Plisio /balances endpoint first (most accurate), then falls back
 // to the individual /currencies/{coin} balance field.
-// ETH and DOGE are ALWAYS shown as Live regardless of Plisio's allowed flag.
+// IMPORTANT: Any coin with a real non-zero balance is ALWAYS shown as Live (not Inactive).
 const ALWAYS_LIVE_COINS = new Set(["ETH", "DOGE"]);
 
 adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
@@ -1003,13 +1004,17 @@ adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
       const plisio = plisioResults[coin];
       const isDbActive = dbActiveCoins.has(coin);
       const isAlwaysLive = ALWAYS_LIVE_COINS.has(coin);
-      // allowed=1 if:
+      // Balance priority: /balances endpoint > /currencies/{coin} balance field
+      const balance = plisioWalletBalances[coin] ?? plisio?.balance ?? "0";
+      const balanceNum = parseFloat(balance);
+      const hasRealBalance = balanceNum > 0;
+      // allowed=1 (show as "Live") if:
+      //   • The coin has a non-zero balance (REAL DATA from Plisio), OR
       //   • ETH or DOGE (always live — our primary currencies), OR
       //   • Plisio reports allowed=1, OR
       //   • We have real deposit activity for this coin in the last 90 days
-      const allowed = (isAlwaysLive || plisio?.allowed === 1 || isDbActive) ? 1 : 0;
-      // Balance priority: /balances endpoint > /currencies/{coin} balance field
-      const balance = plisioWalletBalances[coin] ?? plisio?.balance ?? "0";
+      // This ensures coins with real holdings are ALWAYS shown as Live, never Inactive.
+      const allowed = (hasRealBalance || isAlwaysLive || plisio?.allowed === 1 || isDbActive) ? 1 : 0;
       balances[coin] = {
         balance,
         allowed,

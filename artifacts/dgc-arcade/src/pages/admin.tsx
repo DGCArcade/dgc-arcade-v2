@@ -1385,23 +1385,27 @@ export default function AdminDashboard() {
                   </Card>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {Object.entries(bankBalances).map(([coin, info]) => (
-                      <Card key={coin} className="bg-card/80 border-border/60 hover:border-primary/30 transition-colors">
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-bold text-sm uppercase tracking-wider text-primary">{coin}</span>
-                            {(info as any).allowed === 1 ? (
-                              <span className="flex items-center gap-1 text-xs text-green-400"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />Live</span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">Inactive</span>
-                            )}
-                          </div>
-                          <p className="text-lg font-mono font-bold text-white tabular-nums">
-                            {parseFloat((info as any).balance ?? "0").toFixed(8)}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    ))}
+                    {Object.entries(bankBalances).map(([coin, info]) => {
+                      const balance = parseFloat((info as any).balance ?? "0");
+                      const isLive = (info as any).allowed === 1 || balance > 0;
+                      return (
+                        <Card key={coin} className="bg-card/80 border-border/60 hover:border-primary/30 transition-colors">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-bold text-sm uppercase tracking-wider text-primary">{coin}</span>
+                              {isLive ? (
+                                <span className="flex items-center gap-1 text-xs text-green-400"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />Live</span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Inactive</span>
+                              )}
+                            </div>
+                            <p className="text-lg font-mono font-bold text-white tabular-nums">
+                              {balance.toFixed(8)}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
                   </div>
                 )}
               </div>
