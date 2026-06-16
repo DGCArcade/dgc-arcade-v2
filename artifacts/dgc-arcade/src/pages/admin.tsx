@@ -46,6 +46,9 @@ import {
   MessageSquare,
   Send,
   Bot,
+  Database,
+  GitBranch,
+  Rocket,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
@@ -2914,11 +2917,33 @@ export default function AdminDashboard() {
       {/* ── Owner AI Tab ── */}
       {activeTab === "ai" && isOwner && (
         <div className="space-y-4">
-          <div>
-            <h2 className="font-display font-black uppercase tracking-widest text-xl flex items-center gap-2">
-              <Bot className="w-5 h-5 text-purple-400" /> Owner AI Assistant
-            </h2>
-            <p className="text-muted-foreground text-sm mt-0.5">Connected to live Neon DB · Voice + text commands · Real-time platform control</p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="font-display font-black uppercase tracking-widest text-xl flex items-center gap-2">
+                <Bot className="w-5 h-5 text-purple-400" /> DG AI
+                <span className="text-xs font-mono font-normal bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30 normal-case tracking-normal">GPT-5 · Owner Only</span>
+              </h2>
+              <p className="text-muted-foreground text-sm mt-1">
+                Your in-house platform intelligence. Connected live to Neon DB, GitHub, and Render.
+                Can read &amp; write the database, manage users, push code, trigger deploys, and analyze everything.
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            {[
+              { icon: Database, label: "Neon DB", desc: "Read & Write", color: "text-blue-400" },
+              { icon: GitBranch, label: "GitHub", desc: "Commit & Push", color: "text-green-400" },
+              { icon: Rocket, label: "Render", desc: "Deploy Trigger", color: "text-orange-400" },
+              { icon: Shield, label: "Owner Lock", desc: "Triple Verified", color: "text-purple-400" },
+            ].map(({ icon: Icon, label, desc, color }) => (
+              <div key={label} className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+                <Icon className={`w-4 h-4 flex-shrink-0 ${color}`} />
+                <div>
+                  <div className="font-semibold text-white">{label}</div>
+                  <div className="text-gray-500">{desc}</div>
+                </div>
+              </div>
+            ))}
           </div>
           <OwnerAiChat token={getToken()} />
         </div>

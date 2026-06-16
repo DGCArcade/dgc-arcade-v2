@@ -20,6 +20,19 @@ services:
         sync: false
       - key: NODE_ENV
         value: production
+      # ── DG AI ──────────────────────────────────────────────────────
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_API_BASE
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_OWNER
+        sync: false
+      - key: GITHUB_REPO
+        sync: false
+      - key: RENDER_DEPLOY_HOOK_URL
+        sync: false
 
   # ── Frontend ─────────────────────────────────────────────────────
   - type: web
