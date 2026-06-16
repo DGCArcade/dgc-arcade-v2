@@ -1873,11 +1873,23 @@ export default function AdminDashboard() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {bankInvoices.map((inv: any) => (
+                          {bankInvoices.map((inv: any) => {
+                            const meta = inv.metadata ? (typeof inv.metadata === 'string' ? JSON.parse(inv.metadata) : inv.metadata) : {};
+                            const received = meta.received_amount;
+                            const total = meta.invoice_total_sum;
+                            
+                            return (
                             <TableRow key={inv.txn_id ?? inv.id} className="border-border/30">
                               <TableCell className="font-mono text-xs text-muted-foreground max-w-[90px] truncate" title={inv.txn_id}>{inv.txn_id ?? "—"}</TableCell>
                               <TableCell><Badge variant="outline" className="text-xs capitalize">{inv.type ?? "invoice"}</Badge></TableCell>
-                              <TableCell className="font-mono font-bold">{inv.source_amount ?? inv.amount ?? "—"}</TableCell>
+                              <TableCell className="font-mono font-bold">
+                                <div>{inv.source_amount ?? inv.amount ?? "—"}</div>
+                                {received && (
+                                  <div className="text-[10px] text-green-400 font-normal">
+                                    Recv: {received} {inv.currency}
+                                  </div>
+                                )}
+                              </TableCell>
                               <TableCell className="text-sm">{inv.source_currency ?? inv.currency ?? "—"}</TableCell>
                               <TableCell>
                                 <Badge className="text-xs" variant={inv.status === "completed" ? "default" : inv.status === "pending" || inv.status === "new" ? "secondary" : "destructive"}>
@@ -1896,7 +1908,7 @@ export default function AdminDashboard() {
                                 )}
                               </TableCell>
                             </TableRow>
-                          ))}
+                          );})}
                         </TableBody>
                       </Table>
                     </div>

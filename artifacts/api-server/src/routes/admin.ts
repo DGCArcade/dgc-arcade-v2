@@ -1069,6 +1069,7 @@ adminRouter.get("/bank/invoices", requireBankSession, async (req, res) => {
         currency: transactionsTable.currency,
         address: transactionsTable.address,
         txHash: transactionsTable.txHash,
+        metadata: transactionsTable.metadata,
         createdAt: transactionsTable.createdAt,
         updatedAt: transactionsTable.updatedAt,
         username: usersTable.username,

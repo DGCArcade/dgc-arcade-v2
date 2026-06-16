@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, usersTable, transactionsTable, referralsTable, userBalancesTable } from "@workspace/db";
+import { db, usersTable, transactionsTable, referralsTable, userBalancesTable, creatorBankTxnsTable } from "@workspace/db";
 import { eq, desc, and, ne, sql, count, gte } from "drizzle-orm";
 import {
   InitiateDepositBody,
@@ -401,7 +401,17 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     await db.transaction(async (txn) => {
       const flipped = await txn
         .update(transactionsTable)
-        .set({ status: "completed", amount: String(creditAmount) })
+        .set({ 
+          status: "completed", 
+          amount: String(creditAmount),
+          metadata: JSON.stringify({
+            received_amount: String(received_amount || "0"),
+            invoice_total_sum: String(invoice_total_sum || "0"),
+            source_amount: String(source_amount || "0"),
+            ratio: receivedCrypto && invoicedCrypto ? receivedCrypto / invoicedCrypto : 1,
+            paid_at: new Date().toISOString()
+          })
+        })
         .where(and(eq(transactionsTable.id, tx.id), ne(transactionsTable.status, "completed")))
         .returning({ id: transactionsTable.id });
       if (flipped.length === 0) return;
@@ -466,6 +476,16 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
           await db.update(referralsTable)
             .set({ status: "active", earnedAmount: sql`CAST(earned_amount AS DECIMAL) + ${commission}` })
             .where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.referredId, tx.userId)));
+          
+          // Also record in creator bank for owner tracking
+          await db.insert(creatorBankTxnsTable).values({
+            creatorId: referrerId,
+            type: "referral_commission",
+            amount: String(commission),
+            toUserId: tx.userId,
+            description: `Commission from deposit ${tx.plisioTrackId || tx.id} (Received: ${received_amount} ${tx.currency})`
+          });
+          
           req.log.info({ referrerId, commission, commissionRate, creditAmount, active }, "Plisio IPN: referral commission credited");
         }
       }
