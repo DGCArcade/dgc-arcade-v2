@@ -1857,12 +1857,18 @@ export default function AdminDashboard() {
                     onClick={async () => {
                       if (!confirm("This will check ALL pending deposits with Plisio and retroactively credit any that were paid. Proceed?")) return;
                       try {
-                        const res = await fetch('/api/admin/bank/reconcile', { method: 'POST' });
-                        const data = await res.json();
-                        alert(`Reconciliation complete!\nChecked: ${data.checkedCount}\nReconciled: ${data.reconciledCount}\nFailed: ${data.failedCount}`);
-                        window.location.reload();
+                        const data = await adminFetch('/bank/reconcile', { 
+                          method: 'POST'
+                        });
+                        if (data.error) {
+                          alert(`Error: ${data.error}`);
+                        } else {
+                          alert(`Reconciliation complete!\n\nChecked: ${data.checkedCount ?? 0}\nReconciled: ${data.reconciledCount ?? 0}\nFailed: ${data.failedCount ?? 0}`);
+                          window.location.reload();
+                        }
                       } catch (err) {
-                        alert("Reconciliation failed. Check console.");
+                        console.error("Reconciliation error:", err);
+                        alert("Reconciliation failed. The server might still be processing. Please wait a moment and refresh.");
                       }
                     }}
                   >

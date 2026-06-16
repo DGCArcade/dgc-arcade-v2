@@ -1,7 +1,8 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable, creatorMessagesTable, creatorMessageReadsTable, fraudReviewsTable } from "@workspace/db";
+import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable, creatorMessagesTable, creatorMessageReadsTable, fraudReviewsTable, referralsTable, userBalancesTable, creatorBankTxnsTable } from "@workspace/db";
 import { eq, desc, ilike, and, sql, count, or, gt, ne } from "drizzle-orm";
+import fetch from "node-fetch";
 import { requireAdmin } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
 import { logAudit } from "../services/audit.js";
@@ -1201,10 +1202,16 @@ adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
       }
     }
     
-    res.json({ success: true, reconciledCount, failedCount, checkedCount: pendingDeposits.length });
+    req.log.info({ reconciledCount, failedCount, checkedCount: pendingDeposits.length }, "Manual reconciliation finished");
+    return res.json({ 
+      success: true, 
+      reconciledCount: Number(reconciledCount), 
+      failedCount: Number(failedCount), 
+      checkedCount: Number(pendingDeposits.length) 
+    });
   } catch (err) {
     req.log.error({ err }, "Manual reconciliation error");
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
