@@ -390,7 +390,11 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                 onClick={handleWithdraw}
                 disabled={requestWithdrawal.isPending || withdrawAmount < 1 || !hasBalance}
               >
-                {requestWithdrawal.isPending ? "Processing…" : "Request Withdrawal"}
+                {requestWithdrawal.isPending 
+                  ? "Processing…" 
+                  : withdrawAmount >= 10000 
+                    ? "Request Withdrawal" 
+                    : "Instant Withdrawal"}
               </Button>
             </TabsContent>
             )}
