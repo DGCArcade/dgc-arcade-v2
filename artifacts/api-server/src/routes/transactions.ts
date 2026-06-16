@@ -350,7 +350,7 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       return;
     }
 
-    const creditStatuses = new Set(["completed", "mismatch"]);
+    const creditStatuses = new Set(["completed", "mismatch", "overpaid"]);
     if (!creditStatuses.has(status)) {
       req.log.info({ txn_id, status }, "Plisio IPN: non-credit deposit status — ack");
       res.json({ success: true });
