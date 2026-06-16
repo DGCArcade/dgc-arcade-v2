@@ -1931,12 +1931,32 @@ export default function AdminDashboard() {
                                 {inv.created_utc ? new Date(inv.created_utc * 1000).toLocaleString() : "—"}
                               </TableCell>
                               <TableCell>
-                                {inv.txn_id && (
-                                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" title="View Invoice"
-                                    onClick={() => window.open(`https://plisio.net/invoice/${inv.txn_id}`, "_blank")}>
-                                    <Eye className="h-3 w-3" /> View Invoice
-                                  </Button>
-                                )}
+                                <div className="flex flex-col gap-1">
+                                  {inv.txn_id && (
+                                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" title="View Invoice"
+                                      onClick={() => window.open(`https://plisio.net/invoice/${inv.txn_id}`, "_blank")}>
+                                      <Eye className="h-3 w-3" /> View
+                                    </Button>
+                                  )}
+                                  {inv.type === "deposit" && inv.status === "pending" && (
+                                    <Button size="sm" variant="secondary" className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white"
+                                      onClick={async () => {
+                                        try {
+                                          const res = await adminFetch('/bank/reconcile', { method: 'POST' });
+                                          if (res.reconciledCount > 0) {
+                                            alert("Deposit synced and credited!");
+                                            window.location.reload();
+                                          } else {
+                                            alert("Plisio still reports this as pending or failed.");
+                                          }
+                                        } catch (err) {
+                                          alert("Sync failed.");
+                                        }
+                                      }}>
+                                      Sync
+                                    </Button>
+                                  )}
+                                </div>
                               </TableCell>
                             </TableRow>
                           );})}

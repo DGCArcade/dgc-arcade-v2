@@ -1124,11 +1124,17 @@ adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
     for (const tx of pendingDeposits) {
       if (!tx.plisioTrackId) continue;
       try {
+        req.log.info({ txId: tx.id, trackId: tx.plisioTrackId }, "Reconciling specific deposit");
         const resp = await fetch(`https://api.plisio.net/api/v1/operations/${tx.plisioTrackId}?api_key=${PLISIO_KEY}`);
         const data = await resp.json() as any;
-        if (data.status !== "success" || !data.data) continue;
+        
+        if (data.status !== "success" || !data.data) {
+          req.log.warn({ txId: tx.id, data }, "Plisio reported failure or no data for reconciliation");
+          continue;
+        }
 
         const pStatus = String(data.data.status).toLowerCase();
+        req.log.info({ txId: tx.id, pStatus, plisioData: data.data }, "Plisio status for reconciliation");
         // Be more inclusive of statuses that mean "paid"
         const creditStatuses = ["completed", "mismatch", "overpaid", "finished"];
         
