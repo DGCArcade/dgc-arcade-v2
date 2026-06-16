@@ -1537,6 +1537,153 @@ adminRouter.post("/transactions/:id/complete-deposit", requireBankSession, async
     res.status(500).json({ error: "Internal server error" });
   }
 });
+// POST /api/admin/transactions/sync-plisio
+// Owner-only: checks every pending deposit against Plisio's operations API and
+// auto-credits any that Plisio already marked as paid. Rescues deposits where
+// the IPN callback was unreachable (e.g. wrong SITE_URL pointing to Netlify).
+// Idempotent: safe to run multiple times — credits use a guarded pending→completed flip.
+adminRouter.post("/transactions/sync-plisio", requireBankSession, async (req, res) => {
+  if (!(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Only the platform owner can run the Plisio sync." });
+    return;
+  }
+  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
+  if (!PLISIO_KEY) {
+    res.status(500).json({ error: "PLISIO_SECRET_KEY not set" });
+    return;
+  }
+  const WAGER_MULT = 1.0;
+  const creditStatuses = new Set(["completed", "mismatch"]);
+
+  try {
+    const pending = await db
+      .select()
+      .from(transactionsTable)
+      .where(and(eq(transactionsTable.type, "deposit"), eq(transactionsTable.status, "pending")));
+
+    const results: Array<{
+      id: number; userId: number; plisioTrackId: string | null;
+      plisioStatus: string | null; action: string; creditAmount?: number; error?: string;
+    }> = [];
+
+    for (const tx of pending) {
+      if (!tx.plisioTrackId) {
+        results.push({ id: tx.id, userId: tx.userId, plisioTrackId: null, plisioStatus: null, action: "skipped_no_track_id" });
+        continue;
+      }
+      try {
+        const params = new URLSearchParams({ api_key: PLISIO_KEY });
+        const plisioUrl = "https://api.plisio.net/api/v1/operations/" + tx.plisioTrackId + "?" + params.toString();
+        const resp = await fetch(plisioUrl, { signal: AbortSignal.timeout(12_000) });
+        const data = await resp.json() as {
+          status?: string;
+          data?: {
+            status?: string;
+            source_amount?: string | number;
+            received_amount?: string | number;
+            invoice_total_sum?: string | number;
+          };
+        };
+        const plisioStatus = data.data?.status ?? null;
+
+        if (!plisioStatus) {
+          results.push({ id: tx.id, userId: tx.userId, plisioTrackId: tx.plisioTrackId, plisioStatus: null, action: "no_status_from_plisio" });
+          continue;
+        }
+        if (!creditStatuses.has(plisioStatus)) {
+          results.push({ id: tx.id, userId: tx.userId, plisioTrackId: tx.plisioTrackId, plisioStatus, action: "not_paid_yet" });
+          continue;
+        }
+
+        // Plisio confirms this deposit was paid — compute credit amount
+        const requestedUsd   = parseFloat(tx.amount);
+        const sourceUsd      = data.data?.source_amount     != null ? parseFloat(String(data.data.source_amount))     : null;
+        const receivedCrypto = data.data?.received_amount   != null ? parseFloat(String(data.data.received_amount))   : null;
+        const invoicedCrypto = data.data?.invoice_total_sum != null ? parseFloat(String(data.data.invoice_total_sum)) : null;
+
+        let creditAmount: number;
+        if (receivedCrypto != null && invoicedCrypto != null && invoicedCrypto > 0 && sourceUsd != null) {
+          const ratio = Math.min(receivedCrypto / invoicedCrypto, 1.0);
+          creditAmount = Math.min(Math.round(sourceUsd * ratio * 1e8) / 1e8, requestedUsd);
+        } else if (sourceUsd != null) {
+          creditAmount = Math.min(sourceUsd, requestedUsd);
+        } else {
+          creditAmount = requestedUsd;
+        }
+
+        if (creditAmount < 0.01) {
+          results.push({ id: tx.id, userId: tx.userId, plisioTrackId: tx.plisioTrackId, plisioStatus, action: "credit_too_small", creditAmount });
+          continue;
+        }
+
+        const finalCredit = creditAmount;
+        await db.transaction(async (txn) => {
+          const flipped = await txn
+            .update(transactionsTable)
+            .set({ status: "completed", amount: String(finalCredit) })
+            .where(and(eq(transactionsTable.id, tx.id), eq(transactionsTable.status, "pending")))
+            .returning({ id: transactionsTable.id });
+          if (flipped.length === 0) return; // already credited by concurrent call
+
+          const [userAfter] = await txn.update(usersTable).set({
+            balance: sql`balance + ${finalCredit}`,
+            totalDeposited: sql`coalesce(total_deposited, 0) + ${finalCredit}`,
+            wagerRequirement: sql`(coalesce(total_deposited, 0) + ${finalCredit}) * ${WAGER_MULT}`,
+          }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
+
+          if (userAfter) {
+            const balanceAfter = parseFloat(userAfter.balance);
+            await recordLedger(txn, {
+              userId: tx.userId,
+              amount: finalCredit,
+              balanceBefore: balanceAfter - finalCredit,
+              balanceAfter,
+              reason: "admin_deposit_manual",
+              referenceId: tx.id,
+              referenceType: "transaction",
+              note: "sync-plisio: plisio_status=" + plisioStatus + " confirmed by admin #" + req.user!.userId,
+            });
+          }
+        });
+
+        results.push({ id: tx.id, userId: tx.userId, plisioTrackId: tx.plisioTrackId, plisioStatus, action: "credited", creditAmount: finalCredit });
+
+        logAudit({
+          adminId: req.user!.userId,
+          adminUsername: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1))[0]?.username ?? "admin",
+          action: "sync_plisio_credit",
+          targetType: "transaction",
+          targetId: tx.id,
+          oldValue: { status: "pending" },
+          newValue: { status: "completed", creditAmount: finalCredit, plisioStatus },
+          ip: req.ip,
+          note: "sync-plisio credited $" + finalCredit + " to user #" + tx.userId,
+        }).catch(() => {});
+      } catch (txErr) {
+        results.push({ id: tx.id, userId: tx.userId, plisioTrackId: tx.plisioTrackId, plisioStatus: null, action: "error", error: String(txErr) });
+      }
+    }
+
+    const credited    = results.filter(r => r.action === "credited");
+    const notPaid     = results.filter(r => r.action === "not_paid_yet");
+    const errored     = results.filter(r => r.action === "error");
+    const totalCredit = credited.reduce((sum, r) => sum + (r.creditAmount ?? 0), 0);
+    req.log.info({ credited: credited.length, notPaid: notPaid.length, errored: errored.length, totalCredit }, "sync-plisio complete");
+    res.json({
+      results,
+      summary: {
+        total: pending.length,
+        credited: credited.length,
+        notPaid: notPaid.length,
+        errored: errored.length,
+        totalCreditedUsd: totalCredit,
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "sync-plisio error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // GET /api/admin/stats
 adminRouter.get("/stats", async (req, res) => {
