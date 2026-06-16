@@ -109,7 +109,10 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       return;
     }
     const plisioCurrency = PLISIO_CURRENCY_MAP[currency.toUpperCase()] ?? currency.toUpperCase();
-    const siteUrl = process.env.SITE_URL ?? "";
+    // API_URL must point to the Render service URL (e.g. https://dgc-arcade-v2.onrender.com)
+    // so Plisio callbacks reach the API, not the Netlify frontend at SITE_URL.
+    const apiUrl  = process.env.API_URL ?? process.env.SITE_URL ?? "";
+    const siteUrl = process.env.SITE_URL ?? apiUrl;
     const params = new URLSearchParams({
       api_key: PLISIO_SECRET_KEY,
       currency: plisioCurrency,
@@ -117,7 +120,7 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       order_number: orderId,
       order_name: "DGC Arcade Deposit",
       source_currency: "USD",
-      callback_url: `${siteUrl}/api/transactions/deposit/callback`,
+      callback_url: `${apiUrl}/api/transactions/deposit/callback`,
       success_url: `${siteUrl}/profile`,
       fail_url: `${siteUrl}/profile`,
     });
