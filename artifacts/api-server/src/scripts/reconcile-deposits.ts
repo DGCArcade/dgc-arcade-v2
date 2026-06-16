@@ -49,8 +49,10 @@ async function reconcileAll() {
         const creditStatuses = ["completed", "mismatch", "overpaid"];
         
         if (creditStatuses.includes(pStatus)) {
+          // IMPORTANT: Use received_amount/received_sum for ACTUAL received amount.
+          // 'amount' in Plisio response often refers to the EXPECTED invoice amount.
           const receivedAmount  = parseFloat(String(data.data.received_amount || data.data.received_sum || "0"));
-          const invoicedAmount  = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || "0"));
+          const invoicedAmount  = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || data.data.invoice_amount || "0"));
           const sourceUsd       = parseFloat(String(data.data.source_amount || tx.amount));
           const receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
           
@@ -66,7 +68,8 @@ async function reconcileAll() {
             ratioUsed = receivedAmount / invoicedAmount;
             creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
             console.log(`Reconciling tx ${tx.id}: status=${pStatus}, credit=$${creditAmount}, ratio=${ratioUsed}`);
-          } else if (sourceUsd > 0) {
+          } else if (sourceUsd > 0 && pStatus === "completed") {
+            // Fallback: only if status is fully completed and we have no better data
             ratioUsed = 1;
             creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
             console.warn(`Transaction ${tx.id}: Missing received data, crediting invoice amount $${creditAmount}`);

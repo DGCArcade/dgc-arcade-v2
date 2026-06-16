@@ -1917,13 +1917,22 @@ export default function AdminDashboard() {
                               </TableCell>
                               <TableCell className="font-mono text-xs text-muted-foreground max-w-[90px] truncate" title={inv.txn_id}>{inv.txn_id ?? "—"}</TableCell>
                               <TableCell><Badge variant="outline" className="text-xs capitalize">{inv.type ?? "invoice"}</Badge></TableCell>
-                              <TableCell className="font-mono font-bold">
-                                <div>{inv.source_amount ?? inv.amount ?? "—"}</div>
-	                                {received && (
-	                                  <div className="text-[10px] text-emerald-400 font-bold bg-emerald-400/10 px-1 py-0.5 rounded inline-block mt-1">
-	                                    ACTUAL: {received} {inv.currency}
-	                                  </div>
-	                                )}
+                            <TableCell className="font-mono font-bold">
+                                <div className="flex flex-col">
+                                  <span className={inv.status === "completed" ? "text-emerald-400" : ""}>
+                                    ${parseFloat(inv.amount || "0").toFixed(2)}
+                                  </span>
+                                  {inv.status === "completed" && meta.source_amount && Math.abs(parseFloat(meta.source_amount) - parseFloat(inv.amount)) > 0.01 && (
+                                    <span className="text-[10px] text-muted-foreground line-through">
+                                      ${parseFloat(meta.source_amount).toFixed(2)}
+                                    </span>
+                                  )}
+                                </div>
+                                {received && (
+                                  <div className="text-[10px] text-emerald-400 font-bold bg-emerald-400/10 px-1 py-0.5 rounded inline-block mt-1">
+                                    {received} {inv.currency}
+                                  </div>
+                                )}
                               </TableCell>
                               <TableCell className="text-sm">{inv.source_currency ?? inv.currency ?? "—"}</TableCell>
                               <TableCell>

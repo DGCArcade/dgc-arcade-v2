@@ -1298,7 +1298,9 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
     const pStatus = String(data.data.status).toLowerCase();
     
     // ROBUST AMOUNT EXTRACTION: Check every possible field Plisio might use for different coins/statuses
-    const receivedAmount  = parseFloat(String(data.data.received_amount || data.data.received_sum || data.data.amount || "0"));
+    // IMPORTANT: Use received_amount/received_sum for ACTUAL received amount.
+    // 'amount' in Plisio response often refers to the EXPECTED invoice amount.
+    const receivedAmount  = parseFloat(String(data.data.received_amount || data.data.received_sum || "0"));
     const invoicedAmount  = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || data.data.invoice_amount || "0"));
     const sourceUsd       = parseFloat(String(data.data.source_amount || data.data.invoice_amount || data.data.source_amount_usd || tx.amount));
     const receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
@@ -1327,7 +1329,8 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
       ratioUsed = receivedAmount / invoicedAmount;
       creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
       req.log.info({ receivedAmount, invoicedAmount, sourceUsd, ratio: ratioUsed, creditAmount }, "Smart Sync: crediting with ratio method");
-    } else if (sourceUsd > 0) {
+    } else if (sourceUsd > 0 && pStatus === "completed") {
+      // Fallback: only if status is fully completed and we have no better data
       ratioUsed = 1;
       creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
       req.log.warn({ receivedAmount, invoicedAmount, sourceUsd, creditAmount }, "Smart Sync: Missing received data — crediting invoice amount as fallback");

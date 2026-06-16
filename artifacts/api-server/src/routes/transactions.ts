@@ -166,6 +166,12 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       plisioTrackId: data.data.txn_id,
       orderId,
       address: walletAddress,
+      metadata: JSON.stringify({
+        source_amount: String(amount),
+        source_currency: "USD",
+        expected_crypto: data.data.invoice_total_sum,
+        created_at: new Date().toISOString()
+      })
     });
     res.json({
       paymentUrl: data.data.invoice_url,
@@ -363,9 +369,12 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     
     // ROBUST AMOUNT EXTRACTION: Check every possible field Plisio might use for different coins/statuses
     const sourceUsd       = parseFloat(String(source_amount || req.body.invoice_amount || req.body.source_amount_usd || tx.amount));
-    // We prioritize received_amount (net after fees) over amount (gross)
-    const receivedCrypto  = parseFloat(String(received_amount || req.body.received_sum || req.body.amount || "0"));
+    
+    // IMPORTANT: Distinguish between RECEIVED and EXPECTED amounts.
+    // 'amount' in Plisio IPN is often the EXPECTED amount, not what was actually received.
+    const receivedCrypto  = parseFloat(String(received_amount || req.body.received_sum || "0"));
     const invoicedCrypto  = parseFloat(String(invoice_total_sum || req.body.total_sum || req.body.amount || req.body.invoice_amount || "0"));
+    
     // Prioritize direct USD net received value (after fees)
     const receivedUsdValue = parseFloat(String(req.body.received_amount_usd || req.body.received_sum_usd || "0"));
 
@@ -374,7 +383,7 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     
     // REAL AMOUNT CALCULATION: Credit the real received amount after fees.
     if (receivedUsdValue > 0) {
-      // Best case: Plisio tells us exactly how much USD was received
+      // Best case: Plisio tells us exactly how much USD was received (net)
       creditAmount = Math.round(receivedUsdValue * 1e8) / 1e8;
       ratioUsed = sourceUsd > 0 ? (creditAmount / sourceUsd) : 1;
       req.log.info({ txn_id, receivedUsdValue, creditAmount, sourceUsd }, "Plisio IPN: Crediting based on direct USD received value");
@@ -390,8 +399,8 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
         ratio: ratioUsed, 
         creditAmount 
       }, "Plisio IPN: Calculated credit from actual received crypto ratio");
-    } else if (sourceUsd > 0) {
-      // Fallback: use the invoice USD amount directly (no better data available)
+    } else if (sourceUsd > 0 && pStatus === "completed") {
+      // Fallback: only if status is fully completed and we have no better data
       ratioUsed = 1;
       creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
       req.log.warn({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd, creditAmount }, 
