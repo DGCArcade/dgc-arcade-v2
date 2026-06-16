@@ -400,14 +400,15 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
         ratio: ratioUsed, 
         creditAmount 
       }, "Plisio IPN: Calculated credit from actual received crypto ratio");
-    } else if (sourceUsd > 0 && pStatus === "completed") {
-      // Fallback: only if status is fully completed and we have no better data
+    } else if (sourceUsd > 0) {
+      // FIX: fallback applies to ALL credit statuses (completed, finished, mismatch, overpaid)
+      // Plisio uses "finished" for many coin types — previously this blocked crediting for those.
       ratioUsed = 1;
       creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
-      req.log.warn({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd, creditAmount }, 
+      req.log.warn({ txn_id, pStatus, receivedCrypto, invoicedCrypto, sourceUsd, creditAmount }, 
         "Plisio IPN: Missing received data — crediting invoice amount as fallback");
     } else {
-      req.log.error({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd }, "Plisio IPN: CRITICAL - No amount data at all for paid transaction.");
+      req.log.error({ txn_id, pStatus, receivedCrypto, invoicedCrypto, sourceUsd }, "Plisio IPN: CRITICAL - No amount data at all for paid transaction.");
       res.status(400).json({ error: "Missing payment amount data" });
       return;
     }

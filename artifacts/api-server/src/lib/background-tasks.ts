@@ -1,5 +1,5 @@
 import { db, transactionsTable, usersTable, referralsTable, userBalancesTable, creatorBankTxnsTable } from "@workspace/db";
-import { eq, and, lt, ne, sql, count } from "drizzle-orm";
+import { eq, and, lt, gte, ne, sql, count } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { recordLedger } from "../services/ledger.js";
 
@@ -48,7 +48,7 @@ export async function cleanupExpiredDeposits() {
 /**
  * Plisio Synchronization: Check status of all pending deposits.
  * This handles cases where webhooks are missed or delayed.
- * Runs every 5 minutes.
+ * Runs every 1 minute.
  */
 export async function syncPlisioDeposits() {
   const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY;
@@ -59,6 +59,7 @@ export async function syncPlisioDeposits() {
 
   try {
     // Only check deposits that are still pending and created within the last 24 hours
+    // FIX: actually use oneDayAgo in the query (was previously using `new Date()` which matched ALL pending)
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const pendingDeposits = await db
       .select()
@@ -67,7 +68,7 @@ export async function syncPlisioDeposits() {
         and(
           eq(transactionsTable.type, "deposit"),
           eq(transactionsTable.status, "pending"),
-          lt(transactionsTable.createdAt, new Date()) // current
+          gte(transactionsTable.createdAt, oneDayAgo)
         )
       )
       .limit(50);
@@ -126,8 +127,9 @@ export async function syncPlisioDeposits() {
             ratioUsed = receivedAmount / invoicedAmount;
             creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
             logger.info({ txId: tx.id, pStatus, creditAmount, ratio: ratioUsed, receivedAmount, invoicedAmount }, "Plisio sync: crediting with ratio method");
-          } else if (sourceUsd > 0 && pStatus === "completed") {
-            // Fallback: only if status is fully completed and we have no better data
+          } else if (sourceUsd > 0) {
+            // FIX: fallback applies to ALL credit statuses (completed, finished, mismatch, overpaid)
+            // not just "completed" — Plisio uses "finished" for many coin types
             ratioUsed = 1;
             creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
             logger.warn({ txId: tx.id, pStatus, receivedAmount, invoicedAmount, sourceUsd, creditAmount }, "Plisio sync: Missing received data — crediting invoice amount as fallback");
@@ -214,6 +216,8 @@ export async function syncPlisioDeposits() {
               }
             } catch (e) { logger.warn({ err: e }, "Referral credit failed in sync"); }
           });
+
+          logger.info({ txId: tx.id, creditAmount, userId: tx.userId, pStatus }, "Plisio sync: deposit credited ✓");
         } else if (pStatus === "expired" || pStatus === "cancelled" || pStatus === "error") {
           await db.update(transactionsTable).set({ status: "failed" }).where(eq(transactionsTable.id, tx.id));
           logger.info({ txId: tx.id, pStatus }, "Plisio sync: marked failed transaction");
@@ -258,5 +262,5 @@ export function startBackgroundTasks() {
     clearInterval(syncInterval);
   });
 
-  logger.info("Background tasks started: cleanup (30m) and Plisio sync (5m)");
+  logger.info("Background tasks started: cleanup (30m) and Plisio sync (1m)");
 }
