@@ -1943,35 +1943,44 @@ export default function AdminDashboard() {
                                       <Button size="sm" variant="secondary" className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white"
                                         onClick={async () => {
                                           try {
-                                            const res = await adminFetch('/bank/reconcile', { method: 'POST' });
-                                            if (res.reconciledCount > 0) {
-                                              alert("Deposit synced and credited!");
+                                            const res = await adminFetch('/bank/smart-sync', { 
+                                              method: 'POST',
+                                              body: JSON.stringify({ txId: inv.id })
+                                            });
+                                            if (res.success && !res.alreadyDone) {
+                                              alert(res.message);
                                               window.location.reload();
+                                            } else if (res.alreadyDone) {
+                                              alert("This transaction was already completed.");
                                             } else {
-                                              alert("Plisio still reports this as pending or failed. Use 'Force' if you've verified it manually.");
+                                              alert(res.message || "Plisio still reports this as pending or failed.");
                                             }
                                           } catch (err) {
                                             alert("Sync failed.");
                                           }
                                         }}>
-                                        Sync
+                                        Smart Sync
                                       </Button>
                                       <Button size="sm" variant="destructive" className="h-7 text-xs gap-1 bg-red-600 hover:bg-red-700"
                                         onClick={async () => {
-                                          if (!confirm(`FORCE COMPLETE deposit #${inv.id} for user ${inv.username}? This will credit the user immediately without checking Plisio.`)) return;
+                                          const pid = prompt(`FORCE COMPLETE deposit #${inv.id} for user ${inv.username}?\n\nPlease paste the Plisio Invoice ID (from your dashboard) to verify:`, inv.txn_id || "");
+                                          if (!pid) return;
                                           try {
-                                            const res = await adminFetch(`/bank/force-complete/${inv.id}`, { method: 'POST' });
+                                            const res = await adminFetch(`/bank/smart-sync`, { 
+                                              method: 'POST',
+                                              body: JSON.stringify({ txId: inv.id, plisioId: pid })
+                                            });
                                             if (res.success) {
-                                              alert("Transaction force-completed and user credited!");
+                                              alert(res.message);
                                               window.location.reload();
                                             } else {
-                                              alert(`Error: ${res.error}`);
+                                              alert(`Error: ${res.message || "Unknown error"}`);
                                             }
                                           } catch (err) {
                                             alert("Force complete failed.");
                                           }
                                         }}>
-                                        Force
+                                        Smart Force
                                       </Button>
                                     </>
                                   )}

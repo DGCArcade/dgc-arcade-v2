@@ -1226,48 +1226,100 @@ adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
   }
 });
 
-// POST /api/admin/bank/force-complete/:id — manually force a deposit to complete (OWNER ONLY)
-adminRouter.post("/bank/force-complete/:id", requireBankSession, async (req, res) => {
+// POST /api/admin/bank/smart-sync — manually sync a deposit using a pasted Plisio ID (OWNER ONLY)
+adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
   if (!(await callerIsOwner(req))) {
-    res.status(403).json({ error: "Only the platform owner can force complete transactions." });
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
   
-  const txId = parseInt(req.params.id, 10);
-  if (isNaN(txId)) {
-    res.status(400).json({ error: "Invalid transaction ID" });
+  const { plisioId, txId } = req.body as { plisioId?: string; txId?: number };
+  if (!plisioId && !txId) {
+    res.status(400).json({ error: "Plisio ID or Transaction ID required" });
     return;
   }
 
   try {
-    const [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.id, txId)).limit(1);
-    if (!tx) {
-      res.status(404).json({ error: "Transaction not found" });
+    const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY;
+    if (!PLISIO_KEY) {
+      res.status(500).json({ error: "Plisio API key not configured" });
       return;
     }
+
+    // Find the transaction in our DB
+    let tx;
+    if (txId) {
+      [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.id, txId)).limit(1);
+    } else if (plisioId) {
+      [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.plisioTrackId, plisioId)).limit(1);
+    }
+
+    if (!tx) {
+      res.status(404).json({ error: "Transaction not found in our system" });
+      return;
+    }
+
+    const trackId = plisioId || tx.plisioTrackId;
+    if (!trackId) {
+      res.status(400).json({ error: "No Plisio Track ID found for this transaction" });
+      return;
+    }
+
+    // Fetch REAL data from Plisio
+    const resp = await fetch(`https://api.plisio.net/api/v1/operations/${trackId}?api_key=${PLISIO_KEY}`);
+    const data = await resp.json() as any;
+    
+    if (data.status !== "success" || !data.data) {
+      res.status(400).json({ error: "Could not find invoice on Plisio", plisioResponse: data });
+      return;
+    }
+
+    const pStatus = String(data.data.status).toLowerCase();
+    const receivedAmount = parseFloat(String(data.data.received_amount || "0"));
+    const invoicedAmount = parseFloat(String(data.data.invoice_total_sum || "0"));
+    const sourceUsd = parseFloat(String(data.data.source_amount || tx.amount));
+    
+    // Logic to determine if we should credit
+    const isPaid = ["completed", "mismatch", "overpaid", "finished"].includes(pStatus);
+    
+    if (!isPaid) {
+      res.json({ 
+        success: false, 
+        message: `Plisio reports status: ${pStatus}. Not credited.`,
+        plisioData: data.data 
+      });
+      return;
+    }
+
+    // Calculate real credit based on what was actually received
+    const ratio = invoicedAmount > 0 ? (receivedAmount / invoicedAmount) : 1;
+    const creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
 
     if (tx.status === "completed") {
-      res.status(400).json({ error: "Transaction is already completed" });
+      res.json({ success: true, message: "Transaction was already completed.", alreadyDone: true, plisioData: data.data });
       return;
     }
-
-    const creditAmount = parseFloat(tx.amount);
 
     await db.transaction(async (txn) => {
       await txn.update(transactionsTable)
         .set({ 
-          status: "completed",
+          status: "completed", 
+          amount: String(creditAmount),
+          plisioTrackId: trackId, // Update if we were searching by txId
           metadata: JSON.stringify({
-            force_completed_by: req.user!.userId,
-            force_completed_at: new Date().toISOString(),
-            original_amount: tx.amount
+            received_amount: String(receivedAmount),
+            invoice_total_sum: String(invoicedAmount),
+            source_amount: String(sourceUsd),
+            ratio,
+            paid_at: data.data.updated_at || new Date().toISOString(),
+            smart_synced_at: new Date().toISOString()
           })
         })
         .where(eq(transactionsTable.id, tx.id));
 
-      const cryptoCurrency = tx.currency || "ETH";
-      await txn.insert(userBalancesTable).values({ userId: tx.userId, currency: cryptoCurrency, amount: "0" })
-        .onConflictDoUpdate({ target: [userBalancesTable.userId, userBalancesTable.currency], set: { amount: sql`amount + 0` } });
+      const cryptoCurrency = tx.currency || data.data.currency || "ETH";
+      await txn.insert(userBalancesTable).values({ userId: tx.userId, currency: cryptoCurrency, amount: String(receivedAmount) })
+        .onConflictDoUpdate({ target: [userBalancesTable.userId, userBalancesTable.currency], set: { amount: sql`amount + ${String(receivedAmount)}` } });
 
       const [updatedUser] = await txn.update(usersTable).set({
         balance: sql`balance + ${creditAmount}`,
@@ -1279,7 +1331,7 @@ adminRouter.post("/bank/force-complete/:id", requireBankSession, async (req, res
         await recordLedger(txn, {
           userId: tx.userId, amount: creditAmount, balanceBefore: parseFloat(updatedUser.balance) - creditAmount,
           balanceAfter: parseFloat(updatedUser.balance), reason: "deposit", referenceId: tx.id, referenceType: "transaction",
-          note: `MANUALLY FORCE COMPLETED by owner`
+          note: `Smart Synced: Received ${receivedAmount} ${cryptoCurrency} (Status: ${pStatus})`
         });
       }
       
@@ -1294,14 +1346,20 @@ adminRouter.post("/bank/force-complete/:id", requireBankSession, async (req, res
         if (commission > 0) {
           await txn.update(usersTable).set({ balance: sql`balance + ${commission}` }).where(eq(usersTable.id, referrerId));
           await txn.update(referralsTable).set({ status: "active", earnedAmount: sql`CAST(earned_amount AS DECIMAL) + ${commission}` }).where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.referredId, tx.userId)));
-          await txn.insert(creatorBankTxnsTable).values({ creatorId: referrerId, type: "referral_commission", amount: String(commission), toUserId: tx.userId, description: `Manual commission from force-completed deposit ${tx.id}` });
+          await txn.insert(creatorBankTxnsTable).values({ creatorId: referrerId, type: "referral_commission", amount: String(commission), toUserId: tx.userId, description: `Commission from Smart Synced deposit ${trackId}` });
         }
       }
     });
 
-    res.json({ success: true, message: "Transaction force-completed and user credited." });
+    res.json({ 
+      success: true, 
+      message: `Successfully synced! Credited $${creditAmount} (${receivedAmount} ${data.data.currency})`,
+      creditAmount,
+      receivedAmount,
+      plisioData: data.data
+    });
   } catch (err) {
-    req.log.error({ err, txId }, "Force complete error");
+    req.log.error({ err }, "Smart sync error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
