@@ -53,15 +53,28 @@ async function reconcileAll() {
           const invoicedAmount = parseFloat(data.data.invoice_total_sum || "0");
           const sourceUsd = parseFloat(data.data.source_amount || tx.amount);
           
-          if (receivedAmount <= 0 || invoicedAmount <= 0) {
-            console.warn(`Transaction ${tx.id} reported as paid but amounts are zero`);
+          // REAL AMOUNT CALCULATION: Credit the real received amount after fees.
+          // If Plisio provides both received and invoiced crypto amounts, use the ratio.
+          // If received_amount is missing/zero, fall back to sourceUsd (invoice amount).
+          let ratioUsed: number;
+          let creditAmount: number;
+          if (receivedAmount > 0 && invoicedAmount > 0 && sourceUsd > 0) {
+            ratioUsed = receivedAmount / invoicedAmount;
+            creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
+            console.log(`Reconciling tx ${tx.id}: status=${pStatus}, credit=$${creditAmount}, ratio=${ratioUsed}`);
+          } else if (sourceUsd > 0) {
+            ratioUsed = 1;
+            creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
+            console.warn(`Transaction ${tx.id}: received_amount missing, crediting full invoice amount $${creditAmount}`);
+          } else {
+            console.warn(`Transaction ${tx.id} reported as paid but no amount data available`);
             continue;
           }
 
-          const ratio = receivedAmount / invoicedAmount;
-          const creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
-
-          console.log(`Reconciling tx ${tx.id}: status=${pStatus}, credit=${creditAmount}, ratio=${ratio}`);
+          if (creditAmount <= 0) {
+            console.warn(`Transaction ${tx.id}: calculated credit is zero, skipping`);
+            continue;
+          }
 
           await db.transaction(async (txn) => {
             const flipped = await txn
@@ -73,7 +86,8 @@ async function reconcileAll() {
                   received_amount: String(receivedAmount),
                   invoice_total_sum: String(invoicedAmount),
                   source_amount: String(sourceUsd),
-                  ratio,
+                  ratio: ratioUsed,
+                  credit_amount_usd: creditAmount,
                   paid_at: data.data.updated_at || new Date().toISOString(),
                   reconciled_at: new Date().toISOString()
                 })
@@ -83,22 +97,23 @@ async function reconcileAll() {
 
             if (flipped.length === 0) return;
 
-            // Credit Crypto-Native Balance
+            // Credit Crypto-Native Balance (only if we have a real received crypto amount)
             const cryptoCurrency = tx.currency || "ETH";
-            const cryptoAmountReceived = String(receivedAmount);
-            
-            await txn
-              .insert(userBalancesTable)
-              .values({
-                userId: tx.userId,
-                currency: cryptoCurrency,
-                amount: cryptoAmountReceived,
-              })
-              .onConflictDoUpdate({
-                target: [userBalancesTable.userId, userBalancesTable.currency],
-                set: { amount: sql`amount + ${cryptoAmountReceived}` },
-              });
+            if (receivedAmount > 0) {
+              await txn
+                .insert(userBalancesTable)
+                .values({
+                  userId: tx.userId,
+                  currency: cryptoCurrency,
+                  amount: String(receivedAmount),
+                })
+                .onConflictDoUpdate({
+                  target: [userBalancesTable.userId, userBalancesTable.currency],
+                  set: { amount: sql`amount + ${String(receivedAmount)}` },
+                });
+            }
 
+            // Credit USD balance (real amount after fees)
             const [updatedUser] = await txn.update(usersTable).set({
               balance: sql`balance + ${creditAmount}`,
               totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
@@ -115,7 +130,7 @@ async function reconcileAll() {
                 reason: "deposit",
                 referenceId: tx.id,
                 referenceType: "transaction",
-                note: `Retroactively credited ${cryptoAmountReceived} ${cryptoCurrency}`,
+                note: `Retroactively credited $${creditAmount} USD (${receivedAmount > 0 ? receivedAmount + " " + cryptoCurrency : "invoice amount"})`,
               });
             }
             

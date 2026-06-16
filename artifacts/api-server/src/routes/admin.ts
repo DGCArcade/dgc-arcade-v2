@@ -1314,16 +1314,26 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
       return;
     }
 
-    // STRICT RATIO CALCULATION: Only credit what was actually received.
-    if (invoicedAmount <= 0) {
-      res.status(400).json({ error: "Plisio invoice has 0 invoiced amount. Cannot credit safely." });
+    // REAL AMOUNT CALCULATION: Credit the real received amount after fees.
+    // If Plisio provides both received and invoiced crypto amounts, use the ratio.
+    // If received_amount is missing/zero, fall back to sourceUsd (invoice amount).
+    let ratioUsed: number;
+    let creditAmount: number;
+    if (receivedAmount > 0 && invoicedAmount > 0 && sourceUsd > 0) {
+      ratioUsed = receivedAmount / invoicedAmount;
+      creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
+      req.log.info({ receivedAmount, invoicedAmount, sourceUsd, ratio: ratioUsed, creditAmount }, "Smart Sync: crediting with ratio method");
+    } else if (sourceUsd > 0) {
+      ratioUsed = 1;
+      creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
+      req.log.warn({ receivedAmount, invoicedAmount, sourceUsd, creditAmount }, "Smart Sync: received_amount missing — crediting full invoice amount as fallback");
+    } else {
+      res.status(400).json({ error: "No amount data available from Plisio. Cannot credit." });
       return;
     }
-    const ratio = receivedAmount / invoicedAmount;
-    const creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
     
     if (creditAmount <= 0) {
-      res.status(400).json({ error: `Calculated credit is $${creditAmount} based on ${receivedAmount} received. Not crediting.` });
+      res.status(400).json({ error: `Calculated credit is $${creditAmount}. Not crediting.` });
       return;
     }
 
@@ -1342,7 +1352,8 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
             received_amount: String(receivedAmount),
             invoice_total_sum: String(invoicedAmount),
             source_amount: String(sourceUsd),
-            ratio,
+            ratio: ratioUsed,
+            credit_amount_usd: creditAmount,
             paid_at: data.data.updated_at || new Date().toISOString(),
             smart_synced_at: new Date().toISOString()
           })
@@ -1350,9 +1361,13 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
         .where(eq(transactionsTable.id, tx.id));
 
       const cryptoCurrency = tx.currency || data.data.currency || "ETH";
-      await txn.insert(userBalancesTable).values({ userId: tx.userId, currency: cryptoCurrency, amount: String(receivedAmount) })
-        .onConflictDoUpdate({ target: [userBalancesTable.userId, userBalancesTable.currency], set: { amount: sql`user_balances.amount + ${String(receivedAmount)}` } });
+      // Only insert crypto balance if we have a real received crypto amount
+      if (receivedAmount > 0) {
+        await txn.insert(userBalancesTable).values({ userId: tx.userId, currency: cryptoCurrency, amount: String(receivedAmount) })
+          .onConflictDoUpdate({ target: [userBalancesTable.userId, userBalancesTable.currency], set: { amount: sql`user_balances.amount + ${String(receivedAmount)}` } });
+      }
 
+      // Credit USD balance (real amount after fees)
       const [updatedUser] = await txn.update(usersTable).set({
         balance: sql`balance + ${creditAmount}`,
         totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
@@ -1363,7 +1378,7 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
         await recordLedger(txn, {
           userId: tx.userId, amount: creditAmount, balanceBefore: parseFloat(updatedUser.balance) - creditAmount,
           balanceAfter: parseFloat(updatedUser.balance), reason: "deposit", referenceId: tx.id, referenceType: "transaction",
-          note: `Smart Synced: Received ${receivedAmount} ${cryptoCurrency} (Status: ${pStatus})`
+          note: `Smart Synced: $${creditAmount} USD (${receivedAmount > 0 ? receivedAmount + " " + cryptoCurrency : "invoice amount"}, Status: ${pStatus})`
         });
       }
       

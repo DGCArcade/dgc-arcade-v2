@@ -187,8 +187,9 @@ usersRouter.get("/me", requireAuth, async (req, res) => {
       };
     }));
 
-    // If they have crypto-native balances, use that as the source of truth for their "live" balance
-    const finalBalance = balancesWithPrices.length > 0 ? liveTotalUsd : parseFloat(user.balance);
+    // Total balance = crypto USD value + users.balance (signup bonus, daily bonus, rakeback, admin credits)
+    // We ALWAYS add users.balance so bonuses are never lost when a user makes their first deposit
+    const finalBalance = liveTotalUsd + parseFloat(user.balance);
 
     res.json({ 
       id: user.id, 

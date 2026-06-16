@@ -367,29 +367,36 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     const invoicedCrypto = parseFloat(String(invoice_total_sum || req.body.total_sum || req.body.amount || req.body.invoice_amount || "0"));
 
     let creditAmount: number;
-    // STRICT RATIO CALCULATION: Only credit what was actually received.
-    // We NO LONGER fallback to requestedUsd if fields are missing.
+    let ratioUsed: number;
+    // REAL AMOUNT CALCULATION: Credit the real received amount after fees.
+    // If Plisio provides both received and invoiced crypto amounts, use the ratio.
+    // If received_amount is missing/zero (some coins/statuses), fall back to sourceUsd (invoice amount).
     if (receivedCrypto > 0 && invoicedCrypto > 0 && sourceUsd > 0) {
-      const ratio = receivedCrypto / invoicedCrypto;
-      creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
-      
-      if (creditAmount <= 0) {
-        req.log.warn({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd }, "Plisio IPN: calculated credit is zero or negative, skipping");
-        res.json({ success: true });
-        return;
-      }
-
+      ratioUsed = receivedCrypto / invoicedCrypto;
+      creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
       req.log.info({ 
         txn_id, 
         receivedCrypto, 
         invoicedCrypto, 
         sourceUsd, 
-        ratio, 
+        ratio: ratioUsed, 
         creditAmount 
-      }, "Plisio IPN: Calculated credit from actual received amount (Strict Ratio)");
+      }, "Plisio IPN: Calculated credit from actual received amount (ratio method)");
+    } else if (sourceUsd > 0) {
+      // Fallback: use the invoice USD amount directly (no ratio available)
+      ratioUsed = 1;
+      creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
+      req.log.warn({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd, creditAmount }, 
+        "Plisio IPN: received_amount or invoiced_amount missing — crediting full invoice amount as fallback");
     } else {
-      req.log.error({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd }, "Plisio IPN: CRITICAL - Missing amount fields for paid transaction. Cannot credit safely.");
+      req.log.error({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd }, "Plisio IPN: CRITICAL - No amount data at all for paid transaction.");
       res.status(400).json({ error: "Missing payment amount data" });
+      return;
+    }
+
+    if (creditAmount <= 0) {
+      req.log.warn({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd, creditAmount }, "Plisio IPN: calculated credit is zero or negative, skipping");
+      res.json({ success: true });
       return;
     }
 
@@ -406,7 +413,8 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
             received_amount: String(received_amount || "0"),
             invoice_total_sum: String(invoice_total_sum || "0"),
             source_amount: String(source_amount || "0"),
-            ratio: receivedCrypto && invoicedCrypto ? receivedCrypto / invoicedCrypto : 1,
+            ratio: ratioUsed,
+            credit_amount_usd: creditAmount,
             paid_at: new Date().toISOString()
           })
         })
@@ -414,22 +422,25 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
         .returning({ id: transactionsTable.id });
       if (flipped.length === 0) return;
 
-      // Credit Crypto-Native Balance
+      // Credit Crypto-Native Balance (only if we have a real received crypto amount)
       const cryptoCurrency = tx.currency || "ETH";
-      const cryptoAmountReceived = String(received_amount || "0");
+      const cryptoAmountReceived = parseFloat(String(received_amount || "0"));
       
-      await txn
-        .insert(userBalancesTable)
-        .values({
-          userId: tx.userId,
-          currency: cryptoCurrency,
-          amount: cryptoAmountReceived,
-        })
-        .onConflictDoUpdate({
-          target: [userBalancesTable.userId, userBalancesTable.currency],
-          set: { amount: sql`user_balances.amount + ${cryptoAmountReceived}` },
-        });
+      if (cryptoAmountReceived > 0) {
+        await txn
+          .insert(userBalancesTable)
+          .values({
+            userId: tx.userId,
+            currency: cryptoCurrency,
+            amount: String(cryptoAmountReceived),
+          })
+          .onConflictDoUpdate({
+            target: [userBalancesTable.userId, userBalancesTable.currency],
+            set: { amount: sql`user_balances.amount + ${String(cryptoAmountReceived)}` },
+          });
+      }
 
+      // Credit USD balance (this is the real amount after fees, always credited)
       const [updatedUser] = await txn.update(usersTable).set({
         balance: sql`balance + ${creditAmount}`,
         totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
@@ -445,7 +456,7 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
           reason: "deposit",
           referenceId: tx.id,
           referenceType: "transaction",
-          note: `Credited ${cryptoAmountReceived} ${cryptoCurrency}`,
+          note: `Credited $${creditAmount} USD (${cryptoAmountReceived > 0 ? cryptoAmountReceived + " " + cryptoCurrency : "invoice amount"})`,
         });
       }
     });
@@ -562,9 +573,11 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     const [cryptoBalance] = await db.select().from(userBalancesTable).where(and(eq(userBalancesTable.userId, user.id), eq(userBalancesTable.currency, currency))).limit(1);
     const cryptoPrice = await getCryptoPrice(currency);
     const liveUsdBalance = (parseFloat(cryptoBalance?.amount || "0") * cryptoPrice);
+    const staticBalance = parseFloat(user.balance);
     
-    // If they have a crypto-native balance for this coin, use it. Otherwise fallback to static balance.
-    const effectiveBalance = cryptoBalance ? liveUsdBalance : parseFloat(user.balance);
+    // Total effective balance = crypto USD value + users.balance (signup bonus, daily bonus, etc.)
+    // This mirrors the balance display logic in /me and formatUser
+    const effectiveBalance = liveUsdBalance + staticBalance;
 
     const withdrawRatio = amount / (totalDeposited || 1);
     const timeSinceCreated = Date.now() - new Date(user.createdAt).getTime();
@@ -623,28 +636,39 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     
     const deducted = await db.transaction(async (txn) => {
       let balanceAfter = 0;
-      let balanceBefore = 0;
+      let balanceBefore = effectiveBalance;
 
-      // Deduct from Crypto Balance if it exists
-      if (cryptoBalance) {
+      // Deduct from Crypto Balance first (if the user has crypto for this currency)
+      // Then deduct remainder from users.balance (signup bonus, daily bonus, etc.)
+      let remainingToDeduct = amount;
+      
+      if (cryptoBalance && liveUsdBalance > 0) {
+        // How much crypto do we need to cover?
+        const cryptoToDeduct = Math.min(cryptoAmountToDeduct, parseFloat(cryptoBalance.amount));
+        const usdCoveredByCrypto = cryptoToDeduct * cryptoPrice;
+        
         const updatedCrypto = await txn.update(userBalancesTable)
-          .set({ amount: sql`amount - ${cryptoAmountToDeduct.toFixed(8)}` })
-          .where(and(eq(userBalancesTable.userId, user.id), eq(userBalancesTable.currency, currency), sql`amount >= ${cryptoAmountToDeduct.toFixed(8)}`))
+          .set({ amount: sql`amount - ${cryptoToDeduct.toFixed(8)}` })
+          .where(and(eq(userBalancesTable.userId, user.id), eq(userBalancesTable.currency, currency), sql`amount >= ${cryptoToDeduct.toFixed(8)}`))
           .returning({ amount: userBalancesTable.amount });
         
         if (updatedCrypto.length === 0) return [];
-        balanceAfter = parseFloat(updatedCrypto[0].amount) * cryptoPrice;
-        balanceBefore = balanceAfter + amount;
-      } else {
-        // Fallback to static balance
-        const d = await txn.update(usersTable)
-          .set({ balance: sql`${usersTable.balance} - ${amount}` })
-          .where(and(eq(usersTable.id, user.id), sql`${usersTable.balance} >= ${amount}`))
-          .returning({ balance: usersTable.balance });
-        if (d.length === 0) return [];
-        balanceAfter = parseFloat(d[0].balance);
-        balanceBefore = balanceAfter + amount;
+        remainingToDeduct = Math.max(0, amount - usdCoveredByCrypto);
       }
+      
+      // Deduct any remaining amount from users.balance (bonuses, promo credits, etc.)
+      if (remainingToDeduct > 0.001) {
+        const d = await txn.update(usersTable)
+          .set({ balance: sql`${usersTable.balance} - ${remainingToDeduct}` })
+          .where(and(eq(usersTable.id, user.id), sql`${usersTable.balance} >= ${remainingToDeduct}`))
+          .returning({ balance: usersTable.balance });
+        if (d.length === 0 && !cryptoBalance) return []; // Only fail if no crypto was deducted either
+      } else if (!cryptoBalance) {
+        // No crypto balance and no static balance deduction needed — shouldn't happen but guard it
+        return [];
+      }
+      
+      balanceAfter = effectiveBalance - amount;
 
       const [inserted] = await txn.insert(transactionsTable).values({
         userId: user.id, type: "withdrawal", amount: String(amount),

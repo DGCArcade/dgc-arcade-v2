@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable, dailyBonusClaimsTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 
 export const dailyBonusRouter = Router();
@@ -119,11 +119,11 @@ dailyBonusRouter.post("/claim", requireAuth, async (req, res) => {
     const streakDay = yesterdayClaim ? yesterdayClaim.streakDay + 1 : 1;
     const base = getBaseBonusAmount(user.totalBets, parseFloat(user.totalWon));
     const bonusAmount = applyStreakMultiplier(base, streakDay);
-    const newBalance = parseFloat(user.balance) + bonusAmount;
-
-    await db.update(usersTable)
-      .set({ balance: String(newBalance) })
-      .where(eq(usersTable.id, user.id));
+    const [updatedUser] = await db.update(usersTable)
+      .set({ balance: sql`balance + ${bonusAmount}` })
+      .where(eq(usersTable.id, user.id))
+      .returning({ balance: usersTable.balance });
+    const newBalance = parseFloat(updatedUser?.balance ?? "0");
     await db.insert(dailyBonusClaimsTable).values({
       userId: user.id,
       amount: String(bonusAmount),
@@ -131,7 +131,7 @@ dailyBonusRouter.post("/claim", requireAuth, async (req, res) => {
       streakDay,
     });
 
-    req.log.info({ userId: user.id, bonusAmount, streakDay }, "Daily bonus claimed");
+    req.log.info({ userId: user.id, bonusAmount, streakDay, newBalance }, "Daily bonus claimed");
     res.json({ claimed: true, bonusAmount, streakDay, newBalance });
   } catch (err) {
     req.log.error({ err }, "Daily bonus claim error");

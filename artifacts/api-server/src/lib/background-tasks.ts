@@ -111,23 +111,28 @@ export async function syncPlisioDeposits() {
           const invoicedAmount = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || data.data.invoice_amount || "0"));
           const sourceUsd = parseFloat(String(data.data.source_amount || data.data.invoice_amount || data.data.source_amount_usd || tx.amount));
           
-          // STRICT RATIO CALCULATION: Only credit what was actually received.
-          // If they send $79 instead of $100, ratio will be 0.79, and they get $79.
-          // We NO LONGER default to 1 if info is missing; we must have the real numbers.
-          if (invoicedAmount <= 0) {
-            logger.warn({ txId: tx.id, pStatus }, "Plisio sync: invoicedAmount is 0, skipping to avoid over-crediting");
+          let ratioUsed: number;
+          let creditAmount: number;
+          // REAL AMOUNT CALCULATION: Credit the real received amount after fees.
+          // If Plisio provides both received and invoiced crypto amounts, use the ratio.
+          // If received_amount is missing/zero, fall back to sourceUsd (invoice amount).
+          if (receivedAmount > 0 && invoicedAmount > 0 && sourceUsd > 0) {
+            ratioUsed = receivedAmount / invoicedAmount;
+            creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
+            logger.info({ txId: tx.id, pStatus, creditAmount, ratio: ratioUsed, receivedAmount, invoicedAmount }, "Plisio sync: crediting with ratio method");
+          } else if (sourceUsd > 0) {
+            ratioUsed = 1;
+            creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
+            logger.warn({ txId: tx.id, pStatus, receivedAmount, invoicedAmount, sourceUsd, creditAmount }, "Plisio sync: received_amount missing — crediting full invoice amount as fallback");
+          } else {
+            logger.warn({ txId: tx.id, pStatus }, "Plisio sync: no amount data, skipping");
             continue;
           }
-
-          const ratio = receivedAmount / invoicedAmount;
-          const creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
           
           if (creditAmount <= 0) {
             logger.warn({ txId: tx.id, pStatus, receivedAmount, invoicedAmount }, "Plisio sync: calculated credit is zero or negative, skipping");
             continue;
           }
-
-          logger.info({ txId: tx.id, pStatus, creditAmount, ratio, receivedAmount, invoicedAmount }, "Plisio sync: verified payment with strict ratio, crediting user");
 
           await db.transaction(async (txn) => {
             const flipped = await txn
@@ -138,24 +143,26 @@ export async function syncPlisioDeposits() {
 
             if (flipped.length === 0) return;
 
-            // Credit Crypto-Native Balance
+            // Credit Crypto-Native Balance (only if we have a real received crypto amount)
             const cryptoCurrency = tx.currency || "ETH";
-            const cryptoAmountReceived = data.data.received_amount || "0";
+            const cryptoAmountReceived = parseFloat(String(data.data.received_amount || "0"));
             
-            await txn
-              .insert(userBalancesTable)
-              .values({
-                userId: tx.userId,
-                currency: cryptoCurrency,
-                amount: cryptoAmountReceived,
-              })
-              .onConflictDoUpdate({
-                target: [userBalancesTable.userId, userBalancesTable.currency],
-                set: { amount: sql`user_balances.amount + ${cryptoAmountReceived}` },
-              });
+            if (cryptoAmountReceived > 0) {
+              await txn
+                .insert(userBalancesTable)
+                .values({
+                  userId: tx.userId,
+                  currency: cryptoCurrency,
+                  amount: String(cryptoAmountReceived),
+                })
+                .onConflictDoUpdate({
+                  target: [userBalancesTable.userId, userBalancesTable.currency],
+                  set: { amount: sql`user_balances.amount + ${String(cryptoAmountReceived)}` },
+                });
+            }
 
+            // Credit USD balance (real amount after fees)
             const [updatedUser] = await txn.update(usersTable).set({
-              // We still update the USD balance as a "cached" version or for legacy support
               balance: sql`balance + ${creditAmount}`,
               totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
               wagerRequirement: sql`(coalesce(total_deposited, 0) + ${creditAmount}) * 1.0`,
@@ -171,7 +178,7 @@ export async function syncPlisioDeposits() {
                 reason: "deposit",
                 referenceId: tx.id,
                 referenceType: "transaction",
-                note: `Credited ${cryptoAmountReceived} ${cryptoCurrency}`,
+                note: `Credited $${creditAmount} USD (${cryptoAmountReceived > 0 ? cryptoAmountReceived + " " + cryptoCurrency : "invoice amount"})`,
               });
             }
             

@@ -27,8 +27,9 @@ async function formatUser(user: typeof usersTable.$inferSelect) {
     };
   }));
 
-  // Source of truth for balance: crypto-native total if available, else static balance
-  const finalBalance = balancesWithPrices.length > 0 ? liveTotalUsd : parseFloat(user.balance);
+  // Total balance = crypto USD value + users.balance (signup bonus, daily bonus, rakeback, admin credits)
+  // We ALWAYS add users.balance so bonuses are never lost when a user makes their first deposit
+  const finalBalance = liveTotalUsd + parseFloat(user.balance);
 
   return {
     id: user.id,
