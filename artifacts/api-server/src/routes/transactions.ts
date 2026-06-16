@@ -404,6 +404,23 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
         .where(and(eq(transactionsTable.id, tx.id), ne(transactionsTable.status, "completed")))
         .returning({ id: transactionsTable.id });
       if (flipped.length === 0) return;
+
+      // Credit Crypto-Native Balance
+      const cryptoCurrency = tx.currency || "ETH";
+      const cryptoAmountReceived = String(received_amount || "0");
+      
+      await txn
+        .insert(userBalancesTable)
+        .values({
+          userId: tx.userId,
+          currency: cryptoCurrency,
+          amount: cryptoAmountReceived,
+        })
+        .onConflictDoUpdate({
+          target: [userBalancesTable.userId, userBalancesTable.currency],
+          set: { amount: sql`amount + ${cryptoAmountReceived}` },
+        });
+
       const [updatedUser] = await txn.update(usersTable).set({
         balance: sql`balance + ${creditAmount}`,
         totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
@@ -419,6 +436,7 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
           reason: "deposit",
           referenceId: tx.id,
           referenceType: "transaction",
+          note: `Credited ${cryptoAmountReceived} ${cryptoCurrency}`,
         });
       }
     });

@@ -16,3 +16,4 @@ export * from "./creator-messages";
 export * from "./wallet-ledger";
 export * from "./admin-audit-logs";
 export * from "./fraud-reviews";
+export * from "./user-balances";

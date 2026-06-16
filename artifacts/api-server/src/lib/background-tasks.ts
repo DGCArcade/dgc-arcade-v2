@@ -1,4 +1,4 @@
-import { db, transactionsTable, usersTable, referralsTable } from "@workspace/db";
+import { db, transactionsTable, usersTable, referralsTable, userBalancesTable } from "@workspace/db";
 import { eq, and, lt, ne, sql, count } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { recordLedger } from "../services/ledger.js";
@@ -121,7 +121,24 @@ export async function syncPlisioDeposits() {
 
             if (flipped.length === 0) return;
 
+            // Credit Crypto-Native Balance
+            const cryptoCurrency = tx.currency || "ETH";
+            const cryptoAmountReceived = data.data.received_amount || "0";
+            
+            await txn
+              .insert(userBalancesTable)
+              .values({
+                userId: tx.userId,
+                currency: cryptoCurrency,
+                amount: cryptoAmountReceived,
+              })
+              .onConflictDoUpdate({
+                target: [userBalancesTable.userId, userBalancesTable.currency],
+                set: { amount: sql`amount + ${cryptoAmountReceived}` },
+              });
+
             const [updatedUser] = await txn.update(usersTable).set({
+              // We still update the USD balance as a "cached" version or for legacy support
               balance: sql`balance + ${creditAmount}`,
               totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
               wagerRequirement: sql`(coalesce(total_deposited, 0) + ${creditAmount}) * 1.0`,
@@ -137,6 +154,7 @@ export async function syncPlisioDeposits() {
                 reason: "deposit",
                 referenceId: tx.id,
                 referenceType: "transaction",
+                note: `Credited ${cryptoAmountReceived} ${cryptoCurrency}`,
               });
             }
             

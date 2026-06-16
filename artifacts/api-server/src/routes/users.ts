@@ -1,6 +1,7 @@
 import { Router } from "express";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, userBalancesTable } from "@workspace/db";
 import { eq, ilike, sql } from "drizzle-orm";
+import { getCryptoPrice } from "../lib/price-service.js";
 import { requireAuth } from "../middlewares/auth.js";
 export const usersRouter = Router();
 
@@ -130,7 +131,44 @@ usersRouter.get("/me", requireAuth, async (req, res) => {
     const rakebackClaimed = parseFloat(user.rakebackClaimed ?? "0");
     const tier = getVipTier(wagered);
     const claimableRakeback = Math.max(0, wagered * (tier.rakebackPct / 100) - rakebackClaimed);
-    res.json({ id: user.id, username: user.username, balance: parseFloat(user.balance), role: user.role, totalBets: user.totalBets, totalWon: parseFloat(user.totalWon), totalWageredAmount: wagered, createdAt: user.createdAt.toISOString(), lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null, telegramUsername: user.telegramUsername ?? null, rakebackClaimed, claimableRakeback, canChangeUsername, daysUntilChange, deletionRequested: !!user.deletionRequestedAt });
+
+    // Live Crypto-Native Balances
+    const cryptoBalances = await db.select().from(userBalancesTable).where(eq(userBalancesTable.userId, req.user!.userId));
+    
+    let liveTotalUsd = 0;
+    const balancesWithPrices = await Promise.all(cryptoBalances.map(async (b) => {
+      const price = await getCryptoPrice(b.currency);
+      const usdValue = parseFloat(b.amount) * price;
+      liveTotalUsd += usdValue;
+      return {
+        currency: b.currency,
+        amount: parseFloat(b.amount),
+        price,
+        usdValue
+      };
+    }));
+
+    // If they have crypto-native balances, use that as the source of truth for their "live" balance
+    const finalBalance = balancesWithPrices.length > 0 ? liveTotalUsd : parseFloat(user.balance);
+
+    res.json({ 
+      id: user.id, 
+      username: user.username, 
+      balance: finalBalance, 
+      cryptoBalances: balancesWithPrices,
+      role: user.role, 
+      totalBets: user.totalBets, 
+      totalWon: parseFloat(user.totalWon), 
+      totalWageredAmount: wagered, 
+      createdAt: user.createdAt.toISOString(), 
+      lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null, 
+      telegramUsername: user.telegramUsername ?? null, 
+      rakebackClaimed, 
+      claimableRakeback, 
+      canChangeUsername, 
+      daysUntilChange, 
+      deletionRequested: !!user.deletionRequestedAt 
+    });
   } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
