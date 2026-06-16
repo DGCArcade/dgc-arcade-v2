@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, usersTable, dailyBonusClaimsTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
+import { creditBalance } from "../lib/balance-service.js";
 
 export const dailyBonusRouter = Router();
 
@@ -119,14 +120,13 @@ dailyBonusRouter.post("/claim", requireAuth, async (req, res) => {
     const streakDay = yesterdayClaim ? yesterdayClaim.streakDay + 1 : 1;
     const base = getBaseBonusAmount(user.totalBets, parseFloat(user.totalWon));
     const bonusAmount = applyStreakMultiplier(base, streakDay);
-    const [updatedUser] = await db.update(usersTable)
+    const finalBalance = await creditBalance(user.id, bonusAmount);
+    await db.update(usersTable)
       .set({ 
-        balance: sql`balance + ${bonusAmount}`,
         wagerRequirement: sql`coalesce(wager_requirement, 0) + ${bonusAmount}`
       })
-      .where(eq(usersTable.id, user.id))
-      .returning({ balance: usersTable.balance });
-    const newBalance = parseFloat(updatedUser?.balance ?? "0");
+      .where(eq(usersTable.id, user.id));
+    const newBalance = finalBalance;
     await db.insert(dailyBonusClaimsTable).values({
       userId: user.id,
       amount: String(bonusAmount),

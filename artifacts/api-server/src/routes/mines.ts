@@ -5,6 +5,7 @@ import { requireAuth } from "../middlewares/auth.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import { recordTournamentWager } from "../lib/tournament-tracker.js";
+import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 
 export const minesRouter = Router();
 
@@ -57,17 +58,15 @@ minesRouter.post("/start", requireAuth, async (req, res) => {
       return;
     }
 
-    // ATOMIC balance deduct + wager tracking -- prevents race conditions
-    // and ensures Mines bets count toward the withdrawal wager requirement
-    const deducted = await db.update(usersTable)
-      .set({
-        balance: sql`balance - ${amount}`,
-        totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${amount}`,
-      })
-      .where(and(eq(usersTable.id, user.id), sql`balance >= ${amount}`))
-      .returning({ balance: usersTable.balance });
-    if (deducted.length === 0) {
-      res.status(400).json({ error: "Insufficient balance" });
+    // Standardized balance deduction (crypto-first, live prices)
+    let newBalanceAfterDeduct: number;
+    try {
+      newBalanceAfterDeduct = await deductBalance(user.id, amount);
+      await db.update(usersTable)
+        .set({ totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${amount}` })
+        .where(eq(usersTable.id, user.id));
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || "Insufficient balance" });
       return;
     }
 
@@ -190,12 +189,12 @@ minesRouter.post("/cashout", requireAuth, async (req, res) => {
     const bet = parseFloat(session.bet);
     const payout = bet * multiplier;
 
-    const [updated] = await db.update(usersTable).set({
-      balance: sql`balance + ${payout}`,
+    const finalBalance = await creditBalance(req.user!.userId, payout);
+    await db.update(usersTable).set({
       totalBets: sql`total_bets + 1`,
       totalWon: sql`coalesce(total_won, 0) + ${payout}`,
-    }).where(eq(usersTable.id, req.user!.userId)).returning();
-    const newBalance = parseFloat(updated.balance);
+    }).where(eq(usersTable.id, req.user!.userId));
+    const newBalance = finalBalance;
 
     const mines: number[] = JSON.parse(session.minePositions);
     await db.update(minesSessionsTable).set({ status: "won" }).where(eq(minesSessionsTable.id, session.id));

@@ -5,37 +5,19 @@ import { eq, ilike, and } from "drizzle-orm";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { requireAuth, signToken } from "../middlewares/auth.js";
 import { logger } from "../lib/logger.js";
-import { getCryptoPrice } from "../lib/price-service.js";
+import { getUserBalance } from "../lib/balance-service.js";
 import crypto from "crypto";
 
 export const authRouter = Router();
 
 async function formatUser(user: typeof usersTable.$inferSelect) {
-  // Live Crypto-Native Balances
-  const cryptoBalances = await db.select().from(userBalancesTable).where(eq(userBalancesTable.userId, user.id));
-  
-  let liveTotalUsd = 0;
-  const balancesWithPrices = await Promise.all(cryptoBalances.map(async (b) => {
-    const price = await getCryptoPrice(b.currency);
-    const usdValue = parseFloat(b.amount) * price;
-    liveTotalUsd += usdValue;
-    return {
-      currency: b.currency,
-      amount: parseFloat(b.amount),
-      price,
-      usdValue
-    };
-  }));
-
-  // Total balance = crypto USD value + users.balance (signup bonus, daily bonus, rakeback, admin credits)
-  // We ALWAYS add users.balance so bonuses are never lost when a user makes their first deposit
-  const finalBalance = liveTotalUsd + parseFloat(user.balance);
+  const { totalBalance, cryptoBalances } = await getUserBalance(user.id);
 
   return {
     id: user.id,
     username: user.username,
-    balance: finalBalance,
-    cryptoBalances: balancesWithPrices,
+    balance: totalBalance,
+    cryptoBalances,
     avatarUrl: user.avatarUrl,
     totalBets: user.totalBets,
     totalWon: parseFloat(user.totalWon),

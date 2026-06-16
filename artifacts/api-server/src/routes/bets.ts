@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import { recordTournamentWager } from "../lib/tournament-tracker.js";
 import { recordLedgerStandalone } from "../services/ledger.js";
+import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 
 export const betsRouter = Router();
 
@@ -265,15 +266,12 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       res.status(400).json({ error: `Bet must be between ${minBet} and ${maxBet}` });
       return;
     }
-    // ATOMIC balance deduct -- prevents race conditions
-    // Check and deduct happen in one SQL statement.
-    // Two simultaneous bets can never both pass on the same balance.
-    const deducted = await db.update(usersTable)
-      .set({ balance: sql`balance - ${amount}` })
-      .where(and(eq(usersTable.id, user.id), sql`balance >= ${amount}`))
-      .returning({ balance: usersTable.balance });
-    if (deducted.length === 0) {
-      res.status(400).json({ error: "Insufficient balance" });
+    // Standardized balance deduction (crypto-first, live prices)
+    let newBalanceAfterDeduct: number;
+    try {
+      newBalanceAfterDeduct = await deductBalance(user.id, amount);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || "Insufficient balance" });
       return;
     }
     const serverSeed = generateServerSeed();
@@ -283,14 +281,14 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       game.slug, amount, houseEdge, seedValue, serverSeed, clientSeedStr,
       (meta as Record<string, unknown>) ?? null
     );
-    // Atomic stat + payout update — consistent with mines/blackjack, avoids
-    // read-modify-write races and JS float drift on real-money columns.
-    const [updatedUser] = await db.update(usersTable).set({
-      balance: sql`balance + ${payout}`,
+    // Standardized balance credit and stat updates
+    const finalBalance = await creditBalance(user.id, payout);
+    
+    await db.update(usersTable).set({
       totalBets: sql`coalesce(total_bets, 0) + 1`,
       totalWon: sql`coalesce(total_won, 0) + ${won ? payout : 0}`,
       totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${amount}`,
-    }).where(eq(usersTable.id, user.id)).returning({ balance: usersTable.balance });
+    }).where(eq(usersTable.id, user.id));
 
     const [bet] = await db.insert(betsTable).values({
       userId: user.id,
@@ -304,10 +302,10 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       meta: { ...resultMeta, userMeta: meta },
     }).returning();
 
-    const newBalance = parseFloat(updatedUser.balance);
+    const newBalance = finalBalance;
 
     // Fire-and-forget: record ledger entries for this bet
-    const balanceAfterDeduct = newBalance - payout + amount; // balance right after deduct, before payout
+    const balanceAfterDeduct = newBalanceAfterDeduct; // balance right after deduct, before payout
     recordLedgerStandalone({
       userId: user.id,
       amount: -amount,

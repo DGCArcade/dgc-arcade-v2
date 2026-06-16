@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, usersTable, gamesTable, betsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
+import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 import { createHash } from "crypto";
 
 export const raceRouter = Router();
@@ -65,8 +66,13 @@ raceRouter.post("/run", requireAuth, async (req, res) => {
     .where(eq(usersTable.id, userId))
     .limit(1);
   if (!user) return res.status(404).json({ error: "User not found" });
-  if (Number(user.balance) < betAmount)
-    return res.status(400).json({ error: "Insufficient balance" });
+
+  // Standardized balance deduction (crypto-first, live prices)
+  try {
+    await deductBalance(userId, betAmount);
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || "Insufficient balance" });
+  }
 
   const seed = `${userId}:${Date.now()}:${Math.random()}`;
   const finishOrder = generateRacePositions(seed);
@@ -78,11 +84,12 @@ raceRouter.post("/run", requireAuth, async (req, res) => {
   const payout = won ? betAmount * multiplier : 0;
   const profit = payout - betAmount;
 
+  // Standardized balance credit and stat updates
+  const finalBalance = await creditBalance(userId, payout);
   const newRaceWagered = parseFloat(user.totalWageredAmount ?? "0") + betAmount;
   await db
     .update(usersTable)
     .set({
-      balance: String(Number(user.balance) - betAmount + payout),
       totalWageredAmount: String(newRaceWagered),
     })
     .where(eq(usersTable.id, userId));
@@ -106,6 +113,6 @@ raceRouter.post("/run", requireAuth, async (req, res) => {
     multiplier,
     payout,
     profit,
-    newBalance: Number(user.balance) - betAmount + payout,
+    newBalance: finalBalance,
   });
 });

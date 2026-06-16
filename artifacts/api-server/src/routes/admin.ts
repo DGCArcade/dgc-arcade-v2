@@ -7,6 +7,7 @@ import { requireAdmin } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
 import { logAudit } from "../services/audit.js";
 import { recordLedger, recordLedgerStandalone } from "../services/ledger.js";
+import { getUserBalance } from "../lib/balance-service.js";
 import { sendPlisioPayout } from "../lib/plisio-payout.js";
 
 export const adminRouter = Router();
@@ -133,13 +134,18 @@ adminRouter.get("/users", async (req, res) => {
       .from(usersTable)
       .where(search ? ilike(usersTable.username, `%${search}%`) : undefined);
 
-    res.json({
-      users: rows.map((u) => ({
+    const usersWithLiveBalances = await Promise.all(rows.map(async (u) => {
+      const { totalBalance } = await getUserBalance(u.id);
+      return {
         ...u,
-        balance: parseFloat(u.balance),
+        balance: totalBalance,
         totalWon: parseFloat(u.totalWon),
         createdAt: u.createdAt.toISOString(),
-      })),
+      };
+    }));
+
+    res.json({
+      users: usersWithLiveBalances,
       total: Number(count),
     });
   } catch (err) {
@@ -164,6 +170,8 @@ adminRouter.get("/users/:id", async (req, res) => {
       return;
     }
 
+    const { totalBalance, cryptoBalances } = await getUserBalance(userId);
+
     const bets = await db
       .select()
       .from(betsTable)
@@ -182,7 +190,8 @@ adminRouter.get("/users/:id", async (req, res) => {
       user: {
         id: user.id,
         username: user.username,
-        balance: parseFloat(user.balance),
+        balance: totalBalance,
+        cryptoBalances,
         role: user.role,
         isBanned: user.isBanned,
         totalBets: user.totalBets,

@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from "uuid";
 import { recordLedger } from "../services/ledger.js";
 import { evaluateWithdrawal } from "../services/fraud.js";
 import { getCryptoPrice } from "../lib/price-service.js";
+import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 
 export const transactionsRouter = Router();
 
@@ -589,15 +590,11 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
 
-    // Check Crypto-Native Balance
-    const [cryptoBalance] = await db.select().from(userBalancesTable).where(and(eq(userBalancesTable.userId, user.id), eq(userBalancesTable.currency, currency))).limit(1);
+    // Standardized balance retrieval (live prices)
+    const { totalBalance, cryptoBalances } = await getUserBalance(user.id);
+    const cryptoBalance = cryptoBalances.find(b => b.currency === currency);
     const cryptoPrice = await getCryptoPrice(currency);
-    const liveUsdBalance = (parseFloat(cryptoBalance?.amount || "0") * cryptoPrice);
-    const staticBalance = parseFloat(user.balance);
-    
-    // Total effective balance = crypto USD value + users.balance (signup bonus, daily bonus, etc.)
-    // This mirrors the balance display logic in /me and formatUser
-    const effectiveBalance = liveUsdBalance + staticBalance;
+    const effectiveBalance = totalBalance;
 
     const totalDeposited = parseFloat(user.totalDeposited || "0");
     const withdrawRatio = amount / (totalDeposited || 1);
@@ -661,40 +658,14 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     const cryptoAmountToDeduct = amount / cryptoPrice;
     
     const deducted = await db.transaction(async (txn) => {
-      let balanceAfter = 0;
       let balanceBefore = effectiveBalance;
+      let balanceAfter: number;
 
-      // Deduct from Crypto Balance first (if the user has crypto for this currency)
-      // Then deduct remainder from users.balance (signup bonus, daily bonus, etc.)
-      let remainingToDeduct = amount;
-      
-      if (cryptoBalance && liveUsdBalance > 0) {
-        // How much crypto do we need to cover?
-        const cryptoToDeduct = Math.min(cryptoAmountToDeduct, parseFloat(cryptoBalance.amount));
-        const usdCoveredByCrypto = cryptoToDeduct * cryptoPrice;
-        
-        const updatedCrypto = await txn.update(userBalancesTable)
-          .set({ amount: sql`amount - ${cryptoToDeduct.toFixed(8)}` })
-          .where(and(eq(userBalancesTable.userId, user.id), eq(userBalancesTable.currency, currency), sql`amount >= ${cryptoToDeduct.toFixed(8)}`))
-          .returning({ amount: userBalancesTable.amount });
-        
-        if (updatedCrypto.length === 0) return [];
-        remainingToDeduct = Math.max(0, amount - usdCoveredByCrypto);
-      }
-      
-      // Deduct any remaining amount from users.balance (bonuses, promo credits, etc.)
-      if (remainingToDeduct > 0.001) {
-        const d = await txn.update(usersTable)
-          .set({ balance: sql`${usersTable.balance} - ${remainingToDeduct}` })
-          .where(and(eq(usersTable.id, user.id), sql`${usersTable.balance} >= ${remainingToDeduct}`))
-          .returning({ balance: usersTable.balance });
-        if (d.length === 0 && !cryptoBalance) return []; // Only fail if no crypto was deducted either
-      } else if (!cryptoBalance) {
-        // No crypto balance and no static balance deduction needed — shouldn't happen but guard it
+      try {
+        balanceAfter = await deductBalance(user.id, amount, txn);
+      } catch (err) {
         return [];
       }
-      
-      balanceAfter = effectiveBalance - amount;
 
       const [inserted] = await txn.insert(transactionsTable).values({
         userId: user.id, type: "withdrawal", amount: String(amount),

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, usersTable, gamesTable, betsTable, blackjackHandsTable } from "@workspace/db";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
+import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 
@@ -95,18 +96,17 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
       return;
     }
 
-    const dealDeduct = await db.update(usersTable)
-      .set({
-        balance: sql`balance - ${amount}`,
-        totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${amount}`,
-      })
-      .where(and(eq(usersTable.id, user.id), sql`balance >= ${amount}`))
-      .returning({ balance: usersTable.balance });
-    if (dealDeduct.length === 0) {
-      res.status(400).json({ error: "Insufficient balance" });
+    // Standardized balance deduction (crypto-first, live prices)
+    let currentBalance: number;
+    try {
+      currentBalance = await deductBalance(user.id, amount);
+      await db.update(usersTable)
+        .set({ totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${amount}` })
+        .where(eq(usersTable.id, user.id));
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || "Insufficient balance" });
       return;
     }
-    let currentBalance = parseFloat(dealDeduct[0].balance);
 
     const serverSeed = uuidv4().replace(/-/g, "");
     const deck = shuffleDeck(serverSeed, buildDeck());
@@ -133,12 +133,11 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
 
     if (status === "player_blackjack") {
       const payout = amount * 2.5;
-      const [bjUpdated] = await db.update(usersTable).set({
-        balance: sql`balance + ${payout}`,
+      currentBalance = await creditBalance(user.id, payout);
+      await db.update(usersTable).set({
         totalBets: sql`total_bets + 1`,
         totalWon: sql`coalesce(total_won, 0) + ${payout}`,
-      }).where(eq(usersTable.id, user.id)).returning({ balance: usersTable.balance });
-      currentBalance = parseFloat(bjUpdated.balance);
+      }).where(eq(usersTable.id, user.id));
       await db.insert(betsTable).values({
         userId: user.id, gameId: game.id,
         amount: String(amount), payout: String(payout),
@@ -194,15 +193,13 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
       playerHand = [...playerHand, newCard];
 
       if (action === "double") {
-        const doubleDeduct = await db.update(usersTable)
-          .set({
-            balance: sql`balance - ${bet}`,
-            totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${bet}`,
-          })
-          .where(and(eq(usersTable.id, user.id), sql`balance >= ${bet}`))
-          .returning({ balance: usersTable.balance });
-        if (doubleDeduct.length === 0) {
-          res.status(400).json({ error: "Insufficient balance for double" });
+        try {
+          await deductBalance(user.id, bet);
+          await db.update(usersTable)
+            .set({ totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${bet}` })
+            .where(eq(usersTable.id, user.id));
+        } catch (err: any) {
+          res.status(400).json({ error: err.message || "Insufficient balance for double" });
           return;
         }
       }
@@ -215,16 +212,13 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
         return;
       }
       
-      const splitDeduct = await db.update(usersTable)
-        .set({
-          balance: sql`balance - ${bet}`,
-          totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${bet}`,
-        })
-        .where(and(eq(usersTable.id, user.id), sql`balance >= ${bet}`))
-        .returning({ balance: usersTable.balance });
-        
-      if (splitDeduct.length === 0) {
-        res.status(400).json({ error: "Insufficient balance for split" });
+      try {
+        await deductBalance(user.id, bet);
+        await db.update(usersTable)
+          .set({ totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${bet}` })
+          .where(eq(usersTable.id, user.id));
+      } catch (err: any) {
+        res.status(400).json({ error: err.message || "Insufficient balance for split" });
         return;
       }
       
@@ -253,8 +247,8 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
       else if (status === "push") payout = finalBet;
       else payout = 0;
 
+      await creditBalance(user.id, payout);
       await db.update(usersTable).set({
-        balance: sql`balance + ${payout}`,
         totalBets: sql`total_bets + 1`,
         totalWon: sql`coalesce(total_won, 0) + ${payout}`,
       }).where(eq(usersTable.id, user.id));
@@ -276,7 +270,7 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
       bet: String(finalBet),
     }).where(eq(blackjackHandsTable.id, hand.id));
 
-    const [updatedUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+    const { totalBalance } = await getUserBalance(user.id);
 
     res.json({
       handId: hand.id,
@@ -286,7 +280,7 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
       dealerTotal: isComplete ? handTotal(dealerHand) : null,
       status,
       payout,
-      balance: parseFloat(updatedUser.balance),
+      balance: totalBalance,
     });
   } catch (err) {
     req.log.error({ err }, "Blackjack action error");
