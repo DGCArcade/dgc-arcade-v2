@@ -1,7 +1,7 @@
 import { db, usersTable, transactionsTable, referralsTable, userBalancesTable, creatorBankTxnsTable } from "@workspace/db";
 import { eq, and, ne, sql, count } from "drizzle-orm";
 import { recordLedger } from "../services/ledger.js";
-import fetch from "node-fetch";
+// Using native fetch available in Node.js 18+
 
 const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY;
 
