@@ -1092,6 +1092,122 @@ adminRouter.get("/bank/invoices", requireBankSession, async (req, res) => {
   }
 });
 
+// POST /api/admin/bank/reconcile — manually trigger retroactive reconciliation
+adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
+  if (!(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  
+  try {
+    // We'll run the reconciliation logic inline here for immediate feedback
+    const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY;
+    if (!PLISIO_KEY) {
+      res.status(500).json({ error: "Plisio API key not configured" });
+      return;
+    }
+
+    const pendingDeposits = await db
+      .select()
+      .from(transactionsTable)
+      .where(
+        and(
+          eq(transactionsTable.type, "deposit"),
+          eq(transactionsTable.status, "pending")
+        )
+      );
+
+    let reconciledCount = 0;
+    let failedCount = 0;
+
+    for (const tx of pendingDeposits) {
+      if (!tx.plisioTrackId) continue;
+      try {
+        const resp = await fetch(`https://api.plisio.net/api/v1/operations/${tx.plisioTrackId}?api_key=${PLISIO_KEY}`);
+        const data = await resp.json() as any;
+        if (data.status !== "success" || !data.data) continue;
+
+        const pStatus = data.data.status;
+        const creditStatuses = ["completed", "mismatch", "overpaid"];
+        
+        if (creditStatuses.includes(pStatus)) {
+          const receivedAmount = parseFloat(data.data.received_amount || "0");
+          const invoicedAmount = parseFloat(data.data.invoice_total_sum || "0");
+          const sourceUsd = parseFloat(data.data.source_amount || tx.amount);
+          if (receivedAmount <= 0 || invoicedAmount <= 0) continue;
+
+          const ratio = receivedAmount / invoicedAmount;
+          const creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
+
+          await db.transaction(async (txn) => {
+            const flipped = await txn.update(transactionsTable)
+              .set({ 
+                status: "completed", 
+                amount: String(creditAmount),
+                metadata: JSON.stringify({
+                  received_amount: String(receivedAmount),
+                  invoice_total_sum: String(invoicedAmount),
+                  source_amount: String(sourceUsd),
+                  ratio,
+                  paid_at: data.data.updated_at || new Date().toISOString(),
+                  reconciled_at: new Date().toISOString()
+                })
+              })
+              .where(and(eq(transactionsTable.id, tx.id), ne(transactionsTable.status, "completed")))
+              .returning({ id: transactionsTable.id });
+
+            if (flipped.length === 0) return;
+
+            const cryptoCurrency = tx.currency || "ETH";
+            await txn.insert(userBalancesTable).values({ userId: tx.userId, currency: cryptoCurrency, amount: String(receivedAmount) })
+              .onConflictDoUpdate({ target: [userBalancesTable.userId, userBalancesTable.currency], set: { amount: sql`amount + ${String(receivedAmount)}` } });
+
+            const [updatedUser] = await txn.update(usersTable).set({
+              balance: sql`balance + ${creditAmount}`,
+              totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
+              wagerRequirement: sql`(coalesce(total_deposited, 0) + ${creditAmount}) * 1.0`,
+            }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
+
+            if (updatedUser) {
+              await recordLedger(txn, {
+                userId: tx.userId, amount: creditAmount, balanceBefore: parseFloat(updatedUser.balance) - creditAmount,
+                balanceAfter: parseFloat(updatedUser.balance), reason: "deposit", referenceId: tx.id, referenceType: "transaction",
+                note: `Retroactively credited ${receivedAmount} ${cryptoCurrency}`
+              });
+            }
+            
+            // Handle Referral
+            const [depositor] = await txn.select({ referredBy: usersTable.referredBy }).from(usersTable).where(eq(usersTable.id, tx.userId)).limit(1);
+            if (depositor?.referredBy) {
+              const referrerId = depositor.referredBy;
+              const [activeRow] = await txn.select({ n: count() }).from(referralsTable).where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.status, "active")));
+              const active = activeRow?.n ?? 0;
+              const commissionRate = active >= 50 ? 0.10 : active >= 20 ? 0.07 : active >= 5 ? 0.05 : 0.03;
+              const commission = Math.round(creditAmount * commissionRate * 1e8) / 1e8;
+              if (commission > 0) {
+                await txn.update(usersTable).set({ balance: sql`balance + ${commission}` }).where(eq(usersTable.id, referrerId));
+                await txn.update(referralsTable).set({ status: "active", earnedAmount: sql`CAST(earned_amount AS DECIMAL) + ${commission}` }).where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.referredId, tx.userId)));
+                await txn.insert(creatorBankTxnsTable).values({ creatorId: referrerId, type: "referral_commission", amount: String(commission), toUserId: tx.userId, description: `Retroactive commission from deposit ${tx.plisioTrackId || tx.id}` });
+              }
+            }
+          });
+          reconciledCount++;
+        } else if (["expired", "cancelled", "error"].includes(pStatus)) {
+          await db.update(transactionsTable).set({ status: "failed" }).where(eq(transactionsTable.id, tx.id));
+          failedCount++;
+        }
+      } catch (err) {
+        req.log.error({ err, txId: tx.id }, "Reconciliation error for individual tx");
+      }
+    }
+    
+    res.json({ success: true, reconciledCount, failedCount, checkedCount: pendingDeposits.length });
+  } catch (err) {
+    req.log.error({ err }, "Manual reconciliation error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // GET /api/admin/bank/pending-withdrawals — our pending withdrawal queue
 adminRouter.get("/bank/pending-withdrawals", requireBankSession, async (req, res) => {
   try {

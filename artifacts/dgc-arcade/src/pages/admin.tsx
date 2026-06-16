@@ -1850,6 +1850,24 @@ export default function AdminDashboard() {
                     </Button>
                     <span className="text-xs text-muted-foreground self-center">Page {invoicePage}</span>
                   </div>
+                  <Button 
+                    size="sm" 
+                    variant="default" 
+                    className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                    onClick={async () => {
+                      if (!confirm("This will check ALL pending deposits with Plisio and retroactively credit any that were paid. Proceed?")) return;
+                      try {
+                        const res = await fetch('/api/admin/bank/reconcile', { method: 'POST' });
+                        const data = await res.json();
+                        alert(`Reconciliation complete!\nChecked: ${data.checkedCount}\nReconciled: ${data.reconciledCount}\nFailed: ${data.failedCount}`);
+                        window.location.reload();
+                      } catch (err) {
+                        alert("Reconciliation failed. Check console.");
+                      }
+                    }}
+                  >
+                    Fix All Pending Deposits
+                  </Button>
                 </div>
                 {bankInvoices.length === 0 ? (
                   <Card className="border-dashed border-border/40">
