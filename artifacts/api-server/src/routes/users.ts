@@ -22,8 +22,8 @@ usersRouter.get("/owner/plisio-balance", requireAuth, async (req, res) => {
   const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
   if (!user || user.username !== "fanodgc") { res.status(403).json({ error: "Forbidden" }); return; }
   try {
-    const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? "";
-    if (!PLISIO_SECRET_KEY) { res.status(500).json({ error: "PLISIO_SECRET_KEY not configured" }); return; }
+    const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY ?? "";
+    if (!PLISIO_SECRET_KEY) { res.status(500).json({ error: "Plisio API key not configured (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)" }); return; }
     const COINS = ["BTC","ETH","LTC","DOGE","SOL","BCH","TRX","TON","USDT_TRX","USDT_TON","XMR","DASH"];
     const balances: Record<string, string> = {};
     await Promise.all(COINS.map(async (coin) => {

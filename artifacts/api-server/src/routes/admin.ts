@@ -627,7 +627,7 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
 // hard stop — an inconclusive result falls back to the owner's dashboard-based judgement.
 type PlisioOpStatus = { found: boolean; status?: string; sent: boolean | null; reason?: string };
 async function fetchPlisioOperationStatus(operationId: string): Promise<PlisioOpStatus> {
-  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
+  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY ?? "";
   if (!PLISIO_KEY) return { found: false, sent: null, reason: "no_key" };
   if (!operationId) return { found: false, sent: null, reason: "no_reference" };
   try {
@@ -893,7 +893,7 @@ adminRouter.post("/transactions/:id/reconcile", requireBankSession, async (req, 
 const ALWAYS_LIVE_COINS = new Set(["ETH", "DOGE"]);
 
 adminRouter.get("/bank/balances", requireBankSession, async (req, res) => {
-  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
+  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY ?? "";
 
   const ACCEPTED_COINS = [
     "BTC", "ETH", "LTC", "DOGE", "SOL", "BCH",
@@ -1547,9 +1547,9 @@ adminRouter.post("/transactions/sync-plisio", requireBankSession, async (req, re
     res.status(403).json({ error: "Only the platform owner can run the Plisio sync." });
     return;
   }
-  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
+  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY ?? "";
   if (!PLISIO_KEY) {
-    res.status(500).json({ error: "PLISIO_SECRET_KEY not set" });
+    res.status(500).json({ error: "Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)" });
     return;
   }
   const WAGER_MULT = 1.0;

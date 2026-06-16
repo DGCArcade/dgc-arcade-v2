@@ -51,9 +51,9 @@ export async function cleanupExpiredDeposits() {
  * Runs every 5 minutes.
  */
 export async function syncPlisioDeposits() {
-  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY;
+  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY;
   if (!PLISIO_KEY) {
-    logger.warn("Plisio sync skipped: PLISIO_SECRET_KEY not set");
+    logger.warn("Plisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)");
     return;
   }
 

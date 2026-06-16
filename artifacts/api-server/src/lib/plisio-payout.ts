@@ -147,7 +147,7 @@ export async function sendPlisioPayout(
   txId: number,
   log: MinLogger,
 ): Promise<PayoutOutcome> {
-  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? "";
+  const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY ?? "";
   if (!PLISIO_KEY) return { outcome: "no_key" };
 
   const [tx] = await db

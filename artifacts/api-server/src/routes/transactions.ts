@@ -15,7 +15,7 @@ import { evaluateWithdrawal } from "../services/fraud.js";
 
 export const transactionsRouter = Router();
 
-const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? "";
+const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY ?? "";
 const PLISIO_API = "https://api.plisio.net/api/v1";
 
 const WAGER_MULTIPLIER = 1.0;
@@ -277,7 +277,7 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       }
       req.log.info({ txn_id }, "Plisio IPN: signature verified ✓");
     } else {
-      req.log.warn("Plisio IPN: HMAC check skipped — PLISIO_SECRET_KEY not set (dev only)");
+      req.log.warn("Plisio IPN: HMAC check skipped — Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY) (dev only)");
     }
 
     if (!txn_id || !status) {
