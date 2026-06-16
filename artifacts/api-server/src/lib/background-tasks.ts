@@ -1,6 +1,5 @@
-import { db } from "./db.js";
-import { transactionsTable, usersTable } from "./schema.js";
-import { eq, and, lt, sql } from "drizzle-orm";
+import { db, transactionsTable, usersTable } from "@workspace/db";
+import { eq, and, lt } from "drizzle-orm";
 import { logger } from "./logger.js";
 
 /**
@@ -29,15 +28,12 @@ export async function cleanupExpiredDeposits() {
 
     logger.info({ count: expiredDeposits.length }, "Found expired deposits, marking as failed");
 
-    // Mark all expired deposits as failed and refund the user's balance hold if any
     for (const deposit of expiredDeposits) {
       await db.transaction(async (txn) => {
-        // Mark the deposit as failed
         await txn
           .update(transactionsTable)
           .set({ status: "failed" })
           .where(eq(transactionsTable.id, deposit.id));
-
         logger.info({ depositId: deposit.id, userId: deposit.userId }, "Marked expired deposit as failed");
       });
     }
@@ -53,14 +49,12 @@ export async function cleanupExpiredDeposits() {
  * Call this once when the server starts.
  */
 export function startBackgroundTasks() {
-  // Run cleanup every 30 minutes (1800000 ms)
   const cleanupInterval = setInterval(() => {
     cleanupExpiredDeposits().catch((err) => {
       logger.error({ err }, "Unhandled error in cleanup interval");
     });
   }, 30 * 60 * 1000);
 
-  // Graceful shutdown: clear interval on process termination
   process.on("SIGTERM", () => {
     logger.info("SIGTERM received, clearing background task intervals");
     clearInterval(cleanupInterval);
