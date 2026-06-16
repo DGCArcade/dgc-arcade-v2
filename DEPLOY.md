@@ -56,6 +56,7 @@ Both are configured in the Render dashboard → service → **Environment**.
 | `JWT_SECRET` | Signs login tokens | Generate a long random string (see `.env.example`) |
 | `PLISIO_SECRET_KEY` | Crypto payments | https://plisio.net → Dashboard → API → Secret Key |
 | `SITE_URL` | Your live domain | e.g. `https://differentgrindcrw.com` |
+| `API_URL` | Backend API URL | e.g. `https://dgc-arcade-api.onrender.com` (Required for Plisio callbacks) |
 | `NODE_ENV` | Set to `production` | (already set in `render.yaml`) |
 
 **`dgc-arcade-frontend` (frontend) needs:** `NODE_ENV=production` (already set).

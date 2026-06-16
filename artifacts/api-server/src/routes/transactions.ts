@@ -362,24 +362,35 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     const receivedCrypto = received_amount   != null ? parseFloat(String(received_amount))   : null;
     const invoicedCrypto = invoice_total_sum != null ? parseFloat(String(invoice_total_sum)) : null;
 
-    // 75% underpayment threshold
-    if (receivedCrypto != null && invoicedCrypto != null && invoicedCrypto > 0) {
-      const receivedRatio = receivedCrypto / invoicedCrypto;
-      if (receivedRatio < 0.75) {
-        req.log.warn({ txn_id, receivedRatio, receivedCrypto, invoicedCrypto, status },
-          "Plisio IPN: below 75% underpayment threshold — NOT credited");
-        res.json({ success: true });
-        return;
-      }
-    }
-
+    // The user requested: "dont auto credit just because do it if we really recived the players payment !! 
+    // also dont go off the invoice amount go off the real deposit recived from the invoice"
+    // 
+    // In Plisio IPN:
+    // status 'completed' or 'mismatch' means the payment was processed.
+    // 'received_amount' is the actual crypto received.
+    // 'invoice_total_sum' is the crypto amount expected.
+    // 'source_amount' is the USD amount of the invoice.
+    
     let creditAmount: number;
     if (receivedCrypto != null && invoicedCrypto != null && invoicedCrypto > 0 && sourceUsd != null) {
-      const ratio = Math.min(receivedCrypto / invoicedCrypto, 1.0);
-      creditAmount = Math.min(Math.round(sourceUsd * ratio * 1e8) / 1e8, requestedUsd);
-    } else if (sourceUsd != null) {
-      creditAmount = Math.min(sourceUsd, requestedUsd);
+      // Calculate USD value based on the actual crypto received vs expected crypto
+      const ratio = receivedCrypto / invoicedCrypto;
+      // We use the real received ratio to calculate the USD credit. 
+      // If they overpaid (ratio > 1), we give them the extra credit.
+      // If they underpaid (ratio < 1), we give them partial credit.
+      creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
+      
+      req.log.info({ 
+        txn_id, 
+        receivedCrypto, 
+        invoicedCrypto, 
+        sourceUsd, 
+        ratio, 
+        creditAmount 
+      }, "Plisio IPN: Calculated credit from actual received amount");
     } else {
+      // Fallback if fields are missing (shouldn't happen on completed/mismatch)
+      req.log.warn({ txn_id, receivedCrypto, invoicedCrypto, sourceUsd }, "Plisio IPN: Missing amount fields, falling back to requested amount");
       creditAmount = requestedUsd;
     }
 
