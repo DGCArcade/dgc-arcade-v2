@@ -1,19 +1,40 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable, deviceHistoryTable } from "@workspace/db";
+import { db, usersTable, deviceHistoryTable, userBalancesTable } from "@workspace/db";
 import { eq, ilike, and } from "drizzle-orm";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { requireAuth, signToken } from "../middlewares/auth.js";
 import { logger } from "../lib/logger.js";
+import { getCryptoPrice } from "../lib/price-service.js";
 import crypto from "crypto";
 
 export const authRouter = Router();
 
-function formatUser(user: typeof usersTable.$inferSelect) {
+async function formatUser(user: typeof usersTable.$inferSelect) {
+  // Live Crypto-Native Balances
+  const cryptoBalances = await db.select().from(userBalancesTable).where(eq(userBalancesTable.userId, user.id));
+  
+  let liveTotalUsd = 0;
+  const balancesWithPrices = await Promise.all(cryptoBalances.map(async (b) => {
+    const price = await getCryptoPrice(b.currency);
+    const usdValue = parseFloat(b.amount) * price;
+    liveTotalUsd += usdValue;
+    return {
+      currency: b.currency,
+      amount: parseFloat(b.amount),
+      price,
+      usdValue
+    };
+  }));
+
+  // Source of truth for balance: crypto-native total if available, else static balance
+  const finalBalance = balancesWithPrices.length > 0 ? liveTotalUsd : parseFloat(user.balance);
+
   return {
     id: user.id,
     username: user.username,
-    balance: parseFloat(user.balance),
+    balance: finalBalance,
+    cryptoBalances: balancesWithPrices,
     avatarUrl: user.avatarUrl,
     totalBets: user.totalBets,
     totalWon: parseFloat(user.totalWon),
@@ -86,7 +107,7 @@ authRouter.post("/register", async (req, res) => {
     }
 
     const token = signToken({ userId: user.id, username: user.username, role: user.role });
-    res.status(201).json({ user: formatUser(user), token });
+    res.status(201).json({ user: await formatUser(user), token });
   } catch (err) { req.log.error({ err }, "Register error"); res.status(500).json({ error: "Internal server error" }); }
 });
 
@@ -107,7 +128,7 @@ authRouter.post("/login", async (req, res) => {
     // ── Return the PREVIOUS lastLoginAt BEFORE overwriting it ──
     // formatUser(user) captures user.lastLoginAt as it was in the DB (the previous session's login).
     // We update it AFTER building the response, so the client sees "last time you logged in", not "right now".
-    const responseUser = formatUser(user);
+    const responseUser = await formatUser(user);
 
     // Update lastLoginAt to NOW (fire-and-forget)
     db.update(usersTable).set({ lastLoginAt: new Date() }).where(eq(usersTable.id, user.id))
@@ -173,6 +194,6 @@ authRouter.get("/me", requireAuth, async (req, res) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(401).json({ error: "User not found" }); return; }
     if (user.isBanned) { res.status(403).json({ error: "Account suspended" }); return; }
-    res.json(formatUser(user));
+    res.json(await formatUser(user));
   } catch (err) { req.log.error({ err }, "Get me error"); res.status(500).json({ error: "Internal server error" }); }
 });
