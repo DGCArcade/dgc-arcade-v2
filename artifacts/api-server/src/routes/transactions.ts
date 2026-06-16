@@ -604,6 +604,9 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     const cryptoAmountToDeduct = amount / cryptoPrice;
     
     const deducted = await db.transaction(async (txn) => {
+      let balanceAfter = 0;
+      let balanceBefore = 0;
+
       // Deduct from Crypto Balance if it exists
       if (cryptoBalance) {
         const updatedCrypto = await txn.update(userBalancesTable)
@@ -612,6 +615,8 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
           .returning({ amount: userBalancesTable.amount });
         
         if (updatedCrypto.length === 0) return [];
+        balanceAfter = parseFloat(updatedCrypto[0].amount) * cryptoPrice;
+        balanceBefore = balanceAfter + amount;
       } else {
         // Fallback to static balance
         const d = await txn.update(usersTable)
@@ -619,6 +624,8 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
           .where(and(eq(usersTable.id, user.id), sql`${usersTable.balance} >= ${amount}`))
           .returning({ balance: usersTable.balance });
         if (d.length === 0) return [];
+        balanceAfter = parseFloat(d[0].balance);
+        balanceBefore = balanceAfter + amount;
       }
 
       const [inserted] = await txn.insert(transactionsTable).values({
@@ -631,13 +638,13 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
         }),
       }).returning({ id: transactionsTable.id });
       insertedTxId = inserted.id;
-      const balanceAfter = parseFloat(d[0].balance);
+
       await recordLedger(txn, {
         userId: user.id, amount: -amount,
-        balanceBefore: balanceAfter + amount, balanceAfter,
+        balanceBefore, balanceAfter,
         reason: "withdrawal", referenceId: inserted.id, referenceType: "transaction",
       });
-      return d;
+      return [{ success: true }];
     });
     if (deducted.length === 0) {
       res.status(400).json({ error: "Insufficient balance" });
