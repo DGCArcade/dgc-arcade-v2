@@ -351,9 +351,10 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       return;
     }
 
-    const creditStatuses = new Set(["completed", "mismatch", "overpaid"]);
-    if (!creditStatuses.has(status)) {
-      req.log.info({ txn_id, status }, "Plisio IPN: non-credit deposit status — ack");
+    const pStatus = String(status).toLowerCase();
+    const creditStatuses = new Set(["completed", "mismatch", "overpaid", "finished"]);
+    if (!creditStatuses.has(pStatus)) {
+      req.log.info({ txn_id, status: pStatus }, "Plisio IPN: non-credit deposit status — ack");
       res.json({ success: true });
       return;
     }

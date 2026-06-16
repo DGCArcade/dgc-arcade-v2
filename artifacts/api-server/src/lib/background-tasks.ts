@@ -1,4 +1,4 @@
-import { db, transactionsTable, usersTable, referralsTable, userBalancesTable } from "@workspace/db";
+import { db, transactionsTable, usersTable, referralsTable, userBalancesTable, creatorBankTxnsTable } from "@workspace/db";
 import { eq, and, lt, ne, sql, count } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { recordLedger } from "../services/ledger.js";
@@ -67,11 +67,10 @@ export async function syncPlisioDeposits() {
         and(
           eq(transactionsTable.type, "deposit"),
           eq(transactionsTable.status, "pending"),
-          lt(transactionsTable.createdAt, new Date()), // current
-          lt(transactionsTable.createdAt, new Date(Date.now() - 2 * 60 * 1000)) // at least 2 mins old
+          lt(transactionsTable.createdAt, new Date()) // current
         )
       )
-      .limit(20);
+      .limit(50);
 
     if (pendingDeposits.length === 0) return;
 
@@ -94,21 +93,22 @@ export async function syncPlisioDeposits() {
         const data = await resp.json() as any;
         if (data.status !== "success" || !data.data) continue;
 
-        const pStatus = data.data.status;
-        const creditStatuses = ["completed", "mismatch", "overpaid"];
+        const pStatus = String(data.data.status).toLowerCase();
+        // Finished is often used for completed transactions in Plisio API
+        const creditStatuses = ["completed", "mismatch", "overpaid", "finished"];
         
         if (creditStatuses.includes(pStatus)) {
-          const receivedAmount = parseFloat(data.data.received_amount || "0");
-          const invoicedAmount = parseFloat(data.data.invoice_total_sum || "0");
-          const sourceUsd = parseFloat(data.data.source_amount || tx.amount);
+          const receivedAmount = parseFloat(String(data.data.received_amount || "0"));
+          const invoicedAmount = parseFloat(String(data.data.invoice_total_sum || "0"));
+          const sourceUsd = parseFloat(String(data.data.source_amount || tx.amount));
           
-          if (receivedAmount <= 0 || invoicedAmount <= 0) {
-            logger.warn({ txId: tx.id, pStatus }, "Plisio sync: payment reported as paid but amounts are zero");
-            continue;
-          }
-
-          const ratio = receivedAmount / invoicedAmount;
+          // If it's paid, we should credit it. If ratio is 0 because of missing info, default to 1
+          const ratio = invoicedAmount > 0 ? (receivedAmount / invoicedAmount) : 1;
           const creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
+          
+          if (creditAmount <= 0 && pStatus === "completed") {
+            logger.warn({ txId: tx.id, pStatus }, "Plisio sync: payment reported as paid but calculated credit is zero");
+          }
 
           logger.info({ txId: tx.id, pStatus, creditAmount, ratio }, "Plisio sync: verified payment, crediting user");
 
@@ -170,6 +170,15 @@ export async function syncPlisioDeposits() {
                 if (commission > 0) {
                   await txn.update(usersTable).set({ balance: sql`balance + ${commission}` }).where(eq(usersTable.id, referrerId));
                   await txn.update(referralsTable).set({ status: "active", earnedAmount: sql`CAST(earned_amount AS DECIMAL) + ${commission}` }).where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.referredId, tx.userId)));
+                  
+                  // Also record in creator bank for owner tracking
+                  await txn.insert(creatorBankTxnsTable).values({
+                    creatorId: referrerId,
+                    type: "referral_commission",
+                    amount: String(commission),
+                    toUserId: tx.userId,
+                    description: `Commission from deposit ${tx.plisioTrackId || tx.id} (Sync: ${cryptoAmountReceived} ${tx.currency})`
+                  });
                 }
               }
             } catch (e) { logger.warn({ err: e }, "Referral credit failed in sync"); }
@@ -199,12 +208,12 @@ export function startBackgroundTasks() {
     });
   }, 30 * 60 * 1000);
 
-  // Sync with Plisio: every 5 mins
+  // Sync with Plisio: every 1 min for fast auto-credit
   const syncInterval = setInterval(() => {
     syncPlisioDeposits().catch((err) => {
       logger.error({ err }, "Unhandled error in sync interval");
     });
-  }, 5 * 60 * 1000);
+  }, 1 * 60 * 1000);
 
   process.on("SIGTERM", () => {
     logger.info("SIGTERM received, clearing background task intervals");
