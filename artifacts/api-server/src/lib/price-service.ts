@@ -14,7 +14,7 @@ const COINGECKO_ID_MAP: Record<string, string> = {
 const STABLECOINS = new Set(["USDT_TRX", "USDT_TON", "USDC", "DAI"]);
 
 const priceCache: Record<string, { price: number; timestamp: number }> = {};
-const CACHE_TTL = 30 * 1000; // 30 seconds
+const CACHE_TTL = 5 * 1000; // 5 seconds for real-time market reflection
 
 export async function getCryptoPrice(currency: string): Promise<number> {
   if (STABLECOINS.has(currency)) return 1.0;

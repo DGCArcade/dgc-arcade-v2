@@ -599,6 +599,7 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     // This mirrors the balance display logic in /me and formatUser
     const effectiveBalance = liveUsdBalance + staticBalance;
 
+    const totalDeposited = parseFloat(user.totalDeposited || "0");
     const withdrawRatio = amount / (totalDeposited || 1);
     const timeSinceCreated = Date.now() - new Date(user.createdAt).getTime();
     const accountAgeHours = timeSinceCreated / (1000 * 60 * 60);
@@ -606,8 +607,13 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     if (withdrawRatio > 0.90 && accountAgeHours < 2) flagReasons.push("Immediate high-value withdrawal on new account");
     if (withdrawRatio > 0.95 && totalWageredAmount < totalDeposited * WAGER_MULTIPLIER) flagReasons.push("Withdrawal exceeds 95% of deposit with minimal play");
     if (accountAgeHours < 1 && amount > 100) flagReasons.push("Large withdrawal within 1 hour of account creation");
+    
+    // REAL-TIME BALANCE ENFORCEMENT: Users can only withdraw what their crypto is worth NOW.
     if (amount > (effectiveBalance + 0.01)) { // Small buffer for price fluctuations
-      res.status(400).json({ error: "Insufficient balance" });
+      res.status(400).json({ 
+        error: "Insufficient balance", 
+        detail: `Your current holdings are worth $${effectiveBalance.toFixed(2)} USD. The market price of ${currency} may have changed.`
+      });
       return;
     }
 

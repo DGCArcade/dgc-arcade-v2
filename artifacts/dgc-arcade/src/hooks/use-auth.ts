@@ -9,7 +9,7 @@ export function useAuth() {
     query: {
       queryKey: getGetMeQueryKey(),
       retry: false,
-      refetchInterval: 15000, // Poll every 15 seconds for live crypto price updates
+      refetchInterval: 5000, // Poll every 5 seconds for real-time crypto price updates
       refetchOnWindowFocus: true, // Refresh when user comes back to the tab
     },
   });
