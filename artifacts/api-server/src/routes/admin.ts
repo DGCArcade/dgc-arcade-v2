@@ -1128,16 +1128,21 @@ adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
         const data = await resp.json() as any;
         if (data.status !== "success" || !data.data) continue;
 
-        const pStatus = data.data.status;
-        const creditStatuses = ["completed", "mismatch", "overpaid"];
+        const pStatus = String(data.data.status).toLowerCase();
+        // Be more inclusive of statuses that mean "paid"
+        const creditStatuses = ["completed", "mismatch", "overpaid", "finished"];
         
         if (creditStatuses.includes(pStatus)) {
-          const receivedAmount = parseFloat(data.data.received_amount || "0");
-          const invoicedAmount = parseFloat(data.data.invoice_total_sum || "0");
-          const sourceUsd = parseFloat(data.data.source_amount || tx.amount);
-          if (receivedAmount <= 0 || invoicedAmount <= 0) continue;
+          const receivedAmount = parseFloat(String(data.data.received_amount || "0"));
+          const invoicedAmount = parseFloat(String(data.data.invoice_total_sum || "0"));
+          const sourceUsd = parseFloat(String(data.data.source_amount || tx.amount));
+          
+          // If Plisio says it's paid, we should trust the received_amount even if ratio is weird
+          if (receivedAmount <= 0 && pStatus === "completed") {
+             req.log.warn({ txId: tx.id, pStatus }, "Plisio says completed but received_amount is 0 - investigating further");
+          }
 
-          const ratio = receivedAmount / invoicedAmount;
+          const ratio = invoicedAmount > 0 ? (receivedAmount / invoicedAmount) : 1;
           const creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
 
           await db.transaction(async (txn) => {

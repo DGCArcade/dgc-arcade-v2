@@ -1887,6 +1887,7 @@ export default function AdminDashboard() {
                       <Table>
                         <TableHeader>
                           <TableRow className="border-border/40">
+                            <TableHead className="text-xs">User</TableHead>
                             <TableHead className="text-xs">Plisio ID</TableHead>
                             <TableHead className="text-xs">Type</TableHead>
                             <TableHead className="text-xs">Amount</TableHead>
@@ -1904,6 +1905,12 @@ export default function AdminDashboard() {
                             
                             return (
                             <TableRow key={inv.txn_id ?? inv.id} className="border-border/30">
+                              <TableCell className="text-xs font-medium">
+                                <div className="flex flex-col">
+                                  <span>{inv.username || "Unknown"}</span>
+                                  <span className="text-[10px] text-muted-foreground">ID: {inv.userId}</span>
+                                </div>
+                              </TableCell>
                               <TableCell className="font-mono text-xs text-muted-foreground max-w-[90px] truncate" title={inv.txn_id}>{inv.txn_id ?? "—"}</TableCell>
                               <TableCell><Badge variant="outline" className="text-xs capitalize">{inv.type ?? "invoice"}</Badge></TableCell>
                               <TableCell className="font-mono font-bold">
