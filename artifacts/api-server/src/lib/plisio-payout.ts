@@ -138,7 +138,10 @@ async function usdToCrypto(
 /**
  * Sends a Plisio payout for an existing withdrawal transaction row (must be "pending").
  * Handles the full double-pay guard, error/ambiguous-outcome logic, and DB state updates.
- * Safe to call from both the admin approval path and the automatic-approval path.
+ *
+ * After a successful Plisio payout response, stores the Plisio txn_id in BOTH
+ * txHash AND plisioTrackId. This lets the /deposit/callback IPN handler find
+ * the withdrawal row when Plisio later confirms the on-chain status.
  */
 export async function sendPlisioPayout(
   txId: number,
@@ -190,24 +193,22 @@ export async function sendPlisioPayout(
       .set({ status: "needs_review", ...(operationId ? { txHash: operationId } : {}) })
       .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "processing")));
 
+  const siteUrl = process.env.SITE_URL ?? "";
   const params = new URLSearchParams({
     api_key: PLISIO_KEY,
     currency: payoutCurrency,
     to: tx.address,
     amount: conversion.cryptoAmount,
     type: "cash_out",
+    // Wire up the callback so Plisio notifies us when the payout is confirmed on-chain
+    callback_url: `${siteUrl}/api/transactions/deposit/callback`,
   });
 
   let payoutResponse: Response;
   try {
-    // Use GET for Plisio /withdraw endpoint as per official documentation.
-    // NOTE: For the correct work of the service it is necessary to set Request IP.
     payoutResponse = await fetch(
       `https://api.plisio.net/api/v1/operations/withdraw?${params.toString()}`,
-      {
-        method: "GET",
-        signal: AbortSignal.timeout(30_000),
-      },
+      { method: "GET", signal: AbortSignal.timeout(30_000) },
     );
   } catch (fetchErr) {
     log.error({ fetchErr, txId }, "Plisio payout network error / timeout");
@@ -226,39 +227,20 @@ export async function sendPlisioPayout(
 
   const rawText = await payoutResponse.text();
   log.info(
-    { txId, httpStatus: payoutResponse.status, contentType: payoutResponse.headers.get("content-type"), bodyLength: rawText.length, body: rawText.slice(0, 2000) },
+    { txId, httpStatus: payoutResponse.status, body: rawText.slice(0, 2000) },
     "Plisio payout response",
   );
-
-  // Check if response is HTML (error page) instead of JSON
-  if (rawText.trim().startsWith("<")) {
-    log.error({ txId, htmlResponse: rawText.slice(0, 500) }, "Plisio returned HTML (likely an error page)");
-    await markNeedsReview();
-    // Fetch our public IP to help user with whitelisting
-    let publicIp = "unknown";
-    try {
-      const ipResp = await fetch("https://api.ipify.org?format=json");
-      const ipData = await ipResp.json() as { ip: string };
-      publicIp = ipData.ip;
-    } catch {}
-
-    return {
-      outcome: "needs_review",
-      message:
-        `Plisio returned an error page (404/500). If this is an IP error, your server IP is ${publicIp}. Add it to Plisio whitelist.`,
-    };
-  }
 
   let payoutData: PlisioPayoutResponse;
   try {
     payoutData = JSON.parse(rawText);
-  } catch (parseErr) {
-    log.error({ txId, parseErr, rawText: rawText.slice(0, 2000) }, "Plisio returned non-JSON");
+  } catch {
+    log.error({ txId, rawText: rawText.slice(0, 2000) }, "Plisio returned non-JSON");
     await markNeedsReview();
     return {
       outcome: "needs_review",
       message:
-        "Plisio returned an unexpected response format. The payout status is unknown — check your Plisio dashboard. Left under review.",
+        "Plisio returned an unexpected response. The payout status is unknown — check your Plisio dashboard. Left under review.",
     };
   }
 
@@ -282,9 +264,17 @@ export async function sendPlisioPayout(
   }
 
   const plisioTxId = payoutData.data?.txn_id ?? payoutData.data?.id ?? null;
+
+  // Store plisioTxId in BOTH txHash and plisioTrackId.
+  // plisioTrackId is the key the IPN callback handler uses to look up the row —
+  // this enables automatic on-chain confirmation and failure refund handling.
   const [updated] = await db
     .update(transactionsTable)
-    .set({ status: "completed", txHash: plisioTxId })
+    .set({
+      status: "completed",
+      txHash: plisioTxId,
+      plisioTrackId: plisioTxId,
+    })
     .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "processing")))
     .returning();
 
