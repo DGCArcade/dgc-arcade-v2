@@ -10,7 +10,7 @@ import { requireAuth } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
 import { sendPlisioPayout } from "../lib/plisio-payout.js";
 import { v4 as uuidv4 } from "uuid";
-import { recordLedger, recordLedgerStandalone } from "../services/ledger.js";
+import { recordLedger } from "../services/ledger.js";
 import { evaluateWithdrawal } from "../services/fraud.js";
 
 export const transactionsRouter = Router();
@@ -66,8 +66,6 @@ transactionsRouter.get("/", requireAuth, async (req, res) => {
 });
 
 // GET /api/transactions/coin-balances
-// Returns per-coin USD totals from all completed deposits for this user.
-// Withdrawal form uses this to restrict payouts to coins actually deposited.
 transactionsRouter.get("/coin-balances", requireAuth, async (req, res) => {
   try {
     const rows = await db
@@ -96,7 +94,6 @@ transactionsRouter.get("/coin-balances", requireAuth, async (req, res) => {
   }
 });
 
-
 // POST /api/transactions/deposit/initiate
 transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
   const parsed = InitiateDepositBody.safeParse(req.body);
@@ -112,6 +109,7 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       return;
     }
     const plisioCurrency = PLISIO_CURRENCY_MAP[currency.toUpperCase()] ?? currency.toUpperCase();
+    const siteUrl = process.env.SITE_URL ?? "";
     const params = new URLSearchParams({
       api_key: PLISIO_SECRET_KEY,
       currency: plisioCurrency,
@@ -119,9 +117,9 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       order_number: orderId,
       order_name: "DGC Arcade Deposit",
       source_currency: "USD",
-      callback_url: `${process.env.SITE_URL ?? ""}/api/transactions/deposit/callback`,
-      success_url: `${process.env.SITE_URL ?? ""}/profile`,
-      fail_url: `${process.env.SITE_URL ?? ""}/profile`,
+      callback_url: `${siteUrl}/api/transactions/deposit/callback`,
+      success_url: `${siteUrl}/profile`,
+      fail_url: `${siteUrl}/profile`,
     });
     const response = await fetch(`${PLISIO_API}/invoices/new?${params.toString()}`);
     const data = await response.json() as {
@@ -178,24 +176,30 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/transactions/deposit/callback (Plisio IPN)
-// Plisio sends callbacks from these IPs only
+// ── Plisio IPN / Webhook ──────────────────────────────────────────────────────
+// POST /api/transactions/deposit/callback
+//
+// Plisio calls this URL for BOTH deposit invoices AND withdrawal payouts.
+//
+// Security model:
+//   • HMAC-SHA1 is the hard gate — reject if hash is wrong.
+//   • IP allowlist is SOFT (warn-only). Hard-blocking on IP would silently drop
+//     legitimate callbacks if Plisio ever rotates IPs, leaving deposits stuck
+//     as "pending" forever. HMAC is sufficient protection.
+//
+// Handler forks on transaction type:
+//   deposit    → credit user balance
+//   withdrawal → update payout status; auto-refund on permanent failure
+//
 const PLISIO_IPS = new Set([
-  "65.21.19.51",
-  "65.21.19.52",
-  "65.21.19.53",
-  "65.21.19.54",
-  "65.21.19.55",
-  "138.201.43.212",
+  "65.21.19.51", "65.21.19.52", "65.21.19.53",
+  "65.21.19.54", "65.21.19.55", "138.201.43.212",
 ]);
 
 function plisioHtmlEntityDecode(input: string): string {
   return input
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#0*39;/g, "'")
-    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+    .replace(/&#0*39;/g, "'").replace(/&apos;/g, "'")
     .replace(/&#x([0-9a-fA-F]+);/g, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_m, d) => String.fromCodePoint(parseInt(d, 10)))
     .replace(/&amp;/g, "&");
@@ -218,54 +222,37 @@ export function plisioSerialize(body: Record<string, unknown>): string {
 
 transactionsRouter.post("/deposit/callback", async (req, res) => {
   try {
-    // ── FIX: use req.ip which Express resolves correctly with trust proxy = 1 ──
-    // With app.set("trust proxy", 1), req.ip is the real client IP from X-Forwarded-For.
-    // Using req.socket.remoteAddress was giving us the Render load balancer IP instead,
-    // causing every Plisio IPN to be blocked by the allowlist check.
     const clientIp = (req.ip ?? "").replace(/^::ffff:/, "").trim();
     const forwarded = req.headers["x-forwarded-for"];
     const socketIp = req.socket.remoteAddress ?? "";
 
     req.log.info({
-      clientIp,
-      socketIp,
-      xForwardedFor: forwarded,
+      clientIp, socketIp, xForwardedFor: forwarded,
       bodyKeys: Object.keys(req.body as Record<string, unknown> ?? {}).sort(),
       status: (req.body as any)?.status,
       txn_id: (req.body as any)?.txn_id,
       hasVerifyHash: !!(req.body as any)?.verify_hash,
-      ipAllowed: PLISIO_IPS.has(clientIp),
-    }, "Plisio IPN deposit callback — incoming");
+      ipKnown: PLISIO_IPS.has(clientIp),
+    }, "Plisio IPN — incoming");
 
-    // ── IP allowlist check ──
+    // IP check: SOFT — log warning but never block. HMAC is the real gate.
     if (clientIp && !PLISIO_IPS.has(clientIp)) {
-      req.log.warn({ clientIp, xForwardedFor: forwarded, socketIp }, "Deposit callback rejected: IP not in Plisio allowlist");
-      res.status(403).json({ error: "Forbidden" });
-      return;
+      req.log.warn({ clientIp, xForwardedFor: forwarded }, "Plisio IPN: IP not in known list — proceeding to HMAC check");
     }
 
     const {
-      txn_id,
-      status,
-      source_amount,        // USD amount on the invoice (requested)
-      received_amount,      // actual crypto amount received (may be less due to network fees)
-      invoice_total_sum,    // total crypto amount on the invoice
-      verify_hash,
+      txn_id, status, source_amount, received_amount,
+      invoice_total_sum, verify_hash, tx_urls,
     } = req.body as {
-      txn_id?: string;
-      status?: string;
-      source_amount?: string | number;
-      received_amount?: string | number;
-      invoice_total_sum?: string | number;
-      verify_hash?: string;
+      txn_id?: string; status?: string;
+      source_amount?: string | number; received_amount?: string | number;
+      invoice_total_sum?: string | number; verify_hash?: string; tx_urls?: string;
     };
 
+    // HMAC-SHA1 — hard gate
     if (PLISIO_SECRET_KEY) {
-      const bodyKeys = Object.keys(req.body as Record<string, unknown>)
-        .filter((k) => k !== "verify_hash")
-        .sort();
       if (!verify_hash) {
-        req.log.warn({ txn_id, bodyKeys }, "Plisio callback rejected: missing verify_hash");
+        req.log.warn({ txn_id }, "Plisio IPN rejected: missing verify_hash");
         res.status(400).json({ error: "Invalid signature" });
         return;
       }
@@ -273,25 +260,21 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       const serialized = plisioSerialize(req.body as Record<string, unknown>);
       const expectedHash = crypto.createHmac("sha1", PLISIO_SECRET_KEY).update(serialized).digest("hex");
       const want = Buffer.from(expectedHash, "utf8");
-      const got = Buffer.from(String(verify_hash), "utf8");
+      const got  = Buffer.from(String(verify_hash), "utf8");
       if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) {
-        req.log.warn(
-          {
-            txn_id,
-            bodyKeys,
-            serializedLen: Buffer.byteLength(serialized, "utf8"),
-            serializedPreview: serialized.slice(0, 500),
-            expectedHashPrefix: expectedHash.slice(0, 8),
-            receivedHash: String(verify_hash),
-          },
-          "Plisio callback hash mismatch",
-        );
+        req.log.warn({
+          txn_id,
+          serializedLen: Buffer.byteLength(serialized, "utf8"),
+          serializedPreview: serialized.slice(0, 500),
+          expectedHashPrefix: expectedHash.slice(0, 8),
+          receivedHash: String(verify_hash),
+        }, "Plisio IPN rejected: hash mismatch");
         res.status(400).json({ error: "Invalid signature" });
         return;
       }
-      req.log.info({ txn_id }, "Plisio callback signature verified");
+      req.log.info({ txn_id }, "Plisio IPN: signature verified ✓");
     } else {
-      req.log.warn("Plisio callback HMAC check skipped: PLISIO_SECRET_KEY not set (dev only)");
+      req.log.warn("Plisio IPN: HMAC check skipped — PLISIO_SECRET_KEY not set (dev only)");
     }
 
     if (!txn_id || !status) {
@@ -299,84 +282,107 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       return;
     }
 
-    // Credit on "completed" (Plisio marks as completed any payment ≥ 75% of invoice
-    // amount — this matches the "Underpayment allowed % = 75" setting in the Plisio
-    // merchant dashboard) or "mismatch" (edge-case where Plisio flags a discrepancy).
-    // The 75% minimum is enforced again server-side below as a safety net.
+    // Look up transaction by Plisio track ID (works for both deposits and payouts —
+    // payouts store their txn_id in plisioTrackId when sendPlisioPayout runs)
+    const [tx] = await db
+      .select()
+      .from(transactionsTable)
+      .where(eq(transactionsTable.plisioTrackId, txn_id))
+      .limit(1);
+
+    if (!tx) {
+      req.log.warn({ txn_id, status }, "Plisio IPN: no transaction for txn_id — ack");
+      res.json({ success: true });
+      return;
+    }
+
+    req.log.info({ txn_id, status, txType: tx.type, txStatus: tx.status, txId: tx.id }, "Plisio IPN: matched transaction");
+
+    // ── WITHDRAWAL payout IPN ─────────────────────────────────────────────────
+    if (tx.type === "withdrawal") {
+      if (status === "completed") {
+        const onChainHash = tx_urls
+          ? (() => { try { const p = JSON.parse(plisioHtmlEntityDecode(tx_urls)); return Array.isArray(p) ? String(p[0]) : null; } catch { return null; } })()
+          : null;
+        await db.update(transactionsTable)
+          .set({ status: "completed", ...(onChainHash ? { txHash: onChainHash } : {}) })
+          .where(eq(transactionsTable.id, tx.id));
+        req.log.info({ txn_id, txId: tx.id, onChainHash }, "Plisio IPN: payout confirmed on-chain ✓");
+        sendNtfy(process.env.NTFY_TOPIC, {
+          title: "DGC Arcade — Payout Confirmed",
+          priority: "default",
+          tags: "white_check_mark",
+          body: `$${parseFloat(tx.amount).toFixed(2)} ${tx.currency ?? ""} confirmed on-chain\nTxn: ${txn_id}\nUser: ${tx.userId}`,
+        });
+      } else if (status === "error") {
+        const amount = parseFloat(tx.amount);
+        await db.transaction(async (txn) => {
+          const flipped = await txn.update(transactionsTable)
+            .set({ status: "failed" })
+            .where(and(eq(transactionsTable.id, tx.id), ne(transactionsTable.status, "failed")))
+            .returning({ id: transactionsTable.id });
+          if (flipped.length === 0) return;
+          await txn.update(usersTable)
+            .set({ balance: sql`balance + ${amount}` })
+            .where(eq(usersTable.id, tx.userId));
+        });
+        req.log.warn({ txn_id, txId: tx.id, amount, userId: tx.userId }, "Plisio IPN: payout failed — user refunded ✓");
+        sendNtfy(process.env.NTFY_TOPIC, {
+          title: "DGC Arcade — Payout FAILED",
+          priority: "urgent",
+          tags: "warning",
+          body: `FAILED: $${parseFloat(tx.amount).toFixed(2)} ${tx.currency ?? ""} payout\nTxn: ${txn_id}\nUser: ${tx.userId}\nAuto-refunded.`,
+        });
+      } else {
+        req.log.info({ txn_id, status, txId: tx.id }, "Plisio IPN: payout in-flight — no action");
+      }
+      res.json({ success: true });
+      return;
+    }
+
+    // ── DEPOSIT IPN ───────────────────────────────────────────────────────────
+    if (tx.status === "completed") {
+      req.log.info({ txn_id, txId: tx.id }, "Plisio IPN: deposit already credited — idempotent ack");
+      res.json({ success: true });
+      return;
+    }
+
     const creditStatuses = new Set(["completed", "mismatch"]);
     if (!creditStatuses.has(status)) {
-      req.log.info({ txn_id, status }, "Plisio IPN: non-credit status, acknowledging");
+      req.log.info({ txn_id, status }, "Plisio IPN: non-credit deposit status — ack");
       res.json({ success: true });
       return;
     }
 
-    const [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.plisioTrackId, txn_id)).limit(1);
-    if (!tx || tx.status === "completed") {
-      res.json({ success: true });
-      return;
-    }
-
-    // ── Parse actual received amounts ────────────────────────────────────────
     const requestedUsd   = parseFloat(tx.amount);
     const sourceUsd      = source_amount     != null ? parseFloat(String(source_amount))     : null;
     const receivedCrypto = received_amount   != null ? parseFloat(String(received_amount))   : null;
     const invoicedCrypto = invoice_total_sum != null ? parseFloat(String(invoice_total_sum)) : null;
 
-    // ── 75% underpayment threshold — backend safety net ──────────────────────
-    // Plisio merchant setting: "Underpayment allowed % = 75"
-    // This means Plisio marks invoices as "completed" when ≥ 75% of the crypto
-    // amount was received. We enforce the same rule server-side so a Plisio
-    // misconfiguration or unexpected edge-case can never credit a payment that
-    // is below the 75% minimum.
-    //
-    // When crypto amounts are available from the IPN:
-    //   ratio ≥ 0.75 → continue to credit calculation below
-    //   ratio < 0.75 → acknowledge Plisio but DO NOT credit the user
-    //
-    // When crypto amounts are NOT in the IPN (rare fallback path), we proceed
-    // with the source_amount and trust Plisio's own threshold enforcement.
+    // 75% underpayment threshold
     if (receivedCrypto != null && invoicedCrypto != null && invoicedCrypto > 0) {
       const receivedRatio = receivedCrypto / invoicedCrypto;
       if (receivedRatio < 0.75) {
-        req.log.warn(
-          { txn_id, receivedRatio, receivedCrypto, invoicedCrypto, status },
-          "Plisio IPN: payment below 75% underpayment threshold — acknowledged but NOT credited",
-        );
-        res.json({ success: true }); // acknowledge Plisio; do not credit
+        req.log.warn({ txn_id, receivedRatio, receivedCrypto, invoicedCrypto, status },
+          "Plisio IPN: below 75% underpayment threshold — NOT credited");
+        res.json({ success: true });
         return;
       }
     }
 
-    // ── Exact credit calculation ─────────────────────────────────────────────
-    // Credit the user with what ACTUALLY arrived in the merchant wallet — not the
-    // invoice face value. When both crypto fields are present we scale the USD
-    // credit by the ratio of received vs invoiced crypto so the house never
-    // absorbs network fees or any shortfall above the 75% minimum.
-    //
-    //   100% received → credit 100% of source_amount  (e.g. $5.00 — full payment)
-    //    97% received → credit  97% of source_amount  (e.g. $4.87 — network fee gap)
-    //    75% received → credit  75% of source_amount  (e.g. $3.75 — minimum threshold)
-    //
-    // Safety cap: creditAmount never exceeds the originally invoiced USD amount.
     let creditAmount: number;
     if (receivedCrypto != null && invoicedCrypto != null && invoicedCrypto > 0 && sourceUsd != null) {
-      // Scale USD by actual-vs-invoiced crypto ratio (most accurate path)
       const ratio = Math.min(receivedCrypto / invoicedCrypto, 1.0);
       creditAmount = Math.min(Math.round(sourceUsd * ratio * 1e8) / 1e8, requestedUsd);
     } else if (sourceUsd != null) {
-      // Plisio already sets source_amount to actual received USD on mismatch
       creditAmount = Math.min(sourceUsd, requestedUsd);
     } else {
-      // Last resort: use the invoice amount — never over-credits
       creditAmount = requestedUsd;
     }
 
-    req.log.info(
-      { txn_id, creditAmount, sourceUsd, receivedCrypto, invoicedCrypto, requestedUsd, status },
-      "Plisio IPN: credit calculation",
-    );
+    req.log.info({ txn_id, creditAmount, sourceUsd, receivedCrypto, invoicedCrypto, requestedUsd, status },
+      "Plisio IPN: deposit credit calculation");
 
-    // Idempotent + transactional credit
     await db.transaction(async (txn) => {
       const flipped = await txn
         .update(transactionsTable)
@@ -403,24 +409,20 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       }
     });
 
-    req.log.info({ txn_id, creditAmount, userId: tx.userId, status }, "Plisio IPN: deposit credited");
+    req.log.info({ txn_id, creditAmount, userId: tx.userId, status }, "Plisio IPN: deposit credited ✓");
 
-    // ── Referral commission ───────────────────────────────────────────────────
-    // If this depositor was referred by someone, credit the referrer a commission
-    // based on their affiliate tier. Runs outside the credit transaction — a failure
-    // here NEVER reverses a confirmed deposit (fire-and-forget, non-critical).
+    // Referral commission — fire-and-forget, never reverses deposit on failure
     try {
       const [depositor] = await db
         .select({ referredBy: usersTable.referredBy })
         .from(usersTable)
         .where(eq(usersTable.id, tx.userId))
         .limit(1);
-
       if (depositor?.referredBy) {
         const referrerId = depositor.referredBy;
         const [activeRow] = await db.select({ n: count() })
           .from(referralsTable)
-          .where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.status, 'active')));
+          .where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.status, "active")));
         const active = activeRow?.n ?? 0;
         const commissionRate = active >= 50 ? 0.10 : active >= 20 ? 0.07 : active >= 5 ? 0.05 : 0.03;
         const commission = Math.round(creditAmount * commissionRate * 1e8) / 1e8;
@@ -429,36 +431,42 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
             .set({ balance: sql`balance + ${commission}` })
             .where(eq(usersTable.id, referrerId));
           await db.update(referralsTable)
-            .set({ status: 'active', earnedAmount: sql`CAST(earned_amount AS DECIMAL) + ${commission}` })
+            .set({ status: "active", earnedAmount: sql`CAST(earned_amount AS DECIMAL) + ${commission}` })
             .where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.referredId, tx.userId)));
-          req.log.info({ referrerId, commission, commissionRate, creditAmount, active }, 'Plisio IPN: referral commission credited');
+          req.log.info({ referrerId, commission, commissionRate, creditAmount, active }, "Plisio IPN: referral commission credited");
         }
       }
     } catch (commErr) {
-      req.log.warn({ commErr }, 'Referral commission failed — deposit credited, non-critical');
+      req.log.warn({ commErr }, "Referral commission failed — deposit already credited, non-critical");
     }
 
-    // ── ntfy.sh push notification ──
-    const ntfyTopic = process.env.NTFY_TOPIC;
-    if (ntfyTopic) {
-      fetch(`https://ntfy.sh/${ntfyTopic}`, {
-        method: "POST",
-        headers: {
-          "Title": "DGC Arcade — New Deposit",
-          "Priority": "high",
-          "Tags": "money_with_wings",
-          "Content-Type": "text/plain",
-        },
-        body: `+${creditAmount.toFixed(2)} USD (${tx.currency ?? "?"})\nTxn: ${txn_id}\nUser ID: ${tx.userId}`,
-      }).catch(() => {}); // fire-and-forget, never block the IPN response
-    }
+    sendNtfy(process.env.NTFY_TOPIC, {
+      title: "DGC Arcade — New Deposit",
+      priority: "high",
+      tags: "money_with_wings",
+      body: `+${creditAmount.toFixed(2)} USD (${tx.currency ?? "?"})\nTxn: ${txn_id}\nUser: ${tx.userId}`,
+    });
 
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Plisio callback error");
+    req.log.error({ err }, "Plisio IPN callback error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+function sendNtfy(topic: string | undefined, opts: { title: string; priority: string; tags: string; body: string }) {
+  if (!topic) return;
+  fetch(`https://ntfy.sh/${topic}`, {
+    method: "POST",
+    headers: {
+      "Title": opts.title,
+      "Priority": opts.priority,
+      "Tags": opts.tags,
+      "Content-Type": "text/plain",
+    },
+    body: opts.body,
+  }).catch(() => {});
+}
 
 // POST /api/transactions/withdraw
 transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
@@ -504,85 +512,53 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     const timeSinceCreated = Date.now() - new Date(user.createdAt).getTime();
     const accountAgeHours = timeSinceCreated / (1000 * 60 * 60);
     const flagReasons: string[] = [];
-    if (withdrawRatio > 0.90 && accountAgeHours < 2) {
-      flagReasons.push("Immediate high-value withdrawal on new account");
-    }
-    if (withdrawRatio > 0.95 && totalWageredAmount < totalDeposited * WAGER_MULTIPLIER) {
-      flagReasons.push("Withdrawal exceeds 95% of deposit with minimal play");
-    }
-    if (accountAgeHours < 1 && amount > 100) {
-      flagReasons.push("Large withdrawal within 1 hour of account creation");
-    }
+    if (withdrawRatio > 0.90 && accountAgeHours < 2) flagReasons.push("Immediate high-value withdrawal on new account");
+    if (withdrawRatio > 0.95 && totalWageredAmount < totalDeposited * WAGER_MULTIPLIER) flagReasons.push("Withdrawal exceeds 95% of deposit with minimal play");
+    if (accountAgeHours < 1 && amount > 100) flagReasons.push("Large withdrawal within 1 hour of account creation");
     if (amount > balance) {
       res.status(400).json({ error: "Insufficient balance" });
       return;
     }
 
-    // Minimum withdrawal: $1
-    if (amount < 1) {
-      res.status(400).json({ error: "Minimum withdrawal is $1.00" });
-      return;
-    }
+    if (amount < 1) { res.status(400).json({ error: "Minimum withdrawal is $1.00" }); return; }
+    if (amount > 100_000_000) { res.status(400).json({ error: "Maximum single withdrawal is $100,000,000" }); return; }
 
-    // Maximum single withdrawal: $100,000,000
-    if (amount > 100_000_000) {
-      res.status(400).json({ error: "Maximum single withdrawal is $100,000,000" });
-      return;
-    }
-
-    // Daily withdrawal limit: $1,000,000,000
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const [dailyRow] = await db
       .select({ total: sql`COALESCE(SUM(${transactionsTable.amount}::numeric), 0)` })
       .from(transactionsTable)
-      .where(
-        and(
-          eq(transactionsTable.userId, user.id),
-          eq(transactionsTable.type, "withdrawal"),
-          ne(transactionsTable.status, "declined"),
-          gte(transactionsTable.createdAt, oneDayAgo),
-        )
-      );
+      .where(and(
+        eq(transactionsTable.userId, user.id),
+        eq(transactionsTable.type, "withdrawal"),
+        ne(transactionsTable.status, "declined"),
+        gte(transactionsTable.createdAt, oneDayAgo),
+      ));
     const dailyTotal = parseFloat(String(dailyRow?.total ?? 0));
     const DAILY_LIMIT = 1_000_000_000;
     if (dailyTotal + amount > DAILY_LIMIT) {
-      res.status(400).json({
-        error: `Daily withdrawal limit is $1,000,000,000. You have ${(DAILY_LIMIT - dailyTotal).toFixed(2)} remaining today.`,
-      });
+      res.status(400).json({ error: `Daily withdrawal limit is $1,000,000,000. You have ${(DAILY_LIMIT - dailyTotal).toFixed(2)} remaining today.` });
       return;
     }
-    const settings = await getPlatformSettings();
 
-    // ── Fraud evaluation via unified fraud service ────────────────────────────
+    const settings = await getPlatformSettings();
     const fraudResult = await evaluateWithdrawal({ userId: user.id, amount });
     const { score: fraudScore, flags: fraudFlags, decision: fraudDecision } = fraudResult;
-    // Merge legacy flags with scored flags (dedup)
     const allFlags = [...new Set([...flagReasons, ...fraudFlags])];
 
     if (fraudDecision === "blocked") {
       await db.insert(transactionsTable).values({
-        userId: user.id,
-        type: "withdrawal",
-        amount: String(amount),
-        currency,
-        status: "declined",
-        address,
+        userId: user.id, type: "withdrawal", amount: String(amount), currency,
+        status: "declined", address,
         metadata: JSON.stringify({ fraudFlags: allFlags, fraudScore, decision: "blocked", autoDeclined: true }),
       });
       res.status(403).json({ error: "Withdrawal declined. Please contact support if you believe this is an error." });
       return;
     }
 
-    // ── Auto-approve threshold ──────────────────────────────────────────────────
-    // Withdrawals under $10,000 with approved fraud decision → send immediately via Plisio.
-    // Withdrawals of $10,000 or more (or fraud decision = "review") go to admin queue.
     const AUTO_APPROVE_THRESHOLD = 10_000;
-    // Auto-send any withdrawal under $10,000 that isn't hard-blocked by fraud (score >= 90).
-    // Fraud "review" (score 60-89) still auto-sends for amounts under $10,000 — the payout risk
-    // is acceptable for most users up to this threshold.
     const autoApprove = amount < AUTO_APPROVE_THRESHOLD && fraudDecision !== "blocked";
     const flaggedForReview = !autoApprove;
-    const status = "pending" as const;
+    const txStatus = "pending" as const;
 
     let insertedTxId = 0;
     const deducted = await db.transaction(async (txn) => {
@@ -592,36 +568,20 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
         .returning({ balance: usersTable.balance });
       if (d.length === 0) return d;
       const [inserted] = await txn.insert(transactionsTable).values({
-        userId: user.id,
-        type: "withdrawal",
-        amount: String(amount),
-        currency,
-        status,
-        address,
+        userId: user.id, type: "withdrawal", amount: String(amount),
+        currency, status: txStatus, address,
         metadata: JSON.stringify({
-          fraudFlags: allFlags,
-          fraudScore,
-          fraudDecision,
-          flaggedForReview,
+          fraudFlags: allFlags, fraudScore, fraudDecision, flaggedForReview,
           autoApproved: autoApprove,
-          thresholds: {
-            aiSensitivity: settings.aiSensitivity,
-            autoApproveUnder: settings.autoApproveUnder,
-            requireManualOver: settings.requireManualOver,
-          },
+          thresholds: { aiSensitivity: settings.aiSensitivity, autoApproveUnder: settings.autoApproveUnder, requireManualOver: settings.requireManualOver },
         }),
       }).returning({ id: transactionsTable.id });
       insertedTxId = inserted.id;
-      // Ledger: debit the withdrawal amount
       const balanceAfter = parseFloat(d[0].balance);
       await recordLedger(txn, {
-        userId: user.id,
-        amount: -amount,
-        balanceBefore: balanceAfter + amount,
-        balanceAfter,
-        reason: "withdrawal",
-        referenceId: inserted.id,
-        referenceType: "transaction",
+        userId: user.id, amount: -amount,
+        balanceBefore: balanceAfter + amount, balanceAfter,
+        reason: "withdrawal", referenceId: inserted.id, referenceType: "transaction",
       });
       return d;
     });
@@ -630,7 +590,6 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
 
-    // ── Auto-approve: < $10, no fraud flags → send via Plisio immediately ──
     if (autoApprove && insertedTxId) {
       const result = await sendPlisioPayout(insertedTxId, req.log);
       switch (result.outcome) {
@@ -649,11 +608,10 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       return;
     }
 
-    // ── Manual review: >= $10 or fraud-flagged ─────────────────────────────────
     const msg = flaggedForReview
       ? "Withdrawal requires manual review. Our team will process it within 24 hours."
       : "Withdrawal request submitted. Under review.";
-    res.json({ success: true, message: msg, status });
+    res.json({ success: true, message: msg, status: txStatus });
   } catch (err) {
     req.log.error({ err }, "Withdraw error");
     res.status(500).json({ error: "Internal server error" });
