@@ -360,23 +360,16 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     }
 
     const requestedUsd   = parseFloat(tx.amount);
-    const sourceUsd      = source_amount     != null ? parseFloat(String(source_amount))     : null;
-    const receivedCrypto = received_amount   != null ? parseFloat(String(received_amount))   : null;
-    const invoicedCrypto = invoice_total_sum != null ? parseFloat(String(invoice_total_sum)) : null;
-
-    // The user requested: "dont auto credit just because do it if we really recived the players payment !! 
-    // also dont go off the invoice amount go off the real deposit recived from the invoice"
-    // 
-    // In Plisio IPN:
-    // status 'completed' or 'mismatch' means the payment was processed.
-    // 'received_amount' is the actual crypto received.
-    // 'invoice_total_sum' is the crypto amount expected.
-    // 'source_amount' is the USD amount of the invoice.
     
+    // ROBUST AMOUNT EXTRACTION: Check every possible field Plisio might use for different coins/statuses
+    const sourceUsd      = parseFloat(String(source_amount || req.body.invoice_amount || req.body.source_amount_usd || tx.amount));
+    const receivedCrypto = parseFloat(String(received_amount || req.body.amount || req.body.received_sum || req.body.received_amount_usd || "0"));
+    const invoicedCrypto = parseFloat(String(invoice_total_sum || req.body.total_sum || req.body.amount || req.body.invoice_amount || "0"));
+
     let creditAmount: number;
     // STRICT RATIO CALCULATION: Only credit what was actually received.
     // We NO LONGER fallback to requestedUsd if fields are missing.
-    if (receivedCrypto != null && invoicedCrypto != null && invoicedCrypto > 0 && sourceUsd != null) {
+    if (receivedCrypto > 0 && invoicedCrypto > 0 && sourceUsd > 0) {
       const ratio = receivedCrypto / invoicedCrypto;
       creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
       

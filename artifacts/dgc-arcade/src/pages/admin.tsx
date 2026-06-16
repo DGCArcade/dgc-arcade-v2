@@ -1915,11 +1915,11 @@ export default function AdminDashboard() {
                               <TableCell><Badge variant="outline" className="text-xs capitalize">{inv.type ?? "invoice"}</Badge></TableCell>
                               <TableCell className="font-mono font-bold">
                                 <div>{inv.source_amount ?? inv.amount ?? "—"}</div>
-                                {received && (
-                                  <div className="text-[10px] text-green-400 font-normal">
-                                    Recv: {received} {inv.currency}
-                                  </div>
-                                )}
+	                                {received && (
+	                                  <div className="text-[10px] text-emerald-400 font-bold bg-emerald-400/10 px-1 py-0.5 rounded inline-block mt-1">
+	                                    ACTUAL: {received} {inv.currency}
+	                                  </div>
+	                                )}
                               </TableCell>
                               <TableCell className="text-sm">{inv.source_currency ?? inv.currency ?? "—"}</TableCell>
                               <TableCell>
