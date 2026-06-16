@@ -193,15 +193,15 @@ export async function sendPlisioPayout(
       .set({ status: "needs_review", ...(operationId ? { txHash: operationId } : {}) })
       .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "processing")));
 
-  const siteUrl = process.env.SITE_URL ?? "";
+  // Use API_URL for callbacks so they reach the Render service, not the Netlify frontend
+  const apiUrl = process.env.API_URL ?? process.env.SITE_URL ?? "";
   const params = new URLSearchParams({
     api_key: PLISIO_KEY,
     currency: payoutCurrency,
     to: tx.address,
     amount: conversion.cryptoAmount,
     type: "cash_out",
-    // Wire up the callback so Plisio notifies us when the payout is confirmed on-chain
-    callback_url: `${siteUrl}/api/transactions/deposit/callback`,
+    callback_url: `${apiUrl}/api/transactions/deposit/callback`,
   });
 
   let payoutResponse: Response;
