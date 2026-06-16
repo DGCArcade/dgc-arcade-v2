@@ -62,12 +62,11 @@ export async function deductBalance(userId: number, amount: number, txn?: any): 
   
   for (const crypto of sortedCrypto) {
     if (remainingToDeduct <= 0) break;
-
     const deductUsd = Math.min(remainingToDeduct, crypto.usdValue);
     const deductCryptoAmount = deductUsd / crypto.price;
     
     await database.update(userBalancesTable)
-      .set({ amount: sql`amount - ${deductCryptoAmount.toFixed(8)}` })
+      .set({ amount: sql`amount - ${deductCryptoAmount.toFixed(18)}` })
       .where(and(eq(userBalancesTable.userId, userId), eq(userBalancesTable.currency, crypto.currency)));
     
     remainingToDeduct -= deductUsd;
@@ -85,7 +84,9 @@ export async function deductBalance(userId: number, amount: number, txn?: any): 
 
 /**
  * Credits an amount to a user's balance. 
- * By default, credits to the static balance unless a specific currency is provided.
+ * FIX: If a currency is provided, it credits ONLY to that crypto balance.
+ * If no currency (or USD), it credits to the static bonus balance.
+ * This prevents the double-crediting bug where both USD and crypto were being added.
  */
 export async function creditBalance(userId: number, amount: number, currency?: string, txn?: any): Promise<number> {
   const database = txn || db;
@@ -114,4 +115,22 @@ export async function creditBalance(userId: number, amount: number, currency?: s
 
   const { totalBalance } = await getUserBalance(userId);
   return totalBalance;
+}
+
+/**
+ * Specifically credits a crypto amount (not USD) to a user's balance.
+ * Used for real deposits where we know exactly how much crypto arrived.
+ */
+export async function creditCryptoBalance(userId: number, currency: string, cryptoAmount: number, txn?: any): Promise<void> {
+  const database = txn || db;
+  await database.insert(userBalancesTable)
+    .values({
+      userId,
+      currency,
+      amount: String(cryptoAmount),
+    })
+    .onConflictDoUpdate({
+      target: [userBalancesTable.userId, userBalancesTable.currency],
+      set: { amount: sql`user_balances.amount + ${String(cryptoAmount)}` },
+    });
 }

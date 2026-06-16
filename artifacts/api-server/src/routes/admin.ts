@@ -1381,24 +1381,29 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
         .where(eq(transactionsTable.id, tx.id));
 
       const cryptoCurrency = tx.currency || data.data.currency || "ETH";
-      // Only insert crypto balance if we have a real received crypto amount
+      
+      // 1. Credit Crypto-Native Balance (LIVE)
+      // FIX: uses creditCryptoBalance from balance-service to ensure no double-crediting
       if (receivedAmount > 0) {
-        await txn.insert(userBalancesTable).values({ userId: tx.userId, currency: cryptoCurrency, amount: String(receivedAmount) })
-          .onConflictDoUpdate({ target: [userBalancesTable.userId, userBalancesTable.currency], set: { amount: sql`user_balances.amount + ${String(receivedAmount)}` } });
+        // We import it locally to avoid circular dependencies if any, but it's safe here
+        const { creditCryptoBalance: creditCrypto } = await import("../lib/balance-service.js");
+        await creditCrypto(tx.userId, cryptoCurrency, receivedAmount, txn);
+      } else {
+        // Fallback to static balance if no crypto data
+        await txn.update(usersTable).set({ balance: sql`balance + ${creditAmount}` }).where(eq(usersTable.id, tx.userId));
       }
 
-      // Credit USD balance (real amount after fees)
+      // 2. Update Stats
       const [updatedUser] = await txn.update(usersTable).set({
-        balance: sql`balance + ${creditAmount}`,
         totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
         wagerRequirement: sql`coalesce(wager_requirement, 0) + ${creditAmount}`,
       }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
 
       if (updatedUser) {
         await recordLedger(txn, {
-          userId: tx.userId, amount: creditAmount, balanceBefore: parseFloat(updatedUser.balance) - creditAmount,
-          balanceAfter: parseFloat(updatedUser.balance), reason: "deposit", referenceId: tx.id, referenceType: "transaction",
-          note: `Smart Synced: $${creditAmount} USD (${receivedAmount > 0 ? receivedAmount + " " + cryptoCurrency : "invoice amount"}, Status: ${pStatus})`
+          userId: tx.userId, amount: creditAmount, balanceBefore: 0,
+          balanceAfter: creditAmount, reason: "deposit", referenceId: tx.id, referenceType: "transaction",
+          note: `Smart Synced: ${receivedAmount > 0 ? receivedAmount + " " + cryptoCurrency : "$" + creditAmount + " USD"} (Live Balance)`
         });
       }
       
@@ -1840,17 +1845,17 @@ adminRouter.post("/transactions/:id/complete-deposit", requireBankSession, async
         .returning({ id: transactionsTable.id });
       if (flipped.length === 0) return; // already completed by a concurrent call
       const [userAfter] = await txn.update(usersTable).set({
+        // Manual owner credit goes to static USD balance (bonus/correction)
         balance: sql`balance + ${creditAmount}`,
         totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
-        wagerRequirement: sql`(coalesce(total_deposited, 0) + ${creditAmount}) * ${WAGER_MULT}`,
+        wagerRequirement: sql`coalesce(wager_requirement, 0) + ${creditAmount}`,
       }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
       if (userAfter) {
-        const balanceAfter = parseFloat(userAfter.balance);
         await recordLedger(txn, {
           userId: tx.userId,
           amount: creditAmount,
-          balanceBefore: balanceAfter - creditAmount,
-          balanceAfter,
+          balanceBefore: 0,
+          balanceAfter: creditAmount,
           reason: "admin_deposit_manual",
           referenceId: txId,
           referenceType: "transaction",

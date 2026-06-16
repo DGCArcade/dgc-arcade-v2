@@ -171,25 +171,8 @@ usersRouter.get("/me", requireAuth, async (req, res) => {
     const tier = getVipTier(wagered);
     const claimableRakeback = Math.max(0, wagered * (tier.rakebackPct / 100) - rakebackClaimed);
 
-    // Live Crypto-Native Balances
-    const cryptoBalances = await db.select().from(userBalancesTable).where(eq(userBalancesTable.userId, req.user!.userId));
-    
-    let liveTotalUsd = 0;
-    const balancesWithPrices = await Promise.all(cryptoBalances.map(async (b) => {
-      const price = await getCryptoPrice(b.currency);
-      const usdValue = parseFloat(b.amount) * price;
-      liveTotalUsd += usdValue;
-      return {
-        currency: b.currency,
-        amount: parseFloat(b.amount),
-        price,
-        usdValue
-      };
-    }));
-
-    // Total balance = crypto USD value + users.balance (signup bonus, daily bonus, rakeback, admin credits)
-    // We ALWAYS add users.balance so bonuses are never lost when a user makes their first deposit
-    const finalBalance = liveTotalUsd + parseFloat(user.balance);
+    // Live Crypto-Native Balances (centralized logic)
+    const { totalBalance: finalBalance, cryptoBalances: balancesWithPrices } = await getUserBalance(req.user!.userId);
 
     res.json({ 
       id: user.id, 

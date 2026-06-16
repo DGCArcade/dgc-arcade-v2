@@ -2,6 +2,9 @@ import { db, transactionsTable, usersTable, referralsTable, userBalancesTable, c
 import { eq, and, lt, gte, ne, sql, count } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { recordLedger } from "../services/ledger.js";
+import { creditCryptoBalance } from "./balance-service.js";
+
+const WAGER_MULTIPLIER = 1.0;
 
 /**
  * Auto-cleanup: Mark pending deposits as expired if they haven't been completed within 120 minutes.
@@ -58,8 +61,6 @@ export async function syncPlisioDeposits() {
   }
 
   try {
-    // Only check deposits that are still pending and created within the last 24 hours
-    // FIX: actually use oneDayAgo in the query (was previously using `new Date()` which matched ALL pending)
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const pendingDeposits = await db
       .select()
@@ -88,7 +89,6 @@ export async function syncPlisioDeposits() {
 
         let data = await resp.json() as any;
         
-        // Fallback to order_number if trackId fails
         if ((data.status !== "success" || !data.data) && tx.orderId) {
           resp = await fetch(
             `https://api.plisio.net/api/v1/operations?api_key=${PLISIO_KEY}&order_number=${tx.orderId}`,
@@ -103,95 +103,60 @@ export async function syncPlisioDeposits() {
         if (data.status !== "success" || !data.data) continue;
 
         const pStatus = String(data.data.status).toLowerCase();
-        // Finished is often used for completed transactions in Plisio API
         const creditStatuses = ["completed", "mismatch", "overpaid", "finished"];
         
         if (creditStatuses.includes(pStatus)) {
-          // ROBUST AMOUNT EXTRACTION: Check every possible field Plisio might use for different coins/statuses
-          // IMPORTANT: Use received_amount/received_sum for ACTUAL received amount.
-          // 'amount' in Plisio response often refers to the EXPECTED invoice amount.
-          const receivedAmount  = parseFloat(String(data.data.received_amount || data.data.received_sum || "0"));
-          const invoicedAmount  = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || data.data.invoice_amount || "0"));
-          const sourceUsd       = parseFloat(String(data.data.source_amount || data.data.invoice_amount || data.data.source_amount_usd || tx.amount));
+          const cryptoAmountReceived = parseFloat(String(data.data.received_amount || data.data.received_sum || "0"));
+          const cryptoAmountInvoiced = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || data.data.invoice_amount || "0"));
+          const sourceUsd = parseFloat(String(data.data.source_amount || data.data.invoice_amount || data.data.source_amount_usd || tx.amount));
           const receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
-          
-          let ratioUsed: number;
-          let creditAmount: number;
-          
-          // REAL AMOUNT CALCULATION: Credit the real received amount after fees.
+          const cryptoCurrency = tx.currency || data.data.currency || "ETH";
+
+          let creditAmountUsd: number;
           if (receivedUsdValue > 0) {
-            creditAmount = Math.round(receivedUsdValue * 1e8) / 1e8;
-            ratioUsed = sourceUsd > 0 ? (creditAmount / sourceUsd) : 1;
-            logger.info({ txId: tx.id, receivedUsdValue, creditAmount, sourceUsd }, "Plisio sync: Crediting based on direct USD received value");
-          } else if (receivedAmount > 0 && invoicedAmount > 0 && sourceUsd > 0) {
-            ratioUsed = receivedAmount / invoicedAmount;
-            creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
-            logger.info({ txId: tx.id, pStatus, creditAmount, ratio: ratioUsed, receivedAmount, invoicedAmount }, "Plisio sync: crediting with ratio method");
-          } else if (sourceUsd > 0) {
-            // FIX: fallback applies to ALL credit statuses (completed, finished, mismatch, overpaid)
-            // not just "completed" — Plisio uses "finished" for many coin types
-            ratioUsed = 1;
-            creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
-            logger.warn({ txId: tx.id, pStatus, receivedAmount, invoicedAmount, sourceUsd, creditAmount }, "Plisio sync: Missing received data — crediting invoice amount as fallback");
+            creditAmountUsd = Math.round(receivedUsdValue * 1e8) / 1e8;
+          } else if (cryptoAmountReceived > 0 && cryptoAmountInvoiced > 0 && sourceUsd > 0) {
+            const ratio = cryptoAmountReceived / cryptoAmountInvoiced;
+            creditAmountUsd = Math.round(sourceUsd * ratio * 1e8) / 1e8;
           } else {
-            logger.warn({ txId: tx.id, pStatus }, "Plisio sync: no amount data, skipping");
-            continue;
-          }
-          
-          if (creditAmount <= 0) {
-            logger.warn({ txId: tx.id, pStatus, receivedAmount, invoicedAmount }, "Plisio sync: calculated credit is zero or negative, skipping");
-            continue;
+            creditAmountUsd = sourceUsd;
           }
 
           await db.transaction(async (txn) => {
             const flipped = await txn
               .update(transactionsTable)
-              .set({ status: "completed", amount: String(creditAmount) })
+              .set({ status: "completed", amount: String(creditAmountUsd) })
               .where(and(eq(transactionsTable.id, tx.id), ne(transactionsTable.status, "completed")))
               .returning({ id: transactionsTable.id });
 
             if (flipped.length === 0) return;
 
-            // Credit Crypto-Native Balance (only if we have a real received crypto amount)
-            const cryptoCurrency = tx.currency || "ETH";
-            const cryptoAmountReceived = parseFloat(String(data.data.received_amount || "0"));
-            
+            // 1. Credit Crypto-Native Balance (LIVE)
             if (cryptoAmountReceived > 0) {
-              await txn
-                .insert(userBalancesTable)
-                .values({
-                  userId: tx.userId,
-                  currency: cryptoCurrency,
-                  amount: String(cryptoAmountReceived),
-                })
-                .onConflictDoUpdate({
-                  target: [userBalancesTable.userId, userBalancesTable.currency],
-                  set: { amount: sql`user_balances.amount + ${String(cryptoAmountReceived)}` },
-                });
+              await creditCryptoBalance(tx.userId, cryptoCurrency, cryptoAmountReceived, txn);
+            } else {
+              await txn.update(usersTable).set({ balance: sql`balance + ${creditAmountUsd}` }).where(eq(usersTable.id, tx.userId));
             }
 
-            // Credit USD balance (real amount after fees)
-            const [updatedUser] = await txn.update(usersTable).set({
-              balance: sql`balance + ${creditAmount}`,
-              totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
-              wagerRequirement: sql`coalesce(wager_requirement, 0) + ${creditAmount}`,
-            }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
+            // 2. Update Stats
+            await txn.update(usersTable).set({
+              totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmountUsd}`,
+              wagerRequirement: sql`coalesce(wager_requirement, 0) + ${creditAmountUsd * WAGER_MULTIPLIER}`,
+            }).where(eq(usersTable.id, tx.userId));
 
-            if (updatedUser) {
-              const balanceAfter = parseFloat(updatedUser.balance);
-              await recordLedger(txn, {
-                userId: tx.userId,
-                amount: creditAmount,
-                balanceBefore: balanceAfter - creditAmount,
-                balanceAfter,
-                reason: "deposit",
-                referenceId: tx.id,
-                referenceType: "transaction",
-                note: `Credited $${creditAmount} USD (${cryptoAmountReceived > 0 ? cryptoAmountReceived + " " + cryptoCurrency : "invoice amount"})`,
-              });
-            }
+            // 3. Record Ledger
+            await recordLedger(txn, {
+              userId: tx.userId,
+              amount: creditAmountUsd,
+              balanceBefore: 0,
+              balanceAfter: creditAmountUsd,
+              reason: "deposit",
+              referenceId: tx.id,
+              referenceType: "transaction",
+              note: `Credited ${cryptoAmountReceived > 0 ? cryptoAmountReceived + " " + cryptoCurrency : "$" + creditAmountUsd + " USD"} (Live Balance via Sync)`,
+            });
             
-            // Handle Referral
+            // 4. Referral
             try {
               const [depositor] = await txn.select({ referredBy: usersTable.referredBy }).from(usersTable).where(eq(usersTable.id, tx.userId)).limit(1);
               if (depositor?.referredBy) {
@@ -199,28 +164,25 @@ export async function syncPlisioDeposits() {
                 const [activeRow] = await txn.select({ n: count() }).from(referralsTable).where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.status, "active")));
                 const active = activeRow?.n ?? 0;
                 const commissionRate = active >= 50 ? 0.10 : active >= 20 ? 0.07 : active >= 5 ? 0.05 : 0.03;
-                const commission = Math.round(creditAmount * commissionRate * 1e8) / 1e8;
+                const commission = Math.round(creditAmountUsd * commissionRate * 1e8) / 1e8;
                 if (commission > 0) {
                   await txn.update(usersTable).set({ balance: sql`balance + ${commission}` }).where(eq(usersTable.id, referrerId));
                   await txn.update(referralsTable).set({ status: "active", earnedAmount: sql`CAST(earned_amount AS DECIMAL) + ${commission}` }).where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.referredId, tx.userId)));
-                  
-                  // Also record in creator bank for owner tracking
                   await txn.insert(creatorBankTxnsTable).values({
                     creatorId: referrerId,
                     type: "referral_commission",
                     amount: String(commission),
                     toUserId: tx.userId,
-                    description: `Commission from deposit ${tx.plisioTrackId || tx.id} (Sync: ${cryptoAmountReceived} ${tx.currency})`
+                    description: `Commission from deposit ${tx.plisioTrackId || tx.id}`
                   });
                 }
               }
             } catch (e) { logger.warn({ err: e }, "Referral credit failed in sync"); }
           });
 
-          logger.info({ txId: tx.id, creditAmount, userId: tx.userId, pStatus }, "Plisio sync: deposit credited ✓");
+          logger.info({ txId: tx.id, creditAmountUsd, userId: tx.userId, pStatus }, "Plisio sync: deposit credited ✓");
         } else if (pStatus === "expired" || pStatus === "cancelled" || pStatus === "error") {
           await db.update(transactionsTable).set({ status: "failed" }).where(eq(transactionsTable.id, tx.id));
-          logger.info({ txId: tx.id, pStatus }, "Plisio sync: marked failed transaction");
         }
       } catch (err) {
         logger.error({ err, txId: tx.id }, "Error syncing individual Plisio deposit");
@@ -236,14 +198,12 @@ export async function syncPlisioDeposits() {
  * Call this once when the server starts.
  */
 export function startBackgroundTasks() {
-  // Cleanup expired: every 30 mins
   const cleanupInterval = setInterval(() => {
     cleanupExpiredDeposits().catch((err) => {
       logger.error({ err }, "Unhandled error in cleanup interval");
     });
   }, 30 * 60 * 1000);
 
-  // Sync with Plisio: every 1 min for fast auto-credit
   const syncInterval = setInterval(() => {
     syncPlisioDeposits().catch((err) => {
       logger.error({ err }, "Unhandled error in sync interval");
@@ -251,13 +211,11 @@ export function startBackgroundTasks() {
   }, 1 * 60 * 1000);
 
   process.on("SIGTERM", () => {
-    logger.info("SIGTERM received, clearing background task intervals");
     clearInterval(cleanupInterval);
     clearInterval(syncInterval);
   });
 
   process.on("SIGINT", () => {
-    logger.info("SIGINT received, clearing background task intervals");
     clearInterval(cleanupInterval);
     clearInterval(syncInterval);
   });
