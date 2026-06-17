@@ -3,14 +3,14 @@ import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
-  Users, Copy, CheckCheck, TrendingUp, Coins, Gift, ArrowDownLeft,
+  Users, Copy, CheckCheck, TrendingUp, Coins, Gift,
   Star, Lock, Link2, MessageSquare, Send,
   RefreshCw, X, Zap, BarChart3, DollarSign, Eye, EyeOff,
-  ChevronRight, Shield, Info,
+  ChevronRight, ChevronDown, ChevronUp, Info, Wallet,
+  Clock, CheckCircle2, ArrowUpRight, Plus, AlertCircle,
 } from "lucide-react";
 
 interface DashboardData {
@@ -33,92 +33,92 @@ interface DashboardData {
   pendingReferrals: number;
   totalCommissionEarned: number;
   bankHistory: Array<{
-    id: number;
-    type: string;
-    amount: number;
-    description: string;
-    createdAt: string;
-    toUserId: number | null;
+    id: number; type: string; amount: number;
+    description: string; createdAt: string; toUserId: number | null;
   }>;
 }
 
 interface Referral {
-  id: number;
-  username: string;
-  status: string;
-  earned: number;
-  joinedAt: string;
+  id: number; username: string; status: string; earned: number; joinedAt: string;
 }
 
 interface CreatorMessage {
-  id: number;
-  senderId: number;
-  senderUsername: string;
-  senderRole: string;
-  recipientType: string;
-  recipientId: number | null;
-  message: string;
-  createdAt: string;
-  read: boolean;
+  id: number; senderId: number; senderUsername: string; senderRole: string;
+  recipientType: string; recipientId: number | null; message: string;
+  createdAt: string; read: boolean;
 }
 
-interface TierData {
-  tier: string;
-  group: string;
-  commissionRate: number;
-  nextTierAt: number | null;
-  color: string;
-  emoji: string;
-  isPrivate: boolean;
-  description: string;
+interface Campaign {
+  id: string; name: string; createdAt: string;
 }
 
 function getToken() {
   return typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
 }
 
-const GROUP_COLORS: Record<string, string> = {
-  Bronze: "#cd7f32",
-  Silver: "#c0c0c0",
-  Gold: "#ffd700",
-  Platinum: "#e5e4e2",
-  Private: "#ff6aff",
-};
+function getNextPayoutDate(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() + 1, 1, 11, 0, 0);
+}
 
-const GROUP_GRADIENTS: Record<string, string> = {
-  Bronze: "from-amber-900/20 to-transparent",
-  Silver: "from-slate-500/10 to-transparent",
-  Gold: "from-yellow-500/15 to-transparent",
-  Platinum: "from-cyan-300/10 to-transparent",
-  Private: "from-fuchsia-500/15 to-transparent",
-};
+function useCountdown(target: Date) {
+  const [diff, setDiff] = useState(() => Math.max(0, target.getTime() - Date.now()));
+  useEffect(() => {
+    const id = setInterval(() => setDiff(Math.max(0, target.getTime() - Date.now())), 1000);
+    return () => clearInterval(id);
+  }, [target]);
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  return { diff, d, h, m, s, expired: diff === 0 };
+}
 
-function TierBadge({ tier, color, emoji, size = "sm" }: { tier: string; color: string; emoji: string; size?: "sm" | "lg" }) {
+function TierBadge({ tier, color, emoji }: { tier: string; color: string; emoji: string }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full font-bold uppercase tracking-widest border ${size === "lg" ? "px-4 py-1.5 text-sm" : "px-2.5 py-0.5 text-xs"}`}
-      style={{ borderColor: color + "60", color, backgroundColor: color + "18" }}
-    >
+    <span className="inline-flex items-center gap-1.5 rounded-full font-bold uppercase tracking-widest border px-2.5 py-0.5 text-xs"
+      style={{ borderColor: color + "60", color, backgroundColor: color + "18" }}>
       {emoji} {tier}
     </span>
   );
 }
 
-// Vertical tier ladder — all 13 public tiers + 1 private
-const TIER_LADDER = [
-  { tier: "Hustler",      group: "Bronze",   emoji: "🥉", pct: 3,  at: 0,   color: "#cd7f32" },
-  { tier: "Grinder",      group: "Bronze",   emoji: "💪", pct: 4,  at: 1,   color: "#c67a28" },
-  { tier: "Baller",       group: "Bronze",   emoji: "🔥", pct: 5,  at: 2,   color: "#b06520" },
-  { tier: "High Roller",  group: "Silver",   emoji: "🎰", pct: 5,  at: 4,   color: "#b0d0ff" },
-  { tier: "Whale",        group: "Silver",   emoji: "🐋", pct: 6,  at: 7,   color: "#c0c0c0" },
-  { tier: "Shark",        group: "Silver",   emoji: "🦈", pct: 8,  at: 12,  color: "#a0cfff" },
-  { tier: "Legend",       group: "Gold",     emoji: "🥇", pct: 10, at: 20,  color: "#ffaa00" },
-  { tier: "Icon",         group: "Gold",     emoji: "⭐", pct: 12, at: 35,  color: "#ffc53d" },
-  { tier: "Goat",         group: "Gold",     emoji: "🐐", pct: 15, at: 60,  color: "#ffd700" },
-  { tier: "Platinum I",   group: "Platinum", emoji: "🏆", pct: 20, at: 100, color: "#e5e4e2" },
-  { tier: "Platinum II",  group: "Platinum", emoji: "💎", pct: 25, at: 200, color: "#c8e6ff" },
-  { tier: "Platinum III", group: "Platinum", emoji: "💠", pct: 30, at: null, color: "#b9f2ff" },
-  { tier: "Private",      group: "Private",  emoji: "🔒", pct: 0,  at: null, color: "#ff6aff" },
+function FaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-b border-border/50 last:border-0">
+      <button className="w-full flex items-center justify-between py-3.5 text-left gap-4 hover:text-foreground transition-colors text-sm font-medium"
+        onClick={() => setOpen(v => !v)}>
+        <span>{q}</span>
+        {open ? <ChevronUp className="w-4 h-4 flex-shrink-0 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 flex-shrink-0 text-muted-foreground" />}
+      </button>
+      {open && <p className="pb-4 text-sm text-muted-foreground leading-relaxed">{a}</p>}
+    </div>
+  );
+}
+
+const COINS = ["BTC", "ETH", "USDT (TRC20)", "USDT (ERC20)", "USDC", "BNB", "SOL", "LTC", "DOGE", "TRX"];
+
+const GENERAL_FAQ = [
+  { q: "What is the DGC Arcade Affiliate Program?", a: "The DGC Arcade Affiliate Program lets you earn monthly commission on the casino profits generated by players you refer. Share your link, grow your network, and get paid every month — the more active referrals, the higher your tier and commission rate." },
+  { q: "Who can join the DGC Arcade Affiliate Program?", a: "Anyone with a DGC Arcade account can join and start referring players. Specialty Creator status is invite-only and available to established streamers, influencers, and content creators." },
+  { q: "How do I join?", a: "You're already in! Your personal referral link is shown in this hub. Share it anywhere — social media, Discord, livestreams, or direct messages. Every player who signs up through your link is tracked automatically." },
+  { q: "What are the benefits of joining?", a: "Earn up to 30% monthly commission on your referred players' casino activity, advance through 13 tiers, and unlock exclusive DGC Arcade perks. Specialty Creators also receive a starting promo balance and priority support." },
+];
+
+const AFFILIATE_FAQ = [
+  { q: "How can I promote DGC Arcade?", a: "Share your unique referral link on your social channels, Twitch/Kick/YouTube streams, Discord servers, or personal networks. Every click and signup through your link is tracked in real time." },
+  { q: "How can I create campaigns?", a: "Use the Campaigns tab to create named tracking campaigns. Each campaign gets its own ID appended to your referral URL, so you can measure performance across different platforms." },
+  { q: "How do I check the performance of my campaigns?", a: "The Campaigns tab shows total hits, referred users, first-time depositors, and combined commission for all your campaigns in one simple dashboard." },
+  { q: "What territories can I target?", a: "DGC Arcade accepts players worldwide (subject to local laws). You are responsible for ensuring you only promote DGC Arcade to users in jurisdictions where online gaming is legal." },
+];
+
+const EARNINGS_FAQ = [
+  { q: "How is commission calculated?", a: "At the end of each calendar month we calculate the total house profit (house wins minus house losses) across all your active referrals and multiply it by your tier's commission rate. The result is your commission for that month." },
+  { q: "How much commission can I earn?", a: "Commission rates range from 3% at the Hustler tier up to 30% at Platinum III. Specialty Creators with private contracts can negotiate custom rates beyond the standard ladder." },
+  { q: "When and how do I get paid?", a: "Payouts are processed on the 1st of each month. Regular users receive their commission directly to their DGC Arcade wallet balance. Specialty Creators receive payouts to their registered crypto wallet via our payment gateway." },
+  { q: "Can I track my earnings in real time?", a: "Yes — your Commission tab shows pending, available, and lifetime commission figures. Referred user activity updates daily." },
+  { q: "Can I earn commission from users who have the same IP address?", a: "For fraud prevention, referrals from the same IP address as the referrer are not counted. Multi-accounting and self-referrals are strictly prohibited and will result in account suspension." },
 ];
 
 export default function CreatorPage() {
@@ -128,24 +128,9 @@ export default function CreatorPage() {
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [referrals, setReferrals] = useState<Referral[]>([]);
-  const [allTiers, setAllTiers] = useState<TierData[]>([]);
   const [dashLoading, setDashLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
-  const [tipTo, setTipTo] = useState("");
-  const [tipAmt, setTipAmt] = useState(10);
-  const [tipLoading, setTipLoading] = useState(false);
-  const [hideBalance, setHideBalance] = useState(false);
-
-  const [linkedAccount, setLinkedAccount] = useState<{ id: number; username: string; balance: number } | null>(null);
-  const [linkModalOpen, setLinkModalOpen] = useState(false);
-  const [linkUsername, setLinkUsername] = useState("");
-  const [linkPassword, setLinkPassword] = useState("");
-  const [linkLoading, setLinkLoading] = useState(false);
-
   const [messages, setMessages] = useState<CreatorMessage[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [msgLoading, setMsgLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
   const messagesBottomRef = useRef<HTMLDivElement | null>(null);
 
   const isCreator = user?.accountType === "creator" || user?.role === "creator";
@@ -158,16 +143,12 @@ export default function CreatorPage() {
     if (!isAuthenticated) return;
     const token = getToken();
     try {
-      const [dash, refs, linked, tiersRes] = await Promise.all([
+      const [dash, refs] = await Promise.all([
         fetch("/api/creator/dashboard", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
         fetch("/api/referrals/my-referrals", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-        fetch("/api/creator/linked-account", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-        fetch("/api/referrals/tiers").then(r => r.json()),
       ]);
       if (!dash.error) setDashboard(dash);
       if (Array.isArray(refs)) setReferrals(refs);
-      if (linked?.linked) setLinkedAccount(linked.personalUser);
-      if (tiersRes?.tiers) setAllTiers(tiersRes.tiers);
     } catch {}
     finally { setDashLoading(false); }
   }, [isAuthenticated]);
@@ -177,7 +158,6 @@ export default function CreatorPage() {
   const fetchMessages = useCallback(async () => {
     if (!isAuthenticated) return;
     const token = getToken();
-    setMsgLoading(true);
     try {
       const res = await fetch("/api/creator/messages", { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
@@ -186,114 +166,24 @@ export default function CreatorPage() {
         setUnreadCount(data.messages.filter((m: CreatorMessage) => !m.read).length);
         setTimeout(() => messagesBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
       }
-    } catch {} finally { setMsgLoading(false); }
+    } catch {}
   }, [isAuthenticated]);
-
-  useEffect(() => {
-    if (activeTab === "messages") {
-      fetchMessages();
-      const id = setInterval(fetchMessages, 8000);
-      return () => clearInterval(id);
-    }
-  }, [activeTab, fetchMessages]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
     const token = getToken();
-    fetch("/api/creator/messages/unread-count", { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(d => { if (d.unread) setUnreadCount(d.unread); }).catch(() => {});
-    const id = setInterval(() => {
-      fetch("/api/creator/messages/unread-count", { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json()).then(d => setUnreadCount(d.unread ?? 0)).catch(() => {});
-    }, 15000);
+    const poll = () => fetch("/api/creator/messages/unread-count", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(d => setUnreadCount(d.unread ?? 0)).catch(() => {});
+    poll();
+    const id = setInterval(poll, 20000);
     return () => clearInterval(id);
   }, [isAuthenticated]);
-
-  const markMessagesRead = useCallback(async (ids: number[]) => {
-    if (ids.length === 0) return;
-    const token = getToken();
-    try {
-      await fetch("/api/creator/messages/read", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ messageIds: ids }),
-      });
-      setMessages(prev => prev.map(m => ids.includes(m.id) ? { ...m, read: true } : m));
-      setUnreadCount(0);
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === "messages" && messages.length > 0) {
-      const unreadIds = messages.filter(m => !m.read).map(m => m.id);
-      if (unreadIds.length > 0) markMessagesRead(unreadIds);
-    }
-  }, [activeTab, messages, markMessagesRead]);
-
-  const copyLink = async () => {
-    if (!dashboard) return;
-    await navigator.clipboard.writeText(dashboard.referralLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-    toast({ title: "Copied!", description: "Referral link copied to clipboard." });
-  };
-
-  const sendTip = async () => {
-    if (!tipTo.trim() || tipAmt <= 0) return;
-    setTipLoading(true);
-    try {
-      const res = await fetch("/api/creator/bank/tip", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ toUsername: tipTo.trim(), amount: tipAmt }),
-      });
-      const d = await res.json();
-      if (res.ok) {
-        toast({ title: "Promo Tip Sent!", description: `Sent ${formatCurrency(tipAmt)} to @${tipTo}` });
-        setTipTo("");
-        setDashboard(prev => prev ? { ...prev, promoBalance: d.newPromoBalance } : prev);
-      } else {
-        toast({ title: "Error", description: d.error, variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Error", description: "Network error", variant: "destructive" });
-    } finally { setTipLoading(false); }
-  };
-
-  const linkAccount = async () => {
-    if (!linkUsername.trim() || !linkPassword) return;
-    setLinkLoading(true);
-    try {
-      const res = await fetch("/api/creator/link-account", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ username: linkUsername.trim(), password: linkPassword }),
-      });
-      const d = await res.json();
-      if (res.ok) {
-        localStorage.setItem("dgc_alt_token", d.personalToken);
-        localStorage.setItem("dgc_alt_profile_type", "personal");
-        localStorage.setItem("dgc_creator_token", getToken() ?? "");
-        setLinkedAccount(d.personalUser);
-        setLinkModalOpen(false);
-        setLinkUsername("");
-        setLinkPassword("");
-        toast({ title: "Account Linked!", description: `@${d.personalUser.username} is now your personal account.` });
-      } else {
-        toast({ title: "Error", description: d.error, variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Error", description: "Network error", variant: "destructive" });
-    } finally { setLinkLoading(false); }
-  };
 
   if (isLoading || dashLoading) {
     return (
       <div className="max-w-5xl mx-auto space-y-6 pt-8">
-        <div className="h-40 bg-secondary animate-pulse rounded-2xl" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[1,2,3,4].map(i => <div key={i} className="h-24 bg-secondary animate-pulse rounded-xl" />)}
-        </div>
+        <div className="h-12 bg-secondary animate-pulse rounded-xl" />
+        <div className="h-96 bg-secondary animate-pulse rounded-2xl" />
       </div>
     );
   }
@@ -302,584 +192,755 @@ export default function CreatorPage() {
     return <div className="text-center py-24 text-muted-foreground font-mono">Failed to load affiliate hub.</div>;
   }
 
-  const tierColor = dashboard.color;
-  const currentTierIdx = TIER_LADDER.findIndex(t => t.tier === dashboard.tier);
-  const tierProgress = dashboard.nextTierAt
-    ? Math.min((dashboard.activeReferrals / dashboard.nextTierAt) * 100, 100)
-    : 100;
+  if (isCreator) {
+    return (
+      <SpecialtyHub
+        dashboard={dashboard}
+        referrals={referrals}
+        messages={messages}
+        unreadCount={unreadCount}
+        onRefresh={fetchDashboard}
+        onFetchMessages={fetchMessages}
+        messagesBottomRef={messagesBottomRef}
+        toast={toast}
+      />
+    );
+  }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-16">
+    <RegularHub
+      dashboard={dashboard}
+      referrals={referrals}
+      onRefresh={fetchDashboard}
+      toast={toast}
+    />
+  );
+}
 
-      {/* ── Hero Banner ── */}
-      <div
-        className={`relative overflow-hidden rounded-2xl border p-6 md:p-8 bg-gradient-to-br ${GROUP_GRADIENTS[dashboard.group] ?? "from-primary/5 to-transparent"}`}
-        style={{ borderColor: tierColor + "35" }}
-      >
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: `repeating-linear-gradient(45deg, ${tierColor} 0, ${tierColor} 1px, transparent 0, transparent 50%)`,
-          backgroundSize: "20px 20px",
-        }} />
-        <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div
-                className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-lg"
-                style={{ backgroundColor: tierColor + "20", border: `1px solid ${tierColor}40` }}
-              >
-                {dashboard.emoji}
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h1 className="font-display font-black text-2xl md:text-3xl uppercase tracking-widest">
-                    {isCreator ? "Creator Hub" : "Affiliate Hub"}
-                  </h1>
-                  {isCreator && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-400 text-[10px] font-black uppercase tracking-widest">
-                      <Star className="w-2.5 h-2.5 fill-purple-400" /> Creator
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground text-sm font-mono">@{dashboard.username}</span>
-                  <TierBadge tier={dashboard.tier} color={tierColor} emoji={dashboard.emoji} />
-                </div>
-              </div>
-            </div>
+function SpecialtyHub({
+  dashboard, referrals, messages, unreadCount,
+  onRefresh, onFetchMessages, messagesBottomRef, toast,
+}: {
+  dashboard: DashboardData;
+  referrals: Referral[];
+  messages: CreatorMessage[];
+  unreadCount: number;
+  onRefresh: () => void;
+  onFetchMessages: () => void;
+  messagesBottomRef: React.RefObject<HTMLDivElement>;
+  toast: ReturnType<typeof useToast>["toast"];
+}) {
+  const [section, setSection] = useState<"overview" | "campaigns" | "commission" | "referred" | "faq" | "messages">("overview");
+  const [copied, setCopied] = useState(false);
+  const [faqTab, setFaqTab] = useState<"general" | "affiliate" | "earnings">("general");
+
+  const [campaigns, setCampaigns] = useState<Campaign[]>(() => {
+    try { return JSON.parse(localStorage.getItem("dgc_campaigns") || "[]"); } catch { return []; }
+  });
+  const [createCampaignOpen, setCreateCampaignOpen] = useState(false);
+  const [newCampaignName, setNewCampaignName] = useState("");
+
+  const [selectedCoin, setSelectedCoin] = useState(() => localStorage.getItem("dgc_payout_coin") || "BTC");
+  const [walletAddress, setWalletAddress] = useState(() => localStorage.getItem("dgc_payout_address") || "");
+  const [autoSend, setAutoSend] = useState(() => localStorage.getItem("dgc_auto_send") !== "false");
+  const [walletSaved, setWalletSaved] = useState(false);
+  const [payoutLoading, setPayoutLoading] = useState(false);
+
+  const nextPayout = getNextPayoutDate();
+  const countdown = useCountdown(nextPayout);
+  const canWithdraw = countdown.expired && dashboard.promoBalance > 0;
+
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(dashboard.referralLink);
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
+    toast({ title: "Copied!", description: "Referral link copied to clipboard." });
+  };
+
+  const saveWallet = () => {
+    localStorage.setItem("dgc_payout_coin", selectedCoin);
+    localStorage.setItem("dgc_payout_address", walletAddress);
+    localStorage.setItem("dgc_auto_send", String(autoSend));
+    setWalletSaved(true); setTimeout(() => setWalletSaved(false), 2000);
+    toast({ title: "Wallet Saved", description: `Payouts will go to your ${selectedCoin} address.` });
+  };
+
+  const requestPayout = async () => {
+    if (!walletAddress.trim()) {
+      toast({ title: "No Wallet", description: "Enter your wallet address first.", variant: "destructive" }); return;
+    }
+    setPayoutLoading(true);
+    try {
+      const res = await fetch("/api/creator/request-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ coin: selectedCoin, address: walletAddress, amount: dashboard.promoBalance }),
+      });
+      const d = await res.json();
+      if (res.ok) {
+        toast({ title: "Payout Requested!", description: `Your ${selectedCoin} payout is being processed.` });
+        onRefresh();
+      } else {
+        toast({ title: "Error", description: d.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Network error", variant: "destructive" });
+    } finally { setPayoutLoading(false); }
+  };
+
+  const createCampaign = () => {
+    if (!newCampaignName.trim()) return;
+    const id = Math.random().toString(36).slice(2, 8).toUpperCase();
+    const campaign: Campaign = { id, name: newCampaignName.trim(), createdAt: new Date().toISOString() };
+    const next = [...campaigns, campaign];
+    setCampaigns(next);
+    localStorage.setItem("dgc_campaigns", JSON.stringify(next));
+    setNewCampaignName(""); setCreateCampaignOpen(false);
+    toast({ title: "Campaign Created", description: `Campaign "${campaign.name}" is ready.` });
+  };
+
+  const allCampaigns = [
+    { id: dashboard.referralCode, name: dashboard.username, createdAt: new Date(0).toISOString() },
+    ...campaigns,
+  ];
+
+  const tierColor = dashboard.color;
+
+  const navItems = [
+    { id: "overview" as const, label: "Overview" },
+    { id: "campaigns" as const, label: "Campaigns" },
+    { id: "commission" as const, label: "Commission" },
+    { id: "referred" as const, label: "Referred Users" },
+    { id: "messages" as const, label: "Messages", badge: unreadCount },
+    { id: "faq" as const, label: "FAQ" },
+  ];
+
+  return (
+    <div className="max-w-5xl mx-auto pb-16">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground">
+          <Users className="w-5 h-5" />
+        </div>
+        <h1 className="font-display font-black text-xl uppercase tracking-widest flex items-center gap-2">
+          Creator Hub
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-400 text-[10px] font-black uppercase tracking-widest">
+            <Star className="w-2.5 h-2.5 fill-purple-400" /> {dashboard.username}
+          </span>
+        </h1>
+      </div>
+
+      <div className="flex gap-6">
+        {/* Sidebar */}
+        <aside className="hidden md:flex flex-col gap-1 w-44 flex-shrink-0">
+          {navItems.map(item => (
+            <button key={item.id}
+              onClick={() => { setSection(item.id); if (item.id === "messages") onFetchMessages(); }}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-left transition-colors ${section === item.id ? "bg-primary/10 text-primary font-bold border border-primary/20" : "text-muted-foreground hover:text-foreground hover:bg-secondary/80"}`}>
+              <span>{item.label}</span>
+              {item.badge ? (
+                <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center px-1">
+                  {item.badge > 9 ? "9+" : item.badge}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </aside>
+
+        {/* Mobile nav */}
+        <div className="md:hidden w-full mb-4">
+          <div className="flex overflow-x-auto gap-1 pb-1">
+            {navItems.map(item => (
+              <button key={item.id}
+                onClick={() => { setSection(item.id); if (item.id === "messages") onFetchMessages(); }}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${section === item.id ? "bg-primary/15 text-primary border border-primary/25" : "text-muted-foreground hover:text-foreground bg-secondary/50"}`}>
+                {item.label}
+              </button>
+            ))}
           </div>
+        </div>
 
-          {/* Balance Cards — only for creators */}
-          {isCreator && (
-            <div className="flex gap-3 flex-wrap">
-              <div className="bg-background/60 backdrop-blur-sm border rounded-xl p-4 min-w-[140px]"
-                style={{ borderColor: tierColor + "30" }}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Promo Balance</span>
-                  <button onClick={() => setHideBalance(v => !v)} className="text-muted-foreground hover:text-foreground transition-colors">
-                    {hideBalance ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+        {/* Content */}
+        <main className="flex-1 min-w-0 space-y-5">
+
+          {/* ── Overview ── */}
+          {section === "overview" && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="font-bold text-base mb-1">Overview</h2>
+                <p className="text-sm text-muted-foreground">Grow your network and earn monthly commission on every player you refer to DGC Arcade.</p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 py-4 border-y border-border/50">
+                {[
+                  { value: "10K+", label: "Registered Players" },
+                  { value: "15+", label: "Payment Methods" },
+                  { value: "50+", label: "Casino Games" },
+                ].map(s => (
+                  <div key={s.label} className="text-center">
+                    <div className="font-mono font-black text-xl text-primary">{s.value}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-2">Your Affiliate Link</div>
+                <div className="flex gap-2">
+                  <div className="flex-1 bg-secondary/80 rounded-lg px-4 py-2.5 font-mono text-sm border border-border/50 text-muted-foreground truncate select-all">
+                    {dashboard.referralLink}
+                  </div>
+                  <button onClick={copyLink}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-bold text-sm uppercase tracking-widest hover:bg-primary/90 transition-colors whitespace-nowrap">
+                    {copied ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {copied ? "Copied!" : "Copy"}
                   </button>
                 </div>
-                <div className="font-mono font-black text-xl" style={{ color: tierColor }}>
-                  {hideBalance ? "••••••" : formatCurrency(dashboard.promoBalance)}
-                </div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">non-withdrawable</div>
               </div>
-              <div className="bg-background/60 backdrop-blur-sm border border-border/40 rounded-xl p-4 min-w-[140px]">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <Lock className="w-3 h-3 text-muted-foreground" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Vault</span>
+
+              <div>
+                <div className="text-sm font-bold mb-3">Exclusive Advantages</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    { icon: "⚡", title: "Monthly Payouts", desc: "Commission paid out on the 1st of every month to your registered wallet." },
+                    { icon: "📈", title: "Lifetime Commission", desc: "Keep earning as long as your referred players stay active on DGC Arcade." },
+                    { icon: "🎰", title: "Industry-Favourite Games", desc: "Slots, crash, dice, plinko, hilo, and more — players love to come back." },
+                    { icon: "%", title: "Custom Commission Rate", desc: "Specialty creators can negotiate rates up to 30%+ based on their reach.", style: "font-bold text-primary text-base" },
+                    { icon: "💎", title: "VIP Rakeback", desc: "Your referred players earn rakeback as they climb the VIP ladder — keeping them engaged." },
+                    { icon: "🛎", title: "Dedicated Support", desc: "Priority support for all creator-level partners — we're here 24/7." },
+                  ].map(a => (
+                    <div key={a.title} className="flex gap-3 p-3.5 rounded-xl border border-border/50 bg-secondary/30 hover:bg-secondary/60 transition-colors">
+                      <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                        <span className={a.style ?? "text-base"}>{a.icon}</span>
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm">{a.title}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{a.desc}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="font-mono font-black text-xl text-foreground">
-                  {hideBalance ? "••••••" : formatCurrency(dashboard.vaultBalance)}
+              </div>
+
+              <div className="p-4 rounded-xl bg-secondary/40 border border-border/50">
+                <div className="font-bold text-sm mb-3">Commission Rules</div>
+                <div className="grid sm:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <div className="font-bold uppercase tracking-wider text-muted-foreground mb-1.5">🎰 Casino Games</div>
+                    <p className="text-muted-foreground leading-relaxed mb-2">Commission is calculated on net casino profit (house wins − house losses) across all your active referrals each month.</p>
+                    <div className="bg-background/60 rounded-lg px-3 py-2 font-mono border border-border/40">
+                      House Profit × Commission Rate = Your Earnings
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-bold uppercase tracking-wider text-muted-foreground mb-1.5">📊 Current Rate</div>
+                    <p className="text-muted-foreground leading-relaxed mb-2">
+                      Your current commission rate is <strong className="text-primary" style={{ color: tierColor }}>{dashboard.commissionPct}%</strong> at the{" "}
+                      <TierBadge tier={dashboard.tier} color={tierColor} emoji={dashboard.emoji} /> tier.
+                    </p>
+                    <div className="bg-background/60 rounded-lg px-3 py-2 font-mono border border-border/40">
+                      Example: $5,000 profit → <span className="text-green-400">${(5000 * dashboard.commissionRate).toFixed(2)}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* ── Stats Row ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: "Active Referrals", value: String(dashboard.activeReferrals), icon: <Users className="w-4 h-4" />, color: "text-green-400", bg: "bg-green-500/10" },
-          { label: "Commission Rate", value: `${dashboard.commissionPct}%`, icon: <TrendingUp className="w-4 h-4" />, color: "text-primary", bg: "bg-primary/10" },
-          { label: "Total Earned", value: formatCurrency(dashboard.totalCommissionEarned), icon: <Coins className="w-4 h-4" />, color: "text-emerald-400", bg: "bg-emerald-500/10" },
-          { label: "Pending", value: String(dashboard.pendingReferrals), icon: <Zap className="w-4 h-4" />, color: "text-yellow-400", bg: "bg-yellow-500/10" },
-        ].map(s => (
-          <Card key={s.label} className="bg-card border-border hover:border-border/80 transition-colors">
-            <CardContent className="pt-4 pb-4">
-              <div className={`w-8 h-8 rounded-lg ${s.bg} flex items-center justify-center mb-2 ${s.color}`}>{s.icon}</div>
-              <div className={`font-mono font-black text-lg ${s.color}`}>{s.value}</div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mt-0.5">{s.label}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* ── Personal Account Banner (creators only) ── */}
-      {isCreator && !linkedAccount && (
-        <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center">
-              <Link2 className="w-4 h-4 text-primary" />
-            </div>
-            <div>
-              <p className="font-bold text-sm">Link Your Personal Account</p>
-              <p className="text-xs text-muted-foreground">Link your regular play account for deposits, withdrawals & profile switching.</p>
-            </div>
-          </div>
-          <Button size="sm" onClick={() => setLinkModalOpen(true)} className="whitespace-nowrap">Link Now</Button>
-        </div>
-      )}
-      {isCreator && linkedAccount && (
-        <div className="rounded-xl border border-border/40 bg-secondary/30 p-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center">
-              <Link2 className="w-4 h-4 text-green-400" />
-            </div>
-            <div>
-              <p className="font-bold text-sm text-green-400">Personal Account Linked</p>
-              <p className="text-xs text-muted-foreground">@{linkedAccount.username} · {formatCurrency(linkedAccount.balance)} · Switch from the top menu</p>
-            </div>
-          </div>
-          <button onClick={() => setLinkModalOpen(true)} className="text-xs text-muted-foreground hover:text-foreground transition-colors underline">Change</button>
-        </div>
-      )}
-
-      {/* ── Main Tabs ── */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-secondary w-full flex">
-          <TabsTrigger value="overview" className="flex-1 font-bold uppercase text-xs">Overview</TabsTrigger>
-          <TabsTrigger value="referrals" className="flex-1 font-bold uppercase text-xs">Referrals</TabsTrigger>
-          <TabsTrigger value="earnings" className="flex-1 font-bold uppercase text-xs">Earnings</TabsTrigger>
-          <TabsTrigger value="tiers" className="flex-1 font-bold uppercase text-xs">All Tiers</TabsTrigger>
-          <TabsTrigger value="messages" className="flex-1 font-bold uppercase text-xs relative">
-            Messages
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center px-1 animate-pulse">
-                {unreadCount > 99 ? "99+" : unreadCount}
-              </span>
-            )}
-          </TabsTrigger>
-          {isCreator && <TabsTrigger value="promo" className="flex-1 font-bold uppercase text-xs">Promo</TabsTrigger>}
-        </TabsList>
-
-        {/* ─── Overview Tab ─── */}
-        <TabsContent value="overview" className="space-y-4 mt-4">
-
-          {/* Commission explainer */}
-          <Card className="bg-card border-border">
-            <CardContent className="pt-5 pb-5">
-              <div className="flex items-start gap-3 mb-4">
-                <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-                  <Info className="w-4 h-4 text-primary" />
-                </div>
+          {/* ── Campaigns ── */}
+          {section === "campaigns" && (
+            <div className="space-y-5">
+              <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="font-bold uppercase tracking-widest text-sm mb-1">How Commissions Work</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Every user you refer plays on DGC Arcade. At the end of each month, we calculate the total
-                    <strong className="text-foreground"> casino profit</strong> (house wins minus house losses) across all your active referrals.
-                    You earn <strong style={{ color: tierColor }}>{dashboard.commissionPct}%</strong> of that amount — paid to your account monthly.
-                  </p>
-                  <div className="mt-3 p-3 rounded-lg bg-secondary/60 border border-border/40">
-                    <p className="text-xs text-muted-foreground font-mono">
-                      Example: 50 referrals · $1,000 house profit → you earn <strong className="text-green-400">{formatCurrency(1000 * dashboard.commissionRate)}</strong> ({dashboard.commissionPct}%)
-                    </p>
+                  <h2 className="font-bold text-base mb-1">Campaigns</h2>
+                  <p className="text-sm text-muted-foreground">See the performance of all your campaigns in one simple view.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: "Campaign Hits", value: "—" },
+                  { label: "Referred Users", value: String(dashboard.activeReferrals + dashboard.pendingReferrals) },
+                  { label: "Active Players (FTP)", value: String(dashboard.activeReferrals) },
+                  { label: "Combined Commission", value: formatCurrency(dashboard.totalCommissionEarned) },
+                ].map(s => (
+                  <div key={s.label} className="p-3 rounded-xl border border-border/50 bg-secondary/30">
+                    <div className="font-mono font-black text-base">{s.value}</div>
+                    <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">{s.label}</div>
                   </div>
-                </div>
+                ))}
               </div>
 
-              {/* Tier progress bar */}
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-muted-foreground" />
-                  <span className="font-bold uppercase tracking-widest text-sm">{dashboard.tier} — {dashboard.commissionPct}% commission</span>
-                </div>
-                {dashboard.nextTierAt
-                  ? <span className="text-xs text-muted-foreground font-mono">{dashboard.activeReferrals} / {dashboard.nextTierAt} active refs for next tier</span>
-                  : <span className="text-xs font-mono font-bold" style={{ color: tierColor }}>MAX TIER 🏆</span>
-                }
-              </div>
-              <div className="h-2.5 bg-secondary rounded-full overflow-hidden">
-                <div className="h-full rounded-full transition-all duration-700"
-                  style={{ width: `${tierProgress}%`, backgroundColor: tierColor }} />
-              </div>
-              {dashboard.nextTierAt && (
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  {dashboard.nextTierAt - dashboard.activeReferrals} more active referrals to unlock the next tier
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Referral link */}
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="font-display uppercase tracking-widest text-base">Your Referral Link</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-2">
-                <div className="flex-1 bg-secondary/80 rounded-lg px-4 py-3 font-mono text-sm border border-border/50 break-all text-muted-foreground select-all">
-                  {dashboard.referralLink}
-                </div>
-                <button onClick={copyLink}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-bold text-sm uppercase tracking-widest hover:bg-primary/90 transition-colors whitespace-nowrap">
-                  {copied ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Share this link. Every player who signs up and deposits earns you <strong className="text-primary">{dashboard.commissionPct}%</strong> monthly commission.
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Quick group breakdown */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {(["Bronze", "Silver", "Gold", "Platinum"] as const).map(group => {
-              const groupColor = GROUP_COLORS[group];
-              const isCurrentGroup = dashboard.group === group;
-              return (
-                <div key={group} className={`rounded-xl border p-3 transition-colors ${isCurrentGroup ? "border-opacity-60" : "border-border/30 bg-secondary/20"}`}
-                  style={isCurrentGroup ? { borderColor: groupColor + "50", background: groupColor + "08" } : {}}>
-                  <div className="text-lg mb-1">
-                    {group === "Bronze" ? "🥉" : group === "Silver" ? "🥈" : group === "Gold" ? "🥇" : "💎"}
-                  </div>
-                  <div className="font-bold text-xs uppercase tracking-widest mb-0.5" style={{ color: isCurrentGroup ? groupColor : undefined }}>{group}</div>
-                  <div className="text-[10px] text-muted-foreground">3 tiers · up to {group === "Bronze" ? "5" : group === "Silver" ? "8" : group === "Gold" ? "15" : "30"}%</div>
-                  {isCurrentGroup && <div className="mt-1.5 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: groupColor }} />}
-                </div>
-              );
-            })}
-          </div>
-        </TabsContent>
-
-        {/* ─── Referrals Tab ─── */}
-        <TabsContent value="referrals" className="space-y-4 mt-4">
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="font-display uppercase tracking-widest text-base flex items-center justify-between">
-                <span>Your Referrals ({referrals.length})</span>
-                <button onClick={fetchDashboard} className="text-muted-foreground hover:text-foreground transition-colors">
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {referrals.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground font-mono text-sm border border-dashed border-border rounded-lg">
-                  <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p>No referrals yet.</p>
-                  <p className="text-xs mt-1 opacity-60">Share your referral link to start earning.</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {referrals.map(r => (
-                    <div key={r.id} className="flex items-center justify-between p-3 rounded-lg border border-border/40 bg-secondary/30 hover:bg-secondary/50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-secondary border border-border flex items-center justify-center font-black text-sm text-primary">
-                          {r.username.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="font-mono font-bold text-sm">{r.username}</div>
-                          <div className="text-xs text-muted-foreground">{new Date(r.joinedAt).toLocaleDateString()}</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-bold uppercase ${r.status === "active" ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"}`}>
-                          {r.status}
-                        </span>
-                        <span className="font-mono font-bold text-green-400 text-sm">+{formatCurrency(r.earned)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ─── Earnings Tab ─── */}
-        <TabsContent value="earnings" className="space-y-4 mt-4">
-          <div className="grid grid-cols-2 gap-3 mb-2">
-            <Card className="bg-card border-border">
-              <CardContent className="pt-4 pb-4">
-                <div className="text-xs text-muted-foreground uppercase tracking-wider font-bold mb-1">Total Earned</div>
-                <div className="font-mono font-black text-2xl text-emerald-400">{formatCurrency(dashboard.totalCommissionEarned)}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">lifetime commissions</div>
-              </CardContent>
-            </Card>
-            {isCreator && (
-              <Card className="bg-card border-border">
-                <CardContent className="pt-4 pb-4">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider font-bold mb-1">Promo Balance</div>
-                  <div className="font-mono font-black text-2xl" style={{ color: tierColor }}>{formatCurrency(dashboard.promoBalance)}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">non-withdrawable credits</div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="font-display uppercase tracking-widest text-base">Transaction History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {dashboard.bankHistory.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground font-mono text-sm border border-dashed border-border rounded-lg">
-                  <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  No transactions yet.
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {dashboard.bankHistory.map(h => (
-                    <div key={h.id} className="flex items-center justify-between p-3 rounded-lg border border-border/40 bg-secondary/30">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-full ${h.type === "promo_tip" ? "bg-blue-500/10 text-blue-400" : "bg-green-500/10 text-green-500"}`}>
-                          {h.type === "promo_tip" ? <Gift className="w-4 h-4" /> : <ArrowDownLeft className="w-4 h-4" />}
-                        </div>
-                        <div>
-                          <div className="font-bold text-sm capitalize">{h.type.replace(/_/g, " ")}</div>
-                          <div className="text-xs text-muted-foreground">{h.description}</div>
-                          <div className="text-xs text-muted-foreground/50">{new Date(h.createdAt).toLocaleString()}</div>
-                        </div>
-                      </div>
-                      <span className={`font-mono font-bold ${h.type === "promo_tip" ? "text-blue-400" : "text-green-400"}`}>
-                        {h.type === "promo_tip" ? "-" : "+"}{formatCurrency(h.amount)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ─── All Tiers Tab ─── */}
-        <TabsContent value="tiers" className="mt-4">
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="font-display uppercase tracking-widest text-base">Affiliate Tier Ladder</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">Commission is paid monthly based on your referred users' net casino activity.</p>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1.5">
-                {TIER_LADDER.map((t, i) => {
-                  const isCurrent = t.tier === dashboard.tier && t.group === dashboard.group;
-                  const isPassed = currentTierIdx > i;
-                  const isLocked = t.group === "Private";
-
-                  return (
-                    <div key={`${t.tier}-${i}`}
-                      className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
-                        isCurrent
-                          ? "border-opacity-70 shadow-sm"
-                          : isPassed
-                            ? "border-border/20 bg-secondary/10 opacity-60"
-                            : isLocked
-                              ? "border-border/20 bg-secondary/10"
-                              : "border-border/30 bg-secondary/20"
-                      }`}
-                      style={isCurrent ? { borderColor: t.color + "60", background: t.color + "0a" } : {}}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                          style={{ backgroundColor: t.color + "15", border: `1px solid ${t.color}30` }}>
-                          {t.emoji}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm" style={isCurrent ? { color: t.color } : {}}>
-                              {t.tier}
-                            </span>
-                            <span className="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded"
-                              style={{ color: GROUP_COLORS[t.group], backgroundColor: GROUP_COLORS[t.group] + "15" }}>
-                              {t.group}
-                            </span>
-                            {isCurrent && (
-                              <span className="text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-primary/15 text-primary animate-pulse">
-                                YOU
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {isLocked ? "Invite only · Contract rate" : `${t.at !== null ? `${t.at}+ active refs` : "Max tier"}`}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        {isLocked ? (
-                          <div className="flex items-center gap-1.5 justify-end">
-                            <Lock className="w-3.5 h-3.5 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground font-bold">Private</span>
-                          </div>
-                        ) : (
-                          <div>
-                            <div className="font-mono font-black text-base" style={{ color: t.color }}>{t.pct}%</div>
-                            <div className="text-[10px] text-muted-foreground">monthly</div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-5 p-4 rounded-xl bg-secondary/40 border border-border/30">
-                <div className="flex items-start gap-2">
-                  <Shield className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                  <div className="text-xs text-muted-foreground leading-relaxed">
-                    <strong className="text-foreground">Private tier</strong> is invite-only and contract-based.
-                    Commissions are negotiated individually based on audience size and platform contribution.
-                    Interested in joining? Contact us via Discord or <strong className="text-foreground">support@dgcarcade.com</strong>.
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ─── Messages Tab ─── */}
-        <TabsContent value="messages" className="mt-4">
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="font-display uppercase tracking-widest text-base flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4" /> Messages
-                  {unreadCount > 0 && (
-                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-black">{unreadCount} new</span>
-                  )}
-                </CardTitle>
-                <button onClick={fetchMessages} className="text-muted-foreground hover:text-foreground transition-colors">
-                  <RefreshCw className={`w-4 h-4 ${msgLoading ? "animate-spin" : ""}`} />
-                </button>
+                <div className="text-xs text-muted-foreground font-mono">Sorted by: Date Created</div>
+                <Button size="sm" className="gap-1.5 font-bold" onClick={() => setCreateCampaignOpen(true)}>
+                  <Plus className="w-3.5 h-3.5" /> Create Campaign
+                </Button>
               </div>
-            </CardHeader>
-            <CardContent>
-              {messages.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground font-mono text-sm border border-dashed border-border rounded-lg">
-                  <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  No messages yet. Platform updates will appear here.
+
+              <div className="space-y-2">
+                {allCampaigns.map(c => (
+                  <div key={c.id} className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-secondary/30 hover:bg-secondary/50 transition-colors">
+                    <div>
+                      <div className="font-bold text-sm">{c.name} <span className="text-muted-foreground font-mono font-normal text-xs">({c.id})</span></div>
+                      <div className="text-xs text-muted-foreground font-mono mt-0.5">
+                        {dashboard.referralLink}{c.id !== dashboard.referralCode ? `&c=${c.id}` : ""}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <div className="text-xs text-muted-foreground">Date Created</div>
+                        <div className="text-xs font-mono">{c.createdAt === new Date(0).toISOString() ? "—" : new Date(c.createdAt).toLocaleDateString()}</div>
+                      </div>
+                      <button onClick={() => { navigator.clipboard.writeText(`${dashboard.referralLink}${c.id !== dashboard.referralCode ? `&c=${c.id}` : ""}`); toast({ title: "Copied!" }); }}
+                        className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Commission ── */}
+          {section === "commission" && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="font-bold text-base mb-1">Commission</h2>
+                <p className="text-sm text-muted-foreground">Track your earnings and request your monthly payout below.</p>
+              </div>
+
+              {/* Countdown + withdraw button */}
+              <div className="p-5 rounded-2xl border border-border/50 bg-secondary/30 space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-bold text-sm">Next Payout Window</span>
+                  </div>
+                  <div className="font-mono text-sm text-muted-foreground">
+                    {nextPayout.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                  </div>
+                </div>
+
+                {!countdown.expired ? (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {[
+                      { v: countdown.d, l: "Days" }, { v: countdown.h, l: "Hrs" },
+                      { v: countdown.m, l: "Min" }, { v: countdown.s, l: "Sec" },
+                    ].map(({ v, l }) => (
+                      <div key={l} className="flex flex-col items-center bg-background/60 rounded-xl px-4 py-2 border border-border/50 min-w-[58px]">
+                        <span className="font-mono font-black text-2xl">{String(v).padStart(2, "0")}</span>
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{l}</span>
+                      </div>
+                    ))}
+                    <div className="flex-1 ml-2">
+                      <button disabled
+                        className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-secondary border border-border/50 text-muted-foreground font-bold text-sm uppercase tracking-widest cursor-not-allowed opacity-60 flex items-center gap-2">
+                        <Lock className="w-3.5 h-3.5" /> Withdraw Commission
+                      </button>
+                      <p className="text-[10px] text-muted-foreground mt-1.5">Available on the 1st of next month</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 font-mono font-bold text-sm">
+                      <CheckCircle2 className="w-4 h-4" /> Payout Ready
+                    </div>
+                    <button onClick={requestPayout} disabled={payoutLoading || !dashboard.promoBalance}
+                      className="px-6 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-bold text-sm uppercase tracking-widest transition-colors flex items-center gap-2">
+                      <ArrowUpRight className="w-4 h-4" />
+                      {payoutLoading ? "Processing…" : `Withdraw ${formatCurrency(dashboard.promoBalance)}`}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Commission table */}
+              <div className="rounded-xl border border-border/50 overflow-hidden">
+                <div className="grid grid-cols-4 gap-0 text-xs font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-4 py-2.5 border-b border-border/50">
+                  <span>Coin</span>
+                  <span>Available</span>
+                  <span>Redeemed</span>
+                  <span>Lifetime</span>
+                </div>
+                <div className="divide-y divide-border/50">
+                  {[{ label: "USD", symbol: "💵" }].map(c => (
+                    <div key={c.label} className="grid grid-cols-4 gap-0 px-4 py-3 text-sm hover:bg-secondary/20 transition-colors">
+                      <span className="font-mono font-bold flex items-center gap-1.5">{c.symbol} {c.label}</span>
+                      <span className="font-mono font-bold text-green-400">{formatCurrency(dashboard.promoBalance)}</span>
+                      <span className="font-mono text-muted-foreground">—</span>
+                      <span className="font-mono">{formatCurrency(dashboard.totalCommissionEarned)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Wallet address setup */}
+              <div className="p-5 rounded-2xl border border-border/50 bg-secondary/20 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-primary" />
+                  <span className="font-bold text-sm">Payout Wallet</span>
+                  <span className="text-xs text-muted-foreground">— where your commission gets sent</span>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground block mb-1.5">Select Coin</label>
+                    <select value={selectedCoin} onChange={e => setSelectedCoin(e.target.value)}
+                      className="w-full rounded-lg border border-border/60 bg-secondary px-3 py-2.5 text-sm focus:outline-none focus:border-primary/50">
+                      {COINS.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground block mb-1.5">Wallet Address</label>
+                    <Input
+                      value={walletAddress}
+                      onChange={e => setWalletAddress(e.target.value)}
+                      placeholder={`Your ${selectedCoin} address…`}
+                      className="bg-secondary border-border/60 font-mono text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <div
+                      onClick={() => setAutoSend(v => !v)}
+                      className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer ${autoSend ? "bg-primary" : "bg-secondary border border-border"}`}>
+                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${autoSend ? "left-5" : "left-0.5"}`} />
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium">Auto-send on payout date</span>
+                      <p className="text-xs text-muted-foreground">Automatically withdraw when the monthly window opens</p>
+                    </div>
+                  </label>
+                  <button onClick={saveWallet}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs uppercase tracking-widest transition-colors">
+                    {walletSaved ? <CheckCheck className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                    {walletSaved ? "Saved!" : "Save Wallet"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Referred Users ── */}
+          {section === "referred" && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="font-bold text-base mb-1">Referred Users</h2>
+                <p className="text-sm text-muted-foreground">Track all the players who joined through your referral link.</p>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: "Total Referred", value: String(dashboard.activeReferrals + dashboard.pendingReferrals) },
+                  { label: "Active Players", value: String(dashboard.activeReferrals) },
+                  { label: "Pending", value: String(dashboard.pendingReferrals) },
+                  { label: "Commission Earned", value: formatCurrency(dashboard.totalCommissionEarned) },
+                ].map(s => (
+                  <div key={s.label} className="p-3 rounded-xl border border-border/50 bg-secondary/30">
+                    <div className="font-mono font-black text-base">{s.value}</div>
+                    <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {referrals.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground border border-dashed border-border/50 rounded-2xl">
+                  <BarChart3 className="w-12 h-12 mb-3 opacity-30" />
+                  <p className="font-mono text-sm">No referred users yet.</p>
+                  <p className="text-xs mt-1">Share your link to start building your network.</p>
                 </div>
               ) : (
-                <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
-                  {messages.map(msg => {
-                    const isOwnerMsg = msg.senderRole === "owner";
-                    const isBroadcast = msg.recipientType !== "direct";
-                    return (
-                      <div key={msg.id} className={`rounded-xl border p-4 transition-colors ${!msg.read ? "border-primary/30 bg-primary/5" : "border-border/40 bg-secondary/20"}`}>
-                        <div className="flex items-start justify-between gap-3 mb-2">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm ${isOwnerMsg ? "bg-yellow-500/20 text-yellow-400" : "bg-purple-500/20 text-purple-400"}`}>
-                              {msg.senderUsername.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <span className={`font-bold text-sm ${isOwnerMsg ? "text-yellow-400" : "text-purple-400"}`}>
-                                {msg.senderUsername}
-                              </span>
-                              <span className={`ml-2 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${isOwnerMsg ? "bg-yellow-500/10 text-yellow-500" : "bg-purple-500/10 text-purple-400"}`}>
-                                {isOwnerMsg ? "Owner" : "Admin"}
-                              </span>
-                              {isBroadcast && (
-                                <span className="ml-1.5 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
-                                  {msg.recipientType === "broadcast_all" ? "All" : "All Creators"}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {!msg.read && <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />}
-                            <span className="text-[11px] text-muted-foreground font-mono whitespace-nowrap">
-                              {new Date(msg.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                            </span>
-                          </div>
-                        </div>
-                        <p className="text-sm leading-relaxed">{msg.message}</p>
+                <div className="rounded-xl border border-border/50 overflow-hidden">
+                  <div className="grid grid-cols-4 text-xs font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-4 py-2.5 border-b border-border/50">
+                    <span className="col-span-2">Player</span><span>Status</span><span>Joined</span>
+                  </div>
+                  <div className="divide-y divide-border/30">
+                    {referrals.map(r => (
+                      <div key={r.id} className="grid grid-cols-4 px-4 py-3 text-sm hover:bg-secondary/20 transition-colors">
+                        <span className="col-span-2 font-mono font-bold">@{r.username}</span>
+                        <span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-bold uppercase ${r.status === "active" ? "bg-green-500/15 text-green-400" : "bg-yellow-500/15 text-yellow-400"}`}>
+                            {r.status}
+                          </span>
+                        </span>
+                        <span className="text-xs text-muted-foreground font-mono">{new Date(r.joinedAt).toLocaleDateString()}</span>
                       </div>
-                    );
-                  })}
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Messages ── */}
+          {section === "messages" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-base">Messages</h2>
+                <button onClick={onFetchMessages} className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                  <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                </button>
+              </div>
+              {messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground border border-dashed border-border/50 rounded-2xl">
+                  <MessageSquare className="w-12 h-12 mb-3 opacity-30" />
+                  <p className="font-mono text-sm">No messages yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {messages.map(m => (
+                    <div key={m.id} className={`p-4 rounded-xl border transition-colors ${m.read ? "border-border/40 bg-secondary/20" : "border-primary/30 bg-primary/5"}`}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="font-bold text-sm">@{m.senderUsername}
+                          <span className="ml-1.5 text-xs text-muted-foreground font-normal">{m.senderRole}</span>
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-mono">{new Date(m.createdAt).toLocaleString()}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground leading-relaxed">{m.message}</p>
+                      {!m.read && <div className="mt-2 w-2 h-2 rounded-full bg-primary animate-pulse" />}
+                    </div>
+                  ))}
                   <div ref={messagesBottomRef} />
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
+          )}
 
-        {/* ─── Promo Tools Tab (creators only) ─── */}
-        {isCreator && (
-          <TabsContent value="promo" className="space-y-4 mt-4">
-            <Card className="bg-card border-border">
-              <CardHeader className="pb-3">
-                <CardTitle className="font-display uppercase tracking-widest text-base flex items-center gap-2">
-                  <Gift className="w-4 h-4 text-primary" /> Send Promo Tip
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Send promo credits from your balance to any player — perfect for stream giveaways and community events.
-                  Available: <strong className="text-primary">{formatCurrency(dashboard.promoBalance)}</strong>
-                </p>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Recipient Username</label>
-                    <input type="text" value={tipTo} onChange={e => setTipTo(e.target.value)}
-                      placeholder="@username"
-                      className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors" />
-                  </div>
-                  <div>
-                    <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Amount</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
-                      <input type="number" min={1} value={tipAmt} onChange={e => setTipAmt(Number(e.target.value))}
-                        className="w-full rounded-md border border-border bg-secondary pl-8 pr-3 py-2 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors" />
-                    </div>
-                    <div className="flex gap-1 mt-2">
-                      {[5, 10, 25, 50, 100].map(v => (
-                        <button key={v} type="button" onClick={() => setTipAmt(v)}
-                          className="flex-1 text-xs py-1.5 rounded bg-secondary border border-border font-mono hover:border-primary/40 transition-colors">
-                          ${v}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <button onClick={sendTip}
-                    disabled={tipLoading || !tipTo.trim() || tipAmt <= 0 || tipAmt > dashboard.promoBalance}
-                    className="w-full h-10 rounded-md bg-primary text-primary-foreground font-bold uppercase tracking-widest text-sm disabled:opacity-50 hover:bg-primary/90 transition-colors flex items-center justify-center gap-2">
-                    <Gift className="w-4 h-4" />
-                    {tipLoading ? "Sending…" : `Send ${formatCurrency(tipAmt)}`}
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
-      </Tabs>
-
-      {/* ── Link Account Modal ── */}
-      {linkModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setLinkModalOpen(false)}>
-          <div className="bg-card border border-border/60 rounded-2xl p-7 w-full max-w-sm shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-start justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center">
-                  <Link2 className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <h2 className="font-display font-black uppercase tracking-widest text-lg">Link Personal Account</h2>
-                  <p className="text-xs text-muted-foreground">Enter your regular account credentials</p>
-                </div>
+          {/* ── FAQ ── */}
+          {section === "faq" && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="font-bold text-base mb-1">FAQ</h2>
+                <p className="text-sm text-muted-foreground">Everything you need to know about the DGC Arcade Affiliate Program.</p>
               </div>
-              <button onClick={() => setLinkModalOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors">
-                <X className="w-5 h-5" />
+
+              <div className="flex gap-1 border-b border-border/50 pb-0">
+                {(["general", "affiliate", "earnings"] as const).map(t => (
+                  <button key={t} onClick={() => setFaqTab(t)}
+                    className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border-b-2 -mb-px capitalize ${faqTab === t ? "border-primary text-primary bg-primary/5" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+                    {t === "affiliate" ? "Affiliate Program" : t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="divide-y divide-border/30 bg-secondary/20 rounded-xl border border-border/50 px-5">
+                {(faqTab === "general" ? GENERAL_FAQ : faqTab === "affiliate" ? AFFILIATE_FAQ : EARNINGS_FAQ).map(item => (
+                  <FaqItem key={item.q} q={item.q} a={item.a} />
+                ))}
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Create Campaign Modal */}
+      {createCampaignOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setCreateCampaignOpen(false)}>
+          <div className="bg-card border border-border/60 rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-display font-black uppercase tracking-widest text-base flex items-center gap-2">
+                <Plus className="w-4 h-4" /> Create Campaign
+              </h3>
+              <button onClick={() => setCreateCampaignOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-4 h-4" />
               </button>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">Username</label>
-                <input type="text" value={linkUsername} onChange={e => setLinkUsername(e.target.value)}
-                  placeholder="your personal account username"
-                  className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors" />
+                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground block mb-1.5">Campaign Name *</label>
+                <Input value={newCampaignName} onChange={e => setNewCampaignName(e.target.value)} placeholder="e.g. Twitch Stream, Discord Post" className="bg-secondary border-border/60" />
               </div>
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">Password</label>
-                <input type="password" value={linkPassword} onChange={e => setLinkPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"
-                  onKeyDown={e => { if (e.key === "Enter") linkAccount(); }} />
+                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground block mb-1.5">Campaign ID (auto-generated)</label>
+                <div className="px-3 py-2 rounded-lg bg-secondary border border-border/40 font-mono text-xs text-muted-foreground">Auto-assigned on create</div>
               </div>
-              <div className="flex gap-3 pt-1">
-                <button onClick={() => setLinkModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-border/50 text-sm font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
-                  Cancel
-                </button>
-                <button onClick={linkAccount}
-                  disabled={linkLoading || !linkUsername.trim() || !linkPassword}
-                  className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary/90 disabled:opacity-50 text-sm font-bold uppercase tracking-wider text-primary-foreground transition-colors">
-                  {linkLoading ? "Linking…" : "Link Account"}
-                </button>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground block mb-1.5">Referral Link Preview</label>
+                <div className="px-3 py-2 rounded-lg bg-secondary border border-border/40 font-mono text-xs text-muted-foreground break-all">{dashboard.referralLink}&c=XXXX</div>
               </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <Button variant="outline" className="flex-1" onClick={() => setCreateCampaignOpen(false)}>Cancel</Button>
+              <Button className="flex-1 font-bold" onClick={createCampaign} disabled={!newCampaignName.trim()}>Create Campaign</Button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RegularHub({
+  dashboard, referrals, onRefresh, toast,
+}: {
+  dashboard: DashboardData;
+  referrals: Referral[];
+  onRefresh: () => void;
+  toast: ReturnType<typeof useToast>["toast"];
+}) {
+  const [copied, setCopied] = useState(false);
+  const [faqOpen, setFaqOpen] = useState(false);
+  const [autoDeployEnabled, setAutoDeployEnabled] = useState(() => localStorage.getItem("dgc_autodeploy") !== "false");
+  const [deployLoading, setDeployLoading] = useState(false);
+
+  const nextPayout = getNextPayoutDate();
+  const countdown = useCountdown(nextPayout);
+
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(dashboard.referralLink);
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
+    toast({ title: "Copied!", description: "Your referral link is in your clipboard." });
+  };
+
+  const deployToWallet = async () => {
+    setDeployLoading(true);
+    try {
+      const res = await fetch("/api/creator/request-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ coin: "platform", address: "wallet", amount: dashboard.totalCommissionEarned }),
+      });
+      const d = await res.json();
+      if (res.ok) {
+        toast({ title: "Deployed!", description: "Commission sent to your DGC Arcade wallet." });
+        onRefresh();
+      } else {
+        toast({ title: "Error", description: d.error ?? "Unable to deploy right now.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Network error", variant: "destructive" });
+    } finally { setDeployLoading(false); }
+  };
+
+  const toggleAutoDeploy = () => {
+    const next = !autoDeployEnabled;
+    setAutoDeployEnabled(next);
+    localStorage.setItem("dgc_autodeploy", String(next));
+    toast({ title: next ? "Auto-Deploy On" : "Auto-Deploy Off", description: next ? "Commission will auto-deploy to your wallet on payout date." : "You'll need to manually deploy each month." });
+  };
+
+  const tierColor = dashboard.color;
+
+  return (
+    <div className="max-w-lg mx-auto pb-16 space-y-0">
+      <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
+
+        {/* Affiliate Code */}
+        <div className="p-5 border-b border-border/40">
+          <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Affiliate Code</div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 bg-secondary/60 rounded-lg px-3 py-2 font-mono text-sm border border-border/40 text-muted-foreground truncate">
+              {dashboard.referralLink}
+            </div>
+            <button onClick={copyLink}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-secondary border border-border/50 hover:border-primary/40 font-bold text-xs uppercase tracking-wider transition-colors whitespace-nowrap text-muted-foreground hover:text-foreground">
+              <Copy className="w-3.5 h-3.5" /> Copy
+            </button>
+          </div>
+        </div>
+
+        {/* Tier badge */}
+        <div className="px-5 pt-3 pb-0 flex items-center gap-2">
+          <TierBadge tier={dashboard.tier} color={tierColor} emoji={dashboard.emoji} />
+          <span className="text-xs text-muted-foreground">· <strong style={{ color: tierColor }}>{dashboard.commissionPct}%</strong> commission rate</span>
+        </div>
+
+        {/* Earnings */}
+        <div className="p-5 border-b border-border/40 space-y-3">
+          <div className="text-sm font-bold">Earnings</div>
+
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Clock className="w-3.5 h-3.5" /> Next Payout
+            </div>
+            <div className="flex items-center gap-2 font-mono">
+              <span className="text-muted-foreground text-xs">
+                {nextPayout.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </span>
+              {!countdown.expired ? (
+                <span className="text-foreground font-bold">
+                  {String(countdown.d).padStart(2, "0")}d {String(countdown.h).padStart(2, "0")}:{String(countdown.m).padStart(2, "0")}:{String(countdown.s).padStart(2, "0")}
+                </span>
+              ) : (
+                <span className="text-green-400 font-bold">Ready!</span>
+              )}
+            </div>
+          </div>
+
+          <div className="h-px bg-border/40 border-dashed border-b border-border/30" />
+          <p className="text-xs text-muted-foreground">
+            Learn how payouts are calculated <button onClick={() => setFaqOpen(true)} className="text-primary underline underline-offset-2">here</button>.
+          </p>
+
+          <div className="flex items-center gap-3 flex-wrap pt-1">
+            {/* Auto deploy toggle */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <div onClick={toggleAutoDeploy}
+                className={`w-9 h-4.5 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${autoDeployEnabled ? "bg-primary" : "bg-secondary border border-border"}`}
+                style={{ width: 36, height: 20 }}>
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${autoDeployEnabled ? "left-4" : "left-0.5"}`} />
+              </div>
+              <span className="text-xs font-medium text-muted-foreground">Auto Deploy</span>
+            </label>
+
+            <button
+              onClick={deployToWallet}
+              disabled={deployLoading || (!countdown.expired && dashboard.totalCommissionEarned === 0)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-colors ${countdown.expired || dashboard.totalCommissionEarned > 0 ? "bg-green-600 hover:bg-green-500 text-white" : "bg-secondary border border-border/50 text-muted-foreground cursor-not-allowed opacity-60"}`}>
+              <Zap className="w-3.5 h-3.5" />
+              {deployLoading ? "Deploying…" : "Deploy to Wallet"}
+            </button>
+          </div>
+
+          {dashboard.totalCommissionEarned > 0 && (
+            <div className="flex items-center justify-between bg-primary/5 rounded-lg p-3 border border-primary/20 mt-1">
+              <div className="flex items-center gap-2 text-xs font-bold"><Coins className="w-3.5 h-3.5 text-primary" /> Available Commission</div>
+              <div className="font-mono font-black text-primary text-sm">{formatCurrency(dashboard.totalCommissionEarned)}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Referred Users */}
+        <div className="p-5 border-b border-border/40">
+          <div className="text-sm font-bold mb-3">Referred Users</div>
+          {referrals.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+              <BarChart3 className="w-10 h-10 mb-2 opacity-20" />
+              <p className="text-xs font-mono">You don't have any referred users.</p>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border/40 overflow-hidden">
+              <div className="grid grid-cols-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-3 py-2 border-b border-border/40">
+                <span>Player</span><span className="text-right">Joined</span>
+              </div>
+              <div className="divide-y divide-border/30 max-h-48 overflow-y-auto">
+                {referrals.map(r => (
+                  <div key={r.id} className="grid grid-cols-2 px-3 py-2.5 text-sm hover:bg-secondary/20 transition-colors">
+                    <span className="font-mono text-xs font-bold">@{r.username}</span>
+                    <span className="text-right text-xs text-muted-foreground font-mono">{new Date(r.joinedAt).toLocaleDateString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* FAQ */}
+        <div className="p-5">
+          <button onClick={() => setFaqOpen(v => !v)} className="w-full flex items-center justify-between text-sm font-bold hover:text-primary transition-colors">
+            <span>FAQ</span>
+            {faqOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+          {faqOpen && (
+            <div className="mt-3 divide-y divide-border/30">
+              {GENERAL_FAQ.map(item => <FaqItem key={item.q} q={item.q} a={item.a} />)}
+              {EARNINGS_FAQ.map(item => <FaqItem key={item.q} q={item.q} a={item.a} />)}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

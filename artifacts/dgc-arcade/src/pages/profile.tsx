@@ -582,52 +582,70 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* Referral Section */}
+      {/* Referral Program Widget */}
       {refData && (
-        <Card className="bg-card border-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2">
-              <Users className="w-5 h-5 text-primary" />
-              Referral Program
-              <span className="ml-2 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-bold" style={{ color: refData.color, backgroundColor: refData.color + '18', border: '1px solid ' + refData.color + '40' }}>
+        <div className="rounded-2xl border overflow-hidden relative"
+          style={{ borderColor: refData.color + "30", background: `linear-gradient(135deg, ${refData.color}08 0%, transparent 60%)` }}>
+          <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+            style={{ backgroundImage: `radial-gradient(circle, ${refData.color} 1px, transparent 1px)`, backgroundSize: "28px 28px" }} />
+          <div className="relative p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-muted-foreground" />
+                <span className="font-display font-black uppercase tracking-widest text-sm">Referral Program</span>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full font-bold uppercase tracking-widest border px-2.5 py-0.5 text-xs"
+                style={{ borderColor: refData.color + "60", color: refData.color, backgroundColor: refData.color + "18" }}>
                 {refData.emoji} {refData.tier}
               </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-secondary/50 rounded-lg p-3 text-center border border-border/50">
-                <div className="font-mono font-black text-lg text-green-400">{refData.activeReferrals}</div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">Active</div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-xl border border-border/40 bg-background/40 backdrop-blur-sm p-3 text-center">
+                <div className="font-mono font-black text-xl text-green-400">{refData.activeReferrals}</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5 font-bold">Active</div>
               </div>
-              <div className="bg-secondary/50 rounded-lg p-3 text-center border border-border/50">
-                <div className="font-mono font-black text-lg text-yellow-400">{refData.pendingReferrals}</div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">Pending</div>
+              <div className="rounded-xl border border-border/40 bg-background/40 backdrop-blur-sm p-3 text-center">
+                <div className="font-mono font-black text-xl text-yellow-400">{refData.pendingReferrals}</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5 font-bold">Pending</div>
               </div>
-              <div className="bg-secondary/50 rounded-lg p-3 text-center border border-border/50">
-                <div className="font-mono font-black text-lg text-primary">{refData.commissionPct}%</div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">Commission</div>
+              <div className="rounded-xl border border-border/40 bg-background/40 backdrop-blur-sm p-3 text-center">
+                <div className="font-mono font-black text-xl" style={{ color: refData.color }}>{refData.commissionPct}%</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5 font-bold">Commission</div>
               </div>
             </div>
+
             <div>
-              <div className="text-xs uppercase tracking-wider font-bold text-muted-foreground mb-1.5">Your Referral Link</div>
+              <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-1.5">Your Referral Link</div>
               <div className="flex gap-2">
-                <div className="flex-1 bg-secondary/80 rounded-lg px-3 py-2 font-mono text-xs border border-border/50 break-all text-muted-foreground">{refData.link}</div>
-                <button onClick={copyRefLink} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground font-bold text-xs uppercase hover:bg-primary/90 transition-colors whitespace-nowrap">
+                <div className="flex-1 bg-background/50 backdrop-blur-sm rounded-xl px-3 py-2.5 font-mono text-xs border border-border/40 text-muted-foreground truncate select-all">
+                  {refData.link}
+                </div>
+                <button onClick={copyRefLink}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all whitespace-nowrap"
+                  style={{ backgroundColor: refData.color + "20", borderWidth: 1, borderStyle: "solid", borderColor: refData.color + "50", color: refData.color }}>
                   {refCopied ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  {refCopied ? 'Copied!' : 'Copy'}
+                  {refCopied ? "Copied!" : "Copy"}
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground mt-1.5">Earn <strong className="text-primary">{refData.commissionPct}%</strong> when a referred user deposits. <a href="/creator" className="text-primary hover:underline">Full creator dashboard →</a></p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Earn <strong style={{ color: refData.color }}>{refData.commissionPct}%</strong> when a referred user deposits.{" "}
+                <a href="/creator" className="font-bold hover:underline" style={{ color: refData.color }}>Full creator dashboard →</a>
+              </p>
             </div>
+
             {refData.totalEarned > 0 && (
-              <div className="flex items-center justify-between bg-primary/5 rounded-lg p-3 border border-primary/20">
-                <div className="flex items-center gap-2 text-sm font-bold"><TrendingUp className="w-4 h-4 text-primary" /> Total Commission Earned</div>
-                <div className="font-mono font-black text-primary">{formatCurrency(refData.totalEarned)}</div>
+              <div className="flex items-center justify-between rounded-xl p-3 border"
+                style={{ backgroundColor: refData.color + "08", borderColor: refData.color + "25" }}>
+                <div className="flex items-center gap-2 text-xs font-bold">
+                  <TrendingUp className="w-3.5 h-3.5" style={{ color: refData.color }} />
+                  Total Commission Earned
+                </div>
+                <div className="font-mono font-black text-sm" style={{ color: refData.color }}>{formatCurrency(refData.totalEarned)}</div>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {(user.role === "owner" || user.role === "admin") && (

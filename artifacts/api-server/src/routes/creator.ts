@@ -85,11 +85,14 @@ creatorRouter.get("/dashboard", async (req, res) => {
       referralCode: code,
       referralLink: siteUrl ? `${siteUrl}?ref=${code}` : `/?ref=${code}`,
       tier: tier.tier,
+      group: tier.group,
       color: tier.color,
       emoji: tier.emoji,
       commissionRate: tier.commissionRate,
       commissionPct: Math.round(tier.commissionRate * 100),
       nextTierAt: tier.nextTierAt,
+      description: tier.description,
+      isPrivate: tier.isPrivate,
       activeReferrals: activeCount,
       pendingReferrals: pendingCount,
       totalCommissionEarned: parseFloat(totalEarned ?? "0"),
@@ -107,6 +110,78 @@ creatorRouter.get("/dashboard", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// POST /api/creator/request-payout
+creatorRouter.post("/request-payout", async (req, res) => {
+  const { coin, address, amount } = req.body as { coin?: string; address?: string; amount?: number };
+  if (!coin || !address || !amount || amount <= 0) {
+    res.status(400).json({ error: "coin, address, and amount > 0 required" });
+    return;
+  }
+
+  try {
+    const [user] = await db.select({
+      id: usersTable.id,
+      username: usersTable.username,
+      accountType: usersTable.accountType,
+      role: usersTable.role,
+      promoBalance: usersTable.promoBalance,
+      balance: usersTable.balance,
+    }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+    const isSpecialtyCreator = user.accountType === "creator" || user.role === "creator";
+
+    if (isSpecialtyCreator) {
+      const available = parseFloat(user.promoBalance ?? "0");
+      if (available < amount) {
+        res.status(400).json({ error: "Insufficient commission balance" }); return;
+      }
+      if (coin === "platform") {
+        await db.transaction(async (txn) => {
+          await txn.update(usersTable).set({
+            promoBalance: String(available - amount),
+            balance: String(parseFloat(user.balance ?? "0") + amount),
+          }).where(eq(usersTable.id, user.id));
+          await txn.insert(creatorBankTxnsTable).values({
+            creatorId: user.id,
+            type: "commission_payout",
+            amount: String(amount),
+            description: `Commission payout → platform wallet`,
+          });
+        });
+      } else {
+        await db.insert(creatorBankTxnsTable).values({
+          creatorId: user.id,
+          type: "payout_request",
+          amount: String(amount),
+          description: `Payout request → ${coin} ${address}`,
+        });
+      }
+      res.json({ success: true, message: coin === "platform" ? "Deployed to your wallet." : "Payout request submitted. We will process it within 24h." });
+    } else {
+      const earned = await db.select({ total: sum(referralsTable.earnedAmount) })
+        .from(referralsTable)
+        .where(eq(referralsTable.referrerId, user.id));
+      const totalEarned = parseFloat(String(earned[0]?.total ?? "0"));
+      if (totalEarned <= 0) {
+        res.status(400).json({ error: "No commission earned yet" }); return;
+      }
+      await db.update(usersTable).set({
+        balance: String(parseFloat(user.balance ?? "0") + totalEarned),
+      }).where(eq(usersTable.id, user.id));
+      res.json({ success: true, message: `${formatCurrencyServer(totalEarned)} deployed to your wallet.` });
+    }
+  } catch (err) {
+    req.log.error({ err }, "Creator request-payout error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+function formatCurrencyServer(n: number) {
+  return "$" + n.toFixed(2);
+}
 
 // POST /api/creator/bank/tip
 creatorRouter.post("/bank/tip", async (req, res) => {
