@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, gamesTable } from "@workspace/db";
+import { db, gamesTable, slotThemesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 export const gamesRouter = Router();
@@ -25,6 +25,20 @@ gamesRouter.get("/", async (req, res) => {
     res.json(games.map(formatGame));
   } catch (err) {
     req.log.error({ err }, "List games error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/games/slot-themes — returns all active slot themes (public)
+gamesRouter.get("/slot-themes", async (req, res) => {
+  try {
+    const themes = await db
+      .select()
+      .from(slotThemesTable)
+      .where(eq(slotThemesTable.active, "true"));
+    res.json({ themes });
+  } catch (err) {
+    req.log.error({ err }, "List slot themes error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

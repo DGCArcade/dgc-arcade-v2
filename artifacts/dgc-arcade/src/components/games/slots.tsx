@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SlotMachine } from "./SlotMachine";
+import { SlotConfig } from "../../../../slot-engine/src/engine/types";
 
 interface SlotsProps {
   game: Game;
@@ -18,6 +19,20 @@ const SYMBOLS = ["CHERRY", "LEMON", "BELL", "SEVEN", "BAR", "DIAMOND", "WILD"];
 
 export function Slots({ game }: SlotsProps) {
   const { user, requireAuth } = useAuth();
+  const [activeThemeConfig, setActiveThemeConfig] = useState<SlotConfig | undefined>(undefined);
+
+  useEffect(() => {
+    fetch("/api/games/slot-themes")
+      .then((r) => r.json())
+      .then((data) => {
+        const themes: any[] = data.themes ?? [];
+        const first = themes[0];
+        if (first?.config) {
+          setActiveThemeConfig(first.config as SlotConfig);
+        }
+      })
+      .catch(() => {});
+  }, []);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const placeBet = usePlaceBet();
@@ -136,7 +151,7 @@ export function Slots({ game }: SlotsProps) {
     <div className="flex flex-col md:flex-row gap-8">
       {/* Game Area - Upgraded to Next-Gen Slot Engine */}
       <div className="flex-1 relative min-h-[600px]">
-        <SlotMachine />
+        <SlotMachine key={activeThemeConfig?.id ?? 'default'} config={activeThemeConfig} />
       </div>
       
       {/* Bet Controls */}

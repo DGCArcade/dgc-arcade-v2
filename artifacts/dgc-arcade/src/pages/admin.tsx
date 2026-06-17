@@ -53,6 +53,12 @@ import {
   GitBranch,
   Rocket,
   Star,
+  Layers,
+  ToggleLeft,
+  ToggleRight,
+  Pencil,
+  Save,
+  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
@@ -188,7 +194,7 @@ interface UserDetail {
   transactions: { id: number; type: string; amount: number; currency: string; status: string; address: string | null; createdAt: string }[];
 }
 
-type TabKey = "overview" | "users" | "transactions" | "bank" | "bank-dashboard" | "visitor-logs" | "tournaments" | "chat" | "ai" | "creators";
+type TabKey = "overview" | "users" | "transactions" | "bank" | "bank-dashboard" | "visitor-logs" | "tournaments" | "chat" | "ai" | "creators" | "slot-themes";
 
 export default function AdminDashboard() {
   const { user, isLoading } = useAuth();
@@ -300,6 +306,20 @@ export default function AdminDashboard() {
   const [depositNote, setDepositNote] = useState("");
   const [depositLoading, setDepositLoading] = useState(false);
 
+  // ── Slot Themes state ──
+  const [slotThemes, setSlotThemes] = useState<any[]>([]);
+  const [slotThemesLoading, setSlotThemesLoading] = useState(false);
+  const [editTheme, setEditTheme] = useState<any | null>(null);
+  const [editThemeName, setEditThemeName] = useState("");
+  const [editThemeConfig, setEditThemeConfig] = useState("");
+  const [editThemeAssets, setEditThemeAssets] = useState("");
+  const [editThemeError, setEditThemeError] = useState("");
+  const [editThemeSaving, setEditThemeSaving] = useState(false);
+  const [createThemeOpen, setCreateThemeOpen] = useState(false);
+  const [newTheme, setNewTheme] = useState({ slug: "", name: "", config: "{}", assets: "{}" });
+  const [createThemeError, setCreateThemeError] = useState("");
+  const [createThemeSaving, setCreateThemeSaving] = useState(false);
+
   const loadCreators = useCallback(async (month?: string) => {
     setCreatorsLoading(true);
     try {
@@ -309,6 +329,85 @@ export default function AdminDashboard() {
     } catch {}
     finally { setCreatorsLoading(false); }
   }, [creatorsMonth]);
+
+  const loadSlotThemes = useCallback(async () => {
+    setSlotThemesLoading(true);
+    try {
+      const data = await adminFetch("/slots/themes");
+      setSlotThemes(data.themes ?? []);
+    } catch (err: any) {
+      toast({ title: "Slot Themes error", description: err.message, variant: "destructive" });
+    } finally {
+      setSlotThemesLoading(false);
+    }
+  }, [toast]);
+
+  const handleToggleTheme = async (theme: any) => {
+    const newActive = theme.active === "true" ? "false" : "true";
+    try {
+      await adminFetch(`/slots/themes/${theme.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active: newActive === "true" }),
+      });
+      setSlotThemes((prev) => prev.map((t) => t.id === theme.id ? { ...t, active: newActive } : t));
+      toast({ title: newActive === "true" ? "Theme activated" : "Theme deactivated", description: theme.name });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const openEditTheme = (theme: any) => {
+    setEditTheme(theme);
+    setEditThemeName(theme.name);
+    setEditThemeConfig(JSON.stringify(theme.config, null, 2));
+    setEditThemeAssets(JSON.stringify(theme.assets, null, 2));
+    setEditThemeError("");
+  };
+
+  const handleSaveTheme = async () => {
+    if (!editTheme) return;
+    let config: any, assets: any;
+    try { config = JSON.parse(editThemeConfig); } catch { setEditThemeError("Config is not valid JSON"); return; }
+    try { assets = JSON.parse(editThemeAssets); } catch { setEditThemeError("Assets is not valid JSON"); return; }
+    setEditThemeSaving(true);
+    setEditThemeError("");
+    try {
+      const res = await adminFetch(`/slots/themes/${editTheme.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: editThemeName, config, assets }),
+      });
+      setSlotThemes((prev) => prev.map((t) => t.id === editTheme.id ? res.theme : t));
+      setEditTheme(null);
+      toast({ title: "Theme saved", description: editThemeName });
+    } catch (e: any) {
+      setEditThemeError(e.message);
+    } finally {
+      setEditThemeSaving(false);
+    }
+  };
+
+  const handleCreateTheme = async () => {
+    if (!newTheme.slug || !newTheme.name) { setCreateThemeError("Slug and name are required"); return; }
+    let config: any, assets: any;
+    try { config = JSON.parse(newTheme.config); } catch { setCreateThemeError("Config is not valid JSON"); return; }
+    try { assets = JSON.parse(newTheme.assets); } catch { setCreateThemeError("Assets is not valid JSON"); return; }
+    setCreateThemeSaving(true);
+    setCreateThemeError("");
+    try {
+      const res = await adminFetch("/slots/themes", {
+        method: "POST",
+        body: JSON.stringify({ slug: newTheme.slug, name: newTheme.name, config, assets }),
+      });
+      setSlotThemes((prev) => [res.theme, ...prev]);
+      setCreateThemeOpen(false);
+      setNewTheme({ slug: "", name: "", config: "{}", assets: "{}" });
+      toast({ title: "Theme created", description: newTheme.name });
+    } catch (e: any) {
+      setCreateThemeError(e.message);
+    } finally {
+      setCreateThemeSaving(false);
+    }
+  };
 
   const handleCreatorDeposit = async () => {
     if (!depositModal) return;
@@ -605,6 +704,10 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (activeTab === "creators" && isOwner) loadCreators();
   }, [activeTab, isOwner, loadCreators]);
+
+  useEffect(() => {
+    if (activeTab === "slot-themes" && isAdmin) loadSlotThemes();
+  }, [activeTab, isAdmin, loadSlotThemes]);
 
   const loadChat = useCallback(async (since?: number) => {
     try {
@@ -989,6 +1092,7 @@ export default function AdminDashboard() {
         { key: "transactions", label: "Transactions", icon: List },
         { key: "creators", label: "Creators", icon: Star },
         { key: "tournaments", label: "Tournaments", icon: Trophy },
+        { key: "slot-themes", label: "Slot Themes", icon: Layers },
         { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChatCount },
         { key: "ai", label: "Owner AI", icon: Bot },
       ]
@@ -1021,6 +1125,7 @@ export default function AdminDashboard() {
             if (activeTab === "bank") { loadBank(); loadFraudAlerts(); loadNeedsReview(); }
             if (activeTab === "tournaments") loadTournaments();
             if (activeTab === "chat") loadChat();
+            if (activeTab === "slot-themes") loadSlotThemes();
           }}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
@@ -3482,6 +3587,221 @@ export default function AdminDashboard() {
       {activeTab === "visitor-logs" && (
         <VisitorLogs />
       )}
+
+      {/* ── Slot Themes Tab ── */}
+      {activeTab === "slot-themes" && isOwner && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-display font-black uppercase tracking-widest text-xl flex items-center gap-2">
+                <Layers className="w-5 h-5 text-amber-400" /> Slot Themes
+              </h2>
+              <p className="text-muted-foreground text-sm mt-1">
+                Manage slot game themes — activate/deactivate, rename, or edit configs and assets.
+              </p>
+            </div>
+            <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-black font-bold" onClick={() => { setCreateThemeOpen(true); setCreateThemeError(""); setNewTheme({ slug: "", name: "", config: "{}", assets: "{}" }); }}>
+              <Plus className="w-4 h-4 mr-1" /> New Theme
+            </Button>
+          </div>
+
+          {slotThemesLoading ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground">
+              <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading themes…
+            </div>
+          ) : slotThemes.length === 0 ? (
+            <Card className="border-border/40 bg-card/50">
+              <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
+                <Layers className="w-10 h-10 opacity-30" />
+                <p className="text-sm">No slot themes in the database yet.</p>
+                <p className="text-xs opacity-60">Click "New Theme" to create the first one.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="rounded-lg border border-border/40 overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-border/40 bg-secondary/30">
+                    <TableHead className="font-bold uppercase tracking-wider text-xs">ID</TableHead>
+                    <TableHead className="font-bold uppercase tracking-wider text-xs">Slug</TableHead>
+                    <TableHead className="font-bold uppercase tracking-wider text-xs">Name</TableHead>
+                    <TableHead className="font-bold uppercase tracking-wider text-xs">Status</TableHead>
+                    <TableHead className="font-bold uppercase tracking-wider text-xs">Updated</TableHead>
+                    <TableHead className="font-bold uppercase tracking-wider text-xs text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {slotThemes.map((theme) => (
+                    <TableRow key={theme.id} className="border-border/40 hover:bg-secondary/20">
+                      <TableCell className="font-mono text-xs text-muted-foreground">{theme.id}</TableCell>
+                      <TableCell className="font-mono text-xs">{theme.slug}</TableCell>
+                      <TableCell className="font-semibold">{theme.name}</TableCell>
+                      <TableCell>
+                        <Badge
+                          className={theme.active === "true"
+                            ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                            : "bg-red-500/20 text-red-400 border border-red-500/30"}
+                        >
+                          {theme.active === "true" ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(theme.updatedAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs gap-1"
+                            onClick={() => handleToggleTheme(theme)}
+                          >
+                            {theme.active === "true"
+                              ? <><ToggleRight className="w-4 h-4 text-green-400" /> Deactivate</>
+                              : <><ToggleLeft className="w-4 h-4 text-muted-foreground" /> Activate</>
+                            }
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs gap-1 border-border/40"
+                            onClick={() => openEditTheme(theme)}
+                          >
+                            <Pencil className="w-3 h-3" /> Edit
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Edit Theme Dialog ── */}
+      <Dialog open={!!editTheme} onOpenChange={(open) => { if (!open) setEditTheme(null); }}>
+        <DialogContent className="bg-card border-border/60 max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-400">
+              <Pencil className="w-4 h-4" /> Edit Slot Theme
+            </DialogTitle>
+            <DialogDescription>
+              Update the name, config (JSON), or assets (JSON) for this theme.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Theme Name</label>
+              <Input
+                value={editThemeName}
+                onChange={(e) => setEditThemeName(e.target.value)}
+                placeholder="e.g. Lucky Slots"
+                className="bg-secondary/50 border-border/40"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Config (JSON)</label>
+              <textarea
+                value={editThemeConfig}
+                onChange={(e) => setEditThemeConfig(e.target.value)}
+                rows={10}
+                className="w-full bg-secondary/50 border border-border/40 rounded-md p-3 text-xs font-mono resize-y text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="{}"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Assets (JSON)</label>
+              <textarea
+                value={editThemeAssets}
+                onChange={(e) => setEditThemeAssets(e.target.value)}
+                rows={6}
+                className="w-full bg-secondary/50 border border-border/40 rounded-md p-3 text-xs font-mono resize-y text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="{}"
+              />
+            </div>
+            {editThemeError && (
+              <p className="text-destructive text-sm flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{editThemeError}</p>
+            )}
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 border-border/40" onClick={() => setEditTheme(null)}>
+                <X className="w-4 h-4 mr-1" /> Cancel
+              </Button>
+              <Button className="flex-1 bg-amber-500 hover:bg-amber-600 text-black font-bold" onClick={handleSaveTheme} disabled={editThemeSaving}>
+                <Save className="w-4 h-4 mr-1" /> {editThemeSaving ? "Saving…" : "Save Changes"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Create Theme Dialog ── */}
+      <Dialog open={createThemeOpen} onOpenChange={setCreateThemeOpen}>
+        <DialogContent className="bg-card border-border/60 max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-400">
+              <Plus className="w-4 h-4" /> New Slot Theme
+            </DialogTitle>
+            <DialogDescription>
+              Create a new slot theme with a unique slug, display name, config, and assets.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Slug</label>
+                <Input
+                  value={newTheme.slug}
+                  onChange={(e) => setNewTheme((p) => ({ ...p, slug: e.target.value }))}
+                  placeholder="e.g. lucky-slots"
+                  className="bg-secondary/50 border-border/40 font-mono text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Name</label>
+                <Input
+                  value={newTheme.name}
+                  onChange={(e) => setNewTheme((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="e.g. Lucky Slots"
+                  className="bg-secondary/50 border-border/40"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Config (JSON)</label>
+              <textarea
+                value={newTheme.config}
+                onChange={(e) => setNewTheme((p) => ({ ...p, config: e.target.value }))}
+                rows={10}
+                className="w-full bg-secondary/50 border border-border/40 rounded-md p-3 text-xs font-mono resize-y text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="{}"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Assets (JSON)</label>
+              <textarea
+                value={newTheme.assets}
+                onChange={(e) => setNewTheme((p) => ({ ...p, assets: e.target.value }))}
+                rows={6}
+                className="w-full bg-secondary/50 border border-border/40 rounded-md p-3 text-xs font-mono resize-y text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="{}"
+              />
+            </div>
+            {createThemeError && (
+              <p className="text-destructive text-sm flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{createThemeError}</p>
+            )}
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 border-border/40" onClick={() => setCreateThemeOpen(false)}>
+                <X className="w-4 h-4 mr-1" /> Cancel
+              </Button>
+              <Button className="flex-1 bg-amber-500 hover:bg-amber-600 text-black font-bold" onClick={handleCreateTheme} disabled={createThemeSaving}>
+                <Plus className="w-4 h-4 mr-1" /> {createThemeSaving ? "Creating…" : "Create Theme"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Owner AI Tab ── */}
       {activeTab === "ai" && isOwner && (

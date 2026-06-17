@@ -97,4 +97,12 @@ export class SlotRenderer {
     this.app.renderer.resize(window.innerWidth, window.innerHeight);
     // Recenter reels
   }
+
+  public destroy() {
+    try {
+      this.app.destroy(true, { children: true, texture: true });
+    } catch {
+      // Ignore PIXI cleanup errors (e.g. already destroyed)
+    }
+  }
 }
