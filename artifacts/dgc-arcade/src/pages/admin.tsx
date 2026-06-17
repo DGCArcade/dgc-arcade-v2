@@ -1012,12 +1012,13 @@ export default function AdminDashboard() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-secondary/50 rounded-lg p-1 w-fit border border-border/40">
+      <div className="w-full overflow-x-auto scrollbar-hide -mx-1 px-1">
+        <div className="flex gap-1 bg-secondary/50 rounded-lg p-1 w-max min-w-full sm:w-fit border border-border/40">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => { setActiveTab(tab.key); if (tab.key === "bank") setNewPendingDeposits(0); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold uppercase tracking-wider transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-xs sm:text-sm font-bold uppercase tracking-wider transition-all whitespace-nowrap flex-shrink-0 ${
               activeTab === tab.key
                 ? "bg-primary text-primary-foreground shadow-[0_0_16px_rgba(255,215,0,0.3)]"
                 : "text-muted-foreground hover:text-foreground"
@@ -1042,6 +1043,7 @@ export default function AdminDashboard() {
             )}
           </button>
         ))}
+        </div>
       </div>
 
       {/* ── OVERVIEW ── */}
