@@ -482,11 +482,17 @@ adminRouter.get("/transactions", requireBankSession, async (req, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
   const type = typeof req.query.type === "string" ? req.query.type : undefined;
   const limit = parseInt(String(req.query.limit ?? "50"), 10);
+  const offset = parseInt(String(req.query.offset ?? "0"), 10);
 
   try {
     const conditions = [];
     if (status) conditions.push(eq(transactionsTable.status, status));
     if (type) conditions.push(eq(transactionsTable.type, type));
+
+    const [totalCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(transactionsTable)
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
 
     const rows = await db
       .select({
@@ -507,15 +513,17 @@ adminRouter.get("/transactions", requireBankSession, async (req, res) => {
       .leftJoin(usersTable, eq(transactionsTable.userId, usersTable.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(transactionsTable.createdAt))
-      .limit(limit);
+      .limit(limit)
+      .offset(offset);
 
-    res.json(
-      rows.map((t) => ({
+    res.json({
+      transactions: rows.map((t) => ({
         ...t,
         amount: parseFloat(t.amount),
         createdAt: t.createdAt.toISOString(),
-      }))
-    );
+      })),
+      total: Number(totalCount?.count ?? 0),
+    });
   } catch (err) {
     req.log.error({ err }, "Admin list transactions error");
     res.status(500).json({ error: "Internal server error" });
@@ -1552,13 +1560,28 @@ adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
 //   Source A: fraudReviewsTable — saved AI decisions from auto-approval runs (history)
 //   Source B: live scoring of ALL pending withdrawals (real-time queue)
 adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
+  const limit = parseInt(String(req.query.limit ?? "50"), 10);
+  const offset = parseInt(String(req.query.offset ?? "0"), 10);
+  const date = typeof req.query.date === "string" ? req.query.date : undefined;
+
   try {
     const settings = await getPlatformSettings();
     const sensitivityMultiplier = 0.5 + (settings.aiSensitivity / 100);
 
     // ── Source A: fraudReviewsTable — recent AI review records ───────────────
-    // These represent decisions already made by the auto-processor (blocked, approved, etc.)
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const conditions = [];
+    if (date) {
+      conditions.push(sql`DATE(${fraudReviewsTable.createdAt}) = ${date}`);
+    } else {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      conditions.push(sql`${fraudReviewsTable.createdAt} >= ${thirtyDaysAgo.toISOString()}`);
+    }
+
+    const [totalCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(fraudReviewsTable)
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
+
     const fraudHistoryRows = await db
       .select({
         reviewId: fraudReviewsTable.id,
@@ -1578,9 +1601,10 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
       .from(fraudReviewsTable)
       .leftJoin(usersTable, eq(fraudReviewsTable.userId, usersTable.id))
       .leftJoin(transactionsTable, eq(fraudReviewsTable.withdrawalId, transactionsTable.id))
-      .where(sql`${fraudReviewsTable.createdAt} >= ${thirtyDaysAgo.toISOString()}`)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(fraudReviewsTable.createdAt))
-      .limit(100);
+      .limit(limit)
+      .offset(offset);
 
     // Map fraud history into alert shape — only show blocked/review decisions (not clean approvals)
     const historyAlerts = fraudHistoryRows
@@ -1781,11 +1805,15 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
       return (b?.riskScore ?? 0) - (a?.riskScore ?? 0);
     });
 
-    res.json({ alerts: merged, stats: {
-      livePending: liveAlerts.filter(Boolean).length,
-      historyShown: historyAlerts.length,
-      total: merged.length,
-    }});
+    res.json({ 
+      alerts: merged, 
+      total: Number(totalCount?.count ?? 0),
+      stats: {
+        livePending: liveAlerts.filter(Boolean).length,
+        historyShown: historyAlerts.length,
+        total: merged.length,
+      }
+    });
   } catch (err) {
     req.log.error({ err }, "Fraud alerts error");
     res.status(500).json({ error: "Internal server error" });

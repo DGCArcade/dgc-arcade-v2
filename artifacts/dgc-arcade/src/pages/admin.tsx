@@ -179,7 +179,12 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [usersTotal, setUsersTotal] = useState(0);
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersLimit, setUsersLimit] = useState(15);
   const [txList, setTxList] = useState<AdminTx[]>([]);
+  const [txTotal, setTxTotal] = useState(0);
+  const [txPage, setTxPage] = useState(1);
+  const [txLimit, setTxLimit] = useState(15);
   const [search, setSearch] = useState("");
   const [txFilter, setTxFilter] = useState<"all" | "pending">("pending");
   const [loadingData, setLoadingData] = useState(false);
@@ -205,6 +210,10 @@ export default function AdminDashboard() {
   const [bankLoading, setBankLoading] = useState(false);
   const [bankLastRefresh, setBankLastRefresh] = useState<Date | null>(null);
   const [fraudAlerts, setFraudAlerts] = useState<any[]>([]);
+  const [fraudTotal, setFraudTotal] = useState(0);
+  const [fraudPage, setFraudPage] = useState(1);
+  const [fraudLimit, setFraudLimit] = useState(15);
+  const [fraudDate, setFraudDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [fraudLoading, setFraudLoading] = useState(false);
   // ── Reconcile queue (withdrawals stuck in needs_review / stale processing) ──
   const [needsReview, setNeedsReview] = useState<any[]>([]);
@@ -344,17 +353,18 @@ export default function AdminDashboard() {
     const loadFraudAlerts = useCallback(async () => {
     setFraudLoading(true);
     try {
-      const res = await adminFetch("/bank/fraud-alerts");
+      const offset = (fraudPage - 1) * fraudLimit;
+      const res = await adminFetch(`/bank/fraud-alerts?limit=${fraudLimit}&offset=${offset}&date=${fraudDate}`);
       setFraudAlerts(res.alerts ?? []);
+      setFraudTotal(res.total ?? 0);
     } catch (err: any) {
-      // Show real error — never use mock data in production
       console.error("Fraud alerts fetch error:", err);
       toast({ title: "Fraud monitor error", description: err?.message ?? "Could not load fraud alerts", variant: "destructive" });
       setFraudAlerts([]);
     } finally {
       setFraudLoading(false);
     }
-  }, []);
+  }, [fraudPage, fraudLimit, fraudDate]);
 
   const loadNeedsReview = useCallback(async () => {
     setNeedsReviewLoading(true);
@@ -425,7 +435,8 @@ export default function AdminDashboard() {
   const loadUsers = useCallback(async () => {
     setLoadingData(true);
     try {
-      const data = await adminFetch(`/users?search=${encodeURIComponent(search)}&limit=100`);
+      const offset = (usersPage - 1) * usersLimit;
+      const data = await adminFetch(`/users?search=${encodeURIComponent(search)}&limit=${usersLimit}&offset=${offset}`);
       setUsers(data.users);
       setUsersTotal(data.total);
     } catch (err: any) {
@@ -433,20 +444,23 @@ export default function AdminDashboard() {
     } finally {
       setLoadingData(false);
     }
-  }, [search, toast]);
+  }, [search, usersPage, usersLimit, toast]);
 
   const loadTransactions = useCallback(async () => {
     setLoadingData(true);
     try {
-      const params = txFilter === "pending" ? "?status=pending&type=withdrawal" : "?limit=100";
-      const data = await adminFetch(`/transactions${params}`);
-      setTxList(data);
+      const offset = (txPage - 1) * txLimit;
+      const baseParams = txFilter === "pending" ? "status=pending&type=withdrawal" : "";
+      const params = `${baseParams}${baseParams ? "&" : ""}limit=${txLimit}&offset=${offset}`;
+      const data = await adminFetch(`/transactions?${params}`);
+      setTxList(data.transactions);
+      setTxTotal(data.total);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setLoadingData(false);
     }
-  }, [txFilter, toast]);
+  }, [txFilter, txPage, txLimit, toast]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -829,22 +843,22 @@ export default function AdminDashboard() {
     setActiveTab("overview");
   }
 
-  // Owner: Overview / Users / DGC Bank (in-panel, PIN-gated).
-  // Regular admin: Overview / Users only — their DGC Bank lives on the header.
+  // Owner: Full access (Bank, AI, Stats, etc.)
+  // Regular admin: Restricted access (Fraud Monitor, Transactions, Chat)
   const TABS: { key: TabKey; label: string; icon: React.ElementType; badge?: number }[] = isOwner
     ? [
         { key: "overview", label: "Overview", icon: Activity },
         { key: "users", label: "Users", icon: Users },
         { key: "bank", label: "DGC Bank", icon: DollarSign },
+        { key: "transactions", label: "Transactions", icon: List },
         { key: "tournaments", label: "Tournaments", icon: Trophy },
         { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChatCount },
         { key: "ai", label: "Owner AI", icon: Bot },
       ]
     : [
         { key: "overview", label: "Overview", icon: Activity },
-        { key: "users", label: "Users", icon: Users },
-        { key: "bank-dashboard", label: "DGC Bank", icon: Wallet },
-        { key: "visitor-logs", label: "Visitors", icon: Users },
+        { key: "bank", label: "Fraud Monitor", icon: ShieldAlert },
+        { key: "transactions", label: "Transactions", icon: List },
         { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChatCount },
       ];
 
@@ -1185,18 +1199,29 @@ export default function AdminDashboard() {
       {/* ── TRANSACTIONS ── */}
       {activeTab === "transactions" && (
         <div className="space-y-4">
-          <div className="flex gap-2">
-            {(["pending", "all"] as const).map((f) => (
-              <Button
-                key={f}
-                size="sm"
-                variant={txFilter === f ? "default" : "outline"}
-                onClick={() => setTxFilter(f)}
-                className="uppercase tracking-wider text-xs"
-              >
-                {f === "pending" ? "Pending Withdrawals" : "All Transactions"}
-              </Button>
-            ))}
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2">
+              {(["pending", "all"] as const).map((f) => (
+                <Button
+                  key={f}
+                  size="sm"
+                  variant={txFilter === f ? "default" : "outline"}
+                  onClick={() => { setTxFilter(f); setTxPage(1); }}
+                  className="uppercase tracking-wider text-xs"
+                >
+                  {f === "pending" ? "Pending Withdrawals" : "All Transactions"}
+                </Button>
+              ))}
+            </div>
+            <select
+              value={txLimit}
+              onChange={(e) => { setTxLimit(Number(e.target.value)); setTxPage(1); }}
+              className="bg-secondary/50 border border-border rounded-lg px-2 py-1.5 text-xs font-mono"
+            >
+              <option value={10}>10</option>
+              <option value={15}>15</option>
+              <option value={50}>50</option>
+            </select>
           </div>
 
           <div className="rounded-xl border border-border/40 overflow-hidden">
@@ -1321,6 +1346,32 @@ export default function AdminDashboard() {
               </TableBody>
             </Table>
           </div>
+
+          {txTotal > txLimit && (
+            <div className="flex items-center justify-between mt-4">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={txPage <= 1}
+                onClick={() => setTxPage(p => p - 1)}
+                className="h-8 text-xs"
+              >
+                Previous
+              </Button>
+              <span className="text-xs text-muted-foreground font-mono">
+                Page {txPage} of {Math.ceil(txTotal / txLimit)}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={txPage >= Math.ceil(txTotal / txLimit)}
+                onClick={() => setTxPage(p => p + 1)}
+                className="h-8 text-xs"
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1568,6 +1619,27 @@ export default function AdminDashboard() {
                     <RefreshCw className={fraudLoading ? "animate-spin h-3 w-3" : "h-3 w-3"} /> Refresh
                   </Button>
                 </div>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="relative flex-1">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                    <input
+                      type="date"
+                      value={fraudDate}
+                      onChange={(e) => { setFraudDate(e.target.value); setFraudPage(1); }}
+                      className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-border bg-secondary/50 text-xs font-mono"
+                    />
+                  </div>
+                  <select
+                    value={fraudLimit}
+                    onChange={(e) => { setFraudLimit(Number(e.target.value)); setFraudPage(1); }}
+                    className="bg-secondary/50 border border-border rounded-lg px-2 py-1.5 text-xs font-mono"
+                  >
+                    <option value={10}>10</option>
+                    <option value={15}>15</option>
+                    <option value={50}>50</option>
+                  </select>
+                </div>
+
                 {fraudAlerts.length === 0 ? (
                   <Card className="border-dashed border-border/40">
                     <CardContent className="py-6 text-center text-sm text-green-400">
@@ -1575,7 +1647,7 @@ export default function AdminDashboard() {
                     </CardContent>
                   </Card>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
                     {fraudAlerts.map((alert: any) => (
                       <Card key={alert.id} className={`border transition-colors ${
                         alert.riskScore >= 85 ? "border-red-500/50 bg-red-950/20" :
@@ -1668,6 +1740,32 @@ export default function AdminDashboard() {
                     ))}
                   </div>
                 )}
+                
+                {fraudTotal > fraudLimit && (
+                  <div className="flex items-center justify-between mt-4">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={fraudPage <= 1}
+                      onClick={() => setFraudPage(p => p - 1)}
+                      className="h-8 text-xs"
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-xs text-muted-foreground font-mono">
+                      Page {fraudPage} of {Math.ceil(fraudTotal / fraudLimit)}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={fraudPage >= Math.ceil(fraudTotal / fraudLimit)}
+                      onClick={() => setFraudPage(p => p + 1)}
+                      className="h-8 text-xs"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {/* ── Pending Withdrawals ── */}
@@ -1684,10 +1782,10 @@ export default function AdminDashboard() {
                   </Card>
                 ) : (
                   <Card className="border-border/60">
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto custom-scrollbar">
                       <Table>
-                        <TableHeader>
-                          <TableRow className="border-border/40">
+                        <TableHeader className="sticky top-0 bg-background z-10">
+                          <TableRow className="border-border/40 bg-secondary/50">
                             <TableHead className="text-xs">ID</TableHead>
                             <TableHead className="text-xs">User</TableHead>
                             <TableHead className="text-xs">Amount</TableHead>
@@ -1775,10 +1873,10 @@ export default function AdminDashboard() {
                       </CardContent>
                     </Card>
                     <Card className="border-border/60">
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto max-h-[400px] overflow-y-auto custom-scrollbar">
                         <Table>
-                          <TableHeader>
-                            <TableRow className="border-border/40">
+                          <TableHeader className="sticky top-0 bg-background z-10">
+                            <TableRow className="border-border/40 bg-secondary/50">
                               <TableHead className="text-xs">ID</TableHead>
                               <TableHead className="text-xs">User</TableHead>
                               <TableHead className="text-xs">Amount</TableHead>
@@ -1896,13 +1994,13 @@ export default function AdminDashboard() {
                     </CardContent>
                   </Card>
                 ) : (
-                  <Card className="border-border/60">
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="border-border/40">
-                            <TableHead className="text-xs">User</TableHead>
-                            <TableHead className="text-xs">Plisio ID</TableHead>
+                    <Card className="border-border/60">
+                      <div className="overflow-x-auto max-h-[500px] overflow-y-auto custom-scrollbar">
+                        <Table>
+                          <TableHeader className="sticky top-0 bg-background z-10">
+                            <TableRow className="border-border/40 bg-secondary/50">
+                              <TableHead className="text-xs">User</TableHead>
+                              <TableHead className="text-xs">Plisio ID</TableHead>
                             <TableHead className="text-xs">Type</TableHead>
                             <TableHead className="text-xs">Invoiced (USD)</TableHead>
                             <TableHead className="text-xs">Actual Received</TableHead>

@@ -1242,7 +1242,8 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
   const AI_PROVIDER = useGroq ? "Groq (Llama 3.1)" : "OpenAI";
   const API_KEY = useGroq ? GROQ_KEY : OPENAI_KEY;
   const API_BASE = useGroq ? "https://api.groq.com/openai/v1" : (process.env.OPENAI_API_BASE || "https://api.openai.com/v1");
-  const MODEL = useGroq ? "llama-3.1-70b-versatile" : "gpt-5";
+  // Use llama-3.1-70b-versatile for Groq, or gpt-4o for OpenAI (gpt-5 doesn't exist yet)
+  const MODEL = useGroq ? "llama-3.1-70b-versatile" : (process.env.OPENAI_MODEL || "gpt-4o");
 
   const callerId = req.user!.userId;
   const callerUsername = req.user!.username;
