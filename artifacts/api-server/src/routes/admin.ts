@@ -1489,11 +1489,13 @@ adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
     return;
   }
   try {
-    const { aiSensitivity, autoApproveUnder, requireManualOver } = req.body as Record<string, number>;
+    const { aiSensitivity, autoApproveUnder, requireManualOver, minWithdrawal } = req.body as Record<string, number>;
     const updates: Record<string, number> = {};
     if (typeof aiSensitivity === "number" && aiSensitivity >= 0 && aiSensitivity <= 100) updates.aiSensitivity = aiSensitivity;
-    if (typeof autoApproveUnder === "number" && autoApproveUnder >= 0) updates.autoApproveUnder = autoApproveUnder;
+    // Hard ceiling: autoApproveUnder can never exceed $10,000 — instant withdrawals only below that
+    if (typeof autoApproveUnder === "number" && autoApproveUnder >= 0) updates.autoApproveUnder = Math.min(autoApproveUnder, 10000);
     if (typeof requireManualOver === "number" && requireManualOver >= 0) updates.requireManualOver = requireManualOver;
+    if (typeof minWithdrawal === "number" && minWithdrawal >= 0) updates.minWithdrawal = minWithdrawal;
 
     for (const [key, value] of Object.entries(updates)) {
       await db.insert(platformSettingsTable)

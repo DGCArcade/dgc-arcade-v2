@@ -22,6 +22,13 @@ const PLISIO_API = "https://api.plisio.net/api/v1";
 
 const WAGER_MULTIPLIER = 1.0;
 
+// ── Auto-withdrawal threshold ──────────────────────────────────────────────────
+// Withdrawals at or below this amount are instantly processed via Plisio without
+// requiring admin approval, provided the fraud engine does not block them.
+// This mirrors the platform setting "autoApproveUnder" but is also enforced here
+// as a hard-coded ceiling so the setting can never be set above this limit.
+const INSTANT_WITHDRAWAL_CEILING = 10_000;
+
 const PLISIO_CURRENCY_MAP: Record<string, string> = {
   BTC:      "BTC",
   ETH:      "ETH",
@@ -434,6 +441,17 @@ function sendNtfy(topic: string | undefined, opts: { title: string; priority: st
 }
 
 // POST /api/transactions/withdraw
+// ── Auto-withdrawal logic ──────────────────────────────────────────────────────
+// Withdrawals at or below INSTANT_WITHDRAWAL_CEILING ($10,000) are automatically
+// processed via Plisio without admin approval, provided:
+//   1. The fraud engine decision is "approved" or "review" (not "blocked")
+//   2. A valid payout address is present
+//   3. The user has sufficient balance (checked via getUserBalance — reads BOTH
+//      static USD balance AND live crypto balances, never just the invoice amount)
+//
+// Withdrawals above $10,000 OR with a "blocked" fraud decision are queued as
+// "pending" for the admin to review in the DGC Bank panel.
+// ─────────────────────────────────────────────────────────────────────────────
 transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
   const parsed = RequestWithdrawalBody.safeParse(req.body);
   if (!parsed.success) {
@@ -445,24 +463,28 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
+    // ── Balance check: uses ACTUAL balance (static USD + live crypto valuations) ──
+    // This is the real balance — not the invoice amount or any stored figure.
     const { totalBalance } = await getUserBalance(user.id);
     if (totalBalance < amount) { res.status(400).json({ error: "Insufficient balance" }); return; }
 
     const settings = await getPlatformSettings();
     if (amount < settings.minWithdrawal) { res.status(400).json({ error: `Minimum withdrawal is $${settings.minWithdrawal}` }); return; }
 
-    const isFraudulent = await evaluateWithdrawal(user.id, amount, address);
-    const status = isFraudulent ? "pending" : "pending"; // All manual for now
-
+    // ── Fraud evaluation ──────────────────────────────────────────────────────
+    // Insert the transaction row first (pending) so the fraud evaluator can
+    // reference it by withdrawalId if needed.
     const [tx] = await db.insert(transactionsTable).values({
       userId: user.id,
       type: "withdrawal",
       amount: String(amount),
       currency,
       address,
-      status,
+      status: "pending",
     }).returning();
 
+    // Deduct balance immediately — funds are held while the payout is processed.
+    // If the payout fails, the balance is refunded (see admin reconcile flow).
     await deductBalance(user.id, amount);
 
     await recordLedger(db, {
@@ -474,6 +496,86 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
       referenceId: tx.id,
       referenceType: "transaction",
       note: `Withdrawal request for $${amount} ${currency}`,
+    });
+
+    // ── Fraud check (correct object signature) ────────────────────────────────
+    const fraudResult = await evaluateWithdrawal({ userId: user.id, amount, withdrawalId: tx.id });
+
+    req.log.info(
+      { txId: tx.id, amount, fraudScore: fraudResult.score, fraudDecision: fraudResult.decision, flags: fraudResult.flags },
+      "Withdrawal fraud evaluation complete"
+    );
+
+    // ── Auto-process decision ─────────────────────────────────────────────────
+    // Conditions for instant payout:
+    //   • Amount is at or below the $10,000 ceiling
+    //   • Amount is at or below the platform's autoApproveUnder setting
+    //   • Fraud engine did NOT block the withdrawal
+    //   • A payout address is present
+    const autoApproveLimit = Math.min(settings.autoApproveUnder ?? INSTANT_WITHDRAWAL_CEILING, INSTANT_WITHDRAWAL_CEILING);
+    const isInstant = amount <= autoApproveLimit && fraudResult.decision !== "blocked" && !!address;
+
+    if (isInstant) {
+      req.log.info(
+        { txId: tx.id, amount, autoApproveLimit, fraudDecision: fraudResult.decision },
+        "Withdrawal qualifies for instant auto-processing — sending Plisio payout"
+      );
+
+      // Fire the payout — sendPlisioPayout handles the pending→processing→completed
+      // state machine atomically with double-pay protection.
+      const payoutResult = await sendPlisioPayout(tx.id, req.log);
+
+      switch (payoutResult.outcome) {
+        case "completed":
+          sendNtfy(process.env.NTFY_TOPIC, {
+            title: "DGC Arcade — Auto Withdrawal Sent",
+            priority: "default",
+            tags: "outbox_tray",
+            body: `$${amount} ${currency} → ${address}\nTxn: ${tx.id} | TxHash: ${payoutResult.txHash ?? "pending"}\nUser: ${user.id}`,
+          });
+          res.json({ success: true, transactionId: tx.id, status: "completed", txHash: payoutResult.txHash });
+          return;
+
+        case "reverted_pending":
+          // Rate fetch failed — left as pending for admin to retry
+          req.log.warn({ txId: tx.id, message: payoutResult.message }, "Auto-withdrawal: rate fetch failed, left pending");
+          res.json({ success: true, transactionId: tx.id, status: "pending", message: "Payout queued — rate fetch failed, will retry shortly." });
+          return;
+
+        case "needs_review":
+          // Network/ambiguous outcome — left as needs_review for admin
+          req.log.warn({ txId: tx.id, message: payoutResult.message }, "Auto-withdrawal: ambiguous Plisio response, needs review");
+          res.json({ success: true, transactionId: tx.id, status: "needs_review", message: "Payout sent but outcome unclear — check Plisio dashboard." });
+          return;
+
+        case "already_processing":
+          res.json({ success: true, transactionId: tx.id, status: "processing" });
+          return;
+
+        case "no_key":
+          req.log.error({ txId: tx.id }, "Auto-withdrawal: Plisio API key not configured — left pending for admin");
+          res.json({ success: true, transactionId: tx.id, status: "pending", message: "Payment gateway not configured — queued for manual processing." });
+          return;
+
+        case "no_address":
+          req.log.error({ txId: tx.id }, "Auto-withdrawal: no payout address — left pending for admin");
+          res.json({ success: true, transactionId: tx.id, status: "pending", message: "No payout address — queued for manual processing." });
+          return;
+      }
+    }
+
+    // ── Manual queue: amount > $10,000 OR fraud blocked ───────────────────────
+    const queueReason = fraudResult.decision === "blocked"
+      ? `Fraud score ${fraudResult.score} (blocked): ${fraudResult.flags.join(", ")}`
+      : `Amount $${amount} exceeds auto-approve limit $${autoApproveLimit}`;
+
+    req.log.info({ txId: tx.id, amount, queueReason }, "Withdrawal queued for manual admin review");
+
+    sendNtfy(process.env.NTFY_TOPIC, {
+      title: "DGC Arcade — Withdrawal Pending Review",
+      priority: "high",
+      tags: "hourglass_flowing_sand",
+      body: `$${amount} ${currency} from user ${user.id}\nReason: ${queueReason}\nTxn: ${tx.id}`,
     });
 
     res.json({ success: true, transactionId: tx.id, status: tx.status });

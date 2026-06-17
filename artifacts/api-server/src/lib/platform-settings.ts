@@ -3,14 +3,19 @@ import { db, platformSettingsTable } from "@workspace/db";
 // ── Default platform settings ──
 // Owner-tunable knobs that drive the withdrawal fraud engine.
 //  - aiSensitivity:     0-100, scales raw fraud scores by 0.5x-1.5x (higher = more flags)
-//  - autoApproveUnder:  withdrawals at or under this $ amount with no fraud signals
-//                       clear straight to the standard payout queue
+//  - autoApproveUnder:  withdrawals at or under this $ amount (and not fraud-blocked)
+//                       are instantly processed via Plisio without admin approval.
+//                       Hard ceiling is $10,000 — the code will never auto-approve above that
+//                       regardless of what this setting is set to.
 //  - requireManualOver: withdrawals at or over this $ amount are ALWAYS flagged for
-//                       manual owner review, regardless of risk score
+//                       manual owner review, regardless of risk score.
+//                       Set to 10000 to match the instant-withdrawal ceiling.
+//  - minWithdrawal:     minimum withdrawal amount in USD
 export const DEFAULT_SETTINGS = {
   aiSensitivity: 75,
-  autoApproveUnder: 50,
-  requireManualOver: 500,
+  autoApproveUnder: 10000,
+  requireManualOver: 10000,
+  minWithdrawal: 1,
 };
 
 export type PlatformSettings = typeof DEFAULT_SETTINGS;
