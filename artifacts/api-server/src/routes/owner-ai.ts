@@ -1130,9 +1130,9 @@ async function executeToolCall(
 
       case "get_platform_health": {
         try {
-          const [stats] = await db.select({ count: sql<number>\`COUNT(*)\` }).from(usersTable);
-          const [balance] = await db.select({ total: sql<number>\`COALESCE(SUM(balance::numeric), 0)\` }).from(usersTable);
-          const [bets24h] = await db.select({ count: sql<number>\`COUNT(*)\` }).from(betsTable).where(sql\`created_at > NOW() - INTERVAL '24 hours'\`);
+          const [stats] = await db.select({ count: sql<number>`COUNT(*)` }).from(usersTable);
+          const [balance] = await db.select({ total: sql<number>`COALESCE(SUM(balance::numeric), 0)` }).from(usersTable);
+          const [bets24h] = await db.select({ count: sql<number>`COUNT(*)` }).from(betsTable).where(sql`created_at > NOW() - INTERVAL '24 hours'`);
           result = JSON.stringify({
             totalUsers: stats?.count || 0,
             totalBalance: balance?.total || 0,
