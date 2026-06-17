@@ -31,6 +31,10 @@ export function applyTheme(id: ThemeId) {
   THEMES.forEach(t => html.classList.remove(`theme-${t.id}`));
   if (id !== "dgc") html.classList.add(`theme-${id}`);
   localStorage.setItem(STORAGE_KEY, id);
+  // Notify any React components listening for theme changes
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("dgc-theme-change", { detail: id }));
+  }
 }
 
 export function rotateTheme() {
