@@ -1329,9 +1329,9 @@ When making code changes to the platform:
 4. Confirm the commit SHA and that the deploy will trigger automatically
 
 **Preferred Tool Order for Code Changes:**
-- Read files: `github_read_via_api` > `github_read_file`  
-- Write files: `github_write_via_api` > `github_write_and_commit`
-- List files: `github_list_files`
+- Read files: \`github_read_via_api\` > \`github_read_file\`
+- Write files: \`github_write_via_api\` > \`github_write_and_commit\`
+- List files: \`github_list_files\`
 
 You can edit any file in the repo: frontend React components, API routes, database schema, config files — everything. Always read first, then write the complete updated file content.
 
