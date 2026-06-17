@@ -477,6 +477,55 @@ adminRouter.delete("/users/:id", async (req, res) => {
   }
 });
 
+// POST /api/admin/users/:id/reset — zero out a single user's balance, stats, and history
+adminRouter.post("/users/:id/reset", async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+
+  const [target] = await db
+    .select({ username: usersTable.username, role: usersTable.role })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+  if (isOwnerAccount(target)) { res.status(403).json({ error: "This account is protected and cannot be reset." }); return; }
+
+  try {
+    const { blackjackHandsTable, minesSessionsTable, dailyBonusClaimsTable } = await import("@workspace/db");
+
+    await db.transaction(async (tx) => {
+      await tx.delete(betsTable).where(eq(betsTable.userId, userId));
+      await tx.delete(transactionsTable).where(eq(transactionsTable.userId, userId));
+      await tx.delete(blackjackHandsTable).where(eq(blackjackHandsTable.userId, userId));
+      await tx.delete(minesSessionsTable).where(eq(minesSessionsTable.userId, userId));
+      await tx.delete(dailyBonusClaimsTable).where(eq(dailyBonusClaimsTable.userId, userId));
+      await tx.delete(userBalancesTable).where(eq(userBalancesTable.userId, userId));
+      await tx.update(usersTable).set({
+        balance: "0",
+        promoBalance: "0",
+        vaultBalance: "0",
+        totalBets: 0,
+        totalWon: "0",
+        totalWageredAmount: "0",
+        totalDeposited: "0",
+        wagerRequirement: "0",
+        rakebackClaimed: "0",
+      }).where(eq(usersTable.id, userId));
+    });
+
+    await logAudit({
+      actorId: req.user!.userId,
+      action: "user.reset",
+      targetId: userId,
+      details: { username: target.username },
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Admin reset user error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // GET /api/admin/transactions
 adminRouter.get("/transactions", requireBankSession, async (req, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
@@ -1533,13 +1582,14 @@ adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
     return;
   }
   try {
-    const { aiSensitivity, autoApproveUnder, requireManualOver, minWithdrawal } = req.body as Record<string, number>;
+    const { aiSensitivity, autoApproveUnder, requireManualOver, minWithdrawal, signupBonus } = req.body as Record<string, number>;
     const updates: Record<string, number> = {};
     if (typeof aiSensitivity === "number" && aiSensitivity >= 0 && aiSensitivity <= 100) updates.aiSensitivity = aiSensitivity;
     // Hard ceiling: autoApproveUnder can never exceed $10,000 — instant withdrawals only below that
     if (typeof autoApproveUnder === "number" && autoApproveUnder >= 0) updates.autoApproveUnder = Math.min(autoApproveUnder, 10000);
     if (typeof requireManualOver === "number" && requireManualOver >= 0) updates.requireManualOver = requireManualOver;
     if (typeof minWithdrawal === "number" && minWithdrawal >= 0) updates.minWithdrawal = minWithdrawal;
+    if (typeof signupBonus === "number" && signupBonus >= 0) updates.signupBonus = signupBonus;
 
     for (const [key, value] of Object.entries(updates)) {
       await db.insert(platformSettingsTable)

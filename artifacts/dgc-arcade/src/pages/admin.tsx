@@ -36,6 +36,7 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
+  RotateCcw,
   Wallet,
   KeyRound,
   Activity,
@@ -227,8 +228,10 @@ export default function AdminDashboard() {
     aiSensitivity: 75,
     autoApproveUnder: 50,
     requireManualOver: 500,
+    signupBonus: 0,
     plisioConnected: true,
   });
+  const [confirmReset, setConfirmReset] = useState<AdminUser | null>(null);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
   // ── Tournament state ──
@@ -660,6 +663,20 @@ export default function AdminDashboard() {
       await adminFetch(`/users/${u.id}`, { method: "DELETE" });
       toast({ title: "User deleted", description: u.username });
       setConfirmDelete(null);
+      loadUsers();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  async function handleResetUser(u: AdminUser) {
+    setLoadingAction(`reset-${u.id}`);
+    try {
+      await adminFetch(`/users/${u.id}/reset`, { method: "POST" });
+      toast({ title: "✅ User Reset", description: `${u.username}'s balance and history cleared.` });
+      setConfirmReset(null);
       loadUsers();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -1166,6 +1183,16 @@ export default function AdminDashboard() {
                           </Button>
                           {u.username !== "fanodgc" && (
                             <>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 hover:text-orange-400"
+                                onClick={() => setConfirmReset(u)}
+                                disabled={loadingAction === `reset-${u.id}`}
+                                title="Reset user balance & history"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </Button>
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -2217,6 +2244,25 @@ export default function AdminDashboard() {
                             />
                           </div>
                         </div>
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/30">
+                          <div>
+                            <span className="text-xs text-muted-foreground uppercase tracking-wider">Signup Bonus</span>
+                            <p className="text-xs text-muted-foreground/60 mt-0.5">Amount credited to new accounts on registration. Set to 0 to disable.</p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">$</span>
+                            <input
+                              type="number" min={0} step={0.01}
+                              defaultValue={bankSettings.signupBonus}
+                              key={bankSettings.signupBonus}
+                              onBlur={e => {
+                                const val = parseFloat(e.target.value);
+                                if (!isNaN(val) && val >= 0 && val !== bankSettings.signupBonus) saveBankSettings({ signupBonus: val });
+                              }}
+                              className="w-24 bg-secondary/60 border border-border/40 rounded px-2 py-1 text-xs font-mono font-bold text-right"
+                            />
+                          </div>
+                        </div>
                         <p className="text-xs text-muted-foreground/70 pt-1 border-t border-border/30">
                           Withdrawals at or under "auto-approve" with low risk skip the fraud feed entirely.
                           Withdrawals over "manual review" are always flagged for owner approval.
@@ -3071,6 +3117,33 @@ export default function AdminDashboard() {
           <OwnerAiChat token={getToken()} />
         </div>
       )}
+      {/* ── Reset User Confirm Dialog ── */}
+      <Dialog open={!!confirmReset} onOpenChange={() => setConfirmReset(null)}>
+        <DialogContent className="bg-card border-border/60 max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-400">
+              <RotateCcw className="w-5 h-5" />
+              Reset User
+            </DialogTitle>
+            <DialogDescription>
+              This will zero out <strong>{confirmReset?.username}</strong>'s balance, promo balance, vault, all bets, transactions, game sessions, and stats. Their account stays active. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 mt-4">
+            <Button variant="outline" className="flex-1" onClick={() => setConfirmReset(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+              onClick={() => confirmReset && handleResetUser(confirmReset)}
+              disabled={loadingAction === `reset-${confirmReset?.id}`}
+            >
+              {loadingAction === `reset-${confirmReset?.id}` ? "Resetting…" : "Reset User"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Delete Confirm Dialog ── */}
       <Dialog open={!!confirmDelete} onOpenChange={() => setConfirmDelete(null)}>
         <DialogContent className="bg-card border-border/60 max-w-sm">

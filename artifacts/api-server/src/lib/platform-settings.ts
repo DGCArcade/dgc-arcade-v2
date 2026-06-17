@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS = {
   autoApproveUnder: 10000,
   requireManualOver: 10000,
   minWithdrawal: 1,
+  signupBonus: 0,
 };
 
 export type PlatformSettings = typeof DEFAULT_SETTINGS;

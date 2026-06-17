@@ -6,6 +6,7 @@ import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { requireAuth, signToken } from "../middlewares/auth.js";
 import { logger } from "../lib/logger.js";
 import { getUserBalance } from "../lib/balance-service.js";
+import { getPlatformSettings } from "../lib/platform-settings.js";
 import crypto from "crypto";
 
 export const authRouter = Router();
@@ -70,7 +71,9 @@ authRouter.post("/register", async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    let [user] = await db.insert(usersTable).values({ username, passwordHash, balance: "100", wagerRequirement: "100", deviceFingerprint }).returning();
+    const { signupBonus } = await getPlatformSettings();
+    const startingBalance = signupBonus > 0 ? String(signupBonus) : "0";
+    let [user] = await db.insert(usersTable).values({ username, passwordHash, balance: startingBalance, deviceFingerprint }).returning();
 
     const refCode = 'DGC' + user.id.toString(36).toUpperCase().padStart(4, '0') + crypto.randomBytes(3).toString('hex').toUpperCase();
     await db.update(usersTable).set({ referralCode: refCode }).where(eq(usersTable.id, user.id));
