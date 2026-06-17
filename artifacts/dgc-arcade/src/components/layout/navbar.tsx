@@ -71,6 +71,9 @@ export function Navbar() {
       <Link href="/games" className={`text-sm font-medium uppercase tracking-wider transition-colors ${location === "/games" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
         Games
       </Link>
+      <Link href="/slots" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/slots" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+        🎰 Slots
+      </Link>
       <Link href="/race" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/race" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
         🏇 Race
       </Link>

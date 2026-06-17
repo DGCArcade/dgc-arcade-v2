@@ -2,7 +2,10 @@ import { useListGames, getListGamesQueryKey } from "@workspace/api-client-react"
 import { GameCard } from "@/components/games/game-card";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
+import { Link } from "wouter";
 import { useState } from "react";
+
+const SLOT_SLUGS = ["slots", "lucky-slots", "dragon-realm"];
 
 export default function Games() {
   const { data: games, isLoading } = useListGames({
@@ -10,7 +13,10 @@ export default function Games() {
   });
   const [search, setSearch] = useState("");
 
-  const filteredGames = Array.isArray(games) ? games.filter(g => g.active && g.name.toLowerCase().includes(search.toLowerCase())) : [];
+  // Slots have their own dedicated page — exclude them here
+  const filteredGames = Array.isArray(games)
+    ? games.filter(g => g.active && !SLOT_SLUGS.includes(g.slug) && g.name.toLowerCase().includes(search.toLowerCase()))
+    : [];
 
   return (
     <div className="space-y-8">
@@ -30,6 +36,20 @@ export default function Games() {
           />
         </div>
       </div>
+
+      {/* Slots promo banner */}
+      <Link href="/slots" className="block group">
+        <div className="flex items-center justify-between gap-4 px-6 py-4 rounded-xl bg-gradient-to-r from-purple-900/40 to-primary/20 border border-primary/30 hover:border-primary/60 transition-all duration-300 cursor-pointer">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">🎰</span>
+            <div>
+              <p className="font-display font-black uppercase tracking-widest text-foreground group-hover:text-primary transition-colors">Looking for Slots?</p>
+              <p className="text-xs text-muted-foreground">Dragon Realm and more — all in the dedicated Slots section.</p>
+            </div>
+          </div>
+          <span className="text-sm font-bold uppercase tracking-wider text-primary whitespace-nowrap">Go to Slots →</span>
+        </div>
+      </Link>
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

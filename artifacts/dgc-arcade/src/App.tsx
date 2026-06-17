@@ -6,6 +6,7 @@ import { AppLayout } from "@/components/layout/app-layout";
 
 import Home from "@/pages/home";
 import Games from "@/pages/games";
+import SlotsPage from "@/pages/slots";
 import GamePage from "@/pages/game";
 import Leaderboard from "@/pages/leaderboard";
 import Profile from "@/pages/profile";
@@ -27,6 +28,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/games" component={Games} />
+        <Route path="/slots" component={SlotsPage} />
         <Route path="/games/:gameId" component={GamePage} />
         <Route path="/race" component={RacePage} />
         <Route path="/leaderboard" component={Leaderboard} />
