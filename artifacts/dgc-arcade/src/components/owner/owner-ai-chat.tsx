@@ -327,7 +327,7 @@ export function OwnerAiChat({ token }: OwnerAiChatProps) {
     {
       id: "welcome",
       role: "assistant",
-      content: "**DGC-AI1 online.** I'm your in-house platform intelligence powered by Groq's Llama 3.1 (70B) — connected live to your Neon database, GitHub repo, and Render deployments.\n\nI'm lightning-fast and free to run. I can read and write to the database, manage users and balances, control games, push code commits, trigger deploys, and analyze your platform in real time. Ask me anything or give me a command.",
+      content: "**DGC-AI1 online.** I'm your in-house platform intelligence powered by Groq's Llama 3.3 (70B) — connected live to your Neon database, GitHub repo, and Render deployments.\n\nI'm lightning-fast and free to run. I can read and write to the database, manage users and balances, control games, push code commits, trigger deploys, and analyze your platform in real time. Ask me anything or give me a command.",
       timestamp: new Date(),
     },
   ]);
@@ -615,7 +615,7 @@ export function OwnerAiChat({ token }: OwnerAiChatProps) {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-sm text-white tracking-wide">DGC-AI1</span>
-                  <span className="text-[10px] font-mono bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-500/30 font-semibold">⚡ GROQ · LLAMA 3.1 · LIVE</span>
+                  <span className="text-[10px] font-mono bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-500/30 font-semibold">⚡ GROQ · LLAMA 3.3 · LIVE</span>
                 </div>
                 <p className="text-[10px] text-cyan-400/70 font-mono">Free Tier · Lightning Fast · Neon DB · GitHub · Render</p>
               </div>

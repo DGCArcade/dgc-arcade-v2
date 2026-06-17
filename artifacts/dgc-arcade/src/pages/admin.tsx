@@ -168,6 +168,22 @@ interface AdminStats {
 
 interface UserDetail {
   user: AdminUser;
+  deviceHistory: {
+    id: number;
+    fingerprint: string | null;
+    deviceName: string | null;
+    deviceOs: string | null;
+    deviceBrowser: string | null;
+    deviceType: string | null;
+    ip: string | null;
+    country: string | null;
+    city: string | null;
+    vpnDetected: boolean | null;
+    vpnProvider: string | null;
+    firstSeen: string;
+    lastSeen: string;
+    loginCount: number;
+  }[];
   bets: { id: number; gameId: number; amount: number; payout: number; outcome: string; createdAt: string }[];
   transactions: { id: number; type: string; amount: number; currency: string; status: string; address: string | null; createdAt: string }[];
 }
@@ -2689,7 +2705,7 @@ export default function AdminDashboard() {
               {/* ── Location & Device (all collected compliance data) ── */}
               <div>
                 <h4 className="font-bold uppercase tracking-wider text-sm mb-3 text-muted-foreground flex items-center gap-2">
-                  <MapPin className="w-3.5 h-3.5" /> Location &amp; Device
+                  <MapPin className="w-3.5 h-3.5" /> Location &amp; Device (Snapshot)
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 bg-secondary/30 rounded-lg p-4">
                   {[
@@ -2717,6 +2733,62 @@ export default function AdminDashboard() {
                       </span>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              {/* Device History — Full Audit */}
+              <div>
+                <h4 className="font-bold uppercase tracking-wider text-sm mb-3 text-muted-foreground flex items-center gap-2">
+                  <Activity className="w-3.5 h-3.5" /> Device History (Full Audit)
+                </h4>
+                <div className="bg-secondary/30 rounded-lg overflow-hidden border border-border/20">
+                  <div className="overflow-x-auto max-h-64 custom-scrollbar">
+                    <Table>
+                      <TableHeader className="sticky top-0 bg-secondary z-10">
+                        <TableRow className="border-border/40">
+                          <TableHead className="text-[10px] uppercase font-bold px-3">IP / Location</TableHead>
+                          <TableHead className="text-[10px] uppercase font-bold px-3">Device / Browser</TableHead>
+                          <TableHead className="text-[10px] uppercase font-bold px-3 text-center">VPN</TableHead>
+                          <TableHead className="text-[10px] uppercase font-bold px-3 text-right">Last Seen</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedUser.deviceHistory.length === 0 ? (
+                          <TableRow><TableCell colSpan={4} className="text-center py-4 text-muted-foreground text-xs">No historical device data</TableCell></TableRow>
+                        ) : (
+                          selectedUser.deviceHistory.map((d) => (
+                            <TableRow key={d.id} className="border-border/10 hover:bg-white/5 transition-colors">
+                              <TableCell className="px-3 py-2">
+                                <div className="flex flex-col">
+                                  <span className="font-mono text-xs font-bold text-white">{d.ip || "—"}</span>
+                                  <span className="text-[10px] text-muted-foreground">{[d.city, d.country].filter(Boolean).join(", ")}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
+                                <div className="flex flex-col">
+                                  <span className="text-xs text-white">{d.deviceName || d.deviceType || "Unknown"}</span>
+                                  <span className="text-[10px] text-muted-foreground">{[d.deviceOs, d.deviceBrowser].filter(Boolean).join(" / ")}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-center">
+                                {d.vpnDetected ? (
+                                  <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[9px] px-1.5 h-4" variant="outline">VPN</Badge>
+                                ) : (
+                                  <span className="text-muted-foreground text-[10px]">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-right">
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] text-white font-mono">{new Date(d.lastSeen).toLocaleDateString()}</span>
+                                  <span className="text-[9px] text-muted-foreground font-mono">{new Date(d.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               </div>
 

@@ -1370,10 +1370,10 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
     return;
   }
   
-  const AI_PROVIDER = useGroq ? "Groq (Llama 3.1)" : "OpenAI";
+  const AI_PROVIDER = useGroq ? "Groq (Llama 3.3)" : "OpenAI";
   const API_KEY = useGroq ? GROQ_KEY : OPENAI_KEY;
   const API_BASE = useGroq ? "https://api.groq.com/openai/v1" : (process.env.OPENAI_API_BASE || "https://api.openai.com/v1");
-  // Use llama-3.3-70b-versatile for Groq (llama-3.1 was decommissioned June 2026)
+  // Use llama-3.3-70b-versatile for Groq
   const MODEL = useGroq ? "llama-3.3-70b-versatile" : (process.env.OPENAI_MODEL || "gpt-4o");
 
   const callerId = req.user!.userId;
@@ -1403,22 +1403,36 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
       while (iterationCount < MAX_ITERATIONS) {
         iterationCount++;
 
-        // Non-streaming call to handle tool use properly
-        const apiResponse = await fetch(`${API_BASE}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: MODEL,
-            messages: apiMessages,
-            tools: AI_TOOLS,
-            tool_choice: "auto",
-            max_tokens: 4096,
-            temperature: 0.2,
-          }),
-        });
+        // Non-streaming call to handle tool use properly (with retry logic for rate limits)
+        let apiResponse;
+        let retries = 0;
+        const MAX_RETRIES = 3;
+        
+        while (retries < MAX_RETRIES) {
+          apiResponse = await fetch(`${API_BASE}/chat/completions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${API_KEY}`,
+            },
+            body: JSON.stringify({
+              model: MODEL,
+              messages: apiMessages,
+              tools: AI_TOOLS,
+              tool_choice: "auto",
+              max_tokens: 4096,
+              temperature: 0.2,
+            }),
+          });
+          
+          if (apiResponse.status === 429) {
+            retries++;
+            const retryAfter = parseInt(apiResponse.headers.get("retry-after") || "2");
+            await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+            continue;
+          }
+          break;
+        }
 
         if (!apiResponse.ok) {
           const errText = await apiResponse.text();
@@ -1564,21 +1578,35 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
     while (iterationCount < MAX_ITERATIONS) {
       iterationCount++;
 
-      const apiResponse = await fetch(`${API_BASE}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          messages: apiMessages,
-          tools: AI_TOOLS,
-          tool_choice: "auto",
-          max_tokens: 4096,
-          temperature: 0.2,
-        }),
-      });
+      let apiResponse;
+      let retries = 0;
+      const MAX_RETRIES = 3;
+      
+      while (retries < MAX_RETRIES) {
+        apiResponse = await fetch(`${API_BASE}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            messages: apiMessages,
+            tools: AI_TOOLS,
+            tool_choice: "auto",
+            max_tokens: 4096,
+            temperature: 0.2,
+          }),
+        });
+        
+        if (apiResponse.status === 429) {
+          retries++;
+          const retryAfter = parseInt(apiResponse.headers.get("retry-after") || "2");
+          await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+          continue;
+        }
+        break;
+      }
 
       if (!apiResponse.ok) {
         const errText = await apiResponse.text();

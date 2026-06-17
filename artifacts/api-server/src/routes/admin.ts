@@ -329,6 +329,13 @@ adminRouter.get("/users/:id", async (req, res) => {
       .orderBy(desc(transactionsTable.createdAt))
       .limit(20);
 
+    const deviceHistory = await db
+      .select()
+      .from(deviceHistoryTable)
+      .where(eq(deviceHistoryTable.userId, userId))
+      .orderBy(desc(deviceHistoryTable.lastSeen))
+      .limit(50);
+
     res.json({
       user: {
         id: user.id,
@@ -367,6 +374,22 @@ adminRouter.get("/users/:id", async (req, res) => {
         deviceBrowser: user.deviceBrowser,
         deviceType: user.deviceType,
       },
+      deviceHistory: deviceHistory.map((d) => ({
+        id: d.id,
+        fingerprint: d.fingerprint,
+        deviceName: d.deviceName,
+        deviceOs: d.deviceOs,
+        deviceBrowser: d.deviceBrowser,
+        deviceType: d.deviceType,
+        ip: d.ip,
+        country: d.country,
+        city: d.city,
+        vpnDetected: d.vpnDetected,
+        vpnProvider: d.vpnProvider,
+        firstSeen: d.firstSeen?.toISOString(),
+        lastSeen: d.lastSeen?.toISOString(),
+        loginCount: d.loginCount,
+      })),
       bets: bets.map((b) => ({
         id: b.id,
         gameId: b.gameId,
@@ -1813,9 +1836,6 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
     const conditions = [];
     if (date) {
       conditions.push(sql`DATE(${fraudReviewsTable.createdAt}) = ${date}`);
-    } else {
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      conditions.push(sql`${fraudReviewsTable.createdAt} >= ${thirtyDaysAgo.toISOString()}`);
     }
 
     const [totalCount] = await db

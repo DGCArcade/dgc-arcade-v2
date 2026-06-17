@@ -1,13 +1,13 @@
 # DG AI Architecture Design
 
 ## Overview
-DG AI is a highly privileged, intelligent assistant built exclusively for the platform owner (`fanodgc`) of the DGC Arcade platform. It has full read/write access to the Neon database, GitHub repository, and Render deployments. It uses the GPT-5 model via the sandbox OpenAI-compatible API to provide natural language interaction and powerful tool execution.
+DG AI is a highly privileged, intelligent assistant built exclusively for the platform owner (`fanodgc`) of the DGC Arcade platform. It has full read/write access to the Neon database, GitHub repository, and Render deployments. It uses the Groq Llama 3.3 (70B) model to provide natural language interaction and powerful tool execution.
 
 ## Core Components
 
 ### 1. Backend Engine (`artifacts/api-server/src/routes/owner-ai.ts`)
 The backend route handles the agentic loop, tool execution, and communication with the OpenAI API.
-- **Model:** `gpt-5` (highest capability)
+- **Model:** `llama-3.3-70b-versatile` (via Groq)
 - **Streaming:** The route will use Server-Sent Events (SSE) to stream tokens back to the client for a real-time chat experience.
 - **Agentic Loop:** The server handles `tool_calls` internally, executing the tools against the DB/GitHub/Render, and feeding the results back to the LLM until a final text response is generated.
 - **State Management:** The chat history will be persisted in a new database table `admin_ai_messages` so the owner can resume conversations across sessions.
