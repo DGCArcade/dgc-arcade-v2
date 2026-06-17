@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { THEMES, ThemeId, applyTheme, getTheme } from "@/lib/theme";
 import { Button } from "./button";
 import { Palette } from "lucide-react";
@@ -13,6 +13,15 @@ import {
 
 export function ThemeSwitcher() {
   const [current, setCurrent] = useState<ThemeId>(getTheme);
+
+  // Sync with external theme rotations (e.g. navbar rotates on route change)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      setCurrent((e as CustomEvent<ThemeId>).detail);
+    };
+    window.addEventListener("dgc-theme-change", handler);
+    return () => window.removeEventListener("dgc-theme-change", handler);
+  }, []);
 
   const handleSelect = (id: ThemeId) => {
     applyTheme(id);
