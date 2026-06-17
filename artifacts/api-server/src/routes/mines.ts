@@ -45,7 +45,8 @@ minesRouter.post("/start", requireAuth, async (req, res) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(401).json({ error: "User not found" }); return; }
 
-    if (parseFloat(user.balance) < amount) {
+    const { totalBalance } = await getUserBalance(user.id);
+    if (totalBalance < amount) {
       res.status(400).json({ error: "Insufficient balance" });
       return;
     }
@@ -92,7 +93,7 @@ minesRouter.post("/start", requireAuth, async (req, res) => {
       sessionId: session.id,
       mineCount,
       bet: amount,
-      balance: parseFloat(deducted[0].balance),
+      balance: newBalanceAfterDeduct,
       nextMultiplier: calcMultiplier(1, mineCount),
     });
   } catch (err) {

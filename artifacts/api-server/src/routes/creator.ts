@@ -12,13 +12,16 @@ creatorRouter.use(requireAuth);
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "changeme-secret";
 
-function formatUser(u: any) {
+async function formatUser(u: any) {
+  const { getUserBalance } = await import("../lib/balance-service.js");
+  const { totalBalance } = await getUserBalance(u.id);
+
   return {
     id: u.id,
     username: u.username,
     role: u.role,
     accountType: u.accountType,
-    balance: parseFloat(u.balance ?? "0"),
+    balance: totalBalance,
     promoBalance: parseFloat(u.promoBalance ?? "0"),
     vaultBalance: parseFloat(u.vaultBalance ?? "0"),
   };
@@ -70,9 +73,13 @@ creatorRouter.get("/dashboard", async (req, res) => {
       .orderBy(desc(creatorBankTxnsTable.createdAt))
       .limit(50);
 
+    const { getUserBalance } = await import("../lib/balance-service.js");
+    const { totalBalance } = await getUserBalance(user.id);
+
     res.json({
       username: user.username,
       accountType: user.accountType,
+      balance: totalBalance,
       promoBalance: parseFloat(user.promoBalance ?? "0"),
       vaultBalance: parseFloat(user.vaultBalance ?? "0"),
       referralCode: code,
@@ -222,7 +229,7 @@ creatorRouter.post("/link-account", async (req, res) => {
     res.json({
       success: true,
       personalToken: token,
-      personalUser: formatUser(personal),
+      personalUser: await formatUser(personal),
     });
   } catch (err) {
     req.log.error({ err }, "Creator link-account error");
@@ -251,13 +258,16 @@ creatorRouter.get("/linked-account", async (req, res) => {
 
     if (!personal) { res.json({ linked: false }); return; }
 
+    const { getUserBalance } = await import("../lib/balance-service.js");
+    const { totalBalance } = await getUserBalance(personal.id);
+
     res.json({
       linked: true,
       personalUser: {
         id: personal.id,
         username: personal.username,
         role: personal.role,
-        balance: parseFloat(personal.balance ?? "0"),
+        balance: totalBalance,
       },
     });
   } catch (err) {

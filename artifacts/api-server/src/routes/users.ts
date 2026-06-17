@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, usersTable, userBalancesTable } from "@workspace/db";
 import { eq, ilike, sql } from "drizzle-orm";
 import { getCryptoPrice } from "../lib/price-service.js";
+import { getUserBalance } from "../lib/balance-service.js";
 import { requireAuth } from "../middlewares/auth.js";
 export const usersRouter = Router();
 

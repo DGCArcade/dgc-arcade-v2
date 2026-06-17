@@ -592,7 +592,7 @@ async function executeToolCall(
           username: usersTable.username,
           role: usersTable.role,
           balance: usersTable.balance,
-          banned: usersTable.banned,
+          isBanned: usersTable.isBanned,
           createdAt: usersTable.createdAt,
         }).from(usersTable).limit(200);
         result = JSON.stringify({ users, count: users.length });
@@ -654,11 +654,11 @@ async function executeToolCall(
 
       case "ban_user": {
         const { user_id, ban, reason } = toolArgs;
-        const [user] = await db.select({ username: usersTable.username, banned: usersTable.banned }).from(usersTable).where(eq(usersTable.id, user_id)).limit(1);
+        const [user] = await db.select({ username: usersTable.username, isBanned: usersTable.isBanned }).from(usersTable).where(eq(usersTable.id, user_id)).limit(1);
         if (!user) { result = JSON.stringify({ error: "User not found" }); break; }
-        await db.update(usersTable).set({ banned: ban }).where(eq(usersTable.id, user_id));
+        await db.update(usersTable).set({ isBanned: ban }).where(eq(usersTable.id, user_id));
         await logAudit(callerId, callerUsername, ban ? "ban_user" : "unban_user", "user", reason, user_id);
-        result = JSON.stringify({ success: true, user_id, username: user.username, banned: ban, reason });
+        result = JSON.stringify({ success: true, user_id, username: user.username, isBanned: ban, reason });
         break;
       }
 
@@ -965,7 +965,7 @@ async function executeToolCall(
               currency: currency,
             }),
           });
-          const data = await response.json();
+          const data = (await response.json()) as any;
           if (data.status === "success") {
             await logAudit(callerId, callerUsername, "send_crypto", "payment", reason, undefined, undefined, `${amount_usd} ${currency} to ${wallet_address}`);
             result = JSON.stringify({ success: true, txId: data.data.id, amount: amount_usd, currency, address: wallet_address });
@@ -984,7 +984,7 @@ async function executeToolCall(
           const prices: Record<string, number> = {};
           for (const curr of currencies) {
             const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${curr.toLowerCase()}&vs_currencies=usd`);
-            const data = await response.json();
+            const data = (await response.json()) as any;
             prices[curr] = data[curr.toLowerCase()]?.usd || 0;
           }
           result = JSON.stringify({ prices, timestamp: new Date().toISOString() });
@@ -999,7 +999,7 @@ async function executeToolCall(
         if (!PLISIO_KEY) { result = JSON.stringify({ error: "Plisio API key not configured" }); break; }
         try {
           const response = await fetch(`https://plisio.net/api/v1/balance?api_key=${PLISIO_KEY}`);
-          const data = await response.json();
+          const data = (await response.json()) as any;
           if (data.status === "success") {
             result = JSON.stringify({ balances: data.data });
           } else {
@@ -1017,7 +1017,7 @@ async function executeToolCall(
         if (!PLISIO_KEY) { result = JSON.stringify({ error: "Plisio API key not configured" }); break; }
         try {
           const response = await fetch(`https://plisio.net/api/v1/operations?api_key=${PLISIO_KEY}&limit=${limit}`);
-          const data = await response.json();
+          const data = (await response.json()) as any;
           if (data.status === "success") {
             result = JSON.stringify({ transactions: data.data, count: data.data.length });
           } else {
@@ -1045,7 +1045,7 @@ async function executeToolCall(
               description: `DGC Arcade deposit for user ${user_id}`,
             }),
           });
-          const data = await response.json();
+          const data = (await response.json()) as any;
           if (data.status === "success") {
             result = JSON.stringify({ invoiceId: data.data.id, amount: amount_usd, currency, paymentUrl: data.data.invoice_url });
           } else {
@@ -1066,7 +1066,7 @@ async function executeToolCall(
           const frozen: any[] = [];
           for (const fraudCase of fraudCases) {
             if (auto_freeze && fraudCase.score >= 95) {
-              await db.update(usersTable).set({ banned: true }).where(eq(usersTable.id, fraudCase.userId));
+              await db.update(usersTable).set({ isBanned: true }).where(eq(usersTable.id, fraudCase.userId));
               frozen.push({ userId: fraudCase.userId, score: fraudCase.score, reason: "Auto-frozen by Guardian" });
               await logAudit(callerId, callerUsername, "fraud_auto_freeze", "user", `Guardian auto-freeze (score: ${fraudCase.score})`, fraudCase.userId);
             }
@@ -1085,10 +1085,10 @@ async function executeToolCall(
           const users = await db.select({ id: usersTable.id, username: usersTable.username }).from(usersTable).limit(1000);
           for (const user of users) {
             if (action === "ban") {
-              await db.update(usersTable).set({ banned: true }).where(eq(usersTable.id, user.id));
+              await db.update(usersTable).set({ isBanned: true }).where(eq(usersTable.id, user.id));
               affected++;
             } else if (action === "unban") {
-              await db.update(usersTable).set({ banned: false }).where(eq(usersTable.id, user.id));
+              await db.update(usersTable).set({ isBanned: false }).where(eq(usersTable.id, user.id));
               affected++;
             } else if (action === "set_role" && value) {
               await db.update(usersTable).set({ role: value }).where(eq(usersTable.id, user.id));
@@ -1150,14 +1150,14 @@ async function executeToolCall(
         result = JSON.stringify({ error: `Unknown tool: ${toolName}` });
     }
 
-    return { result, toolName, success: true };
+    return { result, toolName, success: true } as any;
   } catch (err: any) {
     logger.error({ err, toolName, toolArgs }, "DGC-AI1 tool execution error");
     return {
       result: JSON.stringify({ error: err?.message || "Tool execution failed" }),
       toolName,
       success: false,
-    };
+    } as any;
   }
 }
 

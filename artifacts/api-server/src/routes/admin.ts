@@ -1189,11 +1189,10 @@ adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
             if (flipped.length === 0) return;
 
             const cryptoCurrency = tx.currency || "ETH";
-            await txn.insert(userBalancesTable).values({ userId: tx.userId, currency: cryptoCurrency, amount: String(receivedAmount) })
-              .onConflictDoUpdate({ target: [userBalancesTable.userId, userBalancesTable.currency], set: { amount: sql`amount + ${String(receivedAmount)}` } });
+            const { creditCryptoBalance: creditCrypto } = await import("../lib/balance-service.js");
+            await creditCrypto(tx.userId, cryptoCurrency, receivedAmount, txn);
 
             const [updatedUser] = await txn.update(usersTable).set({
-              balance: sql`balance + ${creditAmount}`,
               totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
               wagerRequirement: sql`(coalesce(total_deposited, 0) + ${creditAmount}) * 1.0`,
             }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
@@ -1722,7 +1721,7 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
 
     // ── Merge: deduplicate by transaction ID, live takes priority over history ──
     const seenTxIds = new Set<number>();
-    const merged: typeof liveAlerts[number][] = [];
+    const merged: any[] = [];
 
     // Add live alerts first (highest priority — these need action NOW)
     for (const alert of liveAlerts) {
@@ -1734,7 +1733,7 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
     // Add history alerts that aren't already shown live
     for (const alert of historyAlerts) {
       if (!seenTxIds.has(alert.id)) {
-        merged.push(alert as typeof liveAlerts[number]);
+        merged.push(alert);
       }
     }
 

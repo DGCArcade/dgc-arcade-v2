@@ -1900,7 +1900,8 @@ export default function AdminDashboard() {
                             <TableHead className="text-xs">User</TableHead>
                             <TableHead className="text-xs">Plisio ID</TableHead>
                             <TableHead className="text-xs">Type</TableHead>
-                            <TableHead className="text-xs">Amount</TableHead>
+                            <TableHead className="text-xs">Invoiced (USD)</TableHead>
+                            <TableHead className="text-xs">Actual Received</TableHead>
                             <TableHead className="text-xs">Currency</TableHead>
                             <TableHead className="text-xs">Status</TableHead>
                             <TableHead className="text-xs">Date</TableHead>
@@ -1910,8 +1911,10 @@ export default function AdminDashboard() {
                         <TableBody>
                           {bankInvoices.map((inv: any) => {
                             const meta = inv.metadata ? (typeof inv.metadata === 'string' ? JSON.parse(inv.metadata) : inv.metadata) : {};
-                            const received = meta.received_amount;
-                            const total = meta.invoice_total_sum;
+                            const receivedCrypto = meta.received_amount;
+                            const invoicedCrypto = meta.invoice_total_sum;
+                            const sourceUsd = meta.source_amount || meta.source_amount_usd || inv.amount;
+                            const creditedUsd = inv.amount;
                             
                             return (
                             <TableRow key={inv.txn_id ?? inv.id} className="border-border/30">
@@ -1923,24 +1926,27 @@ export default function AdminDashboard() {
                               </TableCell>
                               <TableCell className="font-mono text-xs text-muted-foreground max-w-[90px] truncate" title={inv.txn_id}>{inv.txn_id ?? "—"}</TableCell>
                               <TableCell><Badge variant="outline" className="text-xs capitalize">{inv.type ?? "invoice"}</Badge></TableCell>
-                            <TableCell className="font-mono font-bold">
+                              <TableCell className="font-mono text-xs">
                                 <div className="flex flex-col">
-                                  <span className={inv.status === "completed" ? "text-emerald-400" : ""}>
-                                    ${parseFloat(inv.amount || "0").toFixed(2)}
-                                  </span>
-                                  {inv.status === "completed" && meta.source_amount && Math.abs(parseFloat(meta.source_amount) - parseFloat(inv.amount)) > 0.01 && (
-                                    <span className="text-[10px] text-muted-foreground line-through">
-                                      ${parseFloat(meta.source_amount).toFixed(2)}
-                                    </span>
+                                  <span className="text-muted-foreground">${parseFloat(sourceUsd || "0").toFixed(2)}</span>
+                                  {invoicedCrypto && (
+                                    <span className="text-[10px] text-muted-foreground/60">{invoicedCrypto} {inv.currency}</span>
                                   )}
                                 </div>
-                                {received && (
-                                  <div className="text-[10px] text-emerald-400 font-bold bg-emerald-400/10 px-1 py-0.5 rounded inline-block mt-1">
-                                    {received} {inv.currency}
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">
+                                {inv.status === "completed" ? (
+                                  <div className="flex flex-col">
+                                    <span className="text-emerald-400 font-bold">${parseFloat(creditedUsd || "0").toFixed(2)}</span>
+                                    {receivedCrypto && (
+                                      <span className="text-[10px] text-emerald-400/80">{receivedCrypto} {inv.currency}</span>
+                                    )}
                                   </div>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
                                 )}
                               </TableCell>
-                              <TableCell className="text-sm">{inv.source_currency ?? inv.currency ?? "—"}</TableCell>
+                              <TableCell className="text-sm">{inv.currency ?? "—"}</TableCell>
                               <TableCell>
                                 <Badge className="text-xs" variant={inv.status === "completed" ? "default" : inv.status === "pending" || inv.status === "new" ? "secondary" : "destructive"}>
                                   {inv.status ?? "unknown"}
