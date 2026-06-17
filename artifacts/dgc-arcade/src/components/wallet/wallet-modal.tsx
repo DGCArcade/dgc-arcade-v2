@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,23 @@ import { useInitiateDeposit, useRequestWithdrawal, getGetMeQueryKey } from "@wor
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
-import { ExternalLink, Send, Wallet, ArrowDownToLine, ArrowUpFromLine, Lock, Unlock, Eye, EyeOff } from "lucide-react";
+import { ExternalLink, Send, Wallet, ArrowDownToLine, ArrowUpFromLine, Lock, Unlock, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { CoinIcon, CURRENCIES } from "./coin-icon";
 
 interface WalletModalProps {
   open: boolean;
   onClose: () => void;
+}
+
+interface CoinBalanceData {
+  balances: Record<string, number>;        // live USD value per coin
+  totalBalance: number;                    // total live balance (crypto + static)
+  staticBalance: number;                   // legacy USD-only balance
+  cryptoAmounts: Record<string, {          // raw crypto amounts + price
+    amount: number;
+    price: number;
+    usdValue: number;
+  }>;
 }
 
 export function WalletModal({ open, onClose }: WalletModalProps) {
@@ -34,7 +45,14 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [depositResult, setDepositResult] = useState<{address: string; qrCode: string; paymentUrl: string} | null>(null);
   const [copied, setCopied] = useState(false);
-  const [coinBalances, setCoinBalances] = useState<Record<string, number>>({});
+
+  // Live coin balance state (refreshed from backend on every open + after withdrawal)
+  const [coinData, setCoinData] = useState<CoinBalanceData>({
+    balances: {},
+    totalBalance: 0,
+    staticBalance: 0,
+    cryptoAmounts: {},
+  });
   const [coinBalancesLoading, setCoinBalancesLoading] = useState(true);
 
   // Vault state
@@ -46,17 +64,38 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const [vaultLoading, setVaultLoading] = useState(false);
   const [vaultShowWithdraw, setVaultShowWithdraw] = useState(false);
 
-  // Fetch per-coin deposit balances so we can restrict withdraw to deposited coins
+  // ── Fetch live coin balances from backend ──────────────────────────────────
+  const fetchCoinBalances = useCallback(async () => {
+    setCoinBalancesLoading(true);
+    try {
+      const token = localStorage.getItem("dgc_token");
+      const r = await fetch("/api/transactions/coin-balances", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (r.ok) {
+        const d: CoinBalanceData = await r.json();
+        setCoinData(d);
+
+        // Auto-select the first coin that has a live balance, or keep current if still valid
+        const availableCoins = Object.keys(d.balances).filter(k => (d.balances[k] ?? 0) > 0);
+        if (availableCoins.length > 0 && !availableCoins.includes(withdrawCurrency)) {
+          setWithdrawCurrency(availableCoins[0]);
+        }
+      }
+    } catch (_) {
+      // Silently fail — user still sees their balance from useAuth
+    } finally {
+      setCoinBalancesLoading(false);
+    }
+  }, [withdrawCurrency]);
+
+  // Refresh on open + every 15 seconds while open (live prices)
   useEffect(() => {
-    const token = localStorage.getItem("dgc_token");
-    fetch("/api/transactions/coin-balances", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(r => r.json())
-      .then(d => { if (d.balances) setCoinBalances(d.balances); })
-      .catch(() => {})
-      .finally(() => setCoinBalancesLoading(false));
-  }, []);
+    if (!open) return;
+    fetchCoinBalances();
+    const interval = setInterval(fetchCoinBalances, 15_000);
+    return () => clearInterval(interval);
+  }, [open, fetchCoinBalances]);
 
   // Fetch vault balance
   useEffect(() => {
@@ -71,7 +110,26 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const selectedCurrency = CURRENCIES.find(c => c.value === currency) ?? CURRENCIES[0];
   // Creator accounts (withdrawalsEnabled === false) only see Vault
   const isCreator = user?.withdrawalsEnabled === false;
-  const hasBalance = (user?.balance ?? 0) > 0;
+
+  // ── Live balance values ────────────────────────────────────────────────────
+  // totalBalance from coinData is the live backend value (crypto + static USD).
+  // Fall back to user.balance from /auth/me if coinData hasn't loaded yet.
+  const liveTotal = coinData.totalBalance > 0 ? coinData.totalBalance : (user?.balance ?? 0);
+  const hasBalance = liveTotal > 0;
+
+  // For the selected withdrawal coin: the live USD value available in that coin
+  const coinLiveUsd = coinData.balances[withdrawCurrency] ?? 0;
+
+  // Max the user can withdraw for the selected coin:
+  //   • If they have crypto rows: min(live coin USD value, total live balance)
+  //   • If they only have static USD balance (old user): total live balance
+  const hasCryptoBalances = Object.keys(coinData.balances).length > 0;
+  const maxWithdrawForCoin = hasCryptoBalances
+    ? Math.min(coinLiveUsd, liveTotal)
+    : liveTotal; // old user — allow any coin, capped at total balance
+
+  // Whether the selected coin is available for withdrawal
+  const isCoinAvailable = hasCryptoBalances ? coinLiveUsd > 0 : liveTotal > 0;
 
   const handleDeposit = () => {
     initiateDeposit.mutate({ data: { amount, currency } } as any, {
@@ -92,11 +150,28 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
 
   const handleWithdraw = () => {
     if (!withdrawAddress) { toast({ title: "Address required", variant: "destructive" }); return; }
+    if (withdrawAmount <= 0) { toast({ title: "Amount must be greater than 0", variant: "destructive" }); return; }
+    if (withdrawAmount > liveTotal) {
+      toast({ title: "Insufficient balance", description: `Your live balance is ${formatCurrency(liveTotal)}`, variant: "destructive" });
+      return;
+    }
+    if (hasCryptoBalances && withdrawAmount > coinLiveUsd) {
+      toast({
+        title: "Exceeds coin balance",
+        description: `You only have ${formatCurrency(coinLiveUsd)} in ${withdrawCurrency.split("_")[0]}. Choose a different coin or reduce the amount.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     requestWithdrawal.mutate({ data: { amount: withdrawAmount, currency: withdrawCurrency, address: withdrawAddress } }, {
       onSuccess: () => {
         toast({ title: "Withdrawal Requested", description: "Your withdrawal is being processed." });
+        // Invalidate user balance AND refresh coin balances
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+        fetchCoinBalances();
         setWithdrawAddress("");
+        setWithdrawAmount(1);
       },
       onError: (err: unknown) => {
         const msg = (err as {data?: {error?: string}})?.data?.error ?? "Error";
@@ -195,8 +270,21 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
           {/* Balances */}
           <div className="mt-4 mb-4 space-y-2">
             <div className="bg-secondary/60 rounded-xl p-4 border border-primary/20">
-              <div className="text-xs text-muted-foreground uppercase tracking-widest mb-1">Available Balance</div>
-              <div className="font-mono font-black text-3xl text-primary">{formatCurrency(user?.balance ?? 0)}</div>
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-xs text-muted-foreground uppercase tracking-widest">Available Balance</div>
+                <button
+                  onClick={fetchCoinBalances}
+                  disabled={coinBalancesLoading}
+                  className="text-muted-foreground hover:text-primary transition-colors p-1 rounded"
+                  title="Refresh live balance"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${coinBalancesLoading ? "animate-spin" : ""}`} />
+                </button>
+              </div>
+              <div className="font-mono font-black text-3xl text-primary">{formatCurrency(liveTotal)}</div>
+              {coinData.totalBalance > 0 && Math.abs(coinData.totalBalance - (user?.balance ?? 0)) > 0.01 && (
+                <div className="text-xs text-muted-foreground mt-1">Live price · updates every 15s</div>
+              )}
             </div>
             <div className="bg-secondary/40 rounded-xl px-4 py-3 border border-border/30 flex items-center justify-between">
               <div>
@@ -239,7 +327,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
               </TabsTrigger>
             </TabsList>
 
-            {/* ── DEPOSIT ─────────────────────────────────────── */}
+            {/* ── DEPOSIT ─────────────────────────────────────────── */}
             {!isCreator && (
             <TabsContent value="deposit" className="space-y-5 mt-0">
               <div className="flex gap-2 flex-wrap">
@@ -301,7 +389,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                   )}
                   <div className="bg-secondary/60 rounded-xl p-3 border border-border/50 space-y-2">
                     <p className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Deposit Address</p>
-                    <p className="font-mono text-xs break-all text-foreground leading-relaxed">{depositResult.address || "Address loading..."}</p>
+                    <p className="font-mono text-xs break-all text-foreground">{depositResult.address}</p>
                     <button
                       onClick={() => { navigator.clipboard.writeText(depositResult.address); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
                       className="w-full text-xs py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary font-bold hover:bg-primary/20 transition-colors"
@@ -324,16 +412,53 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
             </TabsContent>
             )}
 
-            {/* ── WITHDRAW ────────────────────────────────────── */}
+            {/* ── WITHDRAW ────────────────────────────────────────── */}
             {!isCreator && (
             <TabsContent value="withdraw" className="space-y-4 mt-0">
+
+              {/* Live balance summary */}
+              <div className="bg-secondary/40 rounded-lg p-3 border border-border/40 space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-bold uppercase tracking-wider">Live Total Balance</span>
+                  <span className="text-primary font-mono font-black">{formatCurrency(liveTotal)}</span>
+                </div>
+                {coinBalancesLoading && (
+                  <div className="text-xs text-muted-foreground animate-pulse">Fetching live prices…</div>
+                )}
+                {!coinBalancesLoading && Object.keys(coinData.cryptoAmounts).length > 0 && (
+                  <div className="space-y-0.5 mt-1">
+                    {Object.entries(coinData.cryptoAmounts).map(([coin, info]) => (
+                      info.usdValue > 0 && (
+                        <div key={coin} className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <CoinIcon currency={coin} size={12} />
+                            {coin.split("_")[0]}
+                          </span>
+                          <span className="font-mono">
+                            {info.amount.toFixed(8)} ≈ <span className="text-foreground">{formatCurrency(info.usdValue)}</span>
+                          </span>
+                        </div>
+                      )
+                    ))}
+                    {coinData.staticBalance > 0 && (
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>USD Balance</span>
+                        <span className="font-mono text-foreground">{formatCurrency(coinData.staticBalance)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Coin selector */}
               <div className="flex gap-2 flex-wrap">
                 {CURRENCIES.map(c => {
-                  const deposited = coinBalances[c.value] ?? 0;
-                  const isAvailable = !hasBalance || deposited > 0;
+                  const liveUsd = coinData.balances[c.value] ?? 0;
+                  // For old users (no crypto rows), all coins are available up to total balance
+                  const isAvailable = hasCryptoBalances ? liveUsd > 0 : liveTotal > 0;
                   return (
                     <button key={c.value}
-                      disabled={!isAvailable}
+                      disabled={!isAvailable || coinBalancesLoading}
                       onClick={() => { if (isAvailable) setWithdrawCurrency(c.value); }}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
                         !isAvailable
@@ -342,7 +467,13 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                             ? "border-primary bg-primary/10 text-primary"
                             : "border-border/50 bg-secondary/40 text-muted-foreground hover:border-primary/40"
                       }`}
-                      title={isAvailable ? (deposited > 0 ? `Deposited: ${deposited.toFixed(2)}` : `Available`) : "Must withdraw in your deposit currency"}
+                      title={
+                        isAvailable
+                          ? hasCryptoBalances
+                            ? `Live balance: ${formatCurrency(liveUsd)}`
+                            : `Available: ${formatCurrency(liveTotal)}`
+                          : "No balance in this coin"
+                      }
                     >
                       <CoinIcon currency={c.value} size={16} />
                       <span>{c.name === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
@@ -352,15 +483,34 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                 })}
               </div>
 
-              {hasBalance && (coinBalances[withdrawCurrency] ?? 0) > 0 && (
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
+              {/* Max for selected coin */}
+              {hasBalance && maxWithdrawForCoin > 0 && (
+                <div className="flex items-center justify-between text-xs text-muted-foreground bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
                   <span>Max for {withdrawCurrency.split("_")[0]}:</span>
-                  <span className="text-primary font-bold font-mono">${Math.min(coinBalances[withdrawCurrency] ?? 0, user?.balance ?? 0).toFixed(2)}</span>
+                  <div className="text-right">
+                    <span className="text-primary font-bold font-mono">{formatCurrency(maxWithdrawForCoin)}</span>
+                    {hasCryptoBalances && coinData.cryptoAmounts[withdrawCurrency] && (
+                      <div className="text-muted-foreground/70 text-[10px]">
+                        {coinData.cryptoAmounts[withdrawCurrency].amount.toFixed(8)} {withdrawCurrency.split("_")[0]}
+                        {" @ "}{formatCurrency(coinData.cryptoAmounts[withdrawCurrency].price)}/coin
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider font-bold">Amount (USD)</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs uppercase tracking-wider font-bold">Amount (USD)</Label>
+                  {maxWithdrawForCoin > 0 && (
+                    <button
+                      onClick={() => setWithdrawAmount(Math.floor(maxWithdrawForCoin * 100) / 100)}
+                      className="text-xs text-primary font-bold hover:underline"
+                    >
+                      MAX
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono">$</span>
                   <Input type="text" inputMode="decimal" value={withdrawAmount === 0 ? "" : String(withdrawAmount)}
@@ -371,8 +521,14 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                   }}
                   onBlur={() => { if (!withdrawAmount || withdrawAmount < 1) setWithdrawAmount(1); }}
                   placeholder="50"
-                  className="pl-8 font-mono bg-secondary"/>
+                  className={`pl-8 font-mono bg-secondary ${withdrawAmount > maxWithdrawForCoin && maxWithdrawForCoin > 0 ? "border-red-500/60" : ""}`}/>
                 </div>
+                {withdrawAmount > liveTotal && liveTotal > 0 && (
+                  <p className="text-xs text-red-400">Exceeds your total live balance of {formatCurrency(liveTotal)}</p>
+                )}
+                {hasCryptoBalances && withdrawAmount > coinLiveUsd && coinLiveUsd > 0 && withdrawAmount <= liveTotal && (
+                  <p className="text-xs text-red-400">Exceeds your {withdrawCurrency.split("_")[0]} balance of {formatCurrency(coinLiveUsd)}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -381,25 +537,33 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
               </div>
 
               <div className="bg-secondary/40 rounded-lg p-3 text-xs text-muted-foreground border border-border/40">
-                Available: <span className="text-foreground font-mono font-bold">{formatCurrency(user?.balance ?? 0)}</span>
-                {" · "}Min: <span className="text-foreground font-mono">$1.00</span>{" · "}Max/tx: <span className="text-foreground font-mono">$100M</span>{" · "}Daily: <span className="text-foreground font-mono">$1B</span>
+                Available: <span className="text-foreground font-mono font-bold">{formatCurrency(liveTotal)}</span>
+                {" · "}Min: <span className="text-foreground font-mono">$1.00</span>
+                {maxWithdrawForCoin > 0 && <>{" · "}Max this coin: <span className="text-primary font-mono font-bold">{formatCurrency(maxWithdrawForCoin)}</span></>}
               </div>
 
               <Button
                 className="w-full font-bold uppercase tracking-widest h-11"
                 onClick={handleWithdraw}
-                disabled={requestWithdrawal.isPending || withdrawAmount < 1 || !hasBalance}
+                disabled={
+                  requestWithdrawal.isPending ||
+                  withdrawAmount < 1 ||
+                  !hasBalance ||
+                  withdrawAmount > liveTotal ||
+                  (hasCryptoBalances && withdrawAmount > coinLiveUsd && coinLiveUsd > 0) ||
+                  coinBalancesLoading
+                }
               >
-                {requestWithdrawal.isPending 
-                  ? "Processing…" 
-                  : withdrawAmount >= 10000 
-                    ? "Request Withdrawal" 
+                {requestWithdrawal.isPending
+                  ? "Processing…"
+                  : withdrawAmount >= 10000
+                    ? "Request Withdrawal"
                     : "Instant Withdrawal"}
               </Button>
             </TabsContent>
             )}
 
-            {/* ── TIP ─────────────────────────────────────────── */}
+            {/* ── TIP ─────────────────────────────────────────────── */}
             {!isCreator && (
             <TabsContent value="tip" className="space-y-4 mt-0">
               <p className="text-sm text-muted-foreground">Send a tip to any player on DGC Arcade.</p>
@@ -434,7 +598,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
             </TabsContent>
             )}
 
-            {/* ── VAULT ───────────────────────────────────────── */}
+            {/* ── VAULT ───────────────────────────────────────────── */}
             <TabsContent value="vault" className="space-y-4 mt-0">
               <div className="bg-secondary/40 rounded-xl p-4 border border-border/40 text-center space-y-1">
                 <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground uppercase tracking-widest font-bold">
@@ -474,7 +638,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                   <Button
                     className="w-full font-bold uppercase tracking-widest h-11"
                     onClick={handleVaultDeposit}
-                    disabled={vaultLoading || vaultDepositAmt <= 0 || vaultDepositAmt > (user?.balance ?? 0)}
+                    disabled={vaultLoading || vaultDepositAmt <= 0 || vaultDepositAmt > liveTotal}
                   >
                     <Lock className="w-4 h-4 mr-2" />
                     {vaultLoading ? "Locking…" : "Lock in Vault"}

@@ -75,28 +75,33 @@ transactionsRouter.get("/", requireAuth, async (req, res) => {
 });
 
 // GET /api/transactions/coin-balances
+// Returns LIVE per-coin USD values (from user_balances + real-time prices)
+// plus the static USD balance for old users who have no crypto rows.
+// This is the single source of truth for the frontend withdrawal limits.
 transactionsRouter.get("/coin-balances", requireAuth, async (req, res) => {
   try {
-    const rows = await db
-      .select({
-        currency: transactionsTable.currency,
-        total: sql`COALESCE(SUM(${transactionsTable.amount}::numeric), 0)`,
-      })
-      .from(transactionsTable)
-      .where(
-        and(
-          eq(transactionsTable.userId, req.user!.userId),
-          eq(transactionsTable.type, "deposit"),
-          eq(transactionsTable.status, "completed"),
-        ),
-      )
-      .groupBy(transactionsTable.currency);
+    const { totalBalance, staticBalance, cryptoBalances } = await getUserBalance(req.user!.userId);
 
+    // Build per-coin live USD map
     const balances: Record<string, number> = {};
-    for (const row of rows) {
-      balances[row.currency] = parseFloat(String(row.total));
+    for (const cb of cryptoBalances) {
+      if (cb.usdValue > 0) {
+        balances[cb.currency] = cb.usdValue;
+      }
     }
-    res.json({ balances });
+
+    // For old/legacy users who only have a static USD balance (no crypto rows),
+    // expose the static balance so the frontend can allow withdrawals.
+    // We tag it as "USD" so the frontend can detect and handle it.
+    res.json({
+      balances,
+      totalBalance,
+      staticBalance,
+      // Per-coin raw crypto amounts (for display purposes)
+      cryptoAmounts: Object.fromEntries(
+        cryptoBalances.map(cb => [cb.currency, { amount: cb.amount, price: cb.price, usdValue: cb.usdValue }])
+      ),
+    });
   } catch (err) {
     req.log.error({ err }, "Coin balances error");
     res.status(500).json({ error: "Internal server error" });
