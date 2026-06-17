@@ -3210,3 +3210,62 @@ adminRouter.delete("/messages/:id", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// ── SLOT ENGINE: THEME MANAGEMENT ──────────────────────────────────────────
+
+// GET /api/admin/slots/themes
+adminRouter.get("/slots/themes", async (req, res) => {
+  try {
+    const themes = await db.select().from(slotThemesTable).orderBy(desc(slotThemesTable.createdAt));
+    res.json({ themes });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/admin/slots/themes
+adminRouter.post("/slots/themes", async (req, res) => {
+  if (!(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Owner only" });
+    return;
+  }
+  const { slug, name, config, assets } = req.body;
+  if (!slug || !name || !config || !assets) {
+    res.status(400).json({ error: "Missing required fields" });
+    return;
+  }
+  try {
+    const [theme] = await db.insert(slotThemesTable).values({
+      slug,
+      name,
+      config,
+      assets,
+    }).returning();
+    res.json({ theme });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// PATCH /api/admin/slots/themes/:id
+adminRouter.patch("/slots/themes/:id", async (req, res) => {
+  if (!(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Owner only" });
+    return;
+  }
+  const id = parseInt(req.params.id, 10);
+  const { name, config, assets, active } = req.body;
+  try {
+    const updates: any = {};
+    if (name) updates.name = name;
+    if (config) updates.config = config;
+    if (assets) updates.assets = assets;
+    if (active !== undefined) updates.active = String(active);
+    updates.updatedAt = new Date();
+
+    const [updated] = await db.update(slotThemesTable).set(updates).where(eq(slotThemesTable.id, id)).returning();
+    res.json({ theme: updated });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});

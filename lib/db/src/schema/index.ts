@@ -18,3 +18,4 @@ export * from "./admin-audit-logs";
 export * from "./fraud-reviews";
 export * from "./user-balances";
 export * from "./visitors";
+export * from "./slot-themes";

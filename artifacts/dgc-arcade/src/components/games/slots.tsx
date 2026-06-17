@@ -8,6 +8,7 @@ import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SlotMachine } from "./SlotMachine";
 
 interface SlotsProps {
   game: Game;
@@ -133,38 +134,9 @@ export function Slots({ game }: SlotsProps) {
 
   return (
     <div className="flex flex-col md:flex-row gap-8">
-      {/* Game Area */}
-      <div className="flex-1 bg-secondary border border-border rounded-xl p-8 flex flex-col items-center justify-center min-h-[400px] relative overflow-hidden">
-        
-        {/* Slot Machine Frame */}
-        <div className="bg-card border-8 border-border rounded-xl p-4 md:p-8 w-full max-w-xl mx-auto shadow-2xl">
-          {/* Reels */}
-          <div className="grid grid-cols-3 gap-2 md:gap-4 bg-background p-2 md:p-4 rounded-lg shadow-inner">
-            {reels.map((symbol, i) => (
-              <div 
-                key={i} 
-                className="bg-secondary border border-border rounded-md aspect-[3/4] flex items-center justify-center overflow-hidden relative"
-              >
-                <span className={`font-display font-black text-xl md:text-3xl uppercase tracking-tighter ${getSymbolColor(symbol)} ${isSpinning ? 'animate-pulse' : ''}`}>
-                  {symbol}
-                </span>
-                
-                {/* Glow effect on win */}
-                {!isSpinning && win && (
-                  <div className="absolute inset-0 bg-primary/20 animate-pulse rounded-md" />
-                )}
-              </div>
-            ))}
-          </div>
-          
-          <div className="mt-8 text-center h-8">
-            {win !== null && !isSpinning && (
-              <span className={`font-display font-bold text-2xl uppercase tracking-widest ${win ? 'text-primary animate-bounce' : 'text-muted-foreground'}`}>
-                {win ? 'WINNER!' : 'SPIN AGAIN'}
-              </span>
-            )}
-          </div>
-        </div>
+      {/* Game Area - Upgraded to Next-Gen Slot Engine */}
+      <div className="flex-1 relative min-h-[600px]">
+        <SlotMachine />
       </div>
       
       {/* Bet Controls */}
