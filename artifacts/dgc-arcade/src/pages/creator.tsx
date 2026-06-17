@@ -127,6 +127,7 @@ export default function CreatorPage() {
   const { toast } = useToast();
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [dashError, setDashError] = useState<string | null>(null);
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [dashLoading, setDashLoading] = useState(true);
   const [messages, setMessages] = useState<CreatorMessage[]>([]);
@@ -147,9 +148,16 @@ export default function CreatorPage() {
         fetch("/api/creator/dashboard", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
         fetch("/api/referrals/my-referrals", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
       ]);
-      if (!dash.error) setDashboard(dash);
+      if (!dash.error) {
+        setDashboard(dash);
+        setDashError(null);
+      } else {
+        setDashError(dash.error);
+      }
       if (Array.isArray(refs)) setReferrals(refs);
-    } catch {}
+    } catch (e: unknown) {
+      setDashError(e instanceof Error ? e.message : "Network error");
+    }
     finally { setDashLoading(false); }
   }, [isAuthenticated]);
 
@@ -192,8 +200,9 @@ export default function CreatorPage() {
     return (
       <div className="text-center py-24 space-y-4">
         <p className="text-muted-foreground font-mono">Failed to load affiliate hub.</p>
+        {dashError && <p className="text-xs text-red-400 font-mono max-w-sm mx-auto break-all">{dashError}</p>}
         <button
-          onClick={() => { setDashLoading(true); fetchDashboard(); }}
+          onClick={() => { setDashLoading(true); setDashError(null); fetchDashboard(); }}
           className="px-5 py-2 rounded-lg bg-primary/20 border border-primary/40 text-primary text-sm font-bold hover:bg-primary/30 transition-colors"
         >
           Retry
