@@ -201,6 +201,18 @@ export default function AdminDashboard() {
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [newUser, setNewUser] = useState({ username: "", password: "", role: "player", balance: "0" });
   const [creatingUser, setCreatingUser] = useState(false);
+  const [createCreatorOpen, setCreateCreatorOpen] = useState(false);
+  const [newCreator, setNewCreator] = useState({
+    username: "",
+    password: "",
+    displayName: "",
+    platform: "",
+    platformHandle: "",
+    promoBalance: "0",
+    customCommissionPct: "10",
+    notes: "",
+  });
+  const [creatingCreator, setCreatingCreator] = useState(false);
   // ── Bank state ──
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({});
   const [bankBalances, setBankBalances] = useState<Record<string, { balance: string; allowed: number }>>({});
@@ -338,6 +350,40 @@ export default function AdminDashboard() {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setCreatingUser(false);
+    }
+  };
+
+  const handleCreateSpecialtyCreator = async () => {
+    if (!newCreator.username || !newCreator.password) {
+      toast({ title: "Username and password required", variant: "destructive" }); return;
+    }
+    setCreatingCreator(true);
+    try {
+      const res = await adminFetch("/create-specialty-creator", {
+        method: "POST",
+        body: JSON.stringify({
+          username: newCreator.username,
+          password: newCreator.password,
+          displayName: newCreator.displayName || undefined,
+          platform: newCreator.platform || undefined,
+          platformHandle: newCreator.platformHandle || undefined,
+          promoBalance: parseFloat(newCreator.promoBalance || "0"),
+          customCommissionPct: parseFloat(newCreator.customCommissionPct || "10"),
+          notes: newCreator.notes || undefined,
+        }),
+      });
+      toast({
+        title: "⭐ Creator Created",
+        description: `@${newCreator.username} is now a specialty creator. Promo balance: $${newCreator.promoBalance}`,
+        className: "bg-purple-900 border-purple-500",
+      });
+      setCreateCreatorOpen(false);
+      setNewCreator({ username: "", password: "", displayName: "", platform: "", platformHandle: "", promoBalance: "0", customCommissionPct: "10", notes: "" });
+      loadUsers();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setCreatingCreator(false);
     }
   };
 
@@ -1050,9 +1096,16 @@ export default function AdminDashboard() {
               />
             </div>
             <span className="text-sm text-muted-foreground">{usersTotal} users</span>
-            <Button size="sm" className="ml-auto gap-1.5 font-bold uppercase tracking-wider" onClick={() => setCreateUserOpen(true)}>
-              <Shield className="w-3.5 h-3.5" /> + Create User
-            </Button>
+            <div className="ml-auto flex gap-2">
+              {isOwner && (
+                <Button size="sm" variant="outline" className="gap-1.5 font-bold uppercase tracking-wider border-purple-500/40 text-purple-400 hover:bg-purple-500/10 hover:border-purple-500/60" onClick={() => setCreateCreatorOpen(true)}>
+                  <Star className="w-3.5 h-3.5" /> + Specialty Creator
+                </Button>
+              )}
+              <Button size="sm" className="gap-1.5 font-bold uppercase tracking-wider" onClick={() => setCreateUserOpen(true)}>
+                <Shield className="w-3.5 h-3.5" /> + Create User
+              </Button>
+            </div>
           </div>
 
           <div className="rounded-xl border border-border/40 overflow-hidden">
@@ -2751,6 +2804,85 @@ export default function AdminDashboard() {
                 finally { setLoadingAction(null); }
               }}>
               {loadingAction === "save-tourney" ? "Saving…" : editTourney ? "Save Changes" : "Create Tournament"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Create Specialty Creator Dialog ── */}
+      <Dialog open={createCreatorOpen} onOpenChange={setCreateCreatorOpen}>
+        <DialogContent className="bg-card border-purple-500/30 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-purple-400">
+              <Star className="w-4 h-4 fill-purple-400" /> Create Specialty Creator
+            </DialogTitle>
+            <DialogDescription>
+              Specialty creators are invited partners — famous streamers, influencers, or brand ambassadors. They get a custom setup with promo balance and negotiated commission.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Username *</label>
+                <Input placeholder="username" value={newCreator.username} onChange={e => setNewCreator(p => ({ ...p, username: e.target.value }))} className="bg-secondary border-border/60" />
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Password *</label>
+                <Input type="password" placeholder="••••••••" value={newCreator.password} onChange={e => setNewCreator(p => ({ ...p, password: e.target.value }))} className="bg-secondary border-border/60" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Display Name</label>
+              <Input placeholder="e.g. xQc, Adin Ross" value={newCreator.displayName} onChange={e => setNewCreator(p => ({ ...p, displayName: e.target.value }))} className="bg-secondary border-border/60" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Platform</label>
+                <select value={newCreator.platform} onChange={e => setNewCreator(p => ({ ...p, platform: e.target.value }))}
+                  className="w-full rounded-md border border-border/60 bg-secondary px-3 py-2 text-sm focus:outline-none focus:border-purple-500/50">
+                  <option value="">Select…</option>
+                  <option value="Twitch">Twitch</option>
+                  <option value="YouTube">YouTube</option>
+                  <option value="Kick">Kick</option>
+                  <option value="TikTok">TikTok</option>
+                  <option value="Instagram">Instagram</option>
+                  <option value="X / Twitter">X / Twitter</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Handle / Channel</label>
+                <Input placeholder="@handle" value={newCreator.platformHandle} onChange={e => setNewCreator(p => ({ ...p, platformHandle: e.target.value }))} className="bg-secondary border-border/60" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Starting Promo Balance ($)</label>
+                <Input type="number" placeholder="0" value={newCreator.promoBalance} onChange={e => setNewCreator(p => ({ ...p, promoBalance: e.target.value }))} className="bg-secondary border-border/60" />
+                <p className="text-[10px] text-muted-foreground mt-1">Non-withdrawable casino credits</p>
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Commission % (custom)</label>
+                <Input type="number" min={0} max={50} placeholder="10" value={newCreator.customCommissionPct} onChange={e => setNewCreator(p => ({ ...p, customCommissionPct: e.target.value }))} className="bg-secondary border-border/60" />
+                <p className="text-[10px] text-muted-foreground mt-1">Monthly % of house profit</p>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Internal Notes</label>
+              <textarea placeholder="Contract details, follower count, deal terms…"
+                value={newCreator.notes}
+                onChange={e => setNewCreator(p => ({ ...p, notes: e.target.value }))}
+                rows={2}
+                className="w-full rounded-md border border-border/60 bg-secondary px-3 py-2 text-sm font-mono focus:outline-none focus:border-purple-500/50 resize-none" />
+            </div>
+            <div className="p-3 rounded-lg bg-purple-500/5 border border-purple-500/20 text-xs text-purple-300/80">
+              ⭐ This account will be created as <strong>accountType: creator</strong> with full Creator Hub access. You can customize their profile further after creation.
+            </div>
+          </div>
+          <div className="flex gap-3 mt-4">
+            <Button variant="outline" className="flex-1" onClick={() => setCreateCreatorOpen(false)}>Cancel</Button>
+            <Button className="flex-1 font-bold bg-purple-600 hover:bg-purple-500 text-white" onClick={handleCreateSpecialtyCreator} disabled={creatingCreator}>
+              {creatingCreator ? "Creating…" : "⭐ Create Creator"}
             </Button>
           </div>
         </DialogContent>

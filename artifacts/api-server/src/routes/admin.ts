@@ -454,6 +454,76 @@ adminRouter.post("/create-user", async (req, res) => {
   }
 });
 
+// POST /api/admin/create-specialty-creator — owner only
+adminRouter.post("/create-specialty-creator", async (req, res) => {
+  if (!(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Only the owner can create specialty creator accounts." });
+    return;
+  }
+
+  const { username, password, displayName, platform, platformHandle, promoBalance, customCommissionPct, notes } = req.body as {
+    username?: string;
+    password?: string;
+    displayName?: string;
+    platform?: string;
+    platformHandle?: string;
+    promoBalance?: number;
+    customCommissionPct?: number;
+    notes?: string;
+  };
+
+  if (!username || !password) {
+    res.status(400).json({ error: "Username and password are required" });
+    return;
+  }
+  if (username.toLowerCase() === "fanodgc") {
+    res.status(403).json({ error: "That username is reserved." });
+    return;
+  }
+
+  try {
+    const bcrypt = await import("bcryptjs");
+    const passwordHash = await bcrypt.hash(password, 12);
+    const promo = String(promoBalance ?? 0);
+
+    const [created] = await db
+      .insert(usersTable)
+      .values({
+        username,
+        passwordHash,
+        role: "creator",
+        accountType: "creator",
+        balance: promo,
+        promoBalance: promo,
+        withdrawalsEnabled: false,
+      })
+      .returning();
+
+    res.json({
+      id: created.id,
+      username: created.username,
+      role: created.role,
+      accountType: created.accountType,
+      promoBalance: parseFloat(created.promoBalance ?? "0"),
+      displayName: displayName ?? null,
+      platform: platform ?? null,
+      platformHandle: platformHandle ?? null,
+      customCommissionPct: customCommissionPct ?? 10,
+      notes: notes ?? null,
+    });
+  } catch (err: unknown) {
+    const e = err as { message?: string; code?: string; cause?: { message?: string; code?: string } };
+    const combined = `${e.message ?? ""} ${e.cause?.message ?? ""}`;
+    const code = e.code ?? e.cause?.code;
+    if (code === "23505" || combined.includes("unique")) {
+      res.status(409).json({ error: "Username already taken" });
+      return;
+    }
+    req.log.error({ err }, "Admin create specialty creator error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // PATCH /api/admin/users/:id
 adminRouter.patch("/users/:id", async (req, res) => {
   const userId = parseInt(req.params.id, 10);

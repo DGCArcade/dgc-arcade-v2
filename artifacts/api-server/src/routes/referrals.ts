@@ -5,20 +5,117 @@ import { requireAuth } from "../middlewares/auth.js";
 
 export const referralsRouter = Router();
 
-// ── Affiliate tier system ────────────────────────────────────────────────────
-// Tier is based on number of ACTIVE referrals (referred users who have deposited)
-export function getReferralTier(activeCount: number): {
+// ── DGC Arcade Affiliate Tier System ─────────────────────────────────────────
+// 13 public tiers (3 Bronze + 3 Silver + 3 Gold + 3 Platinum) + 1 private contract tier
+// Tier is based on number of ACTIVE referrals (users who have deposited)
+//
+// Commission = % of monthly net casino profit (house win) from referred users
+//
+export interface Affiliatetier {
   tier: string;
+  group: "Bronze" | "Silver" | "Gold" | "Platinum" | "Private";
   commissionRate: number;
   nextTierAt: number | null;
   color: string;
   emoji: string;
-} {
-  if (activeCount >= 50) return { tier: "Platinum", commissionRate: 0.10, nextTierAt: null,  color: "#e5e4e2", emoji: "💎" };
-  if (activeCount >= 20) return { tier: "Gold",     commissionRate: 0.07, nextTierAt: 50,    color: "#ffd700", emoji: "🥇" };
-  if (activeCount >= 5)  return { tier: "Silver",   commissionRate: 0.05, nextTierAt: 20,    color: "#c0c0c0", emoji: "🥈" };
-  return                        { tier: "Bronze",   commissionRate: 0.03, nextTierAt: 5,     color: "#cd7f32", emoji: "🥉" };
+  isPrivate: boolean;
+  description: string;
 }
+
+export function getReferralTier(activeCount: number): Affiliatetier {
+  // Private / Contract tier (invite-only, negotiated rate — shown as locked)
+  if (activeCount >= 200) return {
+    tier: "Legend", group: "Private", commissionRate: 0, nextTierAt: null,
+    color: "#ff6aff", emoji: "🔒", isPrivate: true,
+    description: "Contract-based. Invite only."
+  };
+  // Platinum III
+  if (activeCount >= 100) return {
+    tier: "Platinum III", group: "Platinum", commissionRate: 0.30, nextTierAt: 200,
+    color: "#b9f2ff", emoji: "💠", isPrivate: false,
+    description: "30% monthly commission"
+  };
+  // Platinum II
+  if (activeCount >= 60) return {
+    tier: "Platinum II", group: "Platinum", commissionRate: 0.25, nextTierAt: 100,
+    color: "#c8e6ff", emoji: "💎", isPrivate: false,
+    description: "25% monthly commission"
+  };
+  // Platinum I
+  if (activeCount >= 35) return {
+    tier: "Platinum I", group: "Platinum", commissionRate: 0.20, nextTierAt: 60,
+    color: "#e5e4e2", emoji: "🏆", isPrivate: false,
+    description: "20% monthly commission"
+  };
+  // Gold III — GOAT
+  if (activeCount >= 20) return {
+    tier: "Goat", group: "Gold", commissionRate: 0.15, nextTierAt: 35,
+    color: "#ffd700", emoji: "🐐", isPrivate: false,
+    description: "15% monthly commission"
+  };
+  // Gold II — Icon
+  if (activeCount >= 12) return {
+    tier: "Icon", group: "Gold", commissionRate: 0.12, nextTierAt: 20,
+    color: "#ffc53d", emoji: "⭐", isPrivate: false,
+    description: "12% monthly commission"
+  };
+  // Gold I — Legend
+  if (activeCount >= 7) return {
+    tier: "Legend", group: "Gold", commissionRate: 0.10, nextTierAt: 12,
+    color: "#ffaa00", emoji: "🥇", isPrivate: false,
+    description: "10% monthly commission"
+  };
+  // Silver III — Shark
+  if (activeCount >= 4) return {
+    tier: "Shark", group: "Silver", commissionRate: 0.08, nextTierAt: 7,
+    color: "#a0cfff", emoji: "🦈", isPrivate: false,
+    description: "8% monthly commission"
+  };
+  // Silver II — Whale
+  if (activeCount >= 2) return {
+    tier: "Whale", group: "Silver", commissionRate: 0.06, nextTierAt: 4,
+    color: "#c0c0c0", emoji: "🐋", isPrivate: false,
+    description: "6% monthly commission"
+  };
+  // Silver I — High Roller
+  if (activeCount >= 1) return {
+    tier: "High Roller", group: "Silver", commissionRate: 0.05, nextTierAt: 2,
+    color: "#b0d0ff", emoji: "🎰", isPrivate: false,
+    description: "5% monthly commission"
+  };
+  // Bronze III — Baller
+  if (activeCount >= 0) {
+    // sub-tiers within Bronze based on pending referrals concept — all start here
+  }
+  // Default: Bronze I — Hustler (0 active referrals)
+  return {
+    tier: "Hustler", group: "Bronze", commissionRate: 0.03, nextTierAt: 1,
+    color: "#cd7f32", emoji: "🥉", isPrivate: false,
+    description: "3% monthly commission"
+  };
+}
+
+// All tiers in order — used for the tier ladder display
+export const ALL_TIERS: Affiliatetier[] = [
+  { tier: "Hustler",     group: "Bronze",  commissionRate: 0.03, nextTierAt: 1,   color: "#cd7f32", emoji: "🥉", isPrivate: false, description: "3% monthly commission" },
+  { tier: "Grinder",     group: "Bronze",  commissionRate: 0.04, nextTierAt: 2,   color: "#c67a28", emoji: "💪", isPrivate: false, description: "4% monthly commission" },
+  { tier: "Baller",      group: "Bronze",  commissionRate: 0.05, nextTierAt: 4,   color: "#b06520", emoji: "🔥", isPrivate: false, description: "5% monthly commission — upgrade to Silver" },
+  { tier: "High Roller", group: "Silver",  commissionRate: 0.05, nextTierAt: 4,   color: "#b0d0ff", emoji: "🎰", isPrivate: false, description: "5% monthly commission" },
+  { tier: "Whale",       group: "Silver",  commissionRate: 0.06, nextTierAt: 7,   color: "#c0c0c0", emoji: "🐋", isPrivate: false, description: "6% monthly commission" },
+  { tier: "Shark",       group: "Silver",  commissionRate: 0.08, nextTierAt: 12,  color: "#a0cfff", emoji: "🦈", isPrivate: false, description: "8% monthly commission" },
+  { tier: "Legend",      group: "Gold",    commissionRate: 0.10, nextTierAt: 20,  color: "#ffaa00", emoji: "🥇", isPrivate: false, description: "10% monthly commission" },
+  { tier: "Icon",        group: "Gold",    commissionRate: 0.12, nextTierAt: 35,  color: "#ffc53d", emoji: "⭐", isPrivate: false, description: "12% monthly commission" },
+  { tier: "Goat",        group: "Gold",    commissionRate: 0.15, nextTierAt: 60,  color: "#ffd700", emoji: "🐐", isPrivate: false, description: "15% monthly commission" },
+  { tier: "Platinum I",  group: "Platinum",commissionRate: 0.20, nextTierAt: 100, color: "#e5e4e2", emoji: "🏆", isPrivate: false, description: "20% monthly commission" },
+  { tier: "Platinum II", group: "Platinum",commissionRate: 0.25, nextTierAt: 200, color: "#c8e6ff", emoji: "💎", isPrivate: false, description: "25% monthly commission" },
+  { tier: "Platinum III",group: "Platinum",commissionRate: 0.30, nextTierAt: null,color: "#b9f2ff", emoji: "💠", isPrivate: false, description: "30% monthly commission — max public" },
+  { tier: "Legend",      group: "Private", commissionRate: 0,    nextTierAt: null, color: "#ff6aff", emoji: "🔒", isPrivate: true,  description: "Contract-based. Invite only." },
+];
+
+// GET /api/referrals/tiers — public endpoint to display the tier ladder
+referralsRouter.get("/tiers", (_req, res) => {
+  res.json({ tiers: ALL_TIERS });
+});
 
 // GET /api/referrals/my-code
 referralsRouter.get("/my-code", requireAuth, async (req, res) => {
@@ -48,11 +145,14 @@ referralsRouter.get("/my-code", requireAuth, async (req, res) => {
       code,
       link: siteUrl ? `${siteUrl}?ref=${code}` : `/?ref=${code}`,
       tier: tier.tier,
+      group: tier.group,
       color: tier.color,
       emoji: tier.emoji,
       commissionRate: tier.commissionRate,
       commissionPct: Math.round(tier.commissionRate * 100),
       nextTierAt: tier.nextTierAt,
+      description: tier.description,
+      isPrivate: tier.isPrivate,
       activeReferrals: activeCount,
       pendingReferrals: pendingCount,
       totalEarned: parseFloat(totalEarned ?? "0"),
