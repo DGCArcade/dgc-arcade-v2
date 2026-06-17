@@ -139,6 +139,10 @@ async function usdToCrypto(
  * Sends a Plisio payout for an existing withdrawal transaction row (must be "pending").
  * Handles the full double-pay guard, error/ambiguous-outcome logic, and DB state updates.
  *
+ * IMPORTANT: The Plisio /operations/withdraw endpoint requires `amount` in CRYPTO units.
+ * It does NOT support source_amount/source_currency (those are deposit/invoice-only params).
+ * We convert USD → crypto locally using usdToCrypto() before calling the API.
+ *
  * After a successful Plisio payout response, stores the Plisio txn_id in BOTH
  * txHash AND plisioTrackId. This lets the /deposit/callback IPN handler find
  * the withdrawal row when Plisio later confirms the on-chain status.
@@ -161,13 +165,25 @@ export async function sendPlisioPayout(
   const payoutCurrency = PLISIO_PAYOUT_MAP[tx.currency ?? "BTC"] ?? (tx.currency ?? "BTC");
   const usdAmount = parseFloat(tx.amount);
 
-  // We no longer pre-convert USD to crypto locally.
-  // Per project gotchas, Plisio's withdraw API performs better when we pass
-  // source_amount + source_currency=USD directly. This avoids "transaction can't be computed"
-  // errors caused by precision mismatches or stale local rates.
+  // ── Convert USD → crypto amount ───────────────────────────────────────────
+  // The Plisio withdraw endpoint requires `amount` in crypto units.
+  // source_amount/source_currency are NOT supported on the withdraw endpoint
+  // (they only work for the invoice/deposit endpoint). Passing them causes
+  // Plisio to return {"amount":"Missing required attribute"}.
+  const conversion = await usdToCrypto(usdAmount, payoutCurrency, PLISIO_KEY, log);
+  if (!conversion) {
+    log.error({ txId, usdAmount, currency: payoutCurrency }, "Plisio payout: USD→crypto conversion failed — leaving pending");
+    return {
+      outcome: "reverted_pending",
+      message: "Could not fetch exchange rate to convert USD to crypto. Funds were NOT sent — will retry.",
+    };
+  }
+
+  const { cryptoAmount, rate } = conversion;
+
   log.info(
-    { txId, usdAmount, currency: payoutCurrency },
-    "Plisio payout: initiating with source_amount=USD",
+    { txId, usdAmount, cryptoAmount, currency: payoutCurrency, rate },
+    "Plisio payout: initiating with crypto amount",
   );
 
   // Double-pay guard: atomically claim the row by flipping pending → processing.
@@ -191,13 +207,20 @@ export async function sendPlisioPayout(
 
   // Use API_URL for callbacks so they reach the Render service, not the Netlify frontend
   const apiUrl = process.env.API_URL ?? process.env.SITE_URL ?? "";
+
+  // ── Build Plisio withdraw request ─────────────────────────────────────────
+  // Required fields per Plisio docs:
+  //   currency  — crypto symbol (e.g. BTC, ETH, USDT_TRX)
+  //   type      — "cash_out" for single withdrawal
+  //   to        — destination wallet address
+  //   amount    — amount in CRYPTO units (NOT USD)
+  //   api_key   — your Plisio secret key
   const params = new URLSearchParams({
-    api_key: PLISIO_KEY,
-    currency: payoutCurrency,
-    to: tx.address,
-    source_amount: usdAmount.toString(),
-    source_currency: "USD",
-    type: "cash_out",
+    api_key:      PLISIO_KEY,
+    currency:     payoutCurrency,
+    type:         "cash_out",
+    to:           tx.address,
+    amount:       cryptoAmount,
     callback_url: `${apiUrl}/api/transactions/deposit/callback`,
   });
 
