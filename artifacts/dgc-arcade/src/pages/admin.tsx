@@ -583,6 +583,13 @@ export default function AdminDashboard() {
     return () => clearInterval(id);
   }, [bankUnlocked, isOwner]);
 
+  // Prevent restricted tabs for certain roles (moved from render body to avoid infinite loop)
+  useEffect(() => {
+    if (isOwner && activeTab === "bank-dashboard") {
+      setActiveTab("bank");
+    }
+  }, [isOwner, activeTab]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       if (activeTab === "users" && isAdmin) loadUsers();
@@ -838,10 +845,6 @@ export default function AdminDashboard() {
   }
 
   if (!isAdmin) return null;
-
-  if (user?.username === "fanodgc" && activeTab === "transactions") {
-    setActiveTab("overview");
-  }
 
   // Owner: Full access (Bank, AI, Stats, etc.)
   // Regular admin: Restricted access (Fraud Monitor, Transactions, Chat)
