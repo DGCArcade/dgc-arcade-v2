@@ -485,6 +485,10 @@ adminRouter.patch("/users/:id", async (req, res) => {
     if (role !== undefined) updates.role = role;
     if (isBanned !== undefined) updates.isBanned = isBanned;
 
+    // Sync accountType with role for creator accounts
+    if (role === "creator") updates.accountType = "creator";
+    if (role === "player") updates.accountType = "normal";
+
     // Keep DGC Bank PINs in sync with admin status, regardless of promotion path.
     if (role === "admin" && target && !target.dgcBankPin) {
       // Promoting to admin and no PIN yet — generate a unique one.

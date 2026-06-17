@@ -249,7 +249,7 @@ export default function CreatorPage() {
     return <div className="text-center py-24 text-muted-foreground font-mono">Failed to load creator hub.</div>;
   }
 
-  const isCreator = user?.accountType === "creator";
+  const isCreator = user?.accountType === "creator" || user?.role === "creator";
   const tierProgress = dashboard.nextTierAt
     ? Math.min((dashboard.activeReferrals / dashboard.nextTierAt) * 100, 100)
     : 100;

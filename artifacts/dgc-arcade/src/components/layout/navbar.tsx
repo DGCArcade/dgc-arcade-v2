@@ -32,7 +32,7 @@ export function Navbar() {
   const [vipOpen, setVipOpen] = useState(false);
   const isOwner = user ? (user.username ?? "").toLowerCase() === "fanodgc" : false;
   const isAdmin = user ? (user.role === "admin" || user.role === "owner" || isOwner) : false;
-  const isCreator = user?.accountType === "creator";
+  const isCreator = user?.accountType === "creator" || user?.role === "creator";
   const [bankPinOpen, setBankPinOpen] = useState(false);
   const [bankPin, setBankPin] = useState("");
   const [bankPinError, setBankPinError] = useState("");
@@ -160,10 +160,15 @@ export function Navbar() {
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 p-0">
-                      <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center border border-primary/40 text-primary font-bold text-sm hover:border-primary transition-colors">
+                    <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 p-0 relative">
+                      <div className={`w-9 h-9 rounded-full bg-secondary flex items-center justify-center font-bold text-sm transition-colors ${isCreator ? "border-2 border-purple-500/70 text-purple-300 hover:border-purple-400" : "border border-primary/40 text-primary hover:border-primary"}`}>
                         {(user?.username?.[0] || "?").toUpperCase()}
                       </div>
+                      {isCreator && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-purple-600 border border-background flex items-center justify-center shadow-md" title="Creator">
+                          <Star className="w-2.5 h-2.5 text-white fill-white" />
+                        </span>
+                      )}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56 bg-card border-border/60 backdrop-blur-xl">
