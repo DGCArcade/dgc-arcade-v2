@@ -538,6 +538,50 @@ const AI_TOOLS = [
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "github_write_via_api",
+      description: "Write or update any file in the DGC Arcade GitHub repo using the GitHub REST API and commit it directly. PREFERRED method for code changes — works reliably on Render without needing git access.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "File path relative to repo root (e.g. artifacts/api-server/src/routes/games.ts)" },
+          content: { type: "string", description: "Full new file content to write" },
+          commit_message: { type: "string", description: "Git commit message" },
+        },
+        required: ["path", "content", "commit_message"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "github_read_via_api",
+      description: "Read any file from the DGC Arcade GitHub repo using the REST API. PREFERRED method for reading source code — always returns the latest committed version.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "File path relative to repo root" },
+          ref: { type: "string", default: "main", description: "Branch or commit ref" },
+        },
+        required: ["path"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "github_list_files",
+      description: "List files and directories in the repo at a given path. Use to explore the codebase.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string", default: "", description: "Directory path (empty for root)" },
+        },
+      },
+    },
+  },
 ];
 
 // ── Tool Execution ────────────────────────────────────────────────────────────
@@ -1146,7 +1190,87 @@ async function executeToolCall(
         break;
       }
 
-            default:
+      case "github_write_via_api": {
+        const { path: filePath, content, commit_message } = toolArgs;
+        if (!GITHUB_TOKEN) { result = JSON.stringify({ error: "GITHUB_TOKEN not configured on this server" }); break; }
+        try {
+          // Get current file SHA (needed for update; undefined for new file)
+          const getRes = await fetch(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO_NAME}/contents/${filePath}?ref=main`,
+            { headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: "application/vnd.github+json" } }
+          );
+          let sha: string | undefined;
+          if (getRes.ok) {
+            const existing = await getRes.json() as any;
+            sha = existing.sha;
+          }
+
+          const encoded = Buffer.from(content, "utf8").toString("base64");
+          const putRes = await fetch(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO_NAME}/contents/${filePath}`,
+            {
+              method: "PUT",
+              headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" },
+              body: JSON.stringify({ message: commit_message, content: encoded, sha, branch: "main" }),
+            }
+          );
+          if (!putRes.ok) {
+            const errData = await putRes.json().catch(() => ({})) as any;
+            result = JSON.stringify({ error: `GitHub API error ${putRes.status}: ${errData.message || putRes.statusText}` });
+            break;
+          }
+          const data = await putRes.json() as any;
+          await logAudit(callerId, callerUsername, "github_write", "file", commit_message, undefined, undefined, filePath);
+          result = JSON.stringify({ success: true, commitSha: data.commit?.sha, path: filePath, message: commit_message, url: data.content?.html_url });
+        } catch (e: any) {
+          result = JSON.stringify({ error: `GitHub API error: ${e.message}` });
+        }
+        break;
+      }
+
+      case "github_read_via_api": {
+        const { path: filePath, ref = "main" } = toolArgs;
+        if (!GITHUB_TOKEN) { result = JSON.stringify({ error: "GITHUB_TOKEN not configured" }); break; }
+        try {
+          const getRes = await fetch(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO_NAME}/contents/${filePath}?ref=${ref}`,
+            { headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: "application/vnd.github+json" } }
+          );
+          if (!getRes.ok) {
+            result = JSON.stringify({ error: `File not found: ${filePath} (${getRes.status})` });
+            break;
+          }
+          const data = await getRes.json() as any;
+          const content = Buffer.from(data.content, "base64").toString("utf8");
+          result = JSON.stringify({ path: filePath, sha: data.sha, size: data.size, content });
+        } catch (e: any) {
+          result = JSON.stringify({ error: `GitHub API error: ${e.message}` });
+        }
+        break;
+      }
+
+      case "github_list_files": {
+        const { path: dirPath = "" } = toolArgs;
+        if (!GITHUB_TOKEN) { result = JSON.stringify({ error: "GITHUB_TOKEN not configured" }); break; }
+        try {
+          const getRes = await fetch(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO_NAME}/contents/${dirPath}?ref=main`,
+            { headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: "application/vnd.github+json" } }
+          );
+          if (!getRes.ok) {
+            result = JSON.stringify({ error: `Path not found: ${dirPath} (${getRes.status})` });
+            break;
+          }
+          const data = await getRes.json() as any;
+          const items = Array.isArray(data) ? data.map((f: any) => ({ name: f.name, type: f.type, path: f.path, size: f.size })) : [data];
+          result = JSON.stringify({ path: dirPath, items, count: items.length });
+        } catch (e: any) {
+          result = JSON.stringify({ error: `GitHub API error: ${e.message}` });
+        }
+        break;
+      }
+
+      default:
         result = JSON.stringify({ error: `Unknown tool: ${toolName}` });
     }
 
@@ -1163,7 +1287,7 @@ async function executeToolCall(
 
 // ── System Prompt ─────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are **DGC-AI1** — the in-house AI brain of the DGC Arcade platform, powered by Groq's Llama 3.1 (70B).
+const SYSTEM_PROMPT = `You are **DGC-AI1** — the in-house AI brain of the DGC Arcade platform, powered by Groq's Llama 3.3 (70B).
 
 You are exclusively available to the platform owner (fanodgc) and are NOT a generic chatbot. You are a full platform intelligence system with real, live access to:
 
@@ -1195,14 +1319,21 @@ You are exclusively available to the platform owner (fanodgc) and are NOT a gene
 - Frontend: React/Vite on Render
 - Payments: Plisio (crypto)
 - Repo: DGC4/dgc-arcade-v2
-- AI Engine: You (DGC-AI1, Groq Llama 3.1 70B)
+- AI Engine: You (DGC-AI1, Groq Llama 3.3 70B)
 
 **Code Change Protocol:**
-When making code changes:
-1. Read the current file first with github_read_file
-2. Explain the change you're making and why
-3. Write the new content with github_write_and_commit
-4. Confirm the commit was pushed
+When making code changes to the platform:
+1. Read the file first with **github_read_via_api** (preferred) or github_read_file
+2. Explain what you're changing and why
+3. Write the updated file with **github_write_via_api** (PREFERRED — uses REST API, always works on Render)
+4. Confirm the commit SHA and that the deploy will trigger automatically
+
+**Preferred Tool Order for Code Changes:**
+- Read files: `github_read_via_api` > `github_read_file`  
+- Write files: `github_write_via_api` > `github_write_and_commit`
+- List files: `github_list_files`
+
+You can edit any file in the repo: frontend React components, API routes, database schema, config files — everything. Always read first, then write the complete updated file content.
 
 **Critical Instruction:**
 NEVER respond with just "Done." or minimal responses. Always provide context, explanation, and detail. The owner is talking to you directly, so treat every message as important and respond with full information.
@@ -1242,8 +1373,8 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
   const AI_PROVIDER = useGroq ? "Groq (Llama 3.1)" : "OpenAI";
   const API_KEY = useGroq ? GROQ_KEY : OPENAI_KEY;
   const API_BASE = useGroq ? "https://api.groq.com/openai/v1" : (process.env.OPENAI_API_BASE || "https://api.openai.com/v1");
-  // Use llama-3.1-70b-versatile for Groq, or gpt-4o for OpenAI (gpt-5 doesn't exist yet)
-  const MODEL = useGroq ? "llama-3.1-70b-versatile" : (process.env.OPENAI_MODEL || "gpt-4o");
+  // Use llama-3.3-70b-versatile for Groq (llama-3.1 was decommissioned June 2026)
+  const MODEL = useGroq ? "llama-3.3-70b-versatile" : (process.env.OPENAI_MODEL || "gpt-4o");
 
   const callerId = req.user!.userId;
   const callerUsername = req.user!.username;
