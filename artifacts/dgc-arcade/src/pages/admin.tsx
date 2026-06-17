@@ -52,6 +52,7 @@ import {
   Database,
   GitBranch,
   Rocket,
+  Star,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
