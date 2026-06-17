@@ -161,17 +161,13 @@ export async function sendPlisioPayout(
   const payoutCurrency = PLISIO_PAYOUT_MAP[tx.currency ?? "BTC"] ?? (tx.currency ?? "BTC");
   const usdAmount = parseFloat(tx.amount);
 
-  const conversion = await usdToCrypto(usdAmount, payoutCurrency, PLISIO_KEY, log);
-  if (!conversion) {
-    return {
-      outcome: "reverted_pending",
-      message: `Could not fetch exchange rate for ${payoutCurrency}. Payout NOT sent — you can retry.`,
-    };
-  }
-
+  // We no longer pre-convert USD to crypto locally.
+  // Per project gotchas, Plisio's withdraw API performs better when we pass
+  // source_amount + source_currency=USD directly. This avoids "transaction can't be computed"
+  // errors caused by precision mismatches or stale local rates.
   log.info(
-    { txId, usdAmount, cryptoAmount: conversion.cryptoAmount, rate: conversion.rate, currency: payoutCurrency },
-    "Plisio payout: USD to crypto conversion",
+    { txId, usdAmount, currency: payoutCurrency },
+    "Plisio payout: initiating with source_amount=USD",
   );
 
   // Double-pay guard: atomically claim the row by flipping pending → processing.
@@ -199,7 +195,8 @@ export async function sendPlisioPayout(
     api_key: PLISIO_KEY,
     currency: payoutCurrency,
     to: tx.address,
-    amount: conversion.cryptoAmount,
+    source_amount: usdAmount.toString(),
+    source_currency: "USD",
     type: "cash_out",
     callback_url: `${apiUrl}/api/transactions/deposit/callback`,
   });
