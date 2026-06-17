@@ -30,8 +30,8 @@ export function Navbar() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [bonusOpen, setBonusOpen] = useState(false);
   const [vipOpen, setVipOpen] = useState(false);
-  const isAdmin = user?.role === "admin" || user?.role === "owner";
-  const isOwner = (user?.username ?? "").toLowerCase() === "fanodgc";
+  const isOwner = user ? (user.username ?? "").toLowerCase() === "fanodgc" : false;
+  const isAdmin = user ? (user.role === "admin" || user.role === "owner" || isOwner) : false;
   const isCreator = user?.accountType === "creator";
   const [bankPinOpen, setBankPinOpen] = useState(false);
   const [bankPin, setBankPin] = useState("");

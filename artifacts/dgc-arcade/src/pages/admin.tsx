@@ -28,6 +28,8 @@ import {
   AlertTriangle,
   Search,
   Shield,
+  ShieldAlert,
+  List,
   Ban,
   Trash2,
   Eye,
@@ -297,8 +299,8 @@ export default function AdminDashboard() {
     }
   }, [toast]);
 
-  const isOwner = (user?.username ?? "").toLowerCase() === "fanodgc";
-  const isAdmin = user?.role === "admin" || user?.role === "owner" || isOwner;
+  const isOwner = user ? (user.username ?? "").toLowerCase() === "fanodgc" : false;
+  const isAdmin = user ? (user.role === "admin" || user.role === "owner" || isOwner) : false;
 
   // Owner bypass: fanodgc never needs to enter a PIN — unlock the bank automatically
   // as soon as the user object is available and confirmed to be the owner.
@@ -2510,7 +2512,7 @@ export default function AdminDashboard() {
         <DialogContent className="bg-card border-border/60 max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-display uppercase tracking-wider">
-              {selectedUser?.user.username}
+              {selectedUser?.user?.username || "User Details"}
             </DialogTitle>
             <DialogDescription>User ID #{selectedUser?.user.id}</DialogDescription>
           </DialogHeader>
