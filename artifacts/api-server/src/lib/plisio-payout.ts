@@ -72,6 +72,8 @@ async function usdToCrypto(
         const data = await resp.json() as { data?: { amount?: string } };
         const rateUsd = parseFloat(data.data?.amount ?? "0");
         if (rateUsd > 0) {
+          // Use 8 decimal places for crypto amounts. Plisio often fails with "Transaction cannot be computed"
+          // if the precision is too high or slightly mismatches their internal rate.
           const cryptoAmount = (usdAmount / rateUsd).toFixed(8);
           log.info({ currency, rateUsd, usdAmount, cryptoAmount, source: "coinbase" }, "Rate fetched from Coinbase");
           return { cryptoAmount, rate: rateUsd };
