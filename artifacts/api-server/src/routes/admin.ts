@@ -9,7 +9,8 @@ import { logAudit } from "../services/audit.js";
 import { recordLedger, recordLedgerStandalone } from "../services/ledger.js";
 import { getUserBalance } from "../lib/balance-service.js";
 import { sendPlisioPayout } from "../lib/plisio-payout.js";
-import { getDailyWinLoss, getDailyWithdrawals } from "../services/stats-service.js";
+import { getDailyWinLoss, getDailyWithdrawals, getDailyDeposits } from "../services/stats-service.js";
+import { getCryptoPrice } from "../lib/price-service.js";
 
 export const adminRouter = Router();
 
@@ -188,6 +189,111 @@ adminRouter.get("/stats/daily-withdrawals", async (req, res) => {
     res.json(stats);
   } catch (err) {
     req.log.error({ err }, "Admin daily withdrawals error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+adminRouter.get("/stats/daily-deposits", async (req, res) => {
+  const dateStr = typeof req.query.date === "string" ? req.query.date : new Date().toISOString().split("T")[0];
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) {
+    res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD." });
+    return;
+  }
+  try {
+    const stats = await getDailyDeposits(date, req.log);
+    res.json(stats);
+  } catch (err) {
+    req.log.error({ err }, "Admin daily deposits error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+adminRouter.get("/bank/platform-summary", requireBankSession, async (req, res) => {
+  try {
+    const [staticSumRow] = await db
+      .select({ total: sql<string>`COALESCE(SUM(balance::numeric), 0)` })
+      .from(usersTable);
+
+    const [totalUsersRow] = await db
+      .select({ cnt: sql<number>`COUNT(*)::int` })
+      .from(usersTable);
+
+    const [activeTodayRow] = await db
+      .select({ cnt: sql<number>`COUNT(*)::int` })
+      .from(usersTable)
+      .where(sql`last_seen >= NOW() - INTERVAL '24 hours'`);
+
+    const cryptoRows = await db
+      .select({
+        currency: userBalancesTable.currency,
+        total: sql<string>`SUM(amount::numeric)`,
+      })
+      .from(userBalancesTable)
+      .groupBy(userBalancesTable.currency);
+
+    let cryptoUsdTotal = 0;
+    for (const row of cryptoRows) {
+      const price = await getCryptoPrice(row.currency);
+      cryptoUsdTotal += parseFloat(row.total ?? "0") * price;
+    }
+
+    const totalPlatformBalance = parseFloat(staticSumRow.total ?? "0") + cryptoUsdTotal;
+
+    res.json({
+      totalPlatformBalance,
+      totalUsers: totalUsersRow.cnt ?? 0,
+      activeToday: activeTodayRow.cnt ?? 0,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Platform summary error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+adminRouter.get("/bank/user-balances", requireBankSession, async (req, res) => {
+  try {
+    const users = await db
+      .select({
+        id: usersTable.id,
+        username: usersTable.username,
+        role: usersTable.role,
+        createdAt: usersTable.createdAt,
+      })
+      .from(usersTable)
+      .orderBy(desc(usersTable.id));
+
+    const usersWithBalance = await Promise.all(
+      users.map(async (u) => {
+        try {
+          const { totalBalance, staticBalance, cryptoBalances } = await getUserBalance(u.id);
+          return {
+            id: u.id,
+            username: u.username,
+            role: u.role,
+            staticBalance,
+            cryptoBalances,
+            totalBalance,
+            createdAt: u.createdAt ? new Date(u.createdAt).toISOString() : null,
+          };
+        } catch {
+          return {
+            id: u.id,
+            username: u.username,
+            role: u.role,
+            staticBalance: 0,
+            cryptoBalances: [],
+            totalBalance: 0,
+            createdAt: u.createdAt ? new Date(u.createdAt).toISOString() : null,
+          };
+        }
+      })
+    );
+
+    usersWithBalance.sort((a, b) => b.totalBalance - a.totalBalance);
+    res.json({ users: usersWithBalance });
+  } catch (err) {
+    req.log.error({ err }, "User balances error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -981,6 +1087,17 @@ adminRouter.post("/transactions/:id/reconcile", requireBankSession, async (req, 
   }
 });
 
+
+adminRouter.get("/bank/crypto-prices", requireBankSession, async (req, res) => {
+  const COINS = ["BTC", "ETH", "LTC", "DOGE", "SOL", "BCH", "TRX", "XMR", "DASH", "TON", "USDT_TRX", "USDT_TON"];
+  const prices: Record<string, number> = {};
+  await Promise.all(
+    COINS.map(async (coin) => {
+      prices[coin] = await getCryptoPrice(coin);
+    })
+  );
+  res.json({ prices, updatedAt: new Date().toISOString() });
+});
 
 // ── OWNER BANK: GET /api/admin/bank/balances — live balances ──
 // Strategy:

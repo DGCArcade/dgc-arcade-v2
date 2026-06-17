@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { betsTable, transactionsTable } from "@workspace/db/schema";
-import { eq, sum, sql, and, gte, lte } from "drizzle-orm";
+import { eq, sum, sql, and, gte, lte, count } from "drizzle-orm";
 import { MinLogger } from "../lib/logger";
 
 export async function getDailyWinLoss(date: Date, log: MinLogger) {
@@ -53,4 +53,26 @@ export async function getDailyWithdrawals(date: Date, log: MinLogger) {
   const totalWithdrawals = withdrawals[0]?.totalWithdrawals || 0;
 
   return { totalWithdrawals };
+}
+
+export async function getDailyDeposits(date: Date, log: MinLogger) {
+  const startOfDay = new Date(date);
+  startOfDay.setUTCHours(0, 0, 0, 0);
+  const endOfDay = new Date(date);
+  endOfDay.setUTCHours(23, 59, 59, 999);
+
+  log.info({ startOfDay, endOfDay }, "Calculating daily deposits");
+
+  const deposits = await db
+    .select({ totalDeposits: sum(transactionsTable.amount).mapWith(Number) })
+    .from(transactionsTable)
+    .where(and(
+      eq(transactionsTable.type, "deposit"),
+      eq(transactionsTable.status, "completed"),
+      gte(transactionsTable.createdAt, startOfDay),
+      lte(transactionsTable.createdAt, endOfDay),
+    ));
+
+  const totalDeposits = deposits[0]?.totalDeposits || 0;
+  return { totalDeposits };
 }

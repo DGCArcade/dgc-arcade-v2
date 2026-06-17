@@ -202,6 +202,7 @@ export default function AdminDashboard() {
   const [newUser, setNewUser] = useState({ username: "", password: "", role: "player", balance: "0" });
   const [creatingUser, setCreatingUser] = useState(false);
   // ── Bank state ──
+  const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({});
   const [bankBalances, setBankBalances] = useState<Record<string, { balance: string; allowed: number }>>({});
   const [bankInvoices, setBankInvoices] = useState<any[]>([]);
   const [invoicePage, setInvoicePage] = useState(1);
@@ -393,12 +394,14 @@ export default function AdminDashboard() {
         adminFetch("/bank/pending-withdrawals"),
         adminFetch("/transactions?status=pending&type=deposit&limit=50"),
         adminFetch("/transactions?limit=50"),
+        adminFetch("/bank/crypto-prices"),
       ];
       if (isOwner) tasks.push(adminFetch(`/bank/invoices?limit=25&page=${invoicePage}`));
-      const [balR, wdR, depR, liveR, invR] = await Promise.allSettled(tasks);
+      const [balR, wdR, depR, liveR, pricesR, invR] = await Promise.allSettled(tasks);
 
       if (balR.status === "fulfilled") setBankBalances(balR.value.balances ?? {});
       if (wdR.status === "fulfilled") setBankWithdrawals(wdR.value.withdrawals ?? []);
+      if (pricesR && pricesR.status === "fulfilled") setCryptoPrices(pricesR.value.prices ?? {});
       if (depR && depR.status === "fulfilled") {
         const deps = Array.isArray(depR.value) ? depR.value : [];
         setPendingDeposits(deps);
@@ -1449,7 +1452,7 @@ export default function AdminDashboard() {
                     <Wallet className="w-6 h-6 text-primary" /> DGC Bank
                   </h2>
                   <p className="text-sm text-muted-foreground">
-                    {isOwner ? "Owner control center · Plisio live data" : "Withdrawal approvals · fraud monitor"}
+                    {isOwner ? "Owner control center · DGC platform ops" : "Withdrawal approvals · fraud monitor"}
                     {bankLastRefresh && (
                       <span className="ml-2 text-xs opacity-60">
                         · Refreshed {bankLastRefresh.toLocaleTimeString()}
@@ -1462,47 +1465,6 @@ export default function AdminDashboard() {
                   {bankLoading ? "Loading..." : "Refresh All"}
                 </Button>
               </div>
-
-              {/* ── Live Crypto Balances ── */}
-              <div>
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
-                  <Activity className="w-3.5 h-3.5" /> Live Crypto Balances
-                </h3>
-                {Object.keys(bankBalances).length === 0 ? (
-                  <Card className="border-dashed border-border/40">
-                    <CardContent className="py-8 text-center text-muted-foreground text-sm">
-                      {bankLoading ? (
-                        <span className="flex items-center justify-center gap-2"><RefreshCw className="h-4 w-4 animate-spin" /> Fetching live balances from Plisio…</span>
-                      ) : "No balance data — check PLISIO_SECRET_KEY in Render environment"}
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {Object.entries(bankBalances).map(([coin, info]) => {
-                      const balance = parseFloat((info as any).balance ?? "0");
-                      const isLive = (info as any).allowed === 1 || balance > 0;
-                      return (
-                        <Card key={coin} className="bg-card/80 border-border/60 hover:border-primary/30 transition-colors">
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-bold text-sm uppercase tracking-wider text-primary">{coin}</span>
-                              {isLive ? (
-                                <span className="flex items-center gap-1 text-xs text-green-400"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />Live</span>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">Inactive</span>
-                              )}
-                            </div>
-                            <p className="text-lg font-mono font-bold text-white tabular-nums">
-                              {balance.toFixed(8)}
-                            </p>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
 
               {/* ── Live Deposits Panel ── */}
               <div>
@@ -1536,8 +1498,9 @@ export default function AdminDashboard() {
                               <TableHead className="text-xs">ID</TableHead>
                               <TableHead className="text-xs">User</TableHead>
                               <TableHead className="text-xs">Type</TableHead>
-                              <TableHead className="text-xs">Amount</TableHead>
+                              <TableHead className="text-xs">Amount (USD)</TableHead>
                               <TableHead className="text-xs">Currency</TableHead>
+                              <TableHead className="text-xs">Live Rate</TableHead>
                               <TableHead className="text-xs">Status</TableHead>
                               <TableHead className="text-xs">Time</TableHead>
                               <TableHead className="text-xs">Actions</TableHead>
@@ -1566,12 +1529,37 @@ export default function AdminDashboard() {
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="font-mono font-bold">
-                                  <span className={tx.type === "deposit" ? "text-green-400" : tx.type === "withdrawal" ? "text-amber-400" : ""}>
-                                    {tx.type === "deposit" ? "+" : tx.type === "withdrawal" ? "-" : ""}{parseFloat(tx.amount).toFixed(2)}
-                                  </span>
+                                  <div>
+                                    <span className={tx.type === "deposit" ? "text-green-400" : tx.type === "withdrawal" ? "text-amber-400" : ""}>
+                                      {tx.type === "deposit" ? "+" : tx.type === "withdrawal" ? "-" : ""}${parseFloat(tx.amount).toFixed(2)}
+                                    </span>
+                                    {(() => {
+                                      try {
+                                        const meta = tx.metadata ? JSON.parse(tx.metadata) : null;
+                                        const cryptoAmt = meta?.expected_crypto || meta?.received_amount;
+                                        if (cryptoAmt && tx.currency && tx.currency !== "USD") {
+                                          return <div className="text-xs text-muted-foreground font-mono">{parseFloat(cryptoAmt).toFixed(6)} {tx.currency}</div>;
+                                        }
+                                      } catch { return null; }
+                                      return null;
+                                    })()}
+                                  </div>
                                 </TableCell>
                                 <TableCell>
                                   <Badge variant="outline" className="text-xs">{tx.currency}</Badge>
+                                </TableCell>
+                                <TableCell className="font-mono text-xs">
+                                  {tx.currency && tx.currency !== "USD" && cryptoPrices[tx.currency] ? (
+                                    <div>
+                                      <span className="text-primary font-bold">${cryptoPrices[tx.currency].toLocaleString("en-US", { maximumFractionDigits: 2 })}</span>
+                                      <span className="flex items-center gap-1 text-green-400 text-xs mt-0.5">
+                                        <span className="w-1 h-1 rounded-full bg-green-400 animate-pulse inline-block" />
+                                        live
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
                                 </TableCell>
                                 <TableCell>
                                   <Badge className={`text-xs ${
