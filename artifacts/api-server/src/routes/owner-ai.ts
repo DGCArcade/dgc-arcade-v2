@@ -1086,13 +1086,22 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
     return;
   }
 
+  // Support both Groq (free, fast) and OpenAI (paid, powerful)
+  const GROQ_KEY = process.env.GROQ_API_KEY;
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
-  const OPENAI_BASE = process.env.OPENAI_API_BASE || "https://api.openai.com/v1";
-
-  if (!OPENAI_KEY) {
-    res.status(500).json({ error: "AI service not configured. Set OPENAI_API_KEY in Render environment." });
+  
+  const useGroq = !!GROQ_KEY;
+  const useOpenAI = !!OPENAI_KEY && !useGroq;
+  
+  if (!useGroq && !useOpenAI) {
+    res.status(500).json({ error: "AI service not configured. Set GROQ_API_KEY (free, recommended) or OPENAI_API_KEY in Render environment." });
     return;
   }
+  
+  const AI_PROVIDER = useGroq ? "Groq (Llama 3.1)" : "OpenAI";
+  const API_KEY = useGroq ? GROQ_KEY : OPENAI_KEY;
+  const API_BASE = useGroq ? "https://api.groq.com/openai/v1" : (process.env.OPENAI_API_BASE || "https://api.openai.com/v1");
+  const MODEL = useGroq ? "llama-3.1-70b-versatile" : "gpt-5";
 
   const callerId = req.user!.userId;
   const callerUsername = req.user!.username;
@@ -1122,14 +1131,14 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
         iterationCount++;
 
         // Non-streaming call to handle tool use properly
-        const apiResponse = await fetch(`${OPENAI_BASE}/chat/completions`, {
+        const apiResponse = await fetch(`${API_BASE}/chat/completions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${OPENAI_KEY}`,
+            Authorization: `Bearer ${API_KEY}`,
           },
           body: JSON.stringify({
-            model: "gpt-5",
+            model: MODEL,
             messages: apiMessages,
             tools: AI_TOOLS,
             tool_choice: "auto",
@@ -1190,14 +1199,14 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
         const finalContent = choice.message?.content || "Done.";
 
         // Stream the final response character by character for effect
-        const streamResponse = await fetch(`${OPENAI_BASE}/chat/completions`, {
+        const streamResponse = await fetch(`${API_BASE}/chat/completions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${OPENAI_KEY}`,
+            Authorization: `Bearer ${API_KEY}`,
           },
           body: JSON.stringify({
-            model: "gpt-5",
+            model: MODEL,
             messages: [
               ...apiMessages,
               {
@@ -1282,14 +1291,14 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
     while (iterationCount < MAX_ITERATIONS) {
       iterationCount++;
 
-      const apiResponse = await fetch(`${OPENAI_BASE}/chat/completions`, {
+      const apiResponse = await fetch(`${API_BASE}/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENAI_KEY}`,
+          Authorization: `Bearer ${API_KEY}`,
         },
         body: JSON.stringify({
-          model: "gpt-5",
+          model: MODEL,
           messages: apiMessages,
           tools: AI_TOOLS,
           tool_choice: "auto",

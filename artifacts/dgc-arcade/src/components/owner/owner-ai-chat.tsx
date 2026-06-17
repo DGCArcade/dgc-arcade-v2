@@ -327,7 +327,7 @@ export function OwnerAiChat({ token }: OwnerAiChatProps) {
     {
       id: "welcome",
       role: "assistant",
-      content: "**DG AI online.** I'm your in-house platform intelligence — connected live to your Neon database, GitHub repo, and Render deployments.\n\nI can read and write to the database, manage users and balances, control games, push code commits, trigger deploys, and analyze your platform in real time. Ask me anything or give me a command.",
+      content: "**DGC-AI1 online.** I'm your in-house platform intelligence powered by Groq's Llama 3.1 (70B) — connected live to your Neon database, GitHub repo, and Render deployments.\n\nI'm lightning-fast and free to run. I can read and write to the database, manage users and balances, control games, push code commits, trigger deploys, and analyze your platform in real time. Ask me anything or give me a command.",
       timestamp: new Date(),
     },
   ]);
@@ -606,20 +606,20 @@ export function OwnerAiChat({ token }: OwnerAiChatProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-purple-500/20 bg-purple-950/30">
         <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center shadow-[0_0_20px_rgba(147,51,234,0.7)]">
-              <Bot className="w-5 h-5 text-white" />
+        <div className="relative">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 flex items-center justify-center shadow-[0_0_20px_rgba(34,211,238,0.7)]">
+                  <Bot className="w-5 h-5 text-white" />
+                </div>
+                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-400 border-2 border-black animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm text-white tracking-wide">DGC-AI1</span>
+                  <span className="text-[10px] font-mono bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-500/30 font-semibold">⚡ GROQ · LLAMA 3.1 · LIVE</span>
+                </div>
+                <p className="text-[10px] text-cyan-400/70 font-mono">Free Tier · Lightning Fast · Neon DB · GitHub · Render</p>
+              </div>
             </div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-400 border-2 border-black animate-pulse" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-white tracking-wide">DG AI</span>
-              <span className="text-[10px] font-mono bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30">GPT-5 · LIVE</span>
-            </div>
-            <p className="text-[10px] text-purple-400/70 font-mono">Neon DB · GitHub · Render · Owner Only</p>
-          </div>
-        </div>
         <div className="flex items-center gap-1">
           <button onClick={clearChat} className="p-1.5 rounded text-purple-400/60 hover:text-purple-300 hover:bg-purple-500/10 transition-colors" title="Clear chat">
             <Trash2 className="w-3.5 h-3.5" />

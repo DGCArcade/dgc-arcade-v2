@@ -20,7 +20,9 @@ services:
         sync: false
       - key: NODE_ENV
         value: production
-      # ── DG AI ──────────────────────────────────────────────────────
+      # ── DGC-AI1 ────────────────────────────────────────────────────
+      - key: GROQ_API_KEY
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_API_BASE
