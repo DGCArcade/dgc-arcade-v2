@@ -1156,16 +1156,17 @@ adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
           const receivedAmount = parseFloat(String(data.data.received_amount || "0"));
           const invoicedAmount = parseFloat(String(data.data.invoice_total_sum || "0"));
           const sourceUsd = parseFloat(String(data.data.source_amount || tx.amount));
-          
-          // If Plisio says it's paid, trust the source_amount as fallback when received_amount is 0
-          // FIX: applies to all credit statuses (completed, finished, mismatch, overpaid)
+          // STRICT GUARD: Only credit when we have the actual received amount from Plisio.
+          // Never fall back to the invoice/source amount — that would over-credit users
+          // when the actual payment was less (e.g. network fees deducted).
           if (receivedAmount <= 0) {
-             req.log.warn({ txId: tx.id, pStatus, sourceUsd }, "Plisio says paid but received_amount is 0 — crediting source_amount as fallback");
+            req.log.warn(
+              { txId: tx.id, pStatus, sourceUsd },
+              "Reconcile: received_amount is 0 — skipping, will retry when Plisio provides real data"
+            );
+            continue;
           }
-
-          // FIX: when receivedAmount is 0 (no data from Plisio), default ratio to 1 so we credit the full source amount
-          // Previously: ratio = 0/invoicedAmount = 0 → creditAmount = 0 → user never credited
-          const ratio = (receivedAmount > 0 && invoicedAmount > 0) ? (receivedAmount / invoicedAmount) : 1;
+          const ratio = (invoicedAmount > 0) ? (receivedAmount / invoicedAmount) : 1;
           const creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
 
           await db.transaction(async (txn) => {
@@ -1341,14 +1342,19 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
       ratioUsed = receivedAmount / invoicedAmount;
       creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
       req.log.info({ receivedAmount, invoicedAmount, sourceUsd, ratio: ratioUsed, creditAmount }, "Smart Sync: crediting with ratio method");
-    } else if (sourceUsd > 0) {
-      // FIX: fallback applies to ALL credit statuses (completed, finished, mismatch, overpaid)
-      // Plisio uses "finished" for many coin types — previously this blocked Smart Sync for those.
-      ratioUsed = 1;
-      creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
-      req.log.warn({ pStatus, receivedAmount, invoicedAmount, sourceUsd, creditAmount }, "Smart Sync: Missing received data — crediting invoice amount as fallback");
     } else {
-      res.status(400).json({ error: "No amount data available from Plisio. Cannot credit." });
+      // STRICT GUARD: We do NOT fall back to the invoice/source amount.
+      // If Plisio hasn't provided received_amount yet, we cannot know what actually arrived.
+      // Crediting the invoice amount would over-credit users when the real payment was less.
+      req.log.warn(
+        { pStatus, receivedAmount, invoicedAmount, sourceUsd },
+        "Smart Sync: No received_amount data from Plisio — refusing to credit invoice amount as fallback"
+      );
+      res.status(400).json({
+        error: "Plisio has not provided the actual received amount yet. " +
+               "Please wait for the payment to fully confirm on-chain, then retry. " +
+               "(received_amount=0, invoice_total_sum=" + invoicedAmount + ", source_usd=" + sourceUsd + ")"
+      });
       return;
     }
     

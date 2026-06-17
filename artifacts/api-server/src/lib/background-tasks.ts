@@ -52,6 +52,10 @@ export async function cleanupExpiredDeposits() {
  * Plisio Synchronization: Check status of all pending deposits.
  * This handles cases where webhooks are missed or delayed.
  * Runs every 1 minute.
+ *
+ * IMPORTANT: We ONLY credit when we have a real received_amount from Plisio.
+ * We never fall back to the invoice/source amount — that would over-credit users
+ * when the actual payment was less than the invoice (e.g. network fees deducted).
  */
 export async function syncPlisioDeposits() {
   const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY;
@@ -106,39 +110,75 @@ export async function syncPlisioDeposits() {
         const creditStatuses = ["completed", "mismatch", "overpaid", "finished"];
         
         if (creditStatuses.includes(pStatus)) {
+          // ── ACTUAL RECEIVED AMOUNT ──────────────────────────────────────────
+          // Always use the real received crypto amount from Plisio.
+          // received_amount = what actually arrived in our wallet (after network fees).
+          // We NEVER fall back to the invoice/source amount — doing so would
+          // credit users more than they actually sent.
           const cryptoAmountReceived = parseFloat(String(data.data.received_amount || data.data.received_sum || "0"));
           const cryptoAmountInvoiced = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || data.data.invoice_amount || "0"));
-          const sourceUsd = parseFloat(String(data.data.source_amount || data.data.invoice_amount || data.data.source_amount_usd || tx.amount));
+          const sourceUsd = parseFloat(String(data.data.source_amount || tx.amount));
           const receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
           const cryptoCurrency = tx.currency || data.data.currency || "ETH";
 
+          // ── STRICT GUARD: require real received data ────────────────────────
+          // If Plisio hasn't provided the actual received amount yet, skip this
+          // transaction — the IPN webhook will handle it when it arrives, or we
+          // will pick it up on the next sync cycle once the data is populated.
+          if (cryptoAmountReceived <= 0 && receivedUsdValue <= 0) {
+            logger.info(
+              { txId: tx.id, plisioTrackId: tx.plisioTrackId, pStatus },
+              "Plisio sync: skipping — no received_amount data yet, will retry next cycle"
+            );
+            continue;
+          }
+
+          // ── CALCULATE USD CREDIT AMOUNT ─────────────────────────────────────
+          // Priority: direct USD value from Plisio > ratio of received/invoiced > fallback
           let creditAmountUsd: number;
           if (receivedUsdValue > 0) {
+            // Best case: Plisio tells us exactly how much USD was received
             creditAmountUsd = Math.round(receivedUsdValue * 1e8) / 1e8;
           } else if (cryptoAmountReceived > 0 && cryptoAmountInvoiced > 0 && sourceUsd > 0) {
+            // Calculate the proportion of the invoice that was actually received
             const ratio = cryptoAmountReceived / cryptoAmountInvoiced;
             creditAmountUsd = Math.round(sourceUsd * ratio * 1e8) / 1e8;
           } else {
+            // cryptoAmountReceived > 0 but no invoiced amount to ratio against.
+            // Use source USD as a safe fallback since we know crypto arrived.
             creditAmountUsd = sourceUsd;
           }
 
           await db.transaction(async (txn) => {
             const flipped = await txn
               .update(transactionsTable)
-              .set({ status: "completed", amount: String(creditAmountUsd) })
+              .set({
+                status: "completed",
+                amount: String(creditAmountUsd),
+                metadata: JSON.stringify({
+                  received_amount: String(cryptoAmountReceived),
+                  invoice_total_sum: String(cryptoAmountInvoiced),
+                  source_amount_usd: String(sourceUsd),
+                  received_amount_usd: String(receivedUsdValue),
+                  credit_amount_usd: creditAmountUsd,
+                  paid_at: data.data.updated_at || new Date().toISOString(),
+                  synced_at: new Date().toISOString(),
+                })
+              })
               .where(and(eq(transactionsTable.id, tx.id), ne(transactionsTable.status, "completed")))
               .returning({ id: transactionsTable.id });
 
             if (flipped.length === 0) return;
 
-            // 1. Credit Crypto-Native Balance (LIVE)
+            // 1. Credit Crypto-Native Balance (LIVE) — always use the real crypto amount
             if (cryptoAmountReceived > 0) {
               await creditCryptoBalance(tx.userId, cryptoCurrency, cryptoAmountReceived, txn);
             } else {
+              // receivedUsdValue > 0 but no crypto amount — credit static USD balance
               await txn.update(usersTable).set({ balance: sql`balance + ${creditAmountUsd}` }).where(eq(usersTable.id, tx.userId));
             }
 
-            // 2. Update Stats
+            // 2. Update Stats (totalDeposited and wagerRequirement use USD value)
             await txn.update(usersTable).set({
               totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmountUsd}`,
               wagerRequirement: sql`coalesce(wager_requirement, 0) + ${creditAmountUsd * WAGER_MULTIPLIER}`,
@@ -153,10 +193,10 @@ export async function syncPlisioDeposits() {
               reason: "deposit",
               referenceId: tx.id,
               referenceType: "transaction",
-              note: `Credited ${cryptoAmountReceived > 0 ? cryptoAmountReceived + " " + cryptoCurrency : "$" + creditAmountUsd + " USD"} (Live Balance via Sync)`,
+              note: `Credited ${cryptoAmountReceived > 0 ? cryptoAmountReceived + " " + cryptoCurrency : "$" + creditAmountUsd + " USD"} (Sync — actual received)`,
             });
             
-            // 4. Referral
+            // 4. Referral commission
             try {
               const [depositor] = await txn.select({ referredBy: usersTable.referredBy }).from(usersTable).where(eq(usersTable.id, tx.userId)).limit(1);
               if (depositor?.referredBy) {
@@ -180,7 +220,7 @@ export async function syncPlisioDeposits() {
             } catch (e) { logger.warn({ err: e }, "Referral credit failed in sync"); }
           });
 
-          logger.info({ txId: tx.id, creditAmountUsd, userId: tx.userId, pStatus }, "Plisio sync: deposit credited ✓");
+          logger.info({ txId: tx.id, creditAmountUsd, cryptoAmountReceived, cryptoCurrency, userId: tx.userId, pStatus }, "Plisio sync: deposit credited ✓ (actual received amount)");
         } else if (pStatus === "expired" || pStatus === "cancelled" || pStatus === "error") {
           await db.update(transactionsTable).set({ status: "failed" }).where(eq(transactionsTable.id, tx.id));
         }

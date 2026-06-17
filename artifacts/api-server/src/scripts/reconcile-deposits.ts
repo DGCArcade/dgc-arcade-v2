@@ -68,13 +68,11 @@ async function reconcileAll() {
             ratioUsed = receivedAmount / invoicedAmount;
             creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
             console.log(`Reconciling tx ${tx.id}: status=${pStatus}, credit=$${creditAmount}, ratio=${ratioUsed}`);
-          } else if (sourceUsd > 0 && pStatus === "completed") {
-            // Fallback: only if status is fully completed and we have no better data
-            ratioUsed = 1;
-            creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
-            console.warn(`Transaction ${tx.id}: Missing received data, crediting invoice amount $${creditAmount}`);
           } else {
-            console.warn(`Transaction ${tx.id} reported as paid but no amount data available`);
+            // STRICT GUARD: No received_amount data available from Plisio.
+            // We do NOT fall back to the invoice/source amount — that would over-credit
+            // users when the actual payment was less than the invoice.
+            console.warn(`Transaction ${tx.id}: No received_amount data from Plisio — skipping. Will retry next run.`);
             continue;
           }
 
