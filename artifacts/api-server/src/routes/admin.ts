@@ -3008,6 +3008,173 @@ adminRouter.post("/messages/read", async (req, res) => {
   }
 });
 
+// ── Commission Tracking ──────────────────────────────────────────────────────
+
+// GET /api/admin/creators?month=YYYY-MM
+// Returns all creator/affiliate users with commission stats for the given month.
+// Defaults to the current calendar month.
+adminRouter.get("/creators", async (req, res) => {
+  try {
+    const monthParam = typeof req.query.month === "string" ? req.query.month : null;
+    let monthStart: Date;
+    let monthEnd: Date;
+    if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+      const [y, m] = monthParam.split("-").map(Number);
+      monthStart = new Date(y, m - 1, 1);
+      monthEnd = new Date(y, m, 1);
+    } else {
+      const now = new Date();
+      monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    }
+
+    // All users who are creators or affiliates (role or accountType = creator, exclude owner)
+    const creators = await db
+      .select({
+        id: usersTable.id,
+        username: usersTable.username,
+        accountType: usersTable.accountType,
+        role: usersTable.role,
+        promoBalance: usersTable.promoBalance,
+        createdAt: usersTable.createdAt,
+      })
+      .from(usersTable)
+      .where(
+        or(
+          eq(usersTable.accountType, "creator"),
+          eq(usersTable.role, "creator"),
+        ),
+      )
+      .orderBy(desc(usersTable.createdAt));
+
+    const { getReferralTier } = await import("./referrals.js");
+
+    const results = await Promise.all(
+      creators.map(async (c) => {
+        // Active referral count
+        const [{ activeCount }] = await db
+          .select({ activeCount: count() })
+          .from(referralsTable)
+          .where(and(eq(referralsTable.referrerId, c.id), eq(referralsTable.status, "active")));
+
+        // Commission earned THIS month (referral_commission type only)
+        const [{ monthlyEarned }] = await db
+          .select({ monthlyEarned: sql<string>`COALESCE(SUM(CAST(${creatorBankTxnsTable.amount} AS DECIMAL)), 0)` })
+          .from(creatorBankTxnsTable)
+          .where(
+            and(
+              eq(creatorBankTxnsTable.creatorId, c.id),
+              eq(creatorBankTxnsTable.type, "referral_commission"),
+              sql`${creatorBankTxnsTable.createdAt} >= ${monthStart.toISOString()}`,
+              sql`${creatorBankTxnsTable.createdAt} < ${monthEnd.toISOString()}`,
+            ),
+          );
+
+        // Total lifetime commission earned (referral_commission only)
+        const [{ lifetimeEarned }] = await db
+          .select({ lifetimeEarned: sql<string>`COALESCE(SUM(CAST(${creatorBankTxnsTable.amount} AS DECIMAL)), 0)` })
+          .from(creatorBankTxnsTable)
+          .where(
+            and(
+              eq(creatorBankTxnsTable.creatorId, c.id),
+              eq(creatorBankTxnsTable.type, "referral_commission"),
+            ),
+          );
+
+        // Total admin deposits ever (for context)
+        const [{ totalDeposited }] = await db
+          .select({ totalDeposited: sql<string>`COALESCE(SUM(CAST(${creatorBankTxnsTable.amount} AS DECIMAL)), 0)` })
+          .from(creatorBankTxnsTable)
+          .where(
+            and(
+              eq(creatorBankTxnsTable.creatorId, c.id),
+              eq(creatorBankTxnsTable.type, "admin_deposit"),
+            ),
+          );
+
+        const tier = getReferralTier(activeCount);
+
+        return {
+          id: c.id,
+          username: c.username,
+          accountType: c.accountType,
+          role: c.role,
+          promoBalance: parseFloat(c.promoBalance ?? "0"),
+          activeReferrals: activeCount,
+          monthlyCommission: parseFloat(monthlyEarned ?? "0"),
+          lifetimeCommission: parseFloat(lifetimeEarned ?? "0"),
+          totalAdminDeposits: parseFloat(totalDeposited ?? "0"),
+          tier: tier.tier,
+          group: tier.group,
+          color: tier.color,
+          emoji: tier.emoji,
+          commissionPct: Math.round(tier.commissionRate * 100),
+          joinedAt: c.createdAt.toISOString(),
+        };
+      }),
+    );
+
+    res.json({ creators: results, month: monthParam ?? `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}` });
+  } catch (err) {
+    req.log?.error({ err }, "Admin creators list error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/admin/creators/:id/deposit
+// Owner-only: manually deposit to a creator's promo balance.
+adminRouter.post("/creators/:id/deposit", async (req, res) => {
+  if (!(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Owner only" });
+    return;
+  }
+  const creatorId = parseInt(req.params.id, 10);
+  if (isNaN(creatorId)) { res.status(400).json({ error: "Invalid creator id" }); return; }
+
+  const { amount, note } = req.body as { amount?: number; note?: string };
+  if (!amount || amount <= 0) {
+    res.status(400).json({ error: "amount > 0 required" });
+    return;
+  }
+
+  try {
+    const [target] = await db
+      .select({ id: usersTable.id, username: usersTable.username, promoBalance: usersTable.promoBalance })
+      .from(usersTable)
+      .where(eq(usersTable.id, creatorId))
+      .limit(1);
+
+    if (!target) { res.status(404).json({ error: "Creator not found" }); return; }
+
+    const newBalance = parseFloat(target.promoBalance ?? "0") + amount;
+
+    await db.transaction(async (txn) => {
+      await txn.update(usersTable)
+        .set({ promoBalance: String(newBalance) })
+        .where(eq(usersTable.id, creatorId));
+
+      await txn.insert(creatorBankTxnsTable).values({
+        creatorId,
+        type: "admin_deposit",
+        amount: String(amount),
+        description: note?.trim() || `Admin commission deposit`,
+      });
+    });
+
+    await logAudit({
+      actorId: req.user!.userId,
+      action: "admin_commission_deposit",
+      targetId: creatorId,
+      details: { amount, note, newBalance },
+    });
+
+    res.json({ success: true, newPromoBalance: newBalance, username: target.username });
+  } catch (err) {
+    req.log?.error({ err }, "Admin creator deposit error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // DELETE /api/admin/messages/:id  — owner only
 adminRouter.delete("/messages/:id", async (req, res) => {
   if (!(await callerIsOwner(req))) {

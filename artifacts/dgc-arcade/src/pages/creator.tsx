@@ -189,7 +189,17 @@ export default function CreatorPage() {
   }
 
   if (!dashboard) {
-    return <div className="text-center py-24 text-muted-foreground font-mono">Failed to load affiliate hub.</div>;
+    return (
+      <div className="text-center py-24 space-y-4">
+        <p className="text-muted-foreground font-mono">Failed to load affiliate hub.</p>
+        <button
+          onClick={() => { setDashLoading(true); fetchDashboard(); }}
+          className="px-5 py-2 rounded-lg bg-primary/20 border border-primary/40 text-primary text-sm font-bold hover:bg-primary/30 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   if (isCreator) {

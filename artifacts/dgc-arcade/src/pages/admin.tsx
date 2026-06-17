@@ -172,7 +172,7 @@ interface UserDetail {
   transactions: { id: number; type: string; amount: number; currency: string; status: string; address: string | null; createdAt: string }[];
 }
 
-type TabKey = "overview" | "users" | "transactions" | "bank" | "bank-dashboard" | "visitor-logs" | "tournaments" | "chat" | "ai";
+type TabKey = "overview" | "users" | "transactions" | "bank" | "bank-dashboard" | "visitor-logs" | "tournaments" | "chat" | "ai" | "creators";
 
 export default function AdminDashboard() {
   const { user, isLoading } = useAuth();
@@ -272,6 +272,50 @@ export default function AdminDashboard() {
   const [msgInput, setMsgInput] = useState("");
   const [msgSending, setMsgSending] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
+  // ── Creator Commission tracking ──
+  const [creatorsData, setCreatorsData] = useState<any[]>([]);
+  const [creatorsLoading, setCreatorsLoading] = useState(false);
+  const [creatorsMonth, setCreatorsMonth] = useState<string>(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [depositModal, setDepositModal] = useState<{ id: number; username: string; currentBalance: number } | null>(null);
+  const [depositAmount, setDepositAmount] = useState("");
+  const [depositNote, setDepositNote] = useState("");
+  const [depositLoading, setDepositLoading] = useState(false);
+
+  const loadCreators = useCallback(async (month?: string) => {
+    setCreatorsLoading(true);
+    try {
+      const m = month ?? creatorsMonth;
+      const data = await adminFetch(`/creators?month=${m}`);
+      setCreatorsData(data.creators ?? []);
+    } catch {}
+    finally { setCreatorsLoading(false); }
+  }, [creatorsMonth]);
+
+  const handleCreatorDeposit = async () => {
+    if (!depositModal) return;
+    const amt = parseFloat(depositAmount);
+    if (!amt || amt <= 0) return;
+    setDepositLoading(true);
+    try {
+      await adminFetch(`/creators/${depositModal.id}/deposit`, {
+        method: "POST",
+        body: JSON.stringify({ amount: amt, note: depositNote || undefined }),
+      });
+      toast({ title: "Deposited!", description: `$${amt.toFixed(2)} added to @${depositModal.username}'s commission balance.` });
+      setDepositModal(null);
+      setDepositAmount("");
+      setDepositNote("");
+      loadCreators();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setDepositLoading(false);
+    }
+  };
+
   // ── DGC Bank PIN session (gates the bank tab for regular admins) ──
   // The platform owner (fanodgc) always has the bank unlocked — no PIN ever required.
   // For non-owner admins, the bank is unlocked only when a valid session token is stored.
@@ -541,6 +585,10 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (activeTab === "tournaments" && isAdmin) loadTournaments();
   }, [activeTab, isAdmin, loadTournaments]);
+
+  useEffect(() => {
+    if (activeTab === "creators" && isOwner) loadCreators();
+  }, [activeTab, isOwner, loadCreators]);
 
   const loadChat = useCallback(async (since?: number) => {
     try {
@@ -923,6 +971,7 @@ export default function AdminDashboard() {
         { key: "users", label: "Users", icon: Users },
         { key: "bank", label: "DGC Bank", icon: DollarSign },
         { key: "transactions", label: "Transactions", icon: List },
+        { key: "creators", label: "Creators", icon: Star },
         { key: "tournaments", label: "Tournaments", icon: Trophy },
         { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChatCount },
         { key: "ai", label: "Owner AI", icon: Bot },
@@ -3194,6 +3243,162 @@ export default function AdminDashboard() {
       )}
 
 
+      {/* ── Creators Commission Tab ── */}
+      {activeTab === "creators" && isOwner && (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="font-display font-black uppercase tracking-widest text-xl flex items-center gap-2">
+                <Star className="w-5 h-5 text-yellow-400" /> Creator Commission Tracking
+              </h2>
+              <p className="text-muted-foreground text-sm mt-1">
+                View monthly commission earned by each creator/affiliate and manually deposit to their promo balance.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted-foreground font-mono">Month</label>
+              <input
+                type="month"
+                value={creatorsMonth}
+                onChange={e => {
+                  setCreatorsMonth(e.target.value);
+                  loadCreators(e.target.value);
+                }}
+                className="bg-secondary border border-border/60 rounded-lg px-3 py-1.5 text-sm font-mono text-foreground focus:outline-none focus:border-primary/60"
+              />
+              <Button variant="outline" size="sm" onClick={() => loadCreators()}>
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Summary row */}
+          {creatorsData.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                {
+                  label: "Total Creators",
+                  value: creatorsData.length,
+                  color: "text-purple-400",
+                  bg: "from-purple-500/10",
+                },
+                {
+                  label: "This Month Earned",
+                  value: formatCurrency(creatorsData.reduce((a, c) => a + c.monthlyCommission, 0)),
+                  color: "text-green-400",
+                  bg: "from-green-500/10",
+                },
+                {
+                  label: "Lifetime Earned",
+                  value: formatCurrency(creatorsData.reduce((a, c) => a + c.lifetimeCommission, 0)),
+                  color: "text-yellow-400",
+                  bg: "from-yellow-500/10",
+                },
+                {
+                  label: "Total Promo Balances",
+                  value: formatCurrency(creatorsData.reduce((a, c) => a + c.promoBalance, 0)),
+                  color: "text-blue-400",
+                  bg: "from-blue-500/10",
+                },
+              ].map(({ label, value, color, bg }) => (
+                <div key={label} className={`bg-gradient-to-br ${bg} to-transparent border border-border/40 rounded-xl p-4`}>
+                  <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">{label}</p>
+                  <p className={`text-xl font-black font-mono mt-1 ${color}`}>{value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Table */}
+          <div className="border border-border/40 rounded-xl overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border/40 bg-secondary/40">
+                  <TableHead className="font-mono text-xs uppercase tracking-wider">Creator</TableHead>
+                  <TableHead className="font-mono text-xs uppercase tracking-wider">Tier</TableHead>
+                  <TableHead className="font-mono text-xs uppercase tracking-wider text-right">Active Refs</TableHead>
+                  <TableHead className="font-mono text-xs uppercase tracking-wider text-right">This Month</TableHead>
+                  <TableHead className="font-mono text-xs uppercase tracking-wider text-right">Lifetime</TableHead>
+                  <TableHead className="font-mono text-xs uppercase tracking-wider text-right">Promo Balance</TableHead>
+                  <TableHead className="font-mono text-xs uppercase tracking-wider text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {creatorsLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i} className="border-border/20">
+                      {Array.from({ length: 7 }).map((__, j) => (
+                        <TableCell key={j}>
+                          <div className="h-4 bg-secondary animate-pulse rounded" />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : creatorsData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-12 font-mono">
+                      No creators found. Promote users to creator status from the Users tab.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  creatorsData.map((c) => (
+                    <TableRow key={c.id} className="border-border/20 hover:bg-secondary/30 transition-colors">
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-xs font-black text-primary">
+                            {c.username[0]?.toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="font-semibold text-sm">@{c.username}</div>
+                            <div className="text-xs text-muted-foreground font-mono">{c.accountType === "creator" ? "Specialty" : "Affiliate"}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border"
+                          style={{ color: c.color, borderColor: c.color + "50", backgroundColor: c.color + "15" }}
+                        >
+                          {c.emoji} {c.tier}
+                        </span>
+                        <div className="text-xs text-muted-foreground mt-0.5 font-mono">{c.commissionPct}%</div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">{c.activeReferrals}</TableCell>
+                      <TableCell className="text-right font-mono text-sm text-green-400 font-semibold">
+                        {c.monthlyCommission > 0 ? formatCurrency(c.monthlyCommission) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm text-yellow-400">
+                        {c.lifetimeCommission > 0 ? formatCurrency(c.lifetimeCommission) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        <span className={c.promoBalance > 0 ? "text-primary font-bold" : "text-muted-foreground"}>
+                          {formatCurrency(c.promoBalance)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-500 text-white text-xs h-7 px-3 font-bold"
+                          onClick={() => {
+                            setDepositModal({ id: c.id, username: c.username, currentBalance: c.promoBalance });
+                            setDepositAmount("");
+                            setDepositNote("");
+                          }}
+                        >
+                          <Plus className="w-3 h-3 mr-1" />
+                          Deposit
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
       {/* ── DGC Bank Dashboard Tab ── */}
       {activeTab === "bank-dashboard" && (
         <DGCBankDashboard />
@@ -3238,6 +3443,72 @@ export default function AdminDashboard() {
           <OwnerAiChat token={getToken()} />
         </div>
       )}
+      {/* ── Creator Commission Deposit Dialog ── */}
+      <Dialog open={!!depositModal} onOpenChange={(o) => { if (!o) setDepositModal(null); }}>
+        <DialogContent className="bg-card border-border/60 max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-400">
+              <DollarSign className="w-5 h-5" />
+              Deposit Commission
+            </DialogTitle>
+            <DialogDescription>
+              Add funds to <strong>@{depositModal?.username}</strong>'s commission (promo) balance.
+              Current balance: <strong>{depositModal ? formatCurrency(depositModal.currentBalance) : "—"}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div>
+              <label className="text-xs text-muted-foreground font-mono uppercase tracking-wider mb-1 block">Amount (USD)</label>
+              <Input
+                type="number"
+                min="1"
+                step="0.01"
+                placeholder="e.g. 250.00"
+                value={depositAmount}
+                onChange={e => setDepositAmount(e.target.value)}
+                className="font-mono"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {[50, 100, 250, 500, 1000].map(amt => (
+                <button
+                  key={amt}
+                  onClick={() => setDepositAmount(String(amt))}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${
+                    depositAmount === String(amt)
+                      ? "bg-green-500/20 border-green-500/60 text-green-400"
+                      : "bg-secondary border-border/40 text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  ${amt}
+                </button>
+              ))}
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground font-mono uppercase tracking-wider mb-1 block">Note (optional)</label>
+              <Input
+                placeholder="e.g. June commission payout"
+                value={depositNote}
+                onChange={e => setDepositNote(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex gap-3 mt-4">
+            <Button variant="outline" className="flex-1" onClick={() => setDepositModal(null)} disabled={depositLoading}>
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold"
+              onClick={handleCreatorDeposit}
+              disabled={depositLoading || !depositAmount || parseFloat(depositAmount) <= 0}
+            >
+              {depositLoading ? "Depositing…" : `Deposit $${parseFloat(depositAmount || "0").toFixed(2)}`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Reset User Confirm Dialog ── */}
       <Dialog open={!!confirmReset} onOpenChange={() => setConfirmReset(null)}>
         <DialogContent className="bg-card border-border/60 max-w-sm">

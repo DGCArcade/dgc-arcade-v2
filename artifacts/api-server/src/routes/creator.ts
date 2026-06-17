@@ -73,8 +73,15 @@ creatorRouter.get("/dashboard", async (req, res) => {
       .orderBy(desc(creatorBankTxnsTable.createdAt))
       .limit(50);
 
-    const { getUserBalance } = await import("../lib/balance-service.js");
-    const { totalBalance } = await getUserBalance(user.id);
+    let totalBalance = 0;
+    try {
+      const { getUserBalance } = await import("../lib/balance-service.js");
+      const bal = await getUserBalance(user.id);
+      totalBalance = bal.totalBalance;
+    } catch {
+      // price-service can fail on network issues — fall back to static balance
+      totalBalance = parseFloat(user.promoBalance ?? "0");
+    }
 
     res.json({
       username: user.username,
