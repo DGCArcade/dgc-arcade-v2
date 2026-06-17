@@ -9,6 +9,7 @@ import { logAudit } from "../services/audit.js";
 import { recordLedger, recordLedgerStandalone } from "../services/ledger.js";
 import { getUserBalance } from "../lib/balance-service.js";
 import { sendPlisioPayout } from "../lib/plisio-payout.js";
+import { getDailyWinLoss, getDailyWithdrawals } from "../services/stats-service.js";
 
 export const adminRouter = Router();
 
@@ -155,6 +156,42 @@ adminRouter.get("/users", async (req, res) => {
 });
 
 // GET /api/admin/users/:id
+adminRouter.get("/stats/daily-win-loss", async (req, res) => {
+  const dateStr = typeof req.query.date === "string" ? req.query.date : new Date().toISOString().split("T")[0];
+  const date = new Date(dateStr);
+
+  if (isNaN(date.getTime())) {
+    res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD." });
+    return;
+  }
+
+  try {
+    const stats = await getDailyWinLoss(date, req.log);
+    res.json(stats);
+  } catch (err) {
+    req.log.error({ err }, "Admin daily win/loss error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+adminRouter.get("/stats/daily-withdrawals", async (req, res) => {
+  const dateStr = typeof req.query.date === "string" ? req.query.date : new Date().toISOString().split("T")[0];
+  const date = new Date(dateStr);
+
+  if (isNaN(date.getTime())) {
+    res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD." });
+    return;
+  }
+
+  try {
+    const stats = await getDailyWithdrawals(date, req.log);
+    res.json(stats);
+  } catch (err) {
+    req.log.error({ err }, "Admin daily withdrawals error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 adminRouter.get("/users/:id", async (req, res) => {
   const userId = parseInt(req.params.id, 10);
 

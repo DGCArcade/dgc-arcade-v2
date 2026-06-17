@@ -374,6 +374,8 @@ export default function Profile() {
                 type="text" value={telegramInput}
                 onChange={e => setTelegramInput(e.target.value)}
                 placeholder="@telegram_username"
+                autoComplete="off"
+                name={`tg-${Math.random().toString(36).slice(2, 7)}`}
                 className="bg-transparent border-b border-border/50 focus:border-sky-400 outline-none font-mono text-xs text-muted-foreground focus:text-foreground transition-colors w-36 pb-0.5"
               />
               <button onClick={saveTelegram} disabled={telegramSaving}
