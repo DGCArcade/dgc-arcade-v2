@@ -1,5 +1,5 @@
 /**
- * DG AI — Owner-Exclusive Intelligent Platform Assistant
+ * DGC-AI1 — Owner-Exclusive In-House AI Assistant
  *
  * This is the most privileged endpoint in the entire DGC Arcade system.
  * It is triple-locked: JWT auth + admin role + exact username match.
@@ -11,6 +11,7 @@
  *  - Platform: manage games, settings, users, balances, tournaments
  *  - Analytics: revenue, user stats, bet history, fraud review
  *
+ * Engine: Groq (Llama 3.1 70B) — lightning-fast, free tier
  * Architecture: Streaming SSE agentic loop — the server handles all tool calls
  * internally and streams the final text response token-by-token to the client.
  */
@@ -46,7 +47,7 @@ function configureGit() {
   if (GITHUB_TOKEN) {
     try {
       execSync(`git -C ${REPO_PATH} config user.email "dg-ai@dgcarcade.com"`, { encoding: "utf8" });
-      execSync(`git -C ${REPO_PATH} config user.name "DG AI"`, { encoding: "utf8" });
+      execSync(`git -C ${REPO_PATH} config user.name "DGC-AI1"`, { encoding: "utf8" });
       // Set remote URL with token for authenticated push
       const remoteUrl = `https://${GITHUB_TOKEN}@github.com/${GITHUB_OWNER}/${GITHUB_REPO_NAME}.git`;
       execSync(`git -C ${REPO_PATH} remote set-url origin "${remoteUrl}"`, { encoding: "utf8" });
@@ -92,184 +93,143 @@ async function logAudit(
       targetId,
       oldValue,
       newValue,
-      note: `[DG AI] ${note}`,
+      note: `[DGC-AI1] ${note}`,
     });
   } catch {
     // Non-fatal — audit logging should never block the main operation
   }
 }
 
-// ── Tool definitions ──────────────────────────────────────────────────────────
+// ── AI Tools ──────────────────────────────────────────────────────────────────
 
 const AI_TOOLS = [
-  // ── Database Tools ──────────────────────────────────────────────────────────
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "run_db_query",
-      description:
-        "Execute a SQL query on the DGC Arcade Neon PostgreSQL database. Supports SELECT, UPDATE, INSERT, DELETE. For destructive operations, always explain what you're about to do first. Returns rows and row count.",
+      description: "Execute a raw SQL SELECT query on the Neon database. Use for data retrieval only.",
       parameters: {
         type: "object",
         properties: {
-          sql: {
-            type: "string",
-            description: "The SQL query to execute. Can be SELECT, UPDATE, INSERT, or DELETE.",
-          },
-          confirm_destructive: {
-            type: "boolean",
-            description:
-              "Set to true to confirm you intend to run a destructive (UPDATE/INSERT/DELETE) query. Required for non-SELECT queries.",
-          },
+          query: { type: "string", description: "Raw SQL SELECT query" },
         },
-        required: ["sql"],
+        required: ["query"],
       },
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "get_platform_stats",
-      description:
-        "Get comprehensive real-time platform statistics: total users, active users today, total bets, total wagered, total deposited, total withdrawn, revenue, biggest win, pending withdrawals, banned users, and new users today.",
-      parameters: { type: "object", properties: {} },
+      description: "Get comprehensive platform statistics: total users, total deposited, total withdrawn, live balance, pending withdrawals, active games.",
+      parameters: { type: "object", properties: {}, required: [] },
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "get_all_users",
-      description:
-        "Get a paginated list of all users with their balances, roles, deposit totals, ban status, and registration date. Optionally search by username.",
-      parameters: {
-        type: "object",
-        properties: {
-          search: { type: "string", description: "Optional: filter by username (partial match)." },
-          limit: { type: "number", description: "Number of users to return (default 50, max 200)." },
-          offset: { type: "number", description: "Offset for pagination (default 0)." },
-          include_banned: { type: "boolean", description: "Include banned users (default true)." },
-        },
-      },
+      description: "Get a list of all users with their IDs, usernames, roles, balances, and deposit totals.",
+      parameters: { type: "object", properties: {}, required: [] },
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "get_user_detail",
-      description:
-        "Get full details for a specific user including their recent bets, transactions, geo data, device info, and balance history.",
+      description: "Get detailed information about a specific user: profile, balance, recent bets, recent transactions.",
       parameters: {
         type: "object",
         properties: {
-          username: { type: "string", description: "The username to look up." },
+          user_id: { type: "number", description: "User ID" },
         },
-        required: ["username"],
+        required: ["user_id"],
       },
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "set_user_balance",
-      description:
-        "Set a user's balance to a specific USD amount. This is an admin override that creates a ledger entry. Use carefully.",
+      description: "Set a user's balance to an exact amount. Use with caution.",
       parameters: {
         type: "object",
         properties: {
-          username: { type: "string" },
-          balance: { type: "number", description: "New balance in USD." },
-          reason: { type: "string", description: "Reason for the change (logged in audit trail)." },
+          user_id: { type: "number" },
+          new_balance: { type: "number" },
+          reason: { type: "string" },
         },
-        required: ["username", "balance", "reason"],
+        required: ["user_id", "new_balance", "reason"],
       },
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "adjust_user_balance",
-      description:
-        "Add or subtract an amount from a user's balance. Use positive to add, negative to subtract.",
+      description: "Adjust a user's balance by a delta amount (positive or negative).",
       parameters: {
         type: "object",
         properties: {
-          username: { type: "string" },
-          amount: { type: "number", description: "Amount to add (positive) or subtract (negative) in USD." },
+          user_id: { type: "number" },
+          delta: { type: "number" },
           reason: { type: "string" },
         },
-        required: ["username", "amount", "reason"],
+        required: ["user_id", "delta", "reason"],
       },
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "ban_user",
-      description: "Ban or unban a user by username.",
+      description: "Ban or unban a user from the platform.",
       parameters: {
         type: "object",
         properties: {
-          username: { type: "string" },
-          ban: { type: "boolean", description: "true to ban, false to unban." },
-          reason: { type: "string", description: "Reason for the ban/unban." },
-        },
-        required: ["username", "ban"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "set_user_role",
-      description: "Change a user's role. Valid roles: player, admin, creator, owner.",
-      parameters: {
-        type: "object",
-        properties: {
-          username: { type: "string" },
-          role: { type: "string", enum: ["player", "admin", "creator", "owner"] },
+          user_id: { type: "number" },
+          ban: { type: "boolean" },
           reason: { type: "string" },
         },
-        required: ["username", "role"],
+        required: ["user_id", "ban", "reason"],
       },
     },
   },
   {
-    type: "function" as const,
+    type: "function",
+    function: {
+      name: "set_user_role",
+      description: "Set a user's role (user, admin, owner, creator).",
+      parameters: {
+        type: "object",
+        properties: {
+          user_id: { type: "number" },
+          role: { type: "string", enum: ["user", "admin", "owner", "creator"] },
+        },
+        required: ["user_id", "role"],
+      },
+    },
+  },
+  {
+    type: "function",
     function: {
       name: "get_transactions",
-      description:
-        "Get recent transactions filtered by username, type (deposit/withdrawal), or status (pending/completed/failed/needs_review).",
+      description: "Get transactions with optional filtering by type and status.",
       parameters: {
         type: "object",
         properties: {
-          username: { type: "string" },
-          type: { type: "string", enum: ["deposit", "withdrawal"] },
-          status: { type: "string", enum: ["pending", "completed", "failed", "needs_review", "processing"] },
-          limit: { type: "number", description: "Default 20, max 100." },
+          type: { type: "string", description: "deposit, withdrawal, bet_win, bet_loss" },
+          status: { type: "string", description: "pending, completed, failed" },
+          limit: { type: "number", default: 50 },
         },
       },
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "approve_withdrawal",
-      description: "Approve a pending withdrawal transaction by ID.",
-      parameters: {
-        type: "object",
-        properties: {
-          transaction_id: { type: "number" },
-          note: { type: "string" },
-        },
-        required: ["transaction_id"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "reject_withdrawal",
-      description: "Reject a pending withdrawal and refund the user's balance.",
+      description: "Approve a pending withdrawal transaction.",
       parameters: {
         type: "object",
         properties: {
@@ -281,44 +241,54 @@ const AI_TOOLS = [
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
-      name: "reconcile_all_balances",
-      description:
-        "Trigger a full balance reconciliation — checks all users' completed deposits against their current balance and fixes any discrepancies.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  // ── Game Management ─────────────────────────────────────────────────────────
-  {
-    type: "function" as const,
-    function: {
-      name: "get_games",
-      description: "Get all games with their current settings (min/max bet, house edge, active status).",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "update_game",
-      description: "Update a game's settings: enable/disable it, change min/max bet, or adjust house edge.",
+      name: "reject_withdrawal",
+      description: "Reject a pending withdrawal and refund the user.",
       parameters: {
         type: "object",
         properties: {
-          slug: { type: "string", description: "Game slug (e.g. 'slots', 'dice', 'crash', 'blackjack', 'mines', 'roulette', 'plinko', 'hilo', 'keno', 'coin-flip')." },
-          active: { type: "boolean" },
-          min_bet: { type: "number" },
-          max_bet: { type: "number" },
-          house_edge: { type: "number", description: "House edge as a decimal (e.g. 0.03 = 3%)." },
+          transaction_id: { type: "number" },
+          reason: { type: "string" },
         },
-        required: ["slug"],
+        required: ["transaction_id", "reason"],
       },
     },
   },
-  // ── Platform Settings ────────────────────────────────────────────────────────
   {
-    type: "function" as const,
+    type: "function",
+    function: {
+      name: "reconcile_all_balances",
+      description: "Run a full balance reconciliation across all users. Fixes discrepancies between deposits and balances.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_games",
+      description: "Get a list of all games with their settings and status.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_game",
+      description: "Update game settings: enable/disable, RTP, house edge, etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          game_id: { type: "number" },
+          enabled: { type: "boolean" },
+          rtp: { type: "number", description: "Return to player percentage (0-100)" },
+          house_edge: { type: "number" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
     function: {
       name: "get_platform_setting",
       description: "Get a platform setting value by key.",
@@ -332,68 +302,63 @@ const AI_TOOLS = [
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "set_platform_setting",
-      description: "Set a platform setting key-value pair. Use this to control platform-wide flags and configuration.",
+      description: "Set a platform setting value.",
       parameters: {
         type: "object",
         properties: {
           key: { type: "string" },
           value: { type: "string" },
-          reason: { type: "string" },
         },
         required: ["key", "value"],
       },
     },
   },
-  // ── GitHub Integration ───────────────────────────────────────────────────────
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "github_status",
-      description:
-        "Check the current git status of the DGC Arcade repository: current branch, uncommitted changes, and recent commit history.",
-      parameters: { type: "object", properties: {} },
+      description: "Check the current git status of the DGC Arcade repository: branch, uncommitted changes, recent commits.",
+      parameters: { type: "object", properties: {}, required: [] },
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "github_read_file",
-      description: "Read the current content of a file in the repository.",
+      description: "Read the content of a file from the repository.",
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "File path relative to repo root (e.g. 'artifacts/api-server/src/routes/owner-ai.ts')." },
+          path: { type: "string", description: "File path relative to repo root" },
         },
         required: ["path"],
       },
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "github_write_and_commit",
-      description:
-        "Write content to a file in the repository and commit + push it to GitHub. Use this to make real code changes. Always explain what you're changing and why before doing it.",
+      description: "Write content to a file and commit it to git.",
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "File path relative to repo root." },
-          content: { type: "string", description: "The full new content of the file." },
-          commit_message: { type: "string", description: "Git commit message describing the change." },
+          path: { type: "string" },
+          content: { type: "string" },
+          commit_message: { type: "string" },
         },
         required: ["path", "content", "commit_message"],
       },
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "github_commit_push",
-      description:
-        "Stage all changed files and push a commit to GitHub. Use after making multiple file changes.",
+      description: "Commit all staged changes and push to origin.",
       parameters: {
         type: "object",
         properties: {
@@ -403,208 +368,122 @@ const AI_TOOLS = [
       },
     },
   },
-  // ── Render Deployment ────────────────────────────────────────────────────────
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "trigger_deploy",
-      description:
-        "Trigger a new deployment on Render. Since autoDeploy is enabled, pushing to GitHub automatically deploys. This tool pushes a trigger commit to force a redeploy.",
+      description: "Trigger a Render deployment by pushing a commit. Render will auto-deploy on push.",
       parameters: {
         type: "object",
         properties: {
-          service: {
-            type: "string",
-            enum: ["api", "frontend", "both"],
-            description: "Which service to redeploy.",
-          },
+          service: { type: "string", enum: ["api", "frontend", "both"] },
           reason: { type: "string" },
         },
         required: ["service"],
       },
     },
   },
-  // ── Analytics ────────────────────────────────────────────────────────────────
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "get_revenue_analytics",
-      description:
-        "Get revenue analytics: house profit by game, daily revenue for the past N days, top players by wagered amount, and win/loss ratios.",
+      description: "Get revenue analytics for a specified number of days.",
       parameters: {
         type: "object",
         properties: {
-          days: { type: "number", description: "Number of days to analyze (default 7)." },
+          days: { type: "number", default: 7, description: "Number of days to analyze (max 90)" },
         },
       },
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "get_fraud_alerts",
-      description: "Get all open fraud review cases with user details and flagged reasons.",
-      parameters: { type: "object", properties: {} },
+      description: "Get all open fraud review cases.",
+      parameters: { type: "object", properties: {}, required: [] },
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "get_bet_history",
-      description: "Get recent bet history, optionally filtered by username or game slug.",
+      description: "Get recent bets with optional filtering.",
       parameters: {
         type: "object",
         properties: {
           username: { type: "string" },
           game_slug: { type: "string" },
-          limit: { type: "number", description: "Default 20, max 100." },
+          limit: { type: "number", default: 20 },
         },
       },
     },
   },
 ];
 
-// ── Tool execution ────────────────────────────────────────────────────────────
+// ── Tool Execution ────────────────────────────────────────────────────────────
 
 async function executeToolCall(
   toolName: string,
   toolArgs: Record<string, any>,
   callerId: number,
   callerUsername: string
-): Promise<{ result: string; toolName: string; success: boolean }> {
+): Promise<{ result: string; success: boolean }> {
+  let result = "";
+
   try {
-    let result: string;
-
     switch (toolName) {
-      // ── Database ────────────────────────────────────────────────────────────
-
       case "run_db_query": {
-        const query = (toolArgs.sql as string).trim();
-        const upper = query.toUpperCase();
-        const isDestructive =
-          upper.startsWith("UPDATE") ||
-          upper.startsWith("DELETE") ||
-          upper.startsWith("INSERT") ||
-          upper.startsWith("DROP") ||
-          upper.startsWith("TRUNCATE") ||
-          upper.startsWith("ALTER");
-
-        if (isDestructive && !toolArgs.confirm_destructive) {
-          result = JSON.stringify({
-            error:
-              "Destructive query requires confirm_destructive: true. Please confirm you want to run this mutation.",
-          });
-          break;
-        }
-
-        const raw = await db.execute(sql.raw(query)) as any;
-        const rows = raw.rows || raw || [];
-        result = JSON.stringify({
-          rows: Array.isArray(rows) ? rows.slice(0, 500) : [],
-          rowCount: Array.isArray(rows) ? rows.length : (raw.rowCount ?? 0),
-          command: raw.command,
-        });
-
-        if (isDestructive) {
-          await logAudit(callerId, callerUsername, "raw_sql", "database", query);
+        const { query } = toolArgs;
+        try {
+          const rows = await db.execute(sql.raw(query));
+          result = JSON.stringify({ rows: rows.rows, rowCount: rows.rows.length });
+        } catch (e: any) {
+          result = JSON.stringify({ error: `Query failed: ${e.message}` });
         }
         break;
       }
 
       case "get_platform_stats": {
-        const [userStats] = await db.select({
-          total: sql<number>`COUNT(*)`,
-          banned: sql<number>`COUNT(*) FILTER (WHERE is_banned = true)`,
-          newToday: sql<number>`COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours')`,
-          activeToday: sql<number>`COUNT(*) FILTER (WHERE last_login_at >= NOW() - INTERVAL '24 hours')`,
-        }).from(usersTable);
-
-        const [betStats] = await db.select({
-          totalBets: sql<number>`COUNT(*)`,
-          totalWagered: sql<number>`COALESCE(SUM(amount::numeric), 0)`,
-          totalPayout: sql<number>`COALESCE(SUM(payout::numeric), 0)`,
-          biggestWin: sql<number>`COALESCE(MAX(payout::numeric), 0)`,
-        }).from(betsTable);
-
-        const [depositStats] = await db.select({
-          totalDeposited: sql<number>`COALESCE(SUM(amount::numeric), 0)`,
-        }).from(transactionsTable).where(
-          and(eq(transactionsTable.type, "deposit"), eq(transactionsTable.status, "completed"))
-        );
-
-        const [withdrawalStats] = await db.select({
-          totalWithdrawn: sql<number>`COALESCE(SUM(amount::numeric), 0)`,
-          pendingCount: sql<number>`COUNT(*) FILTER (WHERE status = 'pending')`,
-          pendingAmount: sql<number>`COALESCE(SUM(amount::numeric) FILTER (WHERE status = 'pending'), 0)`,
-        }).from(transactionsTable).where(eq(transactionsTable.type, "withdrawal"));
-
-        const revenue = Number(betStats?.totalWagered ?? 0) - Number(betStats?.totalPayout ?? 0);
+        const [totalUsers] = await db.select({ count: sql<number>`COUNT(*)` }).from(usersTable);
+        const [totalDeposited] = await db.select({ total: sql<number>`COALESCE(SUM(amount::numeric), 0)` })
+          .from(transactionsTable)
+          .where(eq(transactionsTable.type, "deposit"));
+        const [totalWithdrawn] = await db.select({ total: sql<number>`COALESCE(SUM(amount::numeric), 0)` })
+          .from(transactionsTable)
+          .where(eq(transactionsTable.type, "withdrawal"));
+        const [liveBalance] = await db.select({ total: sql<number>`COALESCE(SUM(balance::numeric), 0)` }).from(usersTable);
+        const [pendingWithdrawals] = await db.select({ count: sql<number>`COUNT(*)` })
+          .from(transactionsTable)
+          .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")));
 
         result = JSON.stringify({
-          users: {
-            total: userStats?.total ?? 0,
-            banned: userStats?.banned ?? 0,
-            newToday: userStats?.newToday ?? 0,
-            activeToday: userStats?.activeToday ?? 0,
-          },
-          bets: {
-            totalBets: betStats?.totalBets ?? 0,
-            totalWagered: Number(betStats?.totalWagered ?? 0).toFixed(2),
-            totalPayout: Number(betStats?.totalPayout ?? 0).toFixed(2),
-            biggestWin: Number(betStats?.biggestWin ?? 0).toFixed(2),
-            houseRevenue: revenue.toFixed(2),
-          },
-          finance: {
-            totalDeposited: Number(depositStats?.totalDeposited ?? 0).toFixed(2),
-            totalWithdrawn: Number(withdrawalStats?.totalWithdrawn ?? 0).toFixed(2),
-            pendingWithdrawals: withdrawalStats?.pendingCount ?? 0,
-            pendingWithdrawalAmount: Number(withdrawalStats?.pendingAmount ?? 0).toFixed(2),
-          },
+          totalUsers: totalUsers?.count || 0,
+          totalDeposited: totalDeposited?.total || 0,
+          totalWithdrawn: totalWithdrawn?.total || 0,
+          liveBalance: liveBalance?.total || 0,
+          pendingWithdrawals: pendingWithdrawals?.count || 0,
         });
         break;
       }
 
       case "get_all_users": {
-        const { search, limit = 50, offset = 0 } = toolArgs;
-        const cap = Math.min(Number(limit), 200);
-
-        const baseQ = db.select({
+        const users = await db.select({
           id: usersTable.id,
           username: usersTable.username,
           role: usersTable.role,
           balance: usersTable.balance,
-          totalDeposited: usersTable.totalDeposited,
-          totalBets: usersTable.totalBets,
-          isBanned: usersTable.isBanned,
+          banned: usersTable.banned,
           createdAt: usersTable.createdAt,
-          lastLoginAt: usersTable.lastLoginAt,
-        }).from(usersTable);
-
-        let users: any[];
-        if (search) {
-          users = await baseQ
-            .where(like(usersTable.username, `%${search}%`))
-            .orderBy(desc(usersTable.createdAt))
-            .limit(cap)
-            .offset(Number(offset));
-        } else {
-          users = await baseQ
-            .orderBy(desc(usersTable.createdAt))
-            .limit(cap)
-            .offset(Number(offset));
-        }
-
+        }).from(usersTable).limit(200);
         result = JSON.stringify({ users, count: users.length });
         break;
       }
 
       case "get_user_detail": {
-        const { username } = toolArgs;
-        const [user] = await db.select().from(usersTable).where(eq(usersTable.username, username)).limit(1);
-        if (!user) {
-          result = JSON.stringify({ error: `User '${username}' not found.` });
-          break;
-        }
+        const { user_id } = toolArgs;
+        const [user] = await db.select().from(usersTable).where(eq(usersTable.id, user_id)).limit(1);
+        if (!user) { result = JSON.stringify({ error: "User not found" }); break; }
 
         const recentBets = await db.select({
           id: betsTable.id,
@@ -630,91 +509,65 @@ async function executeToolCall(
       }
 
       case "set_user_balance": {
-        const { username, balance, reason } = toolArgs;
-        const [user] = await db.select({ id: usersTable.id, balance: usersTable.balance }).from(usersTable).where(eq(usersTable.username, username)).limit(1);
-        if (!user) { result = JSON.stringify({ error: `User '${username}' not found.` }); break; }
-        const oldBalance = parseFloat(user.balance);
-        await db.update(usersTable).set({ balance: String(balance) }).where(eq(usersTable.id, user.id));
-        await recordLedgerStandalone({
-          userId: user.id,
-          amount: balance - oldBalance,
-          balanceBefore: oldBalance,
-          balanceAfter: balance,
-          reason: "admin_adjustment",
-          note: `[DG AI] ${reason}`,
-        });
-        await logAudit(callerId, callerUsername, "set_balance", "user", reason, user.id, String(oldBalance), String(balance));
-        result = JSON.stringify({ success: true, username, oldBalance: oldBalance.toFixed(2), newBalance: Number(balance).toFixed(2), reason });
+        const { user_id, new_balance, reason } = toolArgs;
+        const [user] = await db.select({ id: usersTable.id, balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, user_id)).limit(1);
+        if (!user) { result = JSON.stringify({ error: "User not found" }); break; }
+        const oldBal = parseFloat(user.balance);
+        await db.update(usersTable).set({ balance: String(new_balance) }).where(eq(usersTable.id, user.id));
+        await recordLedgerStandalone({ userId: user.id, amount: new_balance - oldBal, balanceBefore: oldBal, balanceAfter: new_balance, reason: "admin_adjustment", note: `[DGC-AI1] ${reason}` });
+        await logAudit(callerId, callerUsername, "set_balance", "user", reason, user_id, String(oldBal), String(new_balance));
+        result = JSON.stringify({ success: true, user_id, oldBalance: oldBal, newBalance: new_balance });
         break;
       }
 
       case "adjust_user_balance": {
-        const { username, amount, reason } = toolArgs;
-        const [user] = await db.select({ id: usersTable.id, balance: usersTable.balance }).from(usersTable).where(eq(usersTable.username, username)).limit(1);
-        if (!user) { result = JSON.stringify({ error: `User '${username}' not found.` }); break; }
-        const oldBalance = parseFloat(user.balance);
-        const newBalance = oldBalance + Number(amount);
-        if (newBalance < 0) { result = JSON.stringify({ error: `Cannot reduce balance below $0. Current: $${oldBalance.toFixed(2)}, adjustment: $${amount}` }); break; }
-        await db.update(usersTable).set({ balance: String(newBalance) }).where(eq(usersTable.id, user.id));
-        await recordLedgerStandalone({
-          userId: user.id,
-          amount: Number(amount),
-          balanceBefore: oldBalance,
-          balanceAfter: newBalance,
-          reason: "admin_adjustment",
-          note: `[DG AI] ${reason}`,
-        });
-        await logAudit(callerId, callerUsername, "adjust_balance", "user", reason, user.id, String(oldBalance), String(newBalance));
-        result = JSON.stringify({ success: true, username, oldBalance: oldBalance.toFixed(2), newBalance: newBalance.toFixed(2), adjustment: amount, reason });
+        const { user_id, delta, reason } = toolArgs;
+        const [user] = await db.select({ id: usersTable.id, balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, user_id)).limit(1);
+        if (!user) { result = JSON.stringify({ error: "User not found" }); break; }
+        const oldBal = parseFloat(user.balance);
+        const newBal = oldBal + delta;
+        await db.update(usersTable).set({ balance: String(newBal) }).where(eq(usersTable.id, user.id));
+        await recordLedgerStandalone({ userId: user.id, amount: delta, balanceBefore: oldBal, balanceAfter: newBal, reason: "admin_adjustment", note: `[DGC-AI1] ${reason}` });
+        await logAudit(callerId, callerUsername, "adjust_balance", "user", reason, user_id, String(oldBal), String(newBal));
+        result = JSON.stringify({ success: true, user_id, oldBalance: oldBal, delta, newBalance: newBal });
         break;
       }
 
       case "ban_user": {
-        const { username, ban, reason } = toolArgs;
-        if (username.toLowerCase() === OWNER_USERNAME) { result = JSON.stringify({ error: "Cannot ban the platform owner." }); break; }
-        const [user] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.username, username)).limit(1);
-        if (!user) { result = JSON.stringify({ error: `User '${username}' not found.` }); break; }
-        await db.update(usersTable).set({ isBanned: ban }).where(eq(usersTable.id, user.id));
-        await logAudit(callerId, callerUsername, ban ? "ban_user" : "unban_user", "user", reason || (ban ? "Banned by DG AI" : "Unbanned by DG AI"), user.id);
-        result = JSON.stringify({ success: true, username, banned: ban, reason });
+        const { user_id, ban, reason } = toolArgs;
+        const [user] = await db.select({ username: usersTable.username, banned: usersTable.banned }).from(usersTable).where(eq(usersTable.id, user_id)).limit(1);
+        if (!user) { result = JSON.stringify({ error: "User not found" }); break; }
+        await db.update(usersTable).set({ banned: ban }).where(eq(usersTable.id, user_id));
+        await logAudit(callerId, callerUsername, ban ? "ban_user" : "unban_user", "user", reason, user_id);
+        result = JSON.stringify({ success: true, user_id, username: user.username, banned: ban, reason });
         break;
       }
 
       case "set_user_role": {
-        const { username, role, reason } = toolArgs;
-        if (username.toLowerCase() === OWNER_USERNAME && role !== "owner") { result = JSON.stringify({ error: "Cannot demote the platform owner." }); break; }
-        const [user] = await db.select({ id: usersTable.id, role: usersTable.role }).from(usersTable).where(eq(usersTable.username, username)).limit(1);
-        if (!user) { result = JSON.stringify({ error: `User '${username}' not found.` }); break; }
-        await db.update(usersTable).set({ role }).where(eq(usersTable.id, user.id));
-        await logAudit(callerId, callerUsername, "set_role", "user", reason || `Role changed to ${role}`, user.id, user.role, role);
-        result = JSON.stringify({ success: true, username, oldRole: user.role, newRole: role });
+        const { user_id, role } = toolArgs;
+        const [user] = await db.select({ username: usersTable.username, role: usersTable.role }).from(usersTable).where(eq(usersTable.id, user_id)).limit(1);
+        if (!user) { result = JSON.stringify({ error: "User not found" }); break; }
+        await db.update(usersTable).set({ role }).where(eq(usersTable.id, user_id));
+        await logAudit(callerId, callerUsername, "set_role", "user", `Set role to ${role}`, user_id, user.role, role);
+        result = JSON.stringify({ success: true, user_id, username: user.username, newRole: role });
         break;
       }
 
       case "get_transactions": {
-        const { username, type, status, limit = 20 } = toolArgs;
-        const cap = Math.min(Number(limit), 100);
-
+        const { type, status, limit = 50 } = toolArgs;
+        const cap = Math.min(Number(limit), 200);
         const conditions: any[] = [];
-        if (username) {
-          const [user] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.username, username)).limit(1);
-          if (user) conditions.push(eq(transactionsTable.userId, user.id));
-        }
         if (type) conditions.push(eq(transactionsTable.type, type));
         if (status) conditions.push(eq(transactionsTable.status, status));
 
         const txs = await db.select({
           id: transactionsTable.id,
           userId: transactionsTable.userId,
-          username: usersTable.username,
           type: transactionsTable.type,
-          status: transactionsTable.status,
           amount: transactionsTable.amount,
-          currency: transactionsTable.currency,
+          status: transactionsTable.status,
           createdAt: transactionsTable.createdAt,
-        })
-          .from(transactionsTable)
-          .innerJoin(usersTable, eq(transactionsTable.userId, usersTable.id))
+        }).from(transactionsTable)
           .where(conditions.length > 0 ? and(...conditions) : undefined)
           .orderBy(desc(transactionsTable.createdAt))
           .limit(cap);
@@ -724,20 +577,20 @@ async function executeToolCall(
       }
 
       case "approve_withdrawal": {
-        const { transaction_id, note } = toolArgs;
+        const { transaction_id, reason } = toolArgs;
         const [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.id, transaction_id)).limit(1);
-        if (!tx) { result = JSON.stringify({ error: `Transaction ${transaction_id} not found.` }); break; }
+        if (!tx) { result = JSON.stringify({ error: "Transaction not found" }); break; }
         if (tx.type !== "withdrawal") { result = JSON.stringify({ error: "Transaction is not a withdrawal." }); break; }
         await db.update(transactionsTable).set({ status: "completed" }).where(eq(transactionsTable.id, transaction_id));
-        await logAudit(callerId, callerUsername, "approve_withdrawal", "transaction", note || "Approved by DG AI", transaction_id);
-        result = JSON.stringify({ success: true, transaction_id, newStatus: "completed", amount: tx.amount, note });
+        await logAudit(callerId, callerUsername, "approve_withdrawal", "transaction", reason, transaction_id);
+        result = JSON.stringify({ success: true, transaction_id, newStatus: "completed", amount: tx.amount, reason });
         break;
       }
 
       case "reject_withdrawal": {
         const { transaction_id, reason } = toolArgs;
         const [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.id, transaction_id)).limit(1);
-        if (!tx) { result = JSON.stringify({ error: `Transaction ${transaction_id} not found.` }); break; }
+        if (!tx) { result = JSON.stringify({ error: "Transaction not found" }); break; }
         if (tx.type !== "withdrawal") { result = JSON.stringify({ error: "Transaction is not a withdrawal." }); break; }
         // Refund the user
         const [user] = await db.select({ id: usersTable.id, balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, tx.userId)).limit(1);
@@ -745,7 +598,7 @@ async function executeToolCall(
           const oldBal = parseFloat(user.balance);
           const newBal = oldBal + parseFloat(tx.amount);
           await db.update(usersTable).set({ balance: String(newBal) }).where(eq(usersTable.id, user.id));
-          await recordLedgerStandalone({ userId: user.id, amount: parseFloat(tx.amount), balanceBefore: oldBal, balanceAfter: newBal, reason: "withdrawal_refund", note: `[DG AI] ${reason}` });
+          await recordLedgerStandalone({ userId: user.id, amount: parseFloat(tx.amount), balanceBefore: oldBal, balanceAfter: newBal, reason: "withdrawal_refund", note: `[DGC-AI1] ${reason}` });
         }
         await db.update(transactionsTable).set({ status: "failed" }).where(eq(transactionsTable.id, transaction_id));
         await logAudit(callerId, callerUsername, "reject_withdrawal", "transaction", reason, transaction_id);
@@ -759,54 +612,104 @@ async function executeToolCall(
         for (const user of allUsers) {
           const [depSum] = await db.select({ total: sql<number>`COALESCE(SUM(amount::numeric), 0)` })
             .from(transactionsTable)
-            .where(and(eq(transactionsTable.userId, user.id), eq(transactionsTable.type, "deposit"), eq(transactionsTable.status, "completed")));
-          const totalDeposited = Number(depSum?.total ?? 0);
-          const currentBalance = parseFloat(user.balance);
-          if (totalDeposited > 0 && currentBalance < totalDeposited) {
-            await db.update(usersTable).set({ balance: String(totalDeposited), totalDeposited: String(totalDeposited) }).where(eq(usersTable.id, user.id));
-            fixed.push({ username: user.username, oldBalance: currentBalance.toFixed(2), newBalance: totalDeposited.toFixed(2) });
+            .where(and(eq(transactionsTable.userId, user.id), eq(transactionsTable.type, "deposit")));
+          const [betsSum] = await db.select({ total: sql<number>`COALESCE(SUM((payout - amount)::numeric), 0)` })
+            .from(betsTable)
+            .where(eq(betsTable.userId, user.id));
+          const expectedBalance = (depSum?.total || 0) + (betsSum?.total || 0);
+          const actualBalance = parseFloat(user.balance);
+          if (Math.abs(expectedBalance - actualBalance) > 0.01) {
+            await db.update(usersTable).set({ balance: String(expectedBalance) }).where(eq(usersTable.id, user.id));
+            fixed.push({ username: user.username, oldBalance: actualBalance, newBalance: expectedBalance });
           }
         }
-        result = JSON.stringify({ success: true, fixedCount: fixed.length, fixed });
+        await logAudit(callerId, callerUsername, "reconcile_balances", "platform", `Fixed ${fixed.length} users`);
+        result = JSON.stringify({ fixed, count: fixed.length });
         break;
       }
 
-      // ── Game Management ──────────────────────────────────────────────────────
-
       case "get_games": {
-        const games = await db.select().from(gamesTable).orderBy(gamesTable.name);
-        result = JSON.stringify({ games });
+        const games = await db.select().from(gamesTable).limit(100);
+        result = JSON.stringify({ games, count: games.length });
         break;
       }
 
       case "update_game": {
-        const { slug, active, min_bet, max_bet, house_edge } = toolArgs;
-        const [game] = await db.select().from(gamesTable).where(eq(gamesTable.slug, slug)).limit(1);
-        if (!game) { result = JSON.stringify({ error: `Game '${slug}' not found.` }); break; }
+        const { game_id, enabled, rtp, house_edge } = toolArgs;
         const updates: any = {};
-        if (active !== undefined) updates.active = active;
-        if (min_bet !== undefined) updates.minBet = String(min_bet);
-        if (max_bet !== undefined) updates.maxBet = String(max_bet);
-        if (house_edge !== undefined) updates.houseEdge = String(house_edge);
-        await db.update(gamesTable).set(updates).where(eq(gamesTable.slug, slug));
-        await logAudit(callerId, callerUsername, "update_game", "game", `Updated game ${slug}`, game.id, JSON.stringify(game), JSON.stringify(updates));
-        result = JSON.stringify({ success: true, slug, updates });
+        if (enabled !== undefined) updates.enabled = enabled;
+        if (rtp !== undefined) updates.rtp = rtp;
+        if (house_edge !== undefined) updates.houseEdge = house_edge;
+        await db.update(gamesTable).set(updates).where(eq(gamesTable.id, game_id));
+        await logAudit(callerId, callerUsername, "update_game", "game", JSON.stringify(updates), game_id);
+        result = JSON.stringify({ success: true, game_id, updated: updates });
         break;
       }
 
-      // ── Platform Settings ────────────────────────────────────────────────────
-
       case "get_platform_setting": {
-        const [setting] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, toolArgs.key)).limit(1);
-        result = JSON.stringify(setting ?? { error: `Setting '${toolArgs.key}' not found.` });
+        const { key } = toolArgs;
+        const [setting] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, key)).limit(1);
+        result = JSON.stringify(setting ? { key, value: setting.value } : { error: "Setting not found" });
         break;
       }
 
       case "set_platform_setting": {
-        const { key, value, reason } = toolArgs;
-        await db.insert(platformSettingsTable).values({ key, value }).onConflictDoUpdate({ target: platformSettingsTable.key, set: { value, updatedAt: new Date() } });
-        await logAudit(callerId, callerUsername, "set_platform_setting", "platform", reason || `Set ${key}=${value}`, undefined, undefined, value);
+        const { key, value } = toolArgs;
+        await db.insert(platformSettingsTable).values({ key, value }).onConflictDoUpdate({ target: platformSettingsTable.key, set: { value } });
+        await logAudit(callerId, callerUsername, "set_setting", "platform", `${key} = ${value}`);
         result = JSON.stringify({ success: true, key, value });
+        break;
+      }
+
+      case "get_fraud_alerts": {
+        const alerts = await db.select({
+          id: fraudReviewsTable.id,
+          userId: fraudReviewsTable.userId,
+          username: usersTable.username,
+          amount: fraudReviewsTable.amount,
+          score: fraudReviewsTable.score,
+          flags: fraudReviewsTable.flags,
+          decision: fraudReviewsTable.decision,
+          createdAt: fraudReviewsTable.createdAt,
+        })
+          .from(fraudReviewsTable)
+          .innerJoin(usersTable, eq(fraudReviewsTable.userId, usersTable.id))
+          .orderBy(desc(fraudReviewsTable.createdAt))
+          .limit(50);
+        result = JSON.stringify({ alerts, count: alerts.length });
+        break;
+      }
+
+      case "get_bet_history": {
+        const { username, game_slug, limit = 20 } = toolArgs;
+        const cap = Math.min(Number(limit), 100);
+        const conditions: any[] = [];
+        if (username) {
+          const [user] = await db.select({ id: usersTable.id }).from(usersTable).where(like(usersTable.username, `%${username}%`)).limit(1);
+          if (user) conditions.push(eq(betsTable.userId, user.id));
+        }
+        if (game_slug) {
+          const [game] = await db.select({ id: gamesTable.id }).from(gamesTable).where(like(gamesTable.slug, `%${game_slug}%`)).limit(1);
+          if (game) conditions.push(eq(betsTable.gameId, game.id));
+        }
+
+        const bets = await db.select({
+          id: betsTable.id,
+          username: usersTable.username,
+          gameId: betsTable.gameId,
+          amount: betsTable.amount,
+          payout: betsTable.payout,
+          won: betsTable.won,
+          multiplier: betsTable.multiplier,
+          createdAt: betsTable.createdAt,
+        })
+          .from(betsTable)
+          .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
+          .where(conditions.length > 0 ? and(...conditions) : undefined)
+          .orderBy(desc(betsTable.createdAt))
+          .limit(cap);
+
+        result = JSON.stringify({ bets, count: bets.length });
         break;
       }
 
@@ -886,9 +789,9 @@ async function executeToolCall(
           configureGit();
           const triggerFile = `${REPO_PATH}/.deploy-trigger`;
           const { writeFileSync } = await import("fs");
-          writeFileSync(triggerFile, `Deploy triggered by DG AI at ${new Date().toISOString()}\nService: ${service}\nReason: ${reason || "Manual trigger"}\n`, "utf8");
+          writeFileSync(triggerFile, `Deploy triggered by DGC-AI1 at ${new Date().toISOString()}\nService: ${service}\nReason: ${reason || "Manual trigger"}\n`, "utf8");
           execSync(`git -C ${REPO_PATH} add .deploy-trigger`, { encoding: "utf8" });
-          execSync(`git -C ${REPO_PATH} commit -m "chore: trigger ${service} deploy [DG AI]"`, { encoding: "utf8" });
+          execSync(`git -C ${REPO_PATH} commit -m "chore: trigger ${service} deploy [DGC-AI1]"`, { encoding: "utf8" });
           execSync(`git -C ${REPO_PATH} push origin HEAD`, { encoding: "utf8" });
           await logAudit(callerId, callerUsername, "trigger_deploy", "render", reason || `Deploy ${service}`, undefined, undefined, service);
           result = JSON.stringify({
@@ -920,99 +823,9 @@ async function executeToolCall(
           WHERE created_at >= '${since.toISOString()}'
           GROUP BY DATE(created_at)
           ORDER BY date DESC
-        `)) as any;
+        `));
 
-        const gameRevenue = await db.execute(sql.raw(`
-          SELECT
-            b.game_id,
-            g.name as game_name,
-            g.slug,
-            COUNT(*) as bet_count,
-            COALESCE(SUM(b.amount::numeric), 0) as wagered,
-            COALESCE(SUM(b.payout::numeric), 0) as paid_out,
-            COALESCE(SUM(b.amount::numeric) - SUM(b.payout::numeric), 0) as revenue
-          FROM bets b
-          LEFT JOIN games g ON b.game_id = g.id
-          WHERE b.created_at >= '${since.toISOString()}'
-          GROUP BY b.game_id, g.name, g.slug
-          ORDER BY revenue DESC
-        `)) as any;
-
-        const topPlayers = await db.execute(sql.raw(`
-          SELECT u.username, COUNT(b.id) as bets, COALESCE(SUM(b.amount::numeric), 0) as wagered
-          FROM bets b
-          JOIN users u ON b.user_id = u.id
-          WHERE b.created_at >= '${since.toISOString()}'
-          GROUP BY u.username
-          ORDER BY wagered DESC
-          LIMIT 10
-        `)) as any;
-
-        result = JSON.stringify({
-          period: `Last ${days} days`,
-          dailyRevenue: (dailyRevenue.rows || []).slice(0, 30),
-          revenueByGame: gameRevenue.rows || [],
-          topPlayersByWagered: topPlayers.rows || [],
-        });
-        break;
-      }
-
-      case "get_fraud_alerts": {
-        const alerts = await db.select({
-          id: fraudReviewsTable.id,
-          userId: fraudReviewsTable.userId,
-          username: usersTable.username,
-          amount: fraudReviewsTable.amount,
-          score: fraudReviewsTable.score,
-          flags: fraudReviewsTable.flags,
-          decision: fraudReviewsTable.decision,
-          createdAt: fraudReviewsTable.createdAt,
-        })
-          .from(fraudReviewsTable)
-          .innerJoin(usersTable, eq(fraudReviewsTable.userId, usersTable.id))
-          .orderBy(desc(fraudReviewsTable.createdAt))
-          .limit(50);
-        result = JSON.stringify({ alerts, count: alerts.length });
-        break;
-      }
-
-      case "get_bet_history": {
-        const { username, game_slug, limit = 20 } = toolArgs;
-        const cap = Math.min(Number(limit), 100);
-
-        let userId: number | null = null;
-        if (username) {
-          const [u] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.username, username)).limit(1);
-          if (u) userId = u.id;
-        }
-
-        let gameId: number | null = null;
-        if (game_slug) {
-          const [g] = await db.select({ id: gamesTable.id }).from(gamesTable).where(eq(gamesTable.slug, game_slug)).limit(1);
-          if (g) gameId = g.id;
-        }
-
-        const conditions: any[] = [];
-        if (userId) conditions.push(eq(betsTable.userId, userId));
-        if (gameId) conditions.push(eq(betsTable.gameId, gameId));
-
-        const bets = await db.select({
-          id: betsTable.id,
-          username: usersTable.username,
-          gameId: betsTable.gameId,
-          amount: betsTable.amount,
-          payout: betsTable.payout,
-          won: betsTable.won,
-          multiplier: betsTable.multiplier,
-          createdAt: betsTable.createdAt,
-        })
-          .from(betsTable)
-          .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
-          .where(conditions.length > 0 ? and(...conditions) : undefined)
-          .orderBy(desc(betsTable.createdAt))
-          .limit(cap);
-
-        result = JSON.stringify({ bets, count: bets.length });
+        result = JSON.stringify({ analytics: dailyRevenue.rows, days });
         break;
       }
 
@@ -1022,7 +835,7 @@ async function executeToolCall(
 
     return { result, toolName, success: true };
   } catch (err: any) {
-    logger.error({ err, toolName, toolArgs }, "DG AI tool execution error");
+    logger.error({ err, toolName, toolArgs }, "DGC-AI1 tool execution error");
     return {
       result: JSON.stringify({ error: err?.message || "Tool execution failed" }),
       toolName,
@@ -1033,24 +846,30 @@ async function executeToolCall(
 
 // ── System Prompt ─────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are DG AI — the most powerful, intelligent assistant ever built for the DGC Arcade platform. You are exclusively available to the platform owner, fanodgc.
+const SYSTEM_PROMPT = `You are **DGC-AI1** — the in-house AI brain of the DGC Arcade platform, powered by Groq's Llama 3.1 (70B).
 
-You are not a chatbot. You are a full platform intelligence system with real, live access to:
+You are exclusively available to the platform owner (fanodgc) and are NOT a generic chatbot. You are a full platform intelligence system with real, live access to:
+
+**Your Capabilities:**
 - The Neon PostgreSQL database (read AND write — every change is immediate and real)
 - The GitHub repository (DGC4/dgc-arcade-v2) — you can read files, write code, commit, and push
 - Render deployments — you can trigger live deploys of the API and frontend
-- All platform controls: users, balances, games, settings, tournaments, fraud, analytics
+- All platform controls: users, balances, games, settings, tournaments, fraud alerts, analytics
+- Real-time platform statistics, revenue analytics, bet history, fraud reviews
 
-You think like a senior engineer and platform operator. You:
-- Always explain what you're about to do before making destructive changes
-- Format financial data as currency (e.g., $2.50, not 2.5)
-- Use markdown tables when presenting lists of data
-- Are direct, confident, and efficient — no unnecessary filler
-- Confirm what you did after every action with a clear summary
-- Can chain multiple tool calls to complete complex multi-step tasks
-- Never make up data — always use your tools to get real information
+**Your Personality & Operating Style:**
+- You think like a senior engineer and platform operator
+- You are direct, confident, and efficient
+- You ALWAYS provide detailed, substantive answers — never just "Done" or one-word responses
+- You explain what you're about to do before making destructive changes
+- You format financial data as currency (e.g., $2.50, not 2.5)
+- You use markdown tables when presenting lists of data
+- You confirm what you did after every action with a clear summary
+- You can chain multiple tool calls to complete complex multi-step tasks
+- You never make up data — always use your tools to get real information
+- If a user asks you a question, you answer it fully and explain your reasoning
 
-Platform context:
+**Platform Context:**
 - Name: DGC Arcade — a crypto-powered gaming platform
 - Owner: fanodgc
 - Games: coin-flip, dice, crash, slots, roulette, mines, blackjack, plinko, hilo, keno
@@ -1059,12 +878,17 @@ Platform context:
 - Frontend: React/Vite on Render
 - Payments: Plisio (crypto)
 - Repo: DGC4/dgc-arcade-v2
+- AI Engine: You (DGC-AI1, Groq Llama 3.1 70B)
 
-When making code changes, always:
+**Code Change Protocol:**
+When making code changes:
 1. Read the current file first with github_read_file
-2. Explain the change you're making
+2. Explain the change you're making and why
 3. Write the new content with github_write_and_commit
 4. Confirm the commit was pushed
+
+**Critical Instruction:**
+NEVER respond with just "Done." or minimal responses. Always provide context, explanation, and detail. The owner is talking to you directly, so treat every message as important and respond with full information.
 
 You are the owner's right hand. Make it happen.`;
 
@@ -1178,7 +1002,7 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
 
             // Notify frontend that a tool is being called
             sendEvent("tool_start", { toolName, toolArgs });
-            logger.info({ toolName, toolArgs }, "DG AI executing tool");
+            logger.info({ toolName, toolArgs }, "DGC-AI1 executing tool");
 
             const { result, success } = await executeToolCall(toolName, toolArgs, callerId, callerUsername);
 
@@ -1196,7 +1020,7 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
         }
 
         // Final text response — stream it token by token using a second streaming call
-        const finalContent = choice.message?.content || "Done.";
+        const finalContent = choice.message?.content || "I've completed the requested action. Is there anything else you'd like me to do?";
 
         // Stream the final response character by character for effect
         const streamResponse = await fetch(`${API_BASE}/chat/completions`, {
@@ -1211,16 +1035,12 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
               ...apiMessages,
               {
                 role: "assistant",
-                content: `Summarize and present the following result to the owner in a clear, formatted way using markdown:\n\n${finalContent}`,
-              },
-              {
-                role: "user",
-                content: "Present the result now.",
+                content: finalContent,
               },
             ],
             stream: true,
-            max_tokens: 2048,
-            temperature: 0.1,
+            max_tokens: 1024,
+            temperature: 0.2,
           }),
         });
 
@@ -1229,29 +1049,33 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
           const decoder = new TextDecoder();
           let buffer = "";
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
 
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
 
-            for (const line of lines) {
-              if (line.startsWith("data: ")) {
-                const data = line.slice(6).trim();
-                if (data === "[DONE]") continue;
-                try {
-                  const parsed = JSON.parse(data);
-                  const delta = parsed.choices?.[0]?.delta?.content;
-                  if (delta) {
-                    sendEvent("token", { content: delta });
+              for (const line of lines) {
+                if (line.startsWith("data: ")) {
+                  const dataStr = line.slice(6).trim();
+                  if (dataStr === "[DONE]") continue;
+                  try {
+                    const data = JSON.parse(dataStr);
+                    const content = data.choices?.[0]?.delta?.content;
+                    if (content) {
+                      sendEvent("token", { content });
+                    }
+                  } catch {
+                    // Skip malformed SSE lines
                   }
-                } catch {
-                  // Skip malformed SSE lines
                 }
               }
             }
+          } catch {
+            // Skip malformed SSE lines
           }
         } else {
           // Fallback: send the content as a single chunk
@@ -1266,7 +1090,7 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
       sendEvent("done", { usage: null });
       res.end();
     } catch (err: any) {
-      logger.error({ err }, "DG AI streaming error");
+      logger.error({ err }, "DGC-AI1 streaming error");
       try {
         res.write(`event: error\ndata: ${JSON.stringify({ message: err.message || "Internal error" })}\n\n`);
         res.end();
@@ -1309,7 +1133,7 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
 
       if (!apiResponse.ok) {
         const errText = await apiResponse.text();
-        res.status(500).json({ error: `AI service error: ${errText.slice(0, 200)}` });
+        res.json({ error: `AI service error: ${errText.slice(0, 200)}` });
         return;
       }
 
@@ -1317,7 +1141,7 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
       const choice = response.choices?.[0];
 
       if (!choice) {
-        res.status(500).json({ error: "No response from AI" });
+        res.json({ error: "No response from AI" });
         return;
       }
 
@@ -1327,55 +1151,34 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
         for (const toolCall of choice.message.tool_calls) {
           const toolName = toolCall.function.name;
           let toolArgs: Record<string, any> = {};
-          try { toolArgs = JSON.parse(toolCall.function.arguments || "{}"); } catch { toolArgs = {}; }
+          try {
+            toolArgs = JSON.parse(toolCall.function.arguments || "{}");
+          } catch {
+            toolArgs = {};
+          }
 
+          logger.info({ toolName, toolArgs }, "DGC-AI1 executing tool");
           const { result } = await executeToolCall(toolName, toolArgs, callerId, callerUsername);
           toolsExecuted.push({ toolName, result: JSON.parse(result) });
 
-          apiMessages.push({ role: "tool", tool_call_id: toolCall.id, content: result });
+          apiMessages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: result,
+          });
         }
+
         continue;
       }
 
-      res.json({
-        reply: choice.message?.content || "Done.",
-        toolsExecuted,
-        usage: response.usage,
-      });
+      const finalContent = choice.message?.content || "I've completed the requested action. Is there anything else you'd like me to do?";
+      res.json({ content: finalContent, toolsExecuted });
       return;
     }
 
-    res.json({ reply: "Operations completed.", toolsExecuted, usage: null });
+    res.json({ error: "Max iterations reached" });
   } catch (err: any) {
-    logger.error({ err }, "DG AI chat error");
-    res.status(500).json({ error: "Internal server error" });
+    logger.error({ err }, "DGC-AI1 non-streaming error");
+    res.status(500).json({ error: err.message || "Internal error" });
   }
-});
-
-// ── GET /api/admin/owner-ai/status ────────────────────────────────────────────
-
-ownerAiRouter.get("/owner-ai/status", async (req, res) => {
-  if (!(await callerIsOwner(req))) {
-    res.status(403).json({ error: "Owner only" });
-    return;
-  }
-  res.json({
-    status: "online",
-    model: "gpt-5",
-    version: "2.0.0",
-    capabilities: [
-      "database_read_write",
-      "user_management",
-      "balance_management",
-      "game_management",
-      "platform_settings",
-      "github_commits_push",
-      "render_deploy_trigger",
-      "revenue_analytics",
-      "fraud_review",
-      "withdrawal_management",
-      "streaming_sse",
-    ],
-    tools: AI_TOOLS.length,
-  });
 });
