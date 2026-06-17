@@ -201,6 +201,34 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
   }
 
   async function handleAccept() {
+    // Try to get precise GPS location if available
+    if (navigator.geolocation) {
+      setState("verifying");
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          // Got precise location
+          const { latitude, longitude } = position.coords;
+          if (geoData) {
+            setGeoData({
+              ...geoData,
+              latitude,
+              longitude,
+            });
+          }
+          await processAccept(latitude, longitude);
+        },
+        async () => {
+          // Declined or error — proceed with IP geo
+          await processAccept();
+        },
+        { timeout: 5000 }
+      );
+    } else {
+      await processAccept();
+    }
+  }
+
+  async function processAccept(gpsLat?: number, gpsLon?: number) {
     setState("verifying");
     try {
       // Block check
@@ -235,8 +263,8 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
         hostname: "",
         asn: geoData.asn ?? "",
         isp: geoData.org ?? "",
-        lat: String(geoData.latitude ?? ""),
-        lon: String(geoData.longitude ?? ""),
+        lat: String(gpsLat ?? geoData.latitude ?? ""),
+        lon: String(gpsLon ?? geoData.longitude ?? ""),
         timezone: geoData.timezone ?? "",
         deviceName: deviceInfo.deviceName,
         deviceOs: deviceInfo.deviceOs,

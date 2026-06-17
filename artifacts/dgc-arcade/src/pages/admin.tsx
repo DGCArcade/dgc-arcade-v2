@@ -53,6 +53,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
 import { DGCBankDashboard } from "@/components/admin/dgc-bank-dashboard";
+import { VisitorLogs } from "@/components/admin/visitor-logs";
 
 const API_BASE = "/api/admin";
 
@@ -167,7 +168,7 @@ interface UserDetail {
   transactions: { id: number; type: string; amount: number; currency: string; status: string; address: string | null; createdAt: string }[];
 }
 
-type TabKey = "overview" | "users" | "transactions" | "bank" | "bank-dashboard" | "tournaments" | "chat" | "ai";
+type TabKey = "overview" | "users" | "transactions" | "bank" | "bank-dashboard" | "visitor-logs" | "tournaments" | "chat" | "ai";
 
 export default function AdminDashboard() {
   const { user, isLoading } = useAuth();
@@ -843,6 +844,7 @@ export default function AdminDashboard() {
         { key: "overview", label: "Overview", icon: Activity },
         { key: "users", label: "Users", icon: Users },
         { key: "bank-dashboard", label: "DGC Bank", icon: Wallet },
+        { key: "visitor-logs", label: "Visitors", icon: Users },
         { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChatCount },
       ];
 
@@ -2925,6 +2927,11 @@ export default function AdminDashboard() {
       {/* ── DGC Bank Dashboard Tab ── */}
       {activeTab === "bank-dashboard" && (
         <DGCBankDashboard />
+      )}
+
+      {/* ── Visitor Logs Tab ── */}
+      {activeTab === "visitor-logs" && (
+        <VisitorLogs />
       )}
 
       {/* ── Owner AI Tab ── */}

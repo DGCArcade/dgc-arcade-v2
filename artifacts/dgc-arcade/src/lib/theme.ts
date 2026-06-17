@@ -33,6 +33,14 @@ export function applyTheme(id: ThemeId) {
   localStorage.setItem(STORAGE_KEY, id);
 }
 
+export function rotateTheme() {
+  const current = getTheme();
+  const currentIndex = THEMES.findIndex(t => t.id === current);
+  const nextIndex = (currentIndex + 1) % THEMES.length;
+  applyTheme(THEMES[nextIndex].id);
+}
+
 export function initTheme() {
-  applyTheme(getTheme());
+  // Always rotate on fresh load/reload
+  rotateTheme();
 }

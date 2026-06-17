@@ -17,11 +17,16 @@ import { WalletModal } from "@/components/wallet/wallet-modal";
 import { DailyBonusModal } from "@/components/ui/daily-bonus-modal";
 import { VipModal, getVipProgress } from "@/components/vip/vip-modal";
 import { useState, useEffect } from "react";
+import { rotateTheme } from "@/lib/theme";
 
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
   const authModal = useAuthModal();
   const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    rotateTheme();
+  }, [location]);
   const [walletOpen, setWalletOpen] = useState(false);
   const [bonusOpen, setBonusOpen] = useState(false);
   const [vipOpen, setVipOpen] = useState(false);

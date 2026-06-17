@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { startBackgroundTasks } from "./lib/background-tasks.js";
+import { logVisitor } from "./services/visitor-service.js";
 
 const app: Express = express();
 
@@ -124,6 +125,15 @@ const withdrawLimiter = rateLimit({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ── Visitor Tracking Middleware ──────────────────────────────────────────────
+app.use((req, _res, next) => {
+  // Fire and forget to not block response
+  if (req.method === "GET" && !req.url.startsWith("/api") && !req.url.includes(".")) {
+    logVisitor(req).catch(() => {});
+  }
+  next();
+});
 
 // Public health check — no auth required
 app.get("/health", (_req, res) => {
