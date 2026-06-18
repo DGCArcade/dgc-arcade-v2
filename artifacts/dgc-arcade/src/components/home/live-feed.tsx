@@ -38,27 +38,53 @@ function BetsTable({ bets, loading, emptyMsg }: { bets: Bet[]; loading?: boolean
 
   if (loading) return <div className="px-6 py-10 text-center text-muted-foreground font-mono text-sm animate-pulse">Loading…</div>;
 
+  if (!bets?.length) {
+    return (
+      <div className="px-6 py-10 text-center text-muted-foreground font-mono text-sm">
+        {emptyMsg ?? "No bets yet."}
+      </div>
+    );
+  }
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm text-left">
-        <thead className="text-xs text-muted-foreground uppercase bg-secondary/30">
-          <tr>
-            <th className="px-4 py-3 font-medium">Game</th>
-            <th className="px-4 py-3 font-medium">Player</th>
-            <th className="px-4 py-3 font-medium text-right">Bet</th>
-            <th className="px-4 py-3 font-medium text-right">Multi</th>
-            <th className="px-4 py-3 font-medium text-right">Payout</th>
-          </tr>
-        </thead>
-        <tbody>
-          {!bets?.length ? (
+    <>
+      {/* Mobile card list */}
+      <div className="md:hidden divide-y divide-border/40">
+        {bets.map(bet => (
+          <div key={bet.id}
+            className={`px-4 py-3 flex items-center justify-between gap-3 transition-all duration-500 ${newIds.has(bet.id) ? "bg-primary/8" : ""}`}>
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <Link href={`/games/${bet.gameId}`} className="font-bold text-sm hover:text-primary transition-colors truncate">
+                {bet.gameName}
+              </Link>
+              <span className="text-xs text-muted-foreground font-mono truncate">{bet.username}</span>
+            </div>
+            <div className="flex flex-col items-end gap-0.5 shrink-0">
+              <span className={`font-mono font-bold text-sm ${bet.won ? "text-green-400" : "text-muted-foreground/60"}`}>
+                {bet.won ? `+${formatCurrency(bet.payout)}` : formatCurrency(bet.amount)}
+              </span>
+              <span className="text-xs text-muted-foreground font-mono">
+                {bet.multiplier ? `${bet.multiplier.toFixed(2)}x` : `${formatCurrency(bet.amount)} bet`}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-sm text-left">
+          <thead className="text-xs text-muted-foreground uppercase bg-secondary/30">
             <tr>
-              <td colSpan={5} className="px-6 py-10 text-center text-muted-foreground font-mono text-sm">
-                {emptyMsg ?? "No bets yet."}
-              </td>
+              <th className="px-4 py-3 font-medium">Game</th>
+              <th className="px-4 py-3 font-medium">Player</th>
+              <th className="px-4 py-3 font-medium text-right">Bet</th>
+              <th className="px-4 py-3 font-medium text-right">Multi</th>
+              <th className="px-4 py-3 font-medium text-right">Payout</th>
             </tr>
-          ) : (
-            bets.map(bet => (
+          </thead>
+          <tbody>
+            {bets.map(bet => (
               <tr key={bet.id}
                 className={`border-b border-border/50 transition-all duration-500 ${newIds.has(bet.id) ? "bg-primary/8" : "hover:bg-secondary/20"}`}>
                 <td className="px-4 py-3 font-medium">
@@ -75,11 +101,11 @@ function BetsTable({ bets, loading, emptyMsg }: { bets: Bet[]; loading?: boolean
                   {bet.won ? `+${formatCurrency(bet.payout)}` : "-"}
                 </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

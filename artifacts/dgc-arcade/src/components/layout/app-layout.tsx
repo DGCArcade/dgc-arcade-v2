@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { Link } from "wouter";
 import { Navbar } from "./navbar";
+import { BottomNav } from "./bottom-nav";
 import { AuthModal } from "@/components/auth/auth-modal";
 import GalaxyBackground from "@/components/GalaxyBackground";
 import { LocationGate } from "@/components/ui/location-gate";
@@ -16,7 +17,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         <GalaxyBackground />
         <div className="relative z-10 flex flex-col min-h-[100dvh]">
           <Navbar />
-          <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
+          <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 flex flex-col">
             {children}
           </main>
 
@@ -93,6 +94,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </footer>
           <AuthModal />
+          <BottomNav />
         </div>
       </div>
     </LocationGate>

@@ -1210,3 +1210,8 @@ body {
   margin-top: 8px;
   animation: slot-jackpot-glow 1s ease-in-out infinite;
 }
+
+/* ── Mobile bottom nav safe-area ─────────────────────────────────────────── */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

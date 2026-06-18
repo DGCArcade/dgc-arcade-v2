@@ -5,7 +5,15 @@ import { Search } from "lucide-react";
 import { Link } from "wouter";
 import { useState } from "react";
 
-const SLOT_SLUGS = ["slots", "lucky-slots", "dragon-realm"];
+// All slugs that belong in the Slots section — kept out of the Games Lobby
+const SLOT_SLUGS = new Set([
+  // legacy
+  "slots", "lucky-slots", "dragon-realm",
+  // active slot themes
+  "dragons-fortune", "neon-cyber", "pharaohs-riches", "street-gold",
+  "ocean-depths", "wolf-pack", "cosmic-cash", "fire-and-ice",
+  "diamond-vault", "lucky-sevens",
+]);
 
 export default function Games() {
   const { data: games, isLoading } = useListGames({
@@ -15,7 +23,7 @@ export default function Games() {
 
   // Slots have their own dedicated page — exclude them here
   const filteredGames = Array.isArray(games)
-    ? games.filter(g => g.active && !SLOT_SLUGS.includes(g.slug) && g.name.toLowerCase().includes(search.toLowerCase()))
+    ? games.filter(g => g.active && !SLOT_SLUGS.has(g.slug) && g.name.toLowerCase().includes(search.toLowerCase()))
     : [];
 
   return (
