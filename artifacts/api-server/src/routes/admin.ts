@@ -3274,6 +3274,10 @@ adminRouter.patch("/slots/themes/:id", async (req, res) => {
   const { name, config, assets, active } = req.body;
   try {
     const [before] = await db.select().from(slotThemesTable).where(eq(slotThemesTable.id, id)).limit(1);
+    if (!before) {
+      res.status(404).json({ error: "Theme not found" });
+      return;
+    }
 
     const updates: any = {};
     if (name) updates.name = name;
@@ -3284,8 +3288,22 @@ adminRouter.patch("/slots/themes/:id", async (req, res) => {
 
     const [updated] = await db.update(slotThemesTable).set(updates).where(eq(slotThemesTable.id, id)).returning();
 
+    if (!updated) {
+      res.status(500).json({ error: "Update failed" });
+      return;
+    }
+
     const isToggleOnly = active !== undefined && !name && !config && !assets;
     const action = isToggleOnly ? "slot_theme_toggle" : "slot_theme_update";
+
+    // Build per-field diff: only include fields that actually changed
+    const oldDiff: Record<string, unknown> = {};
+    const newDiff: Record<string, unknown> = {};
+    if (name && name !== before.name)       { oldDiff.name   = before.name;   newDiff.name   = updated.name;   }
+    if (config)                             { oldDiff.config = before.config; newDiff.config = updated.config; }
+    if (assets)                             { oldDiff.assets = before.assets; newDiff.assets = updated.assets; }
+    if (active !== undefined)               { oldDiff.active = before.active; newDiff.active = updated.active; }
+
     const adminUsername = (
       await db.select({ username: usersTable.username })
         .from(usersTable)
@@ -3298,9 +3316,10 @@ adminRouter.patch("/slots/themes/:id", async (req, res) => {
       action,
       targetType: "platform",
       targetId: id,
-      oldValue: before ? { name: before.name, active: before.active, slug: before.slug } : undefined,
-      newValue: { ...updates, updatedAt: undefined },
+      oldValue: oldDiff,
+      newValue: newDiff,
       ip: req.ip,
+      note: `Theme slug: ${before.slug}`,
     }).catch(() => {});
 
     res.json({ theme: updated });
