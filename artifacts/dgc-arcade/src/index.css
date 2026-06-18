@@ -578,6 +578,7 @@ body {
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
 
 /* ═══════════════════════════════════════════════════════════════
    DGC GOLD RUSH — SLOT MACHINE STYLES
@@ -875,6 +876,27 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+}
+.slot-reel-col::before,
+.slot-reel-col::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  pointer-events: none;
+  z-index: 15;
+}
+.slot-reel-col::before {
+  top: 0;
+  height: 26%;
+  background: linear-gradient(to bottom, rgba(4,4,8,0.93) 0%, transparent 100%);
+}
+.slot-reel-col::after {
+  bottom: 0;
+  height: 26%;
+  background: linear-gradient(to top, rgba(4,4,8,0.93) 0%, transparent 100%);
 }
 
 /* Corner decorations */
@@ -1187,5 +1209,4 @@ body {
   letter-spacing: 0.1em;
   margin-top: 8px;
   animation: slot-jackpot-glow 1s ease-in-out infinite;
-}
 }

@@ -3241,6 +3241,23 @@ adminRouter.post("/slots/themes", async (req, res) => {
       config,
       assets,
     }).returning();
+
+    const adminUsername = (
+      await db.select({ username: usersTable.username })
+        .from(usersTable)
+        .where(eq(usersTable.id, req.user!.userId))
+        .limit(1)
+    )[0]?.username ?? "admin";
+    logAudit({
+      adminId: req.user!.userId,
+      adminUsername,
+      action: "slot_theme_create",
+      targetType: "platform",
+      targetId: theme.id,
+      newValue: { slug: theme.slug, name: theme.name },
+      ip: req.ip,
+    }).catch(() => {});
+
     res.json({ theme });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
@@ -3256,6 +3273,8 @@ adminRouter.patch("/slots/themes/:id", async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { name, config, assets, active } = req.body;
   try {
+    const [before] = await db.select().from(slotThemesTable).where(eq(slotThemesTable.id, id)).limit(1);
+
     const updates: any = {};
     if (name) updates.name = name;
     if (config) updates.config = config;
@@ -3264,6 +3283,26 @@ adminRouter.patch("/slots/themes/:id", async (req, res) => {
     updates.updatedAt = new Date();
 
     const [updated] = await db.update(slotThemesTable).set(updates).where(eq(slotThemesTable.id, id)).returning();
+
+    const isToggleOnly = active !== undefined && !name && !config && !assets;
+    const action = isToggleOnly ? "slot_theme_toggle" : "slot_theme_update";
+    const adminUsername = (
+      await db.select({ username: usersTable.username })
+        .from(usersTable)
+        .where(eq(usersTable.id, req.user!.userId))
+        .limit(1)
+    )[0]?.username ?? "admin";
+    logAudit({
+      adminId: req.user!.userId,
+      adminUsername,
+      action,
+      targetType: "platform",
+      targetId: id,
+      oldValue: before ? { name: before.name, active: before.active, slug: before.slug } : undefined,
+      newValue: { ...updates, updatedAt: undefined },
+      ip: req.ip,
+    }).catch(() => {});
+
     res.json({ theme: updated });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
