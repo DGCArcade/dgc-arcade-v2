@@ -46,17 +46,44 @@ interface SlotTheme {
   active: string;
 }
 
-// ─── Sound Engine (Web Audio API) ─────────────────────────────────────────────
+// ─── Sound Engine — Theme-Aware Audio System ───────────────────────────────────
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private muted = false;
+  private themeSlug = "default";
+  private ambientOsc: OscillatorNode | null = null;
+  private ambientGain: GainNode | null = null;
 
   private getCtx(): AudioContext {
     if (!this.ctx) this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     return this.ctx;
   }
 
-  setMuted(m: boolean) { this.muted = m; }
+  setMuted(m: boolean) {
+    this.muted = m;
+    if (this.ambientGain && this.ctx) {
+      this.ambientGain.gain.setTargetAtTime(m ? 0 : 0.028, this.ctx.currentTime, 0.3);
+    }
+  }
+
+  setTheme(slug: string) { this.themeSlug = slug; }
+
+  // Per-theme oscillator profiles
+  private get profile(): { spinType: OscillatorType; spinBase: number; spinVol: number; stopType: OscillatorType; stopBase: number; winScale: number[] } {
+    const P: Record<string, { spinType: OscillatorType; spinBase: number; spinVol: number; stopType: OscillatorType; stopBase: number; winScale: number[] }> = {
+      "neon-cyber":      { spinType: "square",   spinBase: 1300, spinVol: 0.09, stopType: "square",   stopBase: 750,  winScale: [880, 1109, 1319, 1760] },
+      "dragons-fortune": { spinType: "sawtooth",  spinBase: 290,  spinVol: 0.17, stopType: "triangle", stopBase: 185,  winScale: [392, 494, 587, 784, 1047] },
+      "pharaohs-riches": { spinType: "triangle",  spinBase: 560,  spinVol: 0.17, stopType: "triangle", stopBase: 350,  winScale: [440, 554, 659, 880, 1109] },
+      "street-gold":     { spinType: "sawtooth",  spinBase: 880,  spinVol: 0.15, stopType: "square",   stopBase: 550,  winScale: [523, 698, 880, 1047] },
+      "ocean-depths":    { spinType: "sine",      spinBase: 360,  spinVol: 0.20, stopType: "sine",     stopBase: 230,  winScale: [349, 440, 523, 698, 880] },
+      "wolf-pack":       { spinType: "sawtooth",  spinBase: 230,  spinVol: 0.19, stopType: "triangle", stopBase: 145,  winScale: [330, 415, 494, 659, 880] },
+      "cosmic-cash":     { spinType: "sine",      spinBase: 880,  spinVol: 0.13, stopType: "sine",     stopBase: 590,  winScale: [523, 659, 784, 1047, 1319] },
+      "fire-and-ice":    { spinType: "sawtooth",  spinBase: 710,  spinVol: 0.17, stopType: "square",   stopBase: 460,  winScale: [415, 523, 659, 831, 1047] },
+      "diamond-vault":   { spinType: "triangle",  spinBase: 1080, spinVol: 0.13, stopType: "triangle", stopBase: 690,  winScale: [659, 831, 988, 1319] },
+      "lucky-sevens":    { spinType: "sawtooth",  spinBase: 590,  spinVol: 0.19, stopType: "square",   stopBase: 390,  winScale: [523, 659, 784, 1047, 1319, 1568] },
+    };
+    return P[this.themeSlug] ?? { spinType: "sawtooth", spinBase: 650, spinVol: 0.14, stopType: "square", stopBase: 390, winScale: [523, 659, 784, 1047] };
+  }
 
   private tone(freq: number, duration: number, type: OscillatorType = "sine", vol = 0.3, delay = 0) {
     if (this.muted) return;
@@ -77,64 +104,100 @@ class SoundEngine {
   }
 
   spin() {
-    // Mechanical reel spin sound — rapid descending tones
-    for (let i = 0; i < 8; i++) {
-      this.tone(800 - i * 60, 0.08, "sawtooth", 0.15, i * 0.06);
+    const p = this.profile;
+    for (let i = 0; i < 10; i++) {
+      this.tone(p.spinBase - i * 35, 0.07, p.spinType, p.spinVol, i * 0.048);
     }
   }
 
   reelStop(reelIndex: number) {
-    // Each reel stops with a satisfying click
-    this.tone(200 + reelIndex * 30, 0.12, "square", 0.2, 0);
-    this.tone(150 + reelIndex * 20, 0.08, "square", 0.15, 0.05);
+    const p = this.profile;
+    const f = p.stopBase + reelIndex * 22;
+    this.tone(f,         0.14, p.stopType, 0.22, 0);
+    this.tone(f * 0.75,  0.09, p.stopType, 0.16, 0.06);
+    this.tone(80,        0.03, "square",   0.14, 0.01);
   }
 
   smallWin() {
-    const notes = [523, 659, 784, 1047];
-    notes.forEach((f, i) => this.tone(f, 0.2, "sine", 0.35, i * 0.1));
+    const notes = this.profile.winScale;
+    notes.forEach((f, i) => this.tone(f, 0.22, "sine", 0.34, i * 0.1));
   }
 
   bigWin() {
-    const notes = [523, 659, 784, 1047, 1319, 1568];
-    notes.forEach((f, i) => this.tone(f, 0.25, "sine", 0.4, i * 0.08));
+    const notes = this.profile.winScale;
+    notes.forEach((f, i) => this.tone(f, 0.28, "sine", 0.40, i * 0.085));
     setTimeout(() => {
-      const fanfare = [1047, 1319, 1568, 2093];
-      fanfare.forEach((f, i) => this.tone(f, 0.3, "triangle", 0.35, i * 0.1));
-    }, 600);
+      [notes[notes.length - 1], notes[notes.length - 1] * 1.25, notes[notes.length - 1] * 1.5].forEach(
+        (f, i) => this.tone(f, 0.32, "triangle", 0.36, i * 0.11)
+      );
+    }, 650);
   }
 
   megaWin() {
-    // Epic multi-layer fanfare
     const base = [261, 329, 392, 523, 659, 784, 1047, 1319];
     base.forEach((f, i) => {
-      this.tone(f, 0.4, "sine", 0.3, i * 0.06);
-      this.tone(f * 2, 0.3, "triangle", 0.2, i * 0.06 + 0.03);
+      this.tone(f,     0.42, "sine",     0.30, i * 0.058);
+      this.tone(f * 2, 0.30, "triangle", 0.20, i * 0.058 + 0.03);
     });
   }
 
   jackpot() {
-    // Jackpot celebration — ascending arpeggio then hold
     const notes = [523, 659, 784, 1047, 1319, 1568, 2093, 2637];
     notes.forEach((f, i) => {
-      this.tone(f, 0.5, "sine", 0.4, i * 0.07);
-      this.tone(f * 1.5, 0.3, "triangle", 0.2, i * 0.07 + 0.04);
+      this.tone(f,       0.52, "sine",     0.40, i * 0.068);
+      this.tone(f * 1.5, 0.32, "triangle", 0.22, i * 0.068 + 0.04);
     });
     setTimeout(() => {
-      for (let i = 0; i < 5; i++) {
-        this.tone(2093, 0.2, "sine", 0.35, i * 0.3);
-        this.tone(2637, 0.2, "triangle", 0.25, i * 0.3 + 0.15);
+      for (let i = 0; i < 6; i++) {
+        this.tone(2093, 0.22, "sine",     0.34, i * 0.28);
+        this.tone(2637, 0.22, "triangle", 0.24, i * 0.28 + 0.14);
       }
     }, 700);
   }
 
   coinDrop() {
     this.tone(1200, 0.05, "sine", 0.2);
-    this.tone(900, 0.05, "sine", 0.15, 0.05);
-    this.tone(1100, 0.05, "sine", 0.18, 0.1);
+    this.tone(900,  0.05, "sine", 0.15, 0.05);
+    this.tone(1100, 0.05, "sine", 0.18, 0.10);
   }
 
   buttonClick() {
-    this.tone(440, 0.05, "square", 0.1);
+    const p = this.profile;
+    this.tone(p.stopBase * 1.4, 0.04, p.spinType, 0.07);
+  }
+
+  // Ambient atmospheric drone per theme
+  startAmbient() {
+    if (this.muted) return;
+    try {
+      const ctx = this.getCtx();
+      if (this.ambientOsc) { try { this.ambientOsc.stop(); } catch {} }
+      const freqs: Record<string, number> = {
+        "neon-cyber": 58, "dragons-fortune": 48, "pharaohs-riches": 98,
+        "ocean-depths": 44, "wolf-pack": 42, "cosmic-cash": 74,
+        "fire-and-ice": 62, "diamond-vault": 86, "lucky-sevens": 70,
+        "street-gold": 66,
+      };
+      const freq = freqs[this.themeSlug] ?? 58;
+      this.ambientOsc = ctx.createOscillator();
+      this.ambientGain = ctx.createGain();
+      this.ambientOsc.connect(this.ambientGain);
+      this.ambientGain.connect(ctx.destination);
+      this.ambientOsc.type = "sine";
+      this.ambientOsc.frequency.value = freq;
+      this.ambientGain.gain.setValueAtTime(0, ctx.currentTime);
+      this.ambientGain.gain.linearRampToValueAtTime(0.028, ctx.currentTime + 2.5);
+      this.ambientOsc.start();
+    } catch {}
+  }
+
+  stopAmbient() {
+    try {
+      if (this.ambientGain && this.ctx) {
+        this.ambientGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.6);
+        setTimeout(() => { try { this.ambientOsc?.stop(); } catch {} this.ambientOsc = null; }, 3000);
+      }
+    } catch {}
   }
 }
 
@@ -301,73 +364,217 @@ function WinCelebration({ tier, amount, onDone }: { tier: WinTier; amount: numbe
   );
 }
 
-// ─── Symbol Tile ──────────────────────────────────────────────────────────────
+// ─── Symbol Tile — Always Glowing ─────────────────────────────────────────────
 function SymbolTile({
-  sym, spinning, landing, winning, size
+  sym, spinning, landing, landingDelay, winning, size
 }: {
   sym: SlotSymbol;
   spinning: boolean;
   landing: boolean;
+  landingDelay: number;
   winning: boolean;
   size: number;
 }) {
+  const glow = sym.glow ?? sym.color;
   return (
     <div
       className="relative flex items-center justify-center rounded-xl overflow-hidden select-none"
       style={{
         width: size,
         height: size,
+        flexShrink: 0,
         background: sym.isWild
-          ? "linear-gradient(135deg, #6366f1, #a855f7, #ec4899)"
-          : `radial-gradient(ellipse at 30% 30%, ${sym.color}55, rgba(0,0,0,0.8))`,
-        border: `2px solid ${winning ? sym.color : sym.color + "44"}`,
-        boxShadow: winning ? `0 0 20px ${sym.glow}, 0 0 40px ${sym.glow}` : `0 0 8px ${sym.glow}44`,
-        transition: "box-shadow 0.2s ease, border-color 0.2s ease",
-        animation: spinning
-          ? "symSpin 0.12s linear infinite"
-          : landing
-          ? "symLand 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)"
+          ? "linear-gradient(135deg, #4f46e5, #7c3aed, #a855f7, #ec4899)"
+          : `radial-gradient(ellipse at 35% 30%, ${sym.color}38, rgba(0,0,0,0.88))`,
+        border: `2px solid ${winning ? sym.color : sym.color + "38"}`,
+        // Always glowing — idle breath, intensifies on win
+        boxShadow: winning
+          ? `0 0 24px ${glow}, 0 0 48px ${glow}88, inset 0 0 14px ${sym.color}22`
+          : `0 0 7px ${glow}30, inset 0 0 5px rgba(0,0,0,0.5)`,
+        animation: landing
+          ? `cascadeLand 0.55s cubic-bezier(0.34,1.56,0.64,1) both`
           : winning
-          ? "symWin 0.8s ease-in-out infinite"
-          : "none",
+          ? "symWinPulse 0.9s ease-in-out infinite"
+          : "symIdleBreath 4s ease-in-out infinite",
+        animationDelay: `${landingDelay}ms`,
+        transition: spinning ? "none" : "box-shadow 0.35s ease, border-color 0.35s ease",
+        opacity: spinning ? 0.88 : 1,
       }}
     >
-      {/* Shine overlay */}
+      {/* Top-left shine */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: "linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%)",
+          background: "linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 55%)",
           borderRadius: "inherit",
         }}
       />
-      {/* Symbol */}
+      {/* Win shimmer sweep */}
+      {winning && (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-xl">
+          <div
+            className="absolute inset-y-0"
+            style={{
+              width: 48,
+              background: `linear-gradient(90deg, transparent, ${sym.color}55, transparent)`,
+              animation: "shimmerSweep 1.6s linear infinite",
+            }}
+          />
+        </div>
+      )}
+      {/* Win radial pulse */}
+      {winning && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: `radial-gradient(ellipse at center, ${sym.color}2e, transparent 68%)`,
+            animation: "winRadialPulse 0.9s ease-in-out infinite alternate",
+          }}
+        />
+      )}
+      {/* Symbol emoji — always has drop-shadow glow */}
       <span
         className="relative z-10 select-none leading-none"
         style={{
-          fontSize: size * 0.45,
-          filter: winning ? `drop-shadow(0 0 8px ${sym.color})` : "none",
+          fontSize: size * 0.54,
+          filter: winning
+            ? `drop-shadow(0 0 10px ${sym.color}) drop-shadow(0 0 22px ${sym.color}aa)`
+            : `drop-shadow(0 0 5px ${sym.color}77)`,
           fontFamily: "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif",
+          animation: winning ? "emojiWinBounce 0.9s ease-in-out infinite" : "none",
+          transition: "filter 0.3s ease",
         }}
       >
         {sym.emoji}
       </span>
       {/* Label */}
       <span
-        className="absolute bottom-1 left-0 right-0 text-center font-bold uppercase tracking-wider"
+        className="absolute bottom-0.5 left-0 right-0 text-center font-black uppercase tracking-wider"
         style={{
-          fontSize: Math.max(7, size * 0.1),
+          fontSize: Math.max(7, size * 0.115),
           color: sym.color,
-          textShadow: `0 0 6px ${sym.glow}`,
+          textShadow: `0 0 8px ${glow}`,
           lineHeight: 1,
         }}
       >
         {sym.isWild ? "WILD" : sym.isScatter ? "BONUS" : sym.label}
       </span>
       <style>{`
-        @keyframes symSpin { 0% { transform: scaleY(1); } 50% { transform: scaleY(0.1); } 100% { transform: scaleY(1); } }
-        @keyframes symLand { 0% { transform: scaleY(0.1) translateY(-20px); } 60% { transform: scaleY(1.08) translateY(2px); } 80% { transform: scaleY(0.96); } 100% { transform: scaleY(1); } }
-        @keyframes symWin  { 0%,100% { transform: scale(1); box-shadow: 0 0 20px var(--glow); } 50% { transform: scale(1.06); } }
+        @keyframes cascadeLand {
+          from { transform: translateY(-110px) scaleY(0.65); opacity: 0; }
+          to   { transform: translateY(0) scaleY(1); opacity: 1; }
+        }
+        @keyframes symWinPulse {
+          0%,100% { transform: scale(1);    box-shadow: 0 0 20px ${glow}, 0 0 40px ${glow}88; }
+          50%     { transform: scale(1.07); box-shadow: 0 0 34px ${glow}, 0 0 68px ${glow}aa; }
+        }
+        @keyframes symIdleBreath {
+          0%,100% { box-shadow: 0 0 5px ${glow}20; }
+          50%     { box-shadow: 0 0 13px ${glow}44; }
+        }
+        @keyframes emojiWinBounce {
+          0%,100% { transform: scale(1); }
+          50%     { transform: scale(1.14); }
+        }
+        @keyframes shimmerSweep {
+          from { left: -48px; }
+          to   { left: calc(100% + 48px); }
+        }
+        @keyframes winRadialPulse {
+          from { opacity: 0.35; transform: scale(0.88); }
+          to   { opacity: 1;    transform: scale(1.12); }
+        }
       `}</style>
+    </div>
+  );
+}
+
+// ─── Reel Column — Cascade-Landing Physics ────────────────────────────────────
+function ReelColumn({
+  allSymbols, finalSymIds, spinning, landing, winCells, reelIndex, cellSize,
+}: {
+  allSymbols: SlotSymbol[];
+  finalSymIds: string[];
+  spinning: boolean;
+  landing: boolean;
+  winCells: Set<string>;
+  reelIndex: number;
+  cellSize: number;
+}) {
+  const rows = finalSymIds.length;
+  const pool = allSymbols.filter(s => !s.isScatter);
+  const [displayIds, setDisplayIds] = useState<string[]>(finalSymIds);
+  const [isLanding, setIsLanding] = useState(false);
+  const finalRef = useRef(finalSymIds);
+  finalRef.current = finalSymIds;
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (spinning) {
+      setIsLanding(false);
+      intervalRef.current = setInterval(() => {
+        setDisplayIds(Array.from({ length: rows }, () =>
+          pool[Math.floor(Math.random() * pool.length)].id
+        ));
+      }, 62);
+      return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    }
+    if (landing) {
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+      setDisplayIds([...finalRef.current]);
+      setIsLanding(true);
+      const t = setTimeout(() => setIsLanding(false), 750);
+      return () => clearTimeout(t);
+    }
+  }, [spinning, landing]);
+
+  const getSymById = (id: string) => allSymbols.find(s => s.id === id) ?? allSymbols[0];
+
+  return (
+    <div
+      className="flex flex-col rounded-xl overflow-hidden relative"
+      style={{
+        gap: 6,
+        padding: 4,
+        background: "rgba(0,0,0,0.22)",
+        flex: 1,
+        filter: spinning ? "blur(1.2px) brightness(0.72)" : "none",
+        transition: spinning ? "none" : "filter 0.18s ease",
+      }}
+    >
+      {/* Speed lines */}
+      {spinning && (
+        <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden rounded-xl">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-full"
+              style={{
+                height: 1,
+                background: "rgba(255,255,255,0.08)",
+                top: `${8 + i * 18}%`,
+                animation: "spinLine 0.09s linear infinite",
+                animationDelay: `${i * 0.018}s`,
+              }}
+            />
+          ))}
+          <style>{`
+            @keyframes spinLine { 0% { opacity:0; transform:scaleX(0); } 50% { opacity:1; } 100% { opacity:0; transform:scaleX(1); } }
+          `}</style>
+        </div>
+      )}
+
+      {displayIds.map((symId, row) => (
+        <SymbolTile
+          key={row}
+          sym={getSymById(symId)}
+          spinning={spinning}
+          landing={isLanding}
+          landingDelay={row * 58}
+          winning={winCells.has(`${reelIndex}-${row}`)}
+          size={cellSize}
+        />
+      ))}
     </div>
   );
 }
@@ -497,11 +704,17 @@ function SlotGame({ theme, gameId }: { theme: SlotTheme; gameId: number }) {
   const [autoSpin, setAutoSpin] = useState(false);
   const [autoCount, setAutoCount] = useState(0);
   const autoRef = useRef(false);
-  const spinTickRef = useRef(0);
 
   const symSize = REELS >= 5 ? (isFullscreen ? 90 : 72) : (isFullscreen ? 110 : 88);
 
   useEffect(() => { soundEngine.setMuted(muted); }, [muted]);
+
+  // Wire theme-specific audio profile + ambient atmosphere
+  useEffect(() => {
+    soundEngine.setTheme(theme.slug);
+    soundEngine.startAmbient();
+    return () => soundEngine.stopAmbient();
+  }, [theme.slug]);
 
   const handleSpin = useCallback(async () => {
     if (isSpinning || !user) return;
@@ -698,30 +911,23 @@ function SlotGame({ theme, gameId }: { theme: SlotTheme; gameId: number }) {
           }}
         />
 
-        {/* Grid */}
+        {/* Reel Grid — ReelColumn per reel */}
         <div
-          className="grid p-3 gap-2"
-          style={{
-            gridTemplateColumns: `repeat(${REELS}, 1fr)`,
-            background: "rgba(0,0,0,0.7)",
-          }}
+          className="flex p-3 gap-2"
+          style={{ background: "rgba(0,0,0,0.7)", minHeight: symSize * ROWS + 32 }}
         >
-          {Array.from({ length: REELS }, (_, reel) =>
-            Array.from({ length: ROWS }, (_, row) => {
-              const symId = grid[reel]?.[row] ?? symbols[0].id;
-              const sym = getSymById(symId);
-              return (
-                <SymbolTile
-                  key={`${reel}-${row}-${spinning[reel] ? spinTickRef.current + reel : symId}`}
-                  sym={sym}
-                  spinning={spinning[reel]}
-                  landing={landing[reel]}
-                  winning={winCells.has(`${reel}-${row}`)}
-                  size={symSize}
-                />
-              );
-            })
-          )}
+          {Array.from({ length: REELS }, (_, reel) => (
+            <ReelColumn
+              key={reel}
+              allSymbols={symbols}
+              finalSymIds={grid[reel] ?? Array(ROWS).fill(symbols[0].id)}
+              spinning={spinning[reel]}
+              landing={landing[reel]}
+              winCells={winCells}
+              reelIndex={reel}
+              cellSize={symSize}
+            />
+          ))}
         </div>
 
         {/* Corner decorations */}

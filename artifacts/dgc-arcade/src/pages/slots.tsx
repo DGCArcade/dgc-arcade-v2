@@ -31,54 +31,85 @@ interface SlotTheme {
   active: string;
 }
 
-// ─── Professional Slot Cover Card ─────────────────────────────────────────────
+// ─── Cinematic Slot Cover Card ────────────────────────────────────────────────
 function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => void }) {
   const config = theme.config;
   const accentColor = config.accentColor ?? "#f59e0b";
   const gradient = config.coverGradient ?? ["#1a1a1a", "#2d2d2d", "#1a1a1a"];
-  const symbols = config.symbols?.slice(0, 5) ?? [];
+  const symbols = config.symbols?.slice(0, 4) ?? [];
   const [hovered, setHovered] = useState(false);
 
   return (
     <div
-      className="relative rounded-2xl overflow-hidden cursor-pointer group"
+      className="relative rounded-2xl overflow-hidden cursor-pointer select-none"
       style={{
         aspectRatio: "3/4",
         background: `linear-gradient(160deg, ${gradient.join(", ")})`,
-        border: `1.5px solid ${hovered ? accentColor : accentColor + "44"}`,
+        border: `2px solid ${hovered ? accentColor : accentColor + "55"}`,
         boxShadow: hovered
-          ? `0 0 40px ${accentColor}66, 0 8px 32px rgba(0,0,0,0.6)`
-          : `0 4px 20px rgba(0,0,0,0.4)`,
-        transition: "all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)",
-        transform: hovered ? "scale(1.03) translateY(-4px)" : "scale(1)",
+          ? `0 0 45px ${accentColor}77, 0 0 90px ${accentColor}33, 0 8px 40px rgba(0,0,0,0.7)`
+          : `0 0 18px ${accentColor}33, 0 0 45px ${accentColor}16, 0 4px 20px rgba(0,0,0,0.5)`,
+        transition: "all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        transform: hovered ? "scale(1.04) translateY(-5px)" : "scale(1)",
+        animation: "cardBreath 4s ease-in-out infinite",
       }}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Background glow */}
+      {/* Background image — full-bleed, the big visual upgrade */}
+      {theme.assets.background && (
+        <img
+          src={theme.assets.background}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+          style={{
+            opacity: hovered ? 0.52 : 0.38,
+            transition: "opacity 0.4s ease",
+            filter: "saturate(1.3) brightness(0.9)",
+          }}
+        />
+      )}
+
+      {/* Dark vignette — top is lighter, bottom is heavy for readability */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(ellipse at 50% 20%, ${accentColor}22 0%, transparent 70%)`,
-          opacity: hovered ? 1 : 0.5,
-          transition: "opacity 0.25s ease",
+          background: `linear-gradient(to bottom,
+            rgba(0,0,0,0.1) 0%,
+            transparent 22%,
+            transparent 45%,
+            rgba(0,0,0,0.75) 75%,
+            rgba(0,0,0,0.97) 100%
+          )`,
         }}
       />
 
-      {/* Floating symbols background decoration */}
+      {/* Accent color radial at top — always-on glow */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(ellipse at 50% 20%, ${accentColor}44 0%, transparent 62%)`,
+          opacity: hovered ? 1 : 0.65,
+          transition: "opacity 0.4s ease",
+          animation: "topGlowPulse 3s ease-in-out infinite",
+        }}
+      />
+
+      {/* Floating background symbols */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {symbols.map((s, i) => (
           <div
             key={s.id}
-            className="absolute text-2xl opacity-10"
+            className="absolute select-none"
             style={{
-              left: `${15 + i * 18}%`,
-              top: `${10 + (i % 2) * 15}%`,
-              fontSize: 28,
-              filter: `drop-shadow(0 0 8px ${s.color})`,
-              animation: `floatSym ${3 + i * 0.4}s ease-in-out infinite`,
-              animationDelay: `${i * 0.3}s`,
+              left: `${10 + i * 23}%`,
+              top: `${6 + (i % 3) * 12}%`,
+              fontSize: 22,
+              opacity: 0.18,
+              filter: `drop-shadow(0 0 8px ${s.color}) drop-shadow(0 0 16px ${s.color}66)`,
+              animation: `symDrift${i} ${3.5 + i * 0.7}s ease-in-out infinite`,
+              animationDelay: `${i * 0.5}s`,
             }}
           >
             {s.emoji}
@@ -86,33 +117,42 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
         ))}
       </div>
 
-      {/* Main cover emoji */}
-      <div className="absolute top-6 left-0 right-0 flex justify-center">
+      {/* Hero emoji — massive, layered triple-glow, always animated */}
+      <div className="absolute left-0 right-0 flex justify-center" style={{ top: "13%" }}>
         <div
-          className="relative"
           style={{
-            fontSize: 72,
-            filter: `drop-shadow(0 0 20px ${accentColor}) drop-shadow(0 0 40px ${accentColor}88)`,
-            animation: "coverPulse 2.5s ease-in-out infinite",
+            fontSize: 90,
+            lineHeight: 1,
+            filter: hovered
+              ? `drop-shadow(0 0 28px ${accentColor}) drop-shadow(0 0 56px ${accentColor}99) drop-shadow(0 0 84px ${accentColor}55)`
+              : `drop-shadow(0 0 16px ${accentColor}cc) drop-shadow(0 0 36px ${accentColor}66) drop-shadow(0 0 60px ${accentColor}33)`,
+            transition: "filter 0.4s ease",
+            animation: "heroLevitate 3.2s ease-in-out infinite",
           }}
         >
           {theme.assets.coverEmoji ?? "🎰"}
         </div>
       </div>
 
-      {/* Symbol row */}
+      {/* Symbol strip — always glowing, not just on hover */}
       {symbols.length > 0 && (
-        <div className="absolute top-40 left-0 right-0 flex justify-center gap-2 px-4">
-          {symbols.slice(0, 4).map(s => (
+        <div
+          className="absolute left-0 right-0 flex justify-center gap-2 px-3"
+          style={{ top: "54%" }}
+        >
+          {symbols.map(s => (
             <div
               key={s.id}
               className="flex items-center justify-center rounded-lg"
               style={{
                 width: 36,
                 height: 36,
-                background: `radial-gradient(ellipse, ${s.color}33, rgba(0,0,0,0.6))`,
-                border: `1px solid ${s.color}55`,
-                fontSize: 20,
+                background: `radial-gradient(ellipse at 40% 30%, ${s.color}3a, rgba(0,0,0,0.75))`,
+                border: `1.5px solid ${s.color}66`,
+                fontSize: 18,
+                boxShadow: `0 0 10px ${s.glow ?? s.color}55, 0 0 20px ${s.glow ?? s.color}28`,
+                animation: "symGlowBreath 2.5s ease-in-out infinite",
+                animationDelay: `${symbols.indexOf(s) * 0.4}s`,
               }}
             >
               {s.emoji}
@@ -121,19 +161,20 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
         </div>
       )}
 
-      {/* Bottom info */}
+      {/* Bottom info section */}
       <div
-        className="absolute bottom-0 left-0 right-0 p-4"
+        className="absolute bottom-0 left-0 right-0 px-3 pt-10 pb-3"
         style={{
-          background: "linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 60%, transparent 100%)",
+          background: `linear-gradient(to top, rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.9) 55%, transparent 100%)`,
         }}
       >
-        {/* Game name */}
+        {/* Game name — always glowing text */}
         <div
-          className="font-black text-base uppercase tracking-widest leading-tight mb-1"
+          className="font-black uppercase tracking-widest leading-tight mb-0.5"
           style={{
+            fontSize: "clamp(11px, 2.5vw, 14px)",
             color: accentColor,
-            textShadow: `0 0 12px ${accentColor}`,
+            textShadow: `0 0 14px ${accentColor}, 0 0 28px ${accentColor}77, 0 0 56px ${accentColor}33`,
           }}
         >
           {theme.name}
@@ -141,69 +182,108 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
 
         {/* Tagline */}
         {config.tagline && (
-          <div className="text-[10px] text-white/50 mb-2 leading-tight italic">
+          <div className="text-[9px] text-white/45 italic mb-1.5 leading-tight line-clamp-1">
             {config.tagline}
           </div>
         )}
 
-        {/* Stats row */}
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Badges */}
+        <div className="flex items-center gap-1 mb-2 flex-wrap">
           {config.rtp && (
             <span
-              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-              style={{ background: "#22c55e22", color: "#22c55e", border: "1px solid #22c55e44" }}
+              className="text-[9px] font-black px-1.5 py-0.5 rounded-full"
+              style={{
+                background: "rgba(34,197,94,0.14)",
+                color: "#4ade80",
+                border: "1px solid rgba(34,197,94,0.36)",
+                boxShadow: "0 0 6px rgba(34,197,94,0.3)",
+              }}
             >
               {config.rtp}% RTP
             </span>
           )}
-          {config.reels && (
-            <span className="text-[10px] text-white/50 font-mono">
-              {config.reels}R · {config.paylines ?? "?"}L
-            </span>
-          )}
           {config.volatility && (
             <span
-              className="text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ml-auto"
+              className="text-[9px] font-black px-1.5 py-0.5 rounded-full capitalize"
               style={{
-                background: `${accentColor}22`,
+                background: `${accentColor}18`,
                 color: accentColor,
                 border: `1px solid ${accentColor}44`,
+                boxShadow: `0 0 6px ${accentColor}33`,
               }}
             >
               {config.volatility}
             </span>
           )}
+          {config.paylines && (
+            <span className="text-[9px] text-white/30 font-mono ml-auto">
+              {config.paylines}L
+            </span>
+          )}
         </div>
 
-        {/* Play button (shows on hover) */}
+        {/* PLAY NOW — always visible, glows brighter on hover */}
         <div
-          className="mt-3 py-2 rounded-xl font-black text-sm uppercase tracking-widest text-center transition-all"
+          className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl font-black uppercase tracking-widest"
           style={{
-            background: hovered ? `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)` : "rgba(255,255,255,0.08)",
-            color: hovered ? "#000" : accentColor,
-            border: `1.5px solid ${accentColor}`,
-            boxShadow: hovered ? `0 0 20px ${accentColor}88` : "none",
-            transform: hovered ? "scale(1.02)" : "scale(1)",
-            transition: "all 0.2s ease",
+            fontSize: "clamp(9px, 2vw, 11px)",
+            background: hovered
+              ? `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`
+              : `linear-gradient(135deg, ${accentColor}cc, ${accentColor}99)`,
+            color: "#000",
+            boxShadow: hovered
+              ? `0 0 22px ${accentColor}aa, 0 0 44px ${accentColor}44, 0 4px 12px rgba(0,0,0,0.5)`
+              : `0 0 10px ${accentColor}55, 0 0 20px ${accentColor}28`,
+            transition: "all 0.3s ease",
           }}
         >
-          {hovered ? "▶ PLAY NOW" : "PLAY"}
+          <span>▶</span>
+          <span>Play Now</span>
         </div>
       </div>
 
-      {/* Hot badge for high RTP games */}
+      {/* HOT badge */}
       {config.rtp && config.rtp >= 97 && (
         <div
-          className="absolute top-3 right-3 text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-wider"
-          style={{ background: "#ef4444", color: "#fff", boxShadow: "0 0 10px #ef444488" }}
+          className="absolute top-3 right-3 text-[9px] font-black px-2 py-1 rounded-full uppercase tracking-wider"
+          style={{
+            background: "linear-gradient(135deg, #ef4444, #dc2626)",
+            color: "#fff",
+            boxShadow: "0 0 12px #ef444488, 0 0 24px #ef444433",
+            animation: "hotBadgePulse 1.5s ease-in-out infinite",
+          }}
         >
           HOT
         </div>
       )}
 
       <style>{`
-        @keyframes floatSym { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-8px) rotate(5deg); } }
-        @keyframes coverPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        @keyframes cardBreath {
+          0%, 100% { box-shadow: 0 0 18px ${accentColor}33, 0 0 45px ${accentColor}16, 0 4px 20px rgba(0,0,0,0.5); }
+          50%       { box-shadow: 0 0 28px ${accentColor}44, 0 0 60px ${accentColor}22, 0 4px 20px rgba(0,0,0,0.5); }
+        }
+        @keyframes topGlowPulse {
+          0%, 100% { opacity: 0.55; }
+          50%       { opacity: 0.9; }
+        }
+        @keyframes heroLevitate {
+          0%, 100% { transform: translateY(0px) scale(1); }
+          50%       { transform: translateY(-10px) scale(1.05); }
+        }
+        @keyframes symGlowBreath {
+          0%, 100% { box-shadow: 0 0 8px ${accentColor}33; }
+          50%       { box-shadow: 0 0 16px ${accentColor}66; }
+        }
+        @keyframes hotBadgePulse {
+          0%, 100% { box-shadow: 0 0 10px #ef444488; }
+          50%       { box-shadow: 0 0 18px #ef4444cc; }
+        }
+        ${symbols.map((s, i) => `
+          @keyframes symDrift${i} {
+            0%, 100% { transform: translateY(0px) rotate(${i * 18}deg); opacity: 0.18; }
+            50%       { transform: translateY(-14px) rotate(${i * 18 + 22}deg); opacity: 0.32; }
+          }
+        `).join("")}
       `}</style>
     </div>
   );
