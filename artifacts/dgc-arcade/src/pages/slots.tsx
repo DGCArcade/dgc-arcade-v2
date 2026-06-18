@@ -122,19 +122,17 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
               alt=""
               style={{
                 position: "absolute",
-                inset: "-5%", // 5% padding for minimal clipping
-                width: "110%",
-                height: "110%",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                width: "100%",
+                height: "100%",
                 objectFit: "cover",
+                objectPosition: "center",
                 opacity: hovered ? 0.75 : 0.5,
                 transition: "opacity 0.4s ease",
                 filter: "saturate(1.4) brightness(0.95) contrast(1.1)",
-                // Keep image centered, no parallax shift
-                transform: "translate(0, 0)",
-                transformOrigin: "center",
-                transitionProperty: "opacity, transform",
-                transitionDuration: "0.2s",
-                transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
               }}
             />
           </div>
@@ -285,18 +283,7 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
                 {config.volatility}
               </span>
             )}
-            {config.paylines && (
-              <span
-                style={{
-                  fontSize: "9px",
-                  color: "rgba(255, 255, 255, 0.3)",
-                  fontFamily: "monospace",
-                  marginLeft: "auto",
-                }}
-              >
-                {config.paylines}L
-              </span>
-            )}
+
           </div>
 
           {/* PLAY NOW button */}
