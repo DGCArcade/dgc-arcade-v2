@@ -1,7 +1,7 @@
 import { useListGames, getListGamesQueryKey } from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 
 interface SlotTheme {
@@ -27,21 +27,37 @@ interface SlotTheme {
     background?: string;
     icon?: string;
     coverEmoji?: string;
+    coverArt?: string;
   };
   active: string;
 }
 
-// ─── Cinematic Slot Cover Card ────────────────────────────────────────────────
+// ─── Premium Slot Cover Card with Advanced Hover Animations ────────────────────
 function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => void }) {
   const config = theme.config;
   const accentColor = config.accentColor ?? "#f59e0b";
   const gradient = config.coverGradient ?? ["#1a1a1a", "#2d2d2d", "#1a1a1a"];
   const symbols = config.symbols?.slice(0, 4) ?? [];
   const [hovered, setHovered] = useState(false);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setMousePos({
+      x: ((e.clientX - rect.left) / rect.width) * 100,
+      y: ((e.clientY - rect.top) / rect.height) * 100,
+    });
+  };
+
+  // Premium cover art URL (will be updated with AI-generated images)
+  const coverArtUrl = theme.assets.coverArt || theme.assets.background;
 
   return (
     <div
-      className="relative rounded-2xl overflow-hidden cursor-pointer select-none"
+      ref={containerRef}
+      className="relative rounded-2xl overflow-hidden cursor-pointer select-none group"
       style={{
         aspectRatio: "3/4",
         background: `linear-gradient(160deg, ${gradient.join(", ")})`,
@@ -55,20 +71,59 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
       }}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseLeave={() => {
+        setHovered(false);
+        setMousePos({ x: 50, y: 50 });
+      }}
+      onMouseMove={handleMouseMove}
     >
-      {/* Background image — full-bleed, the big visual upgrade */}
-      {theme.assets.background && (
-        <img
-          src={theme.assets.background}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+      {/* Premium AI Cover Art — Full Bleed with Parallax on Hover */}
+      {coverArtUrl && (
+        <div
+          className="absolute inset-0 w-full h-full overflow-hidden"
           style={{
-            opacity: hovered ? 0.52 : 0.38,
-            transition: "opacity 0.4s ease",
-            filter: "saturate(1.3) brightness(0.9)",
+            perspective: "1000px",
           }}
-        />
+        >
+          <img
+            src={coverArtUrl}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+            style={{
+              opacity: hovered ? 0.7 : 0.45,
+              transition: "opacity 0.4s ease",
+              filter: "saturate(1.4) brightness(0.95) contrast(1.1)",
+              transform: hovered
+                ? `scale(1.08) translate(${(mousePos.x - 50) * 2}px, ${(mousePos.y - 50) * 2}px)`
+                : "scale(1) translate(0, 0)",
+              transformOrigin: "center",
+              transitionProperty: "opacity, transform",
+              transitionDuration: "0.4s",
+              transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
+            }}
+          />
+        </div>
+      )}
+
+      {/* Animated Particle Overlay on Hover */}
+      {hovered && (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute rounded-full"
+              style={{
+                width: Math.random() * 8 + 3,
+                height: Math.random() * 8 + 3,
+                background: `radial-gradient(circle, ${accentColor}88, ${accentColor}00)`,
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animation: `particleFloat${i} ${2 + Math.random() * 1.5}s ease-out forwards`,
+                animationDelay: `${i * 0.08}s`,
+              }}
+            />
+          ))}
+        </div>
       )}
 
       {/* Dark vignette — top is lighter, bottom is heavy for readability */}
@@ -85,13 +140,13 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
         }}
       />
 
-      {/* Accent color radial at top — always-on glow */}
+      {/* Enhanced Accent color radial at top — always-on glow with hover boost */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(ellipse at 50% 20%, ${accentColor}44 0%, transparent 62%)`,
+          background: `radial-gradient(ellipse at ${mousePos.x}% ${Math.max(mousePos.y - 20, 0)}%, ${accentColor}66 0%, transparent 55%)`,
           opacity: hovered ? 1 : 0.65,
-          transition: "opacity 0.4s ease",
+          transition: "opacity 0.4s ease, background 0.2s ease",
           animation: "topGlowPulse 3s ease-in-out infinite",
         }}
       />
@@ -106,10 +161,14 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
               left: `${10 + i * 23}%`,
               top: `${6 + (i % 3) * 12}%`,
               fontSize: 22,
-              opacity: 0.18,
+              opacity: hovered ? 0.28 : 0.18,
               filter: `drop-shadow(0 0 8px ${s.color}) drop-shadow(0 0 16px ${s.color}66)`,
               animation: `symDrift${i} ${3.5 + i * 0.7}s ease-in-out infinite`,
               animationDelay: `${i * 0.5}s`,
+              transition: "opacity 0.4s ease",
+              transform: hovered ? `scale(1.15) translateY(-${i * 3}px)` : "scale(1) translateY(0)",
+              transitionProperty: "opacity, transform",
+              transitionDuration: "0.4s",
             }}
           >
             {s.emoji}
@@ -126,21 +185,22 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
             filter: hovered
               ? `drop-shadow(0 0 28px ${accentColor}) drop-shadow(0 0 56px ${accentColor}99) drop-shadow(0 0 84px ${accentColor}55)`
               : `drop-shadow(0 0 16px ${accentColor}cc) drop-shadow(0 0 36px ${accentColor}66) drop-shadow(0 0 60px ${accentColor}33)`,
-            transition: "filter 0.4s ease",
+            transition: "filter 0.4s ease, transform 0.4s ease",
             animation: "heroLevitate 3.2s ease-in-out infinite",
+            transform: hovered ? "scale(1.2) translateY(-8px)" : "scale(1) translateY(0)",
           }}
         >
           {theme.assets.coverEmoji ?? "🎰"}
         </div>
       </div>
 
-      {/* Symbol strip — always glowing, not just on hover */}
+      {/* Symbol strip — always glowing, enhanced on hover */}
       {symbols.length > 0 && (
         <div
           className="absolute left-0 right-0 flex justify-center gap-2 px-3"
           style={{ top: "54%" }}
         >
-          {symbols.map(s => (
+          {symbols.map((s, idx) => (
             <div
               key={s.id}
               className="flex items-center justify-center rounded-lg"
@@ -150,9 +210,13 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
                 background: `radial-gradient(ellipse at 40% 30%, ${s.color}3a, rgba(0,0,0,0.75))`,
                 border: `1.5px solid ${s.color}66`,
                 fontSize: 18,
-                boxShadow: `0 0 10px ${s.glow ?? s.color}55, 0 0 20px ${s.glow ?? s.color}28`,
-                animation: "symGlowBreath 2.5s ease-in-out infinite",
-                animationDelay: `${symbols.indexOf(s) * 0.4}s`,
+                boxShadow: hovered
+                  ? `0 0 16px ${s.glow ?? s.color}88, 0 0 32px ${s.glow ?? s.color}44, 0 0 48px ${s.glow ?? s.color}22`
+                  : `0 0 10px ${s.glow ?? s.color}55, 0 0 20px ${s.glow ?? s.color}28`,
+                animation: `symGlowBreath 2.5s ease-in-out infinite`,
+                animationDelay: `${idx * 0.4}s`,
+                transition: "all 0.4s ease",
+                transform: hovered ? `scale(1.2) translateY(-6px)` : "scale(1) translateY(0)",
               }}
             >
               {s.emoji}
@@ -175,6 +239,8 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
             fontSize: "clamp(11px, 2.5vw, 14px)",
             color: accentColor,
             textShadow: `0 0 14px ${accentColor}, 0 0 28px ${accentColor}77, 0 0 56px ${accentColor}33`,
+            transition: "all 0.3s ease",
+            transform: hovered ? "scale(1.08) translateY(-2px)" : "scale(1) translateY(0)",
           }}
         >
           {theme.name}
@@ -235,6 +301,7 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
               ? `0 0 22px ${accentColor}aa, 0 0 44px ${accentColor}44, 0 4px 12px rgba(0,0,0,0.5)`
               : `0 0 10px ${accentColor}55, 0 0 20px ${accentColor}28`,
             transition: "all 0.3s ease",
+            transform: hovered ? "scale(1.06)" : "scale(1)",
           }}
         >
           <span>▶</span>
@@ -282,6 +349,18 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
           @keyframes symDrift${i} {
             0%, 100% { transform: translateY(0px) rotate(${i * 18}deg); opacity: 0.18; }
             50%       { transform: translateY(-14px) rotate(${i * 18 + 22}deg); opacity: 0.32; }
+          }
+        `).join("")}
+        ${Array.from({ length: 12 }).map((_, i) => `
+          @keyframes particleFloat${i} {
+            0% {
+              opacity: 1;
+              transform: translateY(0) translateX(0) scale(1);
+            }
+            100% {
+              opacity: 0;
+              transform: translateY(-${40 + Math.random() * 60}px) translateX(${(Math.random() - 0.5) * 60}px) scale(0);
+            }
           }
         `).join("")}
       `}</style>
