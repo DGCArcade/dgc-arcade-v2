@@ -75,6 +75,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "howler": "^2.2.4",
     "zustand": "^5.0.14"
   }
 }
