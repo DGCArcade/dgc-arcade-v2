@@ -19,3 +19,4 @@ export * from "./fraud-reviews";
 export * from "./user-balances";
 export * from "./visitors";
 export * from "./slot-themes";
+export * from "./jackpot-pool";

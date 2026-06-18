@@ -6,6 +6,7 @@ import { requireAuth, optionalAuth } from "../middlewares/auth.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import { recordTournamentWager } from "../lib/tournament-tracker.js";
+import { contributeToJackpot } from "./jackpot.js";
 import { recordLedgerStandalone } from "../services/ledger.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 
@@ -331,6 +332,9 @@ betsRouter.post("/", requireAuth, async (req, res) => {
 
     // Fire-and-forget: track wager in any active tournament
     recordTournamentWager(user.id, amount, req.log).catch(() => {});
+
+    // Fire-and-forget: feed platform jackpot pool (0.01%–0.1% per tier)
+    contributeToJackpot(amount).catch(() => {});
 
     res.json({
       bet: {

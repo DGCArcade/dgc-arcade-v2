@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { PlatformStats } from "@/components/home/stats";
 import { LiveFeed } from "@/components/home/live-feed";
 import { GameCard } from "@/components/games/game-card";
@@ -6,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useAuthModal } from "@/hooks/use-auth-modal";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
-import { Zap, TrendingUp, Shield, ChevronRight } from "lucide-react";
+import { Zap, TrendingUp, Shield, ChevronRight, Users } from "lucide-react";
 
 const FEATURES = [
   {
@@ -26,6 +27,137 @@ const FEATURES = [
   },
 ];
 
+// ── Live Jackpot Banner ────────────────────────────────────────────────────────
+interface LiveJackpots { mini: number; minor: number; major: number; grand: number }
+function LiveJackpotBanner() {
+  const [vals, setVals] = useState<LiveJackpots>({ mini: 50, minor: 250, major: 1250, grand: 5000 });
+  useEffect(() => {
+    const fetch_ = () =>
+      fetch("/api/jackpot")
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) setVals(d); })
+        .catch(() => {});
+    fetch_();
+    const iv = window.setInterval(fetch_, 5000);
+    const tick = window.setInterval(() => {
+      setVals(prev => ({
+        mini:  prev.mini  + 0.003,
+        minor: prev.minor + 0.009,
+        major: prev.major + 0.022,
+        grand: prev.grand + 0.055,
+      }));
+    }, 150);
+    return () => { window.clearInterval(iv); window.clearInterval(tick); };
+  }, []);
+  const tiers = [
+    { key: "mini"  as const, label: "MINI",  color: "#88EEFF" },
+    { key: "minor" as const, label: "MINOR", color: "#AAFFAA" },
+    { key: "major" as const, label: "MAJOR", color: "#FFDD44" },
+    { key: "grand" as const, label: "GRAND", color: "#FF6600" },
+  ];
+  return (
+    <div
+      className="w-full rounded-2xl overflow-hidden relative"
+      style={{
+        background: "linear-gradient(135deg, #0a0015 0%, #050020 50%, #0a0015 100%)",
+        border: "1.5px solid rgba(204,0,255,0.35)",
+        boxShadow: "0 0 60px rgba(204,0,255,0.12)",
+      }}
+    >
+      {/* Background sweep */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div
+          className="absolute inset-0"
+          style={{
+            background: "radial-gradient(ellipse at 50% 0%, rgba(204,0,255,0.18) 0%, transparent 65%)",
+            animation: "jbSweep 4s ease-in-out infinite",
+          }}
+        />
+      </div>
+      <div className="relative z-10 px-4 py-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-2 h-2 rounded-full"
+              style={{ background: "#CC00FF", boxShadow: "0 0 8px #CC00FF", animation: "jbDot 1.6s ease-in-out infinite" }}
+            />
+            <span
+              className="font-black text-xs uppercase tracking-[0.22em]"
+              style={{ color: "#CC00FF", textShadow: "0 0 10px #CC00FF" }}
+            >
+              Live Jackpot Pool
+            </span>
+          </div>
+          <span className="text-xs text-muted-foreground font-mono tracking-wider">Platform-Wide</span>
+        </div>
+        {/* Jackpot tiers */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {tiers.map(t => (
+            <div
+              key={t.key}
+              className="flex flex-col items-center rounded-xl py-3 px-2"
+              style={{
+                background: `radial-gradient(ellipse at 50% 0%, ${t.color}1a 0%, rgba(0,0,0,0.6) 80%)`,
+                border:     `1px solid ${t.color}44`,
+                boxShadow:  `0 0 20px ${t.color}18`,
+              }}
+            >
+              <span
+                className="font-black text-[10px] tracking-[0.2em] uppercase mb-1"
+                style={{ color: t.color, textShadow: `0 0 10px ${t.color}` }}
+              >
+                {t.label}
+              </span>
+              <span
+                className="font-mono font-black text-lg tabular-nums"
+                style={{ color: t.color, textShadow: `0 0 14px ${t.color}` }}
+              >
+                ${vals[t.key].toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              {t.key === "grand" && (
+                <span className="text-[9px] font-bold uppercase tracking-widest mt-1" style={{ color: `${t.color}99` }}>
+                  jackpot
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <style>{`
+        @keyframes jbSweep { 0%,100%{opacity:0.6;} 50%{opacity:1;} }
+        @keyframes jbDot   { 0%,100%{opacity:0.5;} 50%{opacity:1; box-shadow:0 0 14px #CC00FF;} }
+      `}</style>
+    </div>
+  );
+}
+
+// ── Live Online Count ──────────────────────────────────────────────────────────
+function LiveOnlineCount() {
+  const [online, setOnline] = useState<number | null>(null);
+  useEffect(() => {
+    const fetch_ = () =>
+      fetch("/api/stats/live")
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) setOnline(d.onlineNow); })
+        .catch(() => {});
+    fetch_();
+    const iv = window.setInterval(fetch_, 30_000);
+    return () => window.clearInterval(iv);
+  }, []);
+  if (online === null) return null;
+  return (
+    <div className="inline-flex items-center gap-1.5 bg-green-500/10 border border-green-500/25 rounded-full px-3 py-1">
+      <span className="w-1.5 h-1.5 rounded-full bg-green-400 block" style={{ animation: "onlinePulse 2s ease-in-out infinite" }} />
+      <span className="text-xs font-bold text-green-400">
+        {online.toLocaleString()} online now
+      </span>
+      <style>{`@keyframes onlinePulse{0%,100%{opacity:0.5;}50%{opacity:1;box-shadow:0 0 8px #4ade80;}}`}</style>
+    </div>
+  );
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
 export default function Home() {
   const { data: games } = useListGames({ query: { queryKey: getListGamesQueryKey() } });
   const authModal = useAuthModal();
@@ -35,9 +167,13 @@ export default function Home() {
   const featuredGames = Array.isArray(games) ? games.filter((g) => g.active).slice(0, 3) : [];
 
   return (
-    <div className="space-y-20 pb-16">
+    <div className="space-y-16 pb-16">
+      {/* ── Live Jackpot Banner ───────────────────────────────────────── */}
+      <section>
+        <LiveJackpotBanner />
+      </section>
       {/* ── Hero ─────────────────────────────────────────────────── */}
-      <section className="relative rounded-2xl overflow-hidden border border-border/40 min-h-[480px] flex items-center bg-secondary/30">
+      <section className="relative rounded-2xl overflow-hidden border border-border/40 min-h-[440px] flex items-center bg-secondary/30">
         <div
           className="absolute inset-0 opacity-60"
           style={{
@@ -58,9 +194,12 @@ export default function Home() {
 
         <div className="relative z-10 px-6 md:px-16 py-16 w-full flex flex-col items-center text-center">
           <div className="max-w-2xl w-full flex flex-col items-center">
-          <div className="inline-flex items-center gap-2 bg-primary/10 border border-primary/30 rounded-full px-4 py-1.5 mb-8">
-            <span className="live-dot w-2 h-2 rounded-full bg-green-400 block" />
-            <span className="text-xs font-bold uppercase tracking-widest text-glow-shift">Live • Different Grind Crew</span>
+          <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
+            <div className="inline-flex items-center gap-2 bg-primary/10 border border-primary/30 rounded-full px-4 py-1.5">
+              <span className="live-dot w-2 h-2 rounded-full bg-green-400 block" />
+              <span className="text-xs font-bold uppercase tracking-widest text-glow-shift">Live • Different Grind Crew</span>
+            </div>
+            <LiveOnlineCount />
           </div>
 
           <h1 className="font-display font-black text-4xl sm:text-5xl md:text-7xl uppercase tracking-tighter leading-[0.9] mb-6">
