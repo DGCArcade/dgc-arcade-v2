@@ -129,10 +129,8 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
                 opacity: hovered ? 0.75 : 0.5,
                 transition: "opacity 0.4s ease",
                 filter: "saturate(1.4) brightness(0.95) contrast(1.1)",
-                // Parallax: moves within the safe zone, off-center movement
-                transform: hovered
-                  ? `translate(${(mousePos.x - 0.5) * 12}%, ${(mousePos.y - 0.5) * 12}%)`
-                  : "translate(0, 0)",
+                // Keep image centered, no parallax shift
+                transform: "translate(0, 0)",
                 transformOrigin: "center",
                 transitionProperty: "opacity, transform",
                 transitionDuration: "0.2s",
