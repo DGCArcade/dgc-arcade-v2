@@ -138,18 +138,18 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
           </div>
         )}
 
-        {/* Dark vignette — top is lighter, bottom is heavy for readability */}
+        {/* Lightened vignette — preserves art visibility while darkening bottom */}
         <div
           style={{
             position: "absolute",
             inset: 0,
             pointerEvents: "none",
             background: `linear-gradient(to bottom,
-              rgba(0,0,0,0.1) 0%,
-              transparent 22%,
-              transparent 45%,
-              rgba(0,0,0,0.75) 75%,
-              rgba(0,0,0,0.97) 100%
+              rgba(0,0,0,0.05) 0%,
+              transparent 30%,
+              transparent 50%,
+              rgba(0,0,0,0.4) 75%,
+              rgba(0,0,0,0.65) 100%
             )`,
             borderRadius: "1rem",
           }}
@@ -204,7 +204,7 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
             borderRadius: "0 0 1rem 1rem",
           }}
         >
-          {/* Game name — always glowing text */}
+          {/* Game name — signature DGC glow effect */}
           <div
             style={{
               fontSize: "clamp(11px, 2.5vw, 14px)",
@@ -214,9 +214,10 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
               lineHeight: "1.2",
               marginBottom: "0.125rem",
               color: accentColor,
-              textShadow: `0 0 14px ${accentColor}, 0 0 28px ${accentColor}77, 0 0 56px ${accentColor}33`,
+              textShadow: `0 0 8px ${accentColor}, 0 0 16px ${accentColor}99, 0 0 32px ${accentColor}66, 0 0 48px ${accentColor}44`,
               transition: "all 0.3s ease",
               transform: hovered ? "scale(1.08) translateY(-2px)" : "scale(1) translateY(0)",
+              animation: "titleGlow 2.5s ease-in-out infinite",
             }}
           >
             {theme.name}
@@ -358,6 +359,14 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
           100% {
             opacity: 0;
             transform: translateX(100%) translateY(100%);
+          }
+        }
+        @keyframes titleGlow {
+          0%, 100% {
+            filter: drop-shadow(0 0 4px currentColor) drop-shadow(0 0 8px currentColor);
+          }
+          50% {
+            filter: drop-shadow(0 0 8px currentColor) drop-shadow(0 0 16px currentColor) drop-shadow(0 0 24px currentColor);
           }
         }
       `}</style>
