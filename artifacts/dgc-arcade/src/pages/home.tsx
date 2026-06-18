@@ -38,16 +38,9 @@ function LiveJackpotBanner() {
         .then(d => { if (d) setVals(d); })
         .catch(() => {});
     fetch_();
+    // Poll every 5 seconds — only real data from the DB, no fake animation tick
     const iv = window.setInterval(fetch_, 5000);
-    const tick = window.setInterval(() => {
-      setVals(prev => ({
-        mini:  prev.mini  + 0.003,
-        minor: prev.minor + 0.009,
-        major: prev.major + 0.022,
-        grand: prev.grand + 0.055,
-      }));
-    }, 150);
-    return () => { window.clearInterval(iv); window.clearInterval(tick); };
+    return () => { window.clearInterval(iv); };
   }, []);
   const tiers = [
     { key: "mini"  as const, label: "MINI",  color: "#88EEFF" },

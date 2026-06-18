@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Game } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { Game } from "@workspace/api-client-react";
 import {
   usePlaceBet,
   getGetMeQueryKey,
@@ -87,7 +87,7 @@ function getWinCells(grid: SymId[][]): Set<string> {
     let run = 1;
     for (let c = 1; c < 5; c++) {
       const s = r[c];
-      if (s === base || s === "wild" || (base === null && s !== "wild")) {
+      if (s === base || (s as string) === "wild" || (base === null && (s as string) !== "wild")) {
         if (base === null) base = s;
         run++;
       } else break;

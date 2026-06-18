@@ -11,7 +11,8 @@
     "push": "drizzle-kit push --config ./drizzle.config.ts",
     "push-force": "drizzle-kit push --force --config ./drizzle.config.ts",
     "build": "tsc -p tsconfig.json",
-    "seed:slot-themes": "node seed-slot-themes.mjs"
+    "seed:slot-themes": "node seed-slot-themes.mjs",
+    "seed:slot-themes-v2": "node seed-slot-themes-v2.mjs"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",

@@ -1,12 +1,14 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout/app-layout";
+import { useEffect } from "react";
 
 import Home from "@/pages/home";
 import Games from "@/pages/games";
 import SlotsPage from "@/pages/slots";
+import SlotGamePage from "@/pages/slot-game";
 import GamePage from "@/pages/game";
 import Leaderboard from "@/pages/leaderboard";
 import Profile from "@/pages/profile";
@@ -22,17 +24,30 @@ import CreatorPage from "@/pages/creator";
 
 const queryClient = new QueryClient();
 
+// Scroll to top whenever the route changes
+function ScrollToTop() {
+  const [location] = useLocation();
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [location]);
+  return null;
+}
+
 function Router() {
   return (
     <AppLayout>
+      <ScrollToTop />
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/games" component={Games} />
         <Route path="/slots" component={SlotsPage} />
+        <Route path="/slots/:slug" component={SlotGamePage} />
         <Route path="/games/:gameId" component={GamePage} />
         <Route path="/race" component={RacePage} />
         <Route path="/leaderboard" component={Leaderboard} />
         <Route path="/profile" component={Profile} />
+        {/* Admin with optional tab sub-route so reloads preserve the active tab */}
+        <Route path="/admin/:tab" component={Admin} />
         <Route path="/admin" component={Admin} />
         <Route path="/terms" component={TermsPage} />
         <Route path="/privacy" component={PrivacyPage} />

@@ -7,6 +7,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { startBackgroundTasks } from "./lib/background-tasks.js";
 import { logVisitor } from "./services/visitor-service.js";
+import { ensureSlotGamesSeeded } from "./routes/games.js";
 
 const app: Express = express();
 
@@ -150,5 +151,8 @@ app.use("/api", router);
 
 // Start background tasks (cleanup, etc.)
 startBackgroundTasks();
+
+// Ensure slot theme games are seeded in the games table (idempotent)
+ensureSlotGamesSeeded().catch(err => console.error("Slot game seeding error:", err));
 
 export default app;

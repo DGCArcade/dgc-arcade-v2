@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useLocation } from "wouter";
+import { useLocation, useParams } from "wouter";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -199,9 +199,26 @@ type TabKey = "overview" | "users" | "transactions" | "bank" | "bank-dashboard" 
 export default function AdminDashboard() {
   const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const routeParams = useParams<{ tab?: string }>();
   const { toast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  // Derive active tab from URL — /admin/:tab preserves on reload
+  const validTabs: TabKey[] = ["overview", "users", "transactions", "bank", "bank-dashboard", "visitor-logs", "tournaments", "chat", "ai", "creators", "slot-themes"];
+  const urlTab = routeParams.tab && validTabs.includes(routeParams.tab as TabKey) ? (routeParams.tab as TabKey) : "overview";
+  const [activeTab, setActiveTab] = useState<TabKey>(urlTab);
+
+  // Navigate to tab and update URL
+  const navigateToTab = useCallback((tab: TabKey) => {
+    setActiveTab(tab);
+    setLocation(tab === "overview" ? "/admin" : `/admin/${tab}`);
+  }, [setLocation]);
+
+  // Sync tab when URL changes (e.g. browser back/forward)
+  useEffect(() => {
+    const newTab = routeParams.tab && validTabs.includes(routeParams.tab as TabKey) ? (routeParams.tab as TabKey) : "overview";
+    setActiveTab(newTab);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeParams.tab]);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [usersTotal, setUsersTotal] = useState(0);
@@ -785,13 +802,13 @@ export default function AdminDashboard() {
     return () => clearInterval(id);
   }, [activeTab, bankUnlocked, loadBank]);
 
-  // Open the DGC Bank tab when navigated to /admin?tab=bank (e.g. from the header).
+  // Legacy: support /admin?tab=bank query param for backward compat (e.g. from navbar)
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "bank" || t === "users" || t === "overview") {
-      setActiveTab(t as TabKey);
-      if (t === "bank") setNewPendingDeposits(0);
+    if (t && validTabs.includes(t as TabKey)) {
+      navigateToTab(t as TabKey);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Relock automatically if the bank session expires while the page is open.
@@ -808,9 +825,9 @@ export default function AdminDashboard() {
   // Prevent restricted tabs for certain roles (moved from render body to avoid infinite loop)
   useEffect(() => {
     if (isOwner && activeTab === "bank-dashboard") {
-      setActiveTab("bank");
+      navigateToTab("bank");
     }
-  }, [isOwner, activeTab]);
+  }, [isOwner, activeTab, navigateToTab]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1138,7 +1155,7 @@ export default function AdminDashboard() {
         {TABS.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => { setActiveTab(tab.key); if (tab.key === "bank") setNewPendingDeposits(0); }}
+            onClick={() => { navigateToTab(tab.key); if (tab.key === "bank") setNewPendingDeposits(0); }}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-xs sm:text-sm font-bold uppercase tracking-wider transition-all whitespace-nowrap flex-shrink-0 ${
               activeTab === tab.key
                 ? "bg-primary text-primary-foreground shadow-[0_0_16px_rgba(255,215,0,0.3)]"
@@ -1181,8 +1198,8 @@ export default function AdminDashboard() {
                 key={s.label}
                 role="button"
                 tabIndex={0}
-                onClick={() => setActiveTab(s.tab)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveTab(s.tab); } }}
+                onClick={() => navigateToTab(s.tab)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigateToTab(s.tab); } }}
                 className="bg-secondary/40 border-border/40 card-hover-glow overflow-hidden cursor-pointer hover:border-primary/40 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
               >
                 <CardContent className="p-0">
@@ -1213,7 +1230,7 @@ export default function AdminDashboard() {
                 <p className="stat-number text-2xl font-bold text-amber-400">{stats?.pendingWithdrawals ?? "—"}</p>
                 <p className="text-sm text-muted-foreground mt-1">{stats ? formatCurrency(stats.pendingWithdrawalAmount) : "—"} total</p>
                 {stats && stats.pendingWithdrawals > 0 && (
-                  <Button size="sm" className="mt-3 w-full" onClick={() => setActiveTab("bank")}>
+                  <Button size="sm" className="mt-3 w-full" onClick={() => navigateToTab("bank")}>
                     Review Now
                   </Button>
                 )}
@@ -1227,7 +1244,7 @@ export default function AdminDashboard() {
                   <span className="text-xs text-muted-foreground uppercase tracking-wider">Banned Users</span>
                 </div>
                 <p className="stat-number text-2xl font-bold text-destructive">{stats?.bannedUsers ?? "—"}</p>
-                <Button size="sm" variant="outline" className="mt-3 w-full" onClick={() => setActiveTab("users")}>
+                <Button size="sm" variant="outline" className="mt-3 w-full" onClick={() => navigateToTab("users")}>
                   Manage Users
                 </Button>
               </CardContent>
@@ -1236,8 +1253,8 @@ export default function AdminDashboard() {
             <Card
               role="button"
               tabIndex={0}
-              onClick={() => setActiveTab("bank")}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveTab("bank"); } }}
+              onClick={() => navigateToTab("bank")}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigateToTab("bank"); } }}
               className="bg-secondary/40 border-border/40 card-hover-glow cursor-pointer hover:border-primary/40 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
               <CardContent className="p-5">
