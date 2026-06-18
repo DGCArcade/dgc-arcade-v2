@@ -138,28 +138,21 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
           </div>
         )}
 
-        {/* Rapid Glow rotating border — multi-color neon effect */}
+        {/* Rapid Glow rotating border — high-intensity neon edge only */}
         <div
           style={{
             position: "absolute",
             inset: 0,
             pointerEvents: "none",
             borderRadius: "1rem",
+            padding: "2px",
             background: `conic-gradient(
               from 0deg,
               #ff00ff, #00ffff, #ffff00, #ff0080, #00ff80, #ff00ff
             )`,
             animation: "rapidGlowRotate 4s linear infinite",
-            opacity: 0.8,
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            inset: "2px",
-            borderRadius: "calc(1rem - 2px)",
-            background: `linear-gradient(160deg, #1a1a1a, #2d2d2d, #1a1a1a)`,
-            pointerEvents: "none",
+            WebkitMaskImage: `radial-gradient(ellipse at center, transparent 95%, black 100%)`,
+            maskImage: `radial-gradient(ellipse at center, transparent 95%, black 100%)`,
           }}
         />
 
@@ -170,11 +163,11 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
             inset: 0,
             pointerEvents: "none",
             background: `linear-gradient(to bottom,
-              rgba(0,0,0,0.02) 0%,
-              transparent 35%,
-              transparent 55%,
-              rgba(0,0,0,0.25) 75%,
-              rgba(0,0,0,0.45) 100%
+              rgba(0,0,0,0) 0%,
+              transparent 40%,
+              transparent 60%,
+              rgba(0,0,0,0.15) 80%,
+              rgba(0,0,0,0.3) 100%
             )`,
             borderRadius: "1rem",
           }}
