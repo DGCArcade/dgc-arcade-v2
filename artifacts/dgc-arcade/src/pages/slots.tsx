@@ -138,6 +138,31 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
           </div>
         )}
 
+        {/* Rapid Glow rotating border — multi-color neon effect */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            borderRadius: "1rem",
+            background: `conic-gradient(
+              from 0deg,
+              #ff00ff, #00ffff, #ffff00, #ff0080, #00ff80, #ff00ff
+            )`,
+            animation: "rapidGlowRotate 4s linear infinite",
+            opacity: 0.8,
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: "2px",
+            borderRadius: "calc(1rem - 2px)",
+            background: `linear-gradient(160deg, #1a1a1a, #2d2d2d, #1a1a1a)`,
+            pointerEvents: "none",
+          }}
+        />
+
         {/* Lightened vignette — preserves art visibility while darkening bottom */}
         <div
           style={{
@@ -145,11 +170,11 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
             inset: 0,
             pointerEvents: "none",
             background: `linear-gradient(to bottom,
-              rgba(0,0,0,0.05) 0%,
-              transparent 30%,
-              transparent 50%,
-              rgba(0,0,0,0.4) 75%,
-              rgba(0,0,0,0.65) 100%
+              rgba(0,0,0,0.02) 0%,
+              transparent 35%,
+              transparent 55%,
+              rgba(0,0,0,0.25) 75%,
+              rgba(0,0,0,0.45) 100%
             )`,
             borderRadius: "1rem",
           }}
@@ -367,6 +392,23 @@ function SlotCoverCard({ theme, onClick }: { theme: SlotTheme; onClick: () => vo
           }
           50% {
             filter: drop-shadow(0 0 8px currentColor) drop-shadow(0 0 16px currentColor) drop-shadow(0 0 24px currentColor);
+          }
+        }
+        @keyframes rapidGlowRotate {
+          0% {
+            filter: drop-shadow(0 0 8px #ff00ff) drop-shadow(0 0 16px #ff00ff);
+          }
+          25% {
+            filter: drop-shadow(0 0 8px #00ffff) drop-shadow(0 0 16px #00ffff);
+          }
+          50% {
+            filter: drop-shadow(0 0 8px #ffff00) drop-shadow(0 0 16px #ffff00);
+          }
+          75% {
+            filter: drop-shadow(0 0 8px #ff0080) drop-shadow(0 0 16px #ff0080);
+          }
+          100% {
+            filter: drop-shadow(0 0 8px #ff00ff) drop-shadow(0 0 16px #ff00ff);
           }
         }
       `}</style>
