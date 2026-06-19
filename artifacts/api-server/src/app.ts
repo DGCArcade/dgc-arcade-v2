@@ -84,13 +84,24 @@ function isOwnerRequest(req: Request): boolean {
 }
 
 // ── Rate limiting ────────────────────────────────────────────────────────────
-// Auth endpoints: 10 attempts per 15 minutes per IP
+// Login/register: strict — 10 attempts per 15 minutes per IP (brute-force guard)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many attempts, please try again later." },
+  skip: (req) => isOwnerRequest(req),
+});
+
+// /api/auth/me polling: generous — 600 per 15 minutes (~1 per 1.5 s sustained)
+// Must be mounted BEFORE authLimiter so the stricter limiter doesn't catch it.
+const meLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests." },
   skip: (req) => isOwnerRequest(req),
 });
 
@@ -141,6 +152,7 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+app.use("/api/auth/me", meLimiter);
 app.use("/api/auth", authLimiter);
 app.use("/api/admin", adminLimiter);
 app.use("/api/transactions/withdraw", withdrawLimiter);
