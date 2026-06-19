@@ -115,22 +115,36 @@ export async function syncPlisioDeposits() {
           // received_amount = what actually arrived in our wallet (after network fees).
           // We NEVER fall back to the invoice/source amount — doing so would
           // credit users more than they actually sent.
-          const cryptoAmountReceived = parseFloat(String(data.data.received_amount || data.data.received_sum || "0"));
-          const cryptoAmountInvoiced = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || data.data.invoice_amount || "0"));
-          const sourceUsd = parseFloat(String(data.data.source_amount || tx.amount));
-          const receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
+          let cryptoAmountReceived = parseFloat(String(data.data.received_amount || data.data.received_sum || data.data.paid_amount || "0"));
+          const cryptoAmountInvoiced = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.invoice_amount || "0"));
+          const sourceUsd = parseFloat(String(data.data.source_amount || data.data.source_amount_usd || tx.amount));
+          let receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
           const cryptoCurrency = tx.currency || data.data.currency || "ETH";
 
+          // Try extracting received amount from txs array (Plisio sometimes stores it there)
+          if (cryptoAmountReceived <= 0 && Array.isArray(data.data.txs) && data.data.txs.length > 0) {
+            cryptoAmountReceived = data.data.txs.reduce((sum: number, t: any) => sum + parseFloat(String(t.amount || t.received || "0")), 0);
+          }
+
           // ── STRICT GUARD: require real received data ────────────────────────
-          // If Plisio hasn't provided the actual received amount yet, skip this
-          // transaction — the IPN webhook will handle it when it arrives, or we
-          // will pick it up on the next sync cycle once the data is populated.
+          // For "completed" status: Plisio explicitly marks complete only when the full
+          // invoice was paid. If the polling API doesn't return received_amount (common),
+          // credit sourceUsd directly — Plisio has confirmed receipt.
+          // For mismatch/overpaid: must have actual received_amount (partial payment case).
           if (cryptoAmountReceived <= 0 && receivedUsdValue <= 0) {
-            logger.info(
-              { txId: tx.id, plisioTrackId: tx.plisioTrackId, pStatus },
-              "Plisio sync: skipping — no received_amount data yet, will retry next cycle"
-            );
-            continue;
+            if (pStatus === "completed" && sourceUsd > 0) {
+              logger.info(
+                { txId: tx.id, plisioTrackId: tx.plisioTrackId, pStatus, sourceUsd },
+                "Plisio sync: status=completed but received_amount=0 — crediting invoice amount (Plisio confirmed full payment)"
+              );
+              receivedUsdValue = sourceUsd;
+            } else {
+              logger.info(
+                { txId: tx.id, plisioTrackId: tx.plisioTrackId, pStatus },
+                "Plisio sync: skipping — no received_amount data yet, will retry next cycle"
+              );
+              continue;
+            }
           }
 
           // ── CALCULATE USD CREDIT AMOUNT ─────────────────────────────────────

@@ -1190,32 +1190,33 @@ export default function AdminDashboard() {
       </div>
 
       {/* Tabs */}
-      <div className="w-full overflow-x-auto scrollbar-hide -mx-1 px-1">
-        <div className="flex gap-1 bg-secondary/50 rounded-lg p-1 w-max min-w-full sm:w-fit border border-border/40">
+      <div className="w-full overflow-x-auto scrollbar-hide">
+        <div className="flex gap-0.5 bg-secondary/50 rounded-lg p-1 border border-border/40 min-w-max">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => { navigateToTab(tab.key); if (tab.key === "bank") setNewPendingDeposits(0); }}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-xs sm:text-sm font-bold uppercase tracking-wider transition-all whitespace-nowrap flex-shrink-0 ${
+            title={tab.label}
+            className={`relative flex items-center gap-1 px-2.5 py-2 rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap flex-shrink-0 ${
               activeTab === tab.key
-                ? "bg-primary text-primary-foreground shadow-[0_0_16px_rgba(255,215,0,0.3)]"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-primary text-primary-foreground shadow-[0_0_14px_rgba(255,215,0,0.35)]"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
             }`}
           >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
+            <tab.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+            <span className="hidden sm:inline">{tab.label}</span>
             {tab.key === "transactions" && stats && stats.pendingWithdrawals > 0 && (
-              <span className="ml-1 bg-destructive text-destructive-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-mono">
-                {stats.pendingWithdrawals}
+              <span className="ml-0.5 bg-destructive text-destructive-foreground text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-mono leading-none">
+                {stats.pendingWithdrawals > 9 ? "9+" : stats.pendingWithdrawals}
               </span>
             )}
             {tab.key === "bank" && newPendingDeposits > 0 && (
-              <span className="ml-1 bg-amber-500 text-black text-xs rounded-full w-5 h-5 flex items-center justify-center font-mono animate-pulse font-bold">
-                {newPendingDeposits}
+              <span className="ml-0.5 bg-amber-500 text-black text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-mono animate-pulse font-bold leading-none">
+                {newPendingDeposits > 9 ? "9+" : newPendingDeposits}
               </span>
             )}
             {tab.key === "chat" && tab.badge != null && tab.badge > 0 && activeTab !== "chat" && (
-              <span className="ml-1 bg-primary text-primary-foreground text-xs rounded-full min-w-[20px] h-5 flex items-center justify-center font-mono animate-pulse font-bold px-1">
+              <span className="ml-0.5 bg-primary text-primary-foreground text-[10px] rounded-full min-w-[16px] h-4 flex items-center justify-center font-mono animate-pulse font-bold px-0.5 leading-none">
                 {tab.badge > 99 ? "99+" : tab.badge}
               </span>
             )}

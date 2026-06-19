@@ -311,6 +311,10 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     const receivedUsdValue = parseFloat(String(received_amount_usd || "0"));
     const sourceUsd = parseFloat(String(source_amount_usd || source_amount || tx.amount));
 
+    // Also extract from body fields Plisio sends in various formats
+    const bodyRaw = req.body as Record<string, unknown>;
+    const altReceivedCrypto = parseFloat(String(bodyRaw.received_sum || bodyRaw.paid_amount || bodyRaw.tx_amount || "0"));
+
     // ── STRUCTURED ENTRY LOG ──────────────────────────────────────────────
     // Full audit trail before any crediting decision is made.
     req.log.info({
@@ -329,20 +333,27 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
 
     // ── STRICT GUARD: require real received data from Plisio ────────────────
     // If neither received_amount nor received_amount_usd is present we cannot
-    // determine how much actually arrived. Return 200 so Plisio doesn't retry;
-    // the background sync will pick it up once Plisio populates the field.
-    if (cryptoAmountReceived <= 0 && receivedUsdValue <= 0) {
-      req.log.warn({
-        event: "plisio_ipn_no_received_amount",
-        txn_id,
-        tx_db_id: tx.id,
-        user_id: tx.userId,
-        ipn_status: pStatus,
-        received_amount,
-        received_amount_usd,
-      }, "Plisio IPN: no received_amount data — skipping credit, sync will handle it");
-      res.json({ success: true });
-      return;
+    // determine how much actually arrived. Return 200 so Plisio doesn't retry.
+    // Exception: for "completed" status Plisio confirms the full invoice was paid —
+    // credit sourceUsd directly since the polling API doesn't always echo received_amount.
+    const effectiveCryptoReceived = cryptoAmountReceived > 0 ? cryptoAmountReceived : altReceivedCrypto;
+    if (effectiveCryptoReceived <= 0 && receivedUsdValue <= 0) {
+      if (pStatus === "completed" && sourceUsd > 0) {
+        // background-tasks will also attempt this, but let IPN credit it if present
+        req.log.info({
+          event: "plisio_ipn_completed_no_received",
+          txn_id, tx_db_id: tx.id, user_id: tx.userId, sourceUsd,
+        }, "Plisio IPN: status=completed, received_amount=0 — will credit invoice amount");
+        // fall through with effectiveCryptoReceived=0 and we'll use sourceUsd directly below
+      } else {
+        req.log.warn({
+          event: "plisio_ipn_no_received_amount",
+          txn_id, tx_db_id: tx.id, user_id: tx.userId, ipn_status: pStatus,
+          received_amount, received_amount_usd,
+        }, "Plisio IPN: no received_amount data — skipping credit, sync will handle it");
+        res.json({ success: true });
+        return;
+      }
     }
 
     // ── CALCULATE USD CREDIT AMOUNT ─────────────────────────────────────────
@@ -358,35 +369,35 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     if (receivedUsdValue > 0) {
       creditAmountUsd = Math.round(receivedUsdValue * 1e8) / 1e8;
       creditCalcMethod = "plisio_usd_direct";
-      if (cryptoAmountReceived > 0) {
-        exchangeRate = Math.round((receivedUsdValue / cryptoAmountReceived) * 1e8) / 1e8;
+      if (effectiveCryptoReceived > 0) {
+        exchangeRate = Math.round((receivedUsdValue / effectiveCryptoReceived) * 1e8) / 1e8;
       }
-    } else if (cryptoAmountReceived > 0 && cryptoAmountInvoiced > 0 && sourceUsd > 0) {
-      const ratio = cryptoAmountReceived / cryptoAmountInvoiced;
+    } else if (effectiveCryptoReceived > 0 && cryptoAmountInvoiced > 0 && sourceUsd > 0) {
+      const ratio = effectiveCryptoReceived / cryptoAmountInvoiced;
       creditAmountUsd = Math.round(sourceUsd * ratio * 1e8) / 1e8;
       creditCalcMethod = "ratio_received_over_invoiced";
-      exchangeRate = cryptoAmountReceived > 0 ? Math.round((creditAmountUsd / cryptoAmountReceived) * 1e8) / 1e8 : null;
-    } else {
-      // cryptoAmountReceived > 0 but invoice_total_sum was not provided.
-      // Look up live price to convert the real received crypto → USD.
-      // NEVER use sourceUsd here — that is the original invoice amount and would
-      // over-credit the user if they only paid a fraction of it.
+      exchangeRate = effectiveCryptoReceived > 0 ? Math.round((creditAmountUsd / effectiveCryptoReceived) * 1e8) / 1e8 : null;
+    } else if (effectiveCryptoReceived > 0) {
+      // Have received crypto but no invoiced total — look up live price.
       const livePrice = await getCryptoPrice(cryptoCurrency);
-      creditAmountUsd = Math.round(cryptoAmountReceived * livePrice * 1e8) / 1e8;
+      creditAmountUsd = Math.round(effectiveCryptoReceived * livePrice * 1e8) / 1e8;
       exchangeRate = livePrice;
       creditCalcMethod = "live_price_lookup";
 
       req.log.warn({
         event: "plisio_ipn_no_invoice_total",
-        txn_id,
-        tx_db_id: tx.id,
-        user_id: tx.userId,
-        cryptoCurrency,
-        cryptoAmountReceived,
-        livePrice,
-        creditAmountUsd,
+        txn_id, tx_db_id: tx.id, user_id: tx.userId,
+        cryptoCurrency, effectiveCryptoReceived, livePrice, creditAmountUsd,
         requested_amount_usd: sourceUsd,
       }, "Plisio IPN: invoice_total_sum missing — used live price lookup (NOT invoice amount)");
+    } else {
+      // status=completed, received_amount=0 — Plisio confirmed full invoice paid.
+      creditAmountUsd = Math.round(sourceUsd * 1e8) / 1e8;
+      creditCalcMethod = "completed_status_invoice_amount";
+      req.log.info({
+        event: "plisio_ipn_completed_fallback",
+        txn_id, tx_db_id: tx.id, user_id: tx.userId, sourceUsd, creditAmountUsd,
+      }, "Plisio IPN: status=completed, crediting invoice amount (no received_amount in payload)");
     }
 
     // ── OVERPAYMENT WARNING ───────────────────────────────────────────────
@@ -428,11 +439,11 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
 
       if (flipped.length === 0) return;
 
-      // 1. Credit Crypto-Native Balance — always the actual received crypto, never invoice.
-      if (cryptoAmountReceived > 0) {
-        await creditCryptoBalance(tx.userId, cryptoCurrency, cryptoAmountReceived, txn);
+      // 1. Credit Crypto-Native Balance — actual received crypto when available.
+      if (effectiveCryptoReceived > 0) {
+        await creditCryptoBalance(tx.userId, cryptoCurrency, effectiveCryptoReceived, txn);
       } else {
-        // receivedUsdValue > 0 but no crypto amount — credit static USD balance only
+        // No crypto amount (completed_status_invoice_amount path) — credit USD balance
         await txn.update(usersTable).set({ balance: sql`balance + ${creditAmountUsd}` }).where(eq(usersTable.id, tx.userId));
       }
 

@@ -1620,10 +1620,16 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
     // ROBUST AMOUNT EXTRACTION: Check every possible field Plisio might use for different coins/statuses
     // IMPORTANT: Use received_amount/received_sum for ACTUAL received amount.
     // 'amount' in Plisio response often refers to the EXPECTED invoice amount.
-    const receivedAmount  = parseFloat(String(data.data.received_amount || data.data.received_sum || "0"));
-    const invoicedAmount  = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || data.data.invoice_amount || "0"));
-    const sourceUsd       = parseFloat(String(data.data.source_amount || data.data.invoice_amount || data.data.source_amount_usd || tx.amount));
-    const receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
+    let receivedAmount  = parseFloat(String(data.data.received_amount || data.data.received_sum || data.data.paid_amount || "0"));
+    const invoicedAmount  = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.invoice_amount || "0"));
+    const sourceUsd       = parseFloat(String(data.data.source_amount || data.data.source_amount_usd || tx.amount));
+    let receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
+
+    // Try extracting received amount from txs array (Plisio sometimes stores it there)
+    if (receivedAmount <= 0 && Array.isArray(data.data.txs) && data.data.txs.length > 0) {
+      receivedAmount = data.data.txs.reduce((sum: number, t: any) => sum + parseFloat(String(t.amount || t.received || "0")), 0);
+      req.log.info({ receivedAmount, txsCount: data.data.txs.length }, "Smart Sync: extracted receivedAmount from txs array");
+    }
     
     // Logic to determine if we should credit
     const isPaid = ["completed", "mismatch", "overpaid", "finished"].includes(pStatus);
@@ -1649,13 +1655,28 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
       ratioUsed = receivedAmount / invoicedAmount;
       creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
       req.log.info({ receivedAmount, invoicedAmount, sourceUsd, ratio: ratioUsed, creditAmount }, "Smart Sync: crediting with ratio method");
+    } else if (receivedAmount > 0 && sourceUsd > 0) {
+      // Have received crypto but no invoiced total — use live price
+      const { getCryptoPrice } = await import("../lib/price-service.js");
+      const cryptoCurrencyForPrice = tx.currency || data.data.currency || "ETH";
+      const livePrice = await getCryptoPrice(cryptoCurrencyForPrice);
+      creditAmount = Math.round(receivedAmount * livePrice * 1e8) / 1e8;
+      ratioUsed = sourceUsd > 0 ? (creditAmount / sourceUsd) : 1;
+      receivedUsdValue = creditAmount;
+      req.log.info({ receivedAmount, livePrice, creditAmount }, "Smart Sync: crediting with live price lookup");
+    } else if (pStatus === "completed" && sourceUsd > 0) {
+      // Plisio marks "completed" when the FULL invoice amount was received.
+      // The GET operations API doesn't always return received_amount for completed txns
+      // (it's reliably in the IPN webhook but not always in the polling API).
+      // Since "completed" = invoice fulfilled, credit sourceUsd directly.
+      // mismatch/overpaid always need the real received_amount (partial payment cases).
+      creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
+      ratioUsed = 1.0;
+      req.log.info({ pStatus, sourceUsd, creditAmount }, "Smart Sync: status=completed, crediting invoice amount (Plisio confirmed full payment)");
     } else {
-      // STRICT GUARD: We do NOT fall back to the invoice/source amount.
-      // If Plisio hasn't provided received_amount yet, we cannot know what actually arrived.
-      // Crediting the invoice amount would over-credit users when the real payment was less.
       req.log.warn(
         { pStatus, receivedAmount, invoicedAmount, sourceUsd },
-        "Smart Sync: No received_amount data from Plisio — refusing to credit invoice amount as fallback"
+        "Smart Sync: No received_amount data from Plisio — cannot determine credit amount"
       );
       res.status(400).json({
         error: "Plisio has not provided the actual received amount yet. " +
