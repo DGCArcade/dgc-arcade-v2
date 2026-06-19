@@ -59,6 +59,10 @@ import {
   Pencil,
   Save,
   X,
+  ScrollText,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
@@ -194,7 +198,7 @@ interface UserDetail {
   transactions: { id: number; type: string; amount: number; currency: string; status: string; address: string | null; createdAt: string }[];
 }
 
-type TabKey = "overview" | "users" | "transactions" | "bank" | "bank-dashboard" | "visitor-logs" | "tournaments" | "chat" | "ai" | "creators" | "slot-themes";
+type TabKey = "overview" | "users" | "transactions" | "bank" | "bank-dashboard" | "visitor-logs" | "tournaments" | "chat" | "ai" | "creators" | "slot-themes" | "audit-logs";
 
 export default function AdminDashboard() {
   const { user, isLoading } = useAuth();
@@ -203,7 +207,7 @@ export default function AdminDashboard() {
   const { toast } = useToast();
 
   // Derive active tab from URL — /admin/:tab preserves on reload
-  const validTabs: TabKey[] = ["overview", "users", "transactions", "bank", "bank-dashboard", "visitor-logs", "tournaments", "chat", "ai", "creators", "slot-themes"];
+  const validTabs: TabKey[] = ["overview", "users", "transactions", "bank", "bank-dashboard", "visitor-logs", "tournaments", "chat", "ai", "creators", "slot-themes", "audit-logs"];
   const urlTab = routeParams.tab && validTabs.includes(routeParams.tab as TabKey) ? (routeParams.tab as TabKey) : "overview";
   const [activeTab, setActiveTab] = useState<TabKey>(urlTab);
 
@@ -323,6 +327,15 @@ export default function AdminDashboard() {
   const [depositNote, setDepositNote] = useState("");
   const [depositLoading, setDepositLoading] = useState(false);
 
+  // ── Audit Logs state ──
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLogsLoading, setAuditLogsLoading] = useState(false);
+  const [auditLogsTotal, setAuditLogsTotal] = useState(0);
+  const [auditLogsPage, setAuditLogsPage] = useState(1);
+  const [auditLogsSearch, setAuditLogsSearch] = useState("");
+  const [auditLogsTargetType, setAuditLogsTargetType] = useState("");
+  const AUDIT_LOGS_PER_PAGE = 50;
+
   // ── Slot Themes state ──
   const [slotThemes, setSlotThemes] = useState<any[]>([]);
   const [slotThemesLoading, setSlotThemesLoading] = useState(false);
@@ -358,6 +371,26 @@ export default function AdminDashboard() {
       setSlotThemesLoading(false);
     }
   }, [toast]);
+
+  const loadAuditLogs = useCallback(async (page = auditLogsPage, search = auditLogsSearch, targetType = auditLogsTargetType) => {
+    setAuditLogsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(AUDIT_LOGS_PER_PAGE),
+        ...(search ? { action: search } : {}),
+        ...(targetType ? { targetType } : {}),
+      });
+      const data = await adminFetch(`/audit-logs?${params}`);
+      setAuditLogs(data.logs ?? []);
+      setAuditLogsTotal(data.pagination?.total ?? 0);
+      setAuditLogsPage(page);
+    } catch (err: any) {
+      toast({ title: "Audit Logs error", description: err.message, variant: "destructive" });
+    } finally {
+      setAuditLogsLoading(false);
+    }
+  }, [auditLogsPage, auditLogsSearch, auditLogsTargetType, toast]);
 
   const handleToggleTheme = async (theme: any) => {
     const newActive = theme.active === "true" ? "false" : "true";
@@ -725,6 +758,11 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (activeTab === "slot-themes" && isAdmin) loadSlotThemes();
   }, [activeTab, isAdmin, loadSlotThemes]);
+
+  useEffect(() => {
+    if (activeTab === "audit-logs" && isOwner) loadAuditLogs(1, auditLogsSearch, auditLogsTargetType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, isOwner]);
 
   const loadChat = useCallback(async (since?: number) => {
     try {
@@ -1112,6 +1150,7 @@ export default function AdminDashboard() {
         { key: "slot-themes", label: "Slot Themes", icon: Layers },
         { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChatCount },
         { key: "ai", label: "Owner AI", icon: Bot },
+        { key: "audit-logs", label: "Audit Logs", icon: ScrollText },
       ]
     : [
         { key: "overview", label: "Overview", icon: Activity },
@@ -1143,6 +1182,7 @@ export default function AdminDashboard() {
             if (activeTab === "tournaments") loadTournaments();
             if (activeTab === "chat") loadChat();
             if (activeTab === "slot-themes") loadSlotThemes();
+            if (activeTab === "audit-logs") loadAuditLogs(auditLogsPage, auditLogsSearch, auditLogsTargetType);
           }}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
@@ -3946,6 +3986,208 @@ export default function AdminDashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Audit Logs Tab ── */}
+      {activeTab === "audit-logs" && isOwner && (
+        <div className="space-y-5">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <h2 className="font-display font-black uppercase tracking-widest text-xl flex items-center gap-2">
+                <ScrollText className="w-5 h-5 text-violet-400" /> Audit Logs
+              </h2>
+              <p className="text-muted-foreground text-sm mt-1">
+                Full history of every admin action — {auditLogsTotal.toLocaleString()} entries total.
+              </p>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="relative flex-1 min-w-[220px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search by action…"
+                value={auditLogsSearch}
+                onChange={e => setAuditLogsSearch(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") loadAuditLogs(1, auditLogsSearch, auditLogsTargetType); }}
+                className="pl-8 h-8 text-sm bg-secondary border-border/60"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+              <select
+                value={auditLogsTargetType}
+                onChange={e => {
+                  setAuditLogsTargetType(e.target.value);
+                  loadAuditLogs(1, auditLogsSearch, e.target.value);
+                }}
+                className="h-8 rounded-md border border-border/60 bg-secondary px-2 text-sm focus:outline-none focus:border-primary/50"
+              >
+                <option value="">All types</option>
+                <option value="user">User</option>
+                <option value="transaction">Transaction</option>
+                <option value="tournament">Tournament</option>
+                <option value="platform">Platform</option>
+                <option value="system">System</option>
+              </select>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => loadAuditLogs(1, auditLogsSearch, auditLogsTargetType)}
+              disabled={auditLogsLoading}
+              className="h-8 text-xs"
+            >
+              {auditLogsLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : "Search"}
+            </Button>
+            {(auditLogsSearch || auditLogsTargetType) && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setAuditLogsSearch("");
+                  setAuditLogsTargetType("");
+                  loadAuditLogs(1, "", "");
+                }}
+                className="h-8 text-xs text-muted-foreground"
+              >
+                Clear
+              </Button>
+            )}
+          </div>
+
+          {/* Table */}
+          <div className="rounded-xl border border-border/50 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-secondary/50 border-border/50 hover:bg-secondary/50">
+                  <TableHead className="text-xs font-bold uppercase tracking-widest text-muted-foreground w-[140px]">Time</TableHead>
+                  <TableHead className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Admin</TableHead>
+                  <TableHead className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Action</TableHead>
+                  <TableHead className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Target</TableHead>
+                  <TableHead className="text-xs font-bold uppercase tracking-widest text-muted-foreground hidden lg:table-cell">Note</TableHead>
+                  <TableHead className="text-xs font-bold uppercase tracking-widest text-muted-foreground hidden xl:table-cell">IP</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {auditLogsLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-12">
+                      <RefreshCw className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
+                    </TableCell>
+                  </TableRow>
+                ) : auditLogs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground text-sm">
+                      {auditLogsSearch || auditLogsTargetType ? "No audit logs match your filters." : "No audit logs yet."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  auditLogs.map((log: any) => {
+                    const targetTypeColor: Record<string, string> = {
+                      user: "bg-blue-500/15 text-blue-400 border-blue-500/25",
+                      transaction: "bg-green-500/15 text-green-400 border-green-500/25",
+                      tournament: "bg-amber-500/15 text-amber-400 border-amber-500/25",
+                      platform: "bg-violet-500/15 text-violet-400 border-violet-500/25",
+                      system: "bg-rose-500/15 text-rose-400 border-rose-500/25",
+                    };
+                    const colorClass = targetTypeColor[log.targetType] ?? "bg-secondary text-muted-foreground border-border/40";
+                    return (
+                      <TableRow key={log.id} className="border-border/30 hover:bg-secondary/20 transition-colors">
+                        <TableCell className="text-xs text-muted-foreground font-mono whitespace-nowrap">
+                          {new Date(log.createdAt).toLocaleString("en-US", {
+                            month: "short", day: "numeric",
+                            hour: "2-digit", minute: "2-digit", second: "2-digit",
+                            hour12: false,
+                          })}
+                        </TableCell>
+                        <TableCell className="text-sm font-medium">
+                          <span className="font-mono text-xs bg-secondary px-1.5 py-0.5 rounded">
+                            {log.adminUsername}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-sm font-mono max-w-[220px] truncate" title={log.action}>
+                          {log.action}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${colorClass}`}>
+                              {log.targetType}
+                            </span>
+                            {log.targetId != null && (
+                              <span className="text-xs text-muted-foreground font-mono">#{log.targetId}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate hidden lg:table-cell" title={log.note ?? ""}>
+                          {log.note || "—"}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono text-muted-foreground hidden xl:table-cell">
+                          {log.ip || "—"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Pagination */}
+          {auditLogsTotal > AUDIT_LOGS_PER_PAGE && (
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <p className="text-xs text-muted-foreground">
+                Showing {((auditLogsPage - 1) * AUDIT_LOGS_PER_PAGE) + 1}–{Math.min(auditLogsPage * AUDIT_LOGS_PER_PAGE, auditLogsTotal)} of {auditLogsTotal.toLocaleString()} entries
+              </p>
+              <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => loadAuditLogs(auditLogsPage - 1, auditLogsSearch, auditLogsTargetType)}
+                  disabled={auditLogsPage <= 1 || auditLogsLoading}
+                  className="h-7 w-7 p-0"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </Button>
+                {Array.from({ length: Math.min(7, Math.ceil(auditLogsTotal / AUDIT_LOGS_PER_PAGE)) }, (_, i) => {
+                  const totalPages = Math.ceil(auditLogsTotal / AUDIT_LOGS_PER_PAGE);
+                  let page: number;
+                  if (totalPages <= 7) {
+                    page = i + 1;
+                  } else if (auditLogsPage <= 4) {
+                    page = i + 1;
+                  } else if (auditLogsPage >= totalPages - 3) {
+                    page = totalPages - 6 + i;
+                  } else {
+                    page = auditLogsPage - 3 + i;
+                  }
+                  return (
+                    <Button
+                      key={page}
+                      size="sm"
+                      variant={auditLogsPage === page ? "default" : "outline"}
+                      onClick={() => loadAuditLogs(page, auditLogsSearch, auditLogsTargetType)}
+                      disabled={auditLogsLoading}
+                      className="h-7 w-7 p-0 text-xs font-mono"
+                    >
+                      {page}
+                    </Button>
+                  );
+                })}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => loadAuditLogs(auditLogsPage + 1, auditLogsSearch, auditLogsTargetType)}
+                  disabled={auditLogsPage >= Math.ceil(auditLogsTotal / AUDIT_LOGS_PER_PAGE) || auditLogsLoading}
+                  className="h-7 w-7 p-0"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Delete Confirm Dialog ── */}
       <Dialog open={!!confirmDelete} onOpenChange={() => setConfirmDelete(null)}>
