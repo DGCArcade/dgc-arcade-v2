@@ -35,6 +35,8 @@ app.use(
   }),
 );
 const ALLOWED_ORIGINS = [
+  "https://differentgrindcrew.com",
+  "https://www.differentgrindcrew.com",
   "https://dgcarcade.io",
   "https://www.dgcarcade.io",
   "https://dgc-arcade-frontend-cb8i.onrender.com",
