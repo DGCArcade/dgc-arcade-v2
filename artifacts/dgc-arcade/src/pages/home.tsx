@@ -166,24 +166,24 @@ export default function Home() {
         <LiveJackpotBanner />
       </section>
       {/* ── Hero ─────────────────────────────────────────────────── */}
-      <section className="relative rounded-2xl overflow-hidden border border-border/40 min-h-[440px] flex items-center bg-secondary/30">
+      <section className="relative rounded-2xl overflow-hidden border border-border/20 min-h-[440px] flex items-center bg-secondary/10">
         <div
-          className="absolute inset-0 opacity-60"
+          className="absolute inset-0 opacity-40"
           style={{
             background:
-              "radial-gradient(circle at 82% 18%, var(--theme-glow-strong, rgba(255,215,0,0.28)), transparent 55%), radial-gradient(circle at 15% 85%, var(--theme-glow, rgba(255,215,0,0.10)), transparent 50%)",
+              "radial-gradient(circle at 82% 18%, var(--theme-glow-strong, rgba(255,215,0,0.18)), transparent 55%), radial-gradient(circle at 15% 85%, var(--theme-glow, rgba(255,215,0,0.07)), transparent 50%)",
           }}
         />
         <div
-          className="absolute inset-0 opacity-[0.05] pointer-events-none"
+          className="absolute inset-0 opacity-[0.03] pointer-events-none"
           style={{
             backgroundImage:
               "linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)",
             backgroundSize: "44px 44px",
           }}
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-background/30" />
-        <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-background/60 via-background/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background/30 via-transparent to-transparent" />
 
         <div className="relative z-10 px-6 md:px-16 py-16 w-full flex flex-col items-center text-center">
           <div className="max-w-2xl w-full flex flex-col items-center">
@@ -200,7 +200,8 @@ export default function Home() {
             <span className="text-glow-shift">Always Win</span>
           </h1>
           <p className="text-base sm:text-lg md:text-xl text-muted-foreground mb-10 max-w-lg mx-auto leading-relaxed">
-            High-stakes crypto gaming. Provably fair · Instant payouts · No BS.
+            High-stakes crypto gaming.<br />
+            Provably fair · Instant payouts · No BS.
           </p>
 
           <div className="flex flex-wrap gap-4 justify-center">
