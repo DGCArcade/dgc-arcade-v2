@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable, creatorMessagesTable, creatorMessageReadsTable, fraudReviewsTable, referralsTable, userBalancesTable, creatorBankTxnsTable, slotThemesTable, adminAuditLogsTable } from "@workspace/db";
+import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable, creatorMessagesTable, creatorMessageReadsTable, fraudReviewsTable, referralsTable, userBalancesTable, creatorBankTxnsTable, slotThemesTable, adminAuditLogsTable, deviceHistoryTable } from "@workspace/db";
 import { eq, desc, ilike, and, sql, count, or, gt, ne } from "drizzle-orm";
 // Using native fetch available in Node.js 18+
 import { requireAdmin } from "../middlewares/auth.js";
