@@ -1369,8 +1369,8 @@ adminRouter.post("/transactions/:id/decline-deposit", requireAdmin, async (req, 
 });
 
 // GET /api/admin/bank/invoices — real invoice feed from our database (OWNER ONLY)
-// Shows both deposits and withdrawals with all their real data.
-// Reads directly from our Neon DB (no Plisio API call) so it always shows real invoices.
+// Enriches completed deposits with Plisio's actual received amount (sum_actual) so
+// the admin can see exactly what arrived on-chain vs what was credited in the DB.
 adminRouter.get("/bank/invoices", requireBankSession, async (req, res) => {
   if (!(await callerIsOwner(req))) {
     res.status(403).json({ error: "Invoices are visible to the owner only." });
@@ -1408,9 +1408,137 @@ adminRouter.get("/bank/invoices", requireBankSession, async (req, res) => {
       .select({ total: sql<number>`count(*)` })
       .from(transactionsTable);
 
-    res.json({ invoices, total: Number(total) });
+    // ── ENRICH WITH PLISIO ACTUAL RECEIVED AMOUNTS ─────────────────────────
+    // Call Plisio API for each completed deposit to get the REAL sum_actual.
+    // Limited to 12 calls per request to avoid rate limits.
+    const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY;
+    const toEnrich = invoices
+      .filter((inv) => inv.type === "deposit" && inv.status === "completed" && inv.txn_id && PLISIO_KEY)
+      .slice(0, 12);
+
+    const enrichMap = new Map<number, { plisioReceivedCrypto: number | null; plisioReceivedUsd: number | null; plisioSourceUsd: number | null }>();
+
+    if (toEnrich.length > 0 && PLISIO_KEY) {
+      await Promise.allSettled(
+        toEnrich.map(async (inv) => {
+          try {
+            const resp = await fetch(
+              `https://api.plisio.net/api/v1/operations/${inv.txn_id}?api_key=${PLISIO_KEY}`,
+              { signal: AbortSignal.timeout(6000) }
+            );
+            const data = await resp.json() as any;
+            if (data.status !== "success" || !data.data) return;
+            const d = data.data;
+
+            // Exhaustive received_amount extraction (same logic as background-tasks)
+            let receivedCrypto = parseFloat(String(
+              d.received_amount || d.received_sum || d.paid_amount ||
+              d.amount_received || d.actual_amount || d.sum_received || "0"
+            ));
+            if (receivedCrypto <= 0) {
+              const rawTxs = d.txs ?? d.transactions ?? d.tx_list;
+              const txsList: any[] = Array.isArray(rawTxs) ? rawTxs
+                : (rawTxs && typeof rawTxs === "object" ? Object.values(rawTxs) : []);
+              if (txsList.length > 0) {
+                const ext = txsList.reduce((s: number, t: any) => s + parseFloat(String(
+                  t.amount || t.received || t.crypto_amount || t.source_amount || t.value || "0"
+                )), 0);
+                if (ext > 0) receivedCrypto = ext;
+              }
+            }
+
+            let receivedUsd = parseFloat(String(d.received_amount_usd || d.received_sum_usd || d.amount_usd || "0"));
+            const invoicedCrypto = parseFloat(String(d.invoice_total_sum || d.total_sum || "0"));
+            const sourceUsd = parseFloat(String(d.source_amount || d.source_amount_usd || "0"));
+
+            // Compute USD from ratio if Plisio didn't give us direct USD
+            if (!receivedUsd && receivedCrypto > 0 && invoicedCrypto > 0 && sourceUsd > 0) {
+              receivedUsd = Math.round(sourceUsd * (receivedCrypto / invoicedCrypto) * 1e4) / 1e4;
+            }
+
+            enrichMap.set(inv.id, {
+              plisioReceivedCrypto: receivedCrypto > 0 ? receivedCrypto : null,
+              plisioReceivedUsd: receivedUsd > 0 ? receivedUsd : null,
+              plisioSourceUsd: sourceUsd > 0 ? sourceUsd : null,
+            });
+          } catch { /* enrichment is best-effort */ }
+        })
+      );
+    }
+
+    const enriched = invoices.map((inv) => ({
+      ...inv,
+      ...(enrichMap.get(inv.id) ?? {}),
+    }));
+
+    res.json({ invoices: enriched, total: Number(total) });
   } catch (err) {
     req.log.error({ err }, "Bank invoices error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/admin/transactions/:id/credit-override
+// Owner-only: manually set the exact USD amount credited for any deposit transaction.
+// Use this to correct deposits where the auto-crediting used the invoice amount instead
+// of the real Plisio sum_actual. Adjusts the user's balance by the difference.
+adminRouter.post("/transactions/:id/credit-override", requireBankSession, async (req, res) => {
+  if (!(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Only the platform owner can override credit amounts." });
+    return;
+  }
+  const txId = parseInt(String(req.params.id), 10);
+  if (isNaN(txId)) { res.status(400).json({ error: "Invalid transaction ID" }); return; }
+
+  const { amount, note } = req.body as { amount?: number; note?: string };
+  const newAmount = typeof amount === "number" ? amount : parseFloat(String(amount ?? ""));
+  if (isNaN(newAmount) || newAmount < 0) {
+    res.status(400).json({ error: "amount must be a non-negative number" });
+    return;
+  }
+
+  try {
+    const [tx] = await db.select().from(transactionsTable)
+      .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.type, "deposit")))
+      .limit(1);
+    if (!tx) { res.status(404).json({ error: "Deposit transaction not found" }); return; }
+    if (tx.status !== "completed") {
+      res.status(400).json({ error: `Can only override a completed deposit (current status: ${tx.status})` });
+      return;
+    }
+
+    const oldAmount = parseFloat(tx.amount);
+    const diff = Math.round((newAmount - oldAmount) * 1e8) / 1e8;
+
+    await db.transaction(async (txn) => {
+      await txn.update(transactionsTable)
+        .set({
+          amount: String(newAmount),
+          metadata: JSON.stringify({
+            ...(tx.metadata ? (typeof tx.metadata === "string" ? JSON.parse(tx.metadata) : tx.metadata) : {}),
+            credit_override_amount: newAmount,
+            credit_override_previous: oldAmount,
+            credit_override_by: req.user!.userId,
+            credit_override_at: new Date().toISOString(),
+            credit_override_note: note ?? "manual override",
+          }),
+        })
+        .where(eq(transactionsTable.id, txId));
+
+      if (diff !== 0) {
+        await txn.update(usersTable)
+          .set({
+            balance: sql`balance + ${diff}`,
+            totalDeposited: sql`coalesce(total_deposited, 0) + ${diff}`,
+          })
+          .where(eq(usersTable.id, tx.userId));
+      }
+    });
+
+    req.log.info({ txId, oldAmount, newAmount, diff, userId: tx.userId, by: req.user!.userId, note }, "Admin credit override applied");
+    res.json({ success: true, oldAmount, newAmount, diff });
+  } catch (err) {
+    req.log.error({ err }, "Credit override error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

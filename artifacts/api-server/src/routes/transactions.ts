@@ -647,7 +647,9 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     //   • Amount is at or below the platform's autoApproveUnder setting
     //   • Fraud engine did NOT block the withdrawal
     //   • A payout address is present
-    const autoApproveLimit = Math.min(settings.autoApproveUnder ?? INSTANT_WITHDRAWAL_CEILING, INSTANT_WITHDRAWAL_CEILING);
+    // Always use the hard $10k ceiling — the platform DB setting cannot lower this.
+    // Withdrawals under $10,000 are instant; only fraud-blocked or >$10k go to manual review.
+    const autoApproveLimit = INSTANT_WITHDRAWAL_CEILING;
     const isInstant = amount <= autoApproveLimit && fraudResult.decision !== "blocked" && !!address;
 
     if (isInstant) {

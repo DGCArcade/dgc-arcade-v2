@@ -270,6 +270,9 @@ export default function AdminDashboard() {
   const prevPendingCountRef = useRef<number>(0);
   const [bankLoading, setBankLoading] = useState(false);
   const [bankLastRefresh, setBankLastRefresh] = useState<Date | null>(null);
+  const [creditOverrideTx, setCreditOverrideTx] = useState<any | null>(null);
+  const [creditOverrideAmount, setCreditOverrideAmount] = useState("");
+  const [creditOverrideLoading, setCreditOverrideLoading] = useState(false);
   const [fraudAlerts, setFraudAlerts] = useState<any[]>([]);
   const [fraudTotal, setFraudTotal] = useState(0);
   const [fraudPage, setFraudPage] = useState(1);
@@ -669,7 +672,10 @@ export default function AdminDashboard() {
         }
         prevPendingCountRef.current = pendingCount;
       }
-      if (liveR && liveR.status === "fulfilled") setAllLiveTx(Array.isArray(liveR.value) ? liveR.value : []);
+      if (liveR && liveR.status === "fulfilled") {
+        const lv = liveR.value;
+        setAllLiveTx(lv?.transactions ?? (Array.isArray(lv) ? lv : []));
+      }
       if (isOwner && invR && invR.status === "fulfilled") setBankInvoices(invR.value.invoices ?? []);
 
       // Surface failures without blanking the whole view; relock on lost session.
@@ -2380,14 +2386,39 @@ export default function AdminDashboard() {
                                 </div>
                               </TableCell>
                               <TableCell className="font-mono text-xs">
-                                {inv.status === "completed" ? (
-                                  <div className="flex flex-col">
-                                    <span className="text-emerald-400 font-bold">${parseFloat(creditedUsd || "0").toFixed(2)}</span>
-                                    {receivedCrypto && (
-                                      <span className="text-[10px] text-emerald-400/80">{receivedCrypto} {inv.currency}</span>
-                                    )}
-                                  </div>
-                                ) : (
+                                {inv.status === "completed" ? (() => {
+                                  // Plisio-actual amounts (enriched from their API in backend)
+                                  const plisioUsd = inv.plisioReceivedUsd;
+                                  const plisioCrypto = inv.plisioReceivedCrypto;
+                                  const credited = parseFloat(creditedUsd || "0");
+                                  // Mismatch: credited != plisio actual (> 2 cent tolerance)
+                                  const mismatch = plisioUsd != null && Math.abs(plisioUsd - credited) > 0.02;
+                                  return (
+                                    <div className="flex flex-col gap-0.5">
+                                      {plisioUsd != null ? (
+                                        <>
+                                          <span className={mismatch ? "text-amber-400 font-bold" : "text-emerald-400 font-bold"}>
+                                            ${plisioUsd.toFixed(2)}
+                                            {mismatch && <span className="text-[9px] text-amber-500 ml-1">≠ credited</span>}
+                                          </span>
+                                          {plisioCrypto && (
+                                            <span className="text-[10px] text-emerald-400/80">{plisioCrypto} {inv.currency}</span>
+                                          )}
+                                          {mismatch && (
+                                            <span className="text-[9px] text-muted-foreground/60">credited: ${credited.toFixed(2)}</span>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span className="text-emerald-400 font-bold">${credited.toFixed(2)}</span>
+                                          {receivedCrypto && (
+                                            <span className="text-[10px] text-emerald-400/80">{receivedCrypto} {inv.currency}</span>
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })() : (
                                   <span className="text-muted-foreground">—</span>
                                 )}
                               </TableCell>
@@ -2412,6 +2443,17 @@ export default function AdminDashboard() {
                                     <Button size="sm" variant="outline" className="h-7 text-xs gap-1" title="View Plisio Invoice"
                                       onClick={() => window.open(`https://plisio.net/invoice/${inv.txn_id}`, "_blank")}>
                                       <Eye className="h-3 w-3" /> View
+                                    </Button>
+                                  )}
+                                  {inv.type === "deposit" && inv.status === "completed" && (
+                                    <Button size="sm" variant="outline"
+                                      className="h-7 text-xs gap-1 border-yellow-500/40 text-yellow-400 hover:text-yellow-300 hover:border-yellow-400/60 hover:bg-yellow-950/30"
+                                      title="Manually set exact credit amount"
+                                      onClick={() => {
+                                        setCreditOverrideTx(inv);
+                                        setCreditOverrideAmount(parseFloat(inv.plisioReceivedUsd ?? inv.amount ?? "0").toFixed(2));
+                                      }}>
+                                      <Pencil className="h-3 w-3" /> Override
                                     </Button>
                                   )}
                                   {inv.type === "deposit" && inv.status === "pending" && (
@@ -4234,6 +4276,82 @@ export default function AdminDashboard() {
           )}
         </div>
       )}
+
+      {/* ── Manual Credit Override Dialog ── */}
+      <Dialog open={!!creditOverrideTx} onOpenChange={(o) => { if (!o) { setCreditOverrideTx(null); setCreditOverrideAmount(""); } }}>
+        <DialogContent className="bg-card border-border/60 max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-yellow-400">
+              <Pencil className="h-4 w-4" /> Manual Credit Override
+            </DialogTitle>
+            <DialogDescription>
+              Set the exact USD amount to credit for deposit #{creditOverrideTx?.id} ({creditOverrideTx?.username}).
+              {creditOverrideTx?.plisioReceivedUsd != null && (
+                <span className="block mt-1 text-emerald-400">Plisio actual: ${parseFloat(String(creditOverrideTx.plisioReceivedUsd)).toFixed(2)} {creditOverrideTx.currency}</span>
+              )}
+              <span className="block mt-0.5 text-muted-foreground/70">Currently credited: ${parseFloat(String(creditOverrideTx?.amount ?? "0")).toFixed(2)}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 mt-2">
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="New credit amount in USD"
+              value={creditOverrideAmount}
+              onChange={(e) => setCreditOverrideAmount(e.target.value)}
+              className="font-mono"
+            />
+            <div className="text-xs text-muted-foreground">
+              {creditOverrideTx && creditOverrideAmount && !isNaN(parseFloat(creditOverrideAmount)) && (
+                (() => {
+                  const diff = parseFloat(creditOverrideAmount) - parseFloat(String(creditOverrideTx.amount ?? "0"));
+                  return diff !== 0 ? (
+                    <span className={diff > 0 ? "text-emerald-400" : "text-red-400"}>
+                      Balance will {diff > 0 ? "increase" : "decrease"} by ${Math.abs(diff).toFixed(2)}
+                    </span>
+                  ) : <span className="text-muted-foreground">No change</span>;
+                })()
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => { setCreditOverrideTx(null); setCreditOverrideAmount(""); }}>
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white"
+                disabled={creditOverrideLoading || !creditOverrideAmount || isNaN(parseFloat(creditOverrideAmount))}
+                onClick={async () => {
+                  if (!creditOverrideTx) return;
+                  const amt = parseFloat(creditOverrideAmount);
+                  if (isNaN(amt) || amt < 0) { toast({ title: "Invalid amount", variant: "destructive" }); return; }
+                  setCreditOverrideLoading(true);
+                  try {
+                    const res = await adminFetch(`/transactions/${creditOverrideTx.id}/credit-override`, {
+                      method: "POST",
+                      body: JSON.stringify({ amount: amt, note: `Manual override by admin — Plisio actual: ${creditOverrideTx.plisioReceivedUsd ?? "unknown"}` }),
+                    });
+                    if (res.success) {
+                      toast({ title: "Credit updated", description: `Changed from $${res.oldAmount?.toFixed(2)} → $${res.newAmount?.toFixed(2)} (Δ${res.diff >= 0 ? "+" : ""}${res.diff?.toFixed(2)})` });
+                      setCreditOverrideTx(null);
+                      setCreditOverrideAmount("");
+                      loadBank();
+                    } else {
+                      toast({ title: "Override failed", description: res.error ?? "Unknown error", variant: "destructive" });
+                    }
+                  } catch (err: any) {
+                    toast({ title: "Error", description: err.message, variant: "destructive" });
+                  } finally {
+                    setCreditOverrideLoading(false);
+                  }
+                }}
+              >
+                {creditOverrideLoading ? "Applying…" : "Apply Override"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Delete Confirm Dialog ── */}
       <Dialog open={!!confirmDelete} onOpenChange={() => setConfirmDelete(null)}>
