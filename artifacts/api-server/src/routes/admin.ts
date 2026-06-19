@@ -1676,7 +1676,7 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
     }
 
     await db.transaction(async (txn) => {
-      await txn.update(transactionsTable)
+      const flipped = await txn.update(transactionsTable)
         .set({ 
           status: "completed", 
           amount: String(creditAmount),
@@ -1691,7 +1691,11 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
             smart_synced_at: new Date().toISOString()
           })
         })
-        .where(eq(transactionsTable.id, tx.id));
+        .where(and(eq(transactionsTable.id, tx.id), ne(transactionsTable.status, "completed")))
+        .returning({ id: transactionsTable.id });
+
+      // Race condition guard: if another request already completed this tx, bail out
+      if (flipped.length === 0) return;
 
       const cryptoCurrency = tx.currency || data.data.currency || "ETH";
       

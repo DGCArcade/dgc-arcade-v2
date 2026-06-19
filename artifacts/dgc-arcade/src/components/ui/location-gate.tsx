@@ -351,7 +351,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
         <Button onClick={handleRetry} variant="outline" className="gap-2 font-bold">
           <MapPin className="w-4 h-4" /> Try Again
         </Button>
-        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@differentgrindcrew.com</strong></p>
+        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@dgcarcade.io</strong></p>
       </div>
     );
   }
@@ -369,7 +369,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             DGC Arcade is not available in {geoData?.country_name ?? "your region"} due to local gambling regulations. We apologize for the inconvenience.
           </p>
         </div>
-        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@differentgrindcrew.com</strong></p>
+        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@dgcarcade.io</strong></p>
       </div>
     );
   }
@@ -387,7 +387,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             DGC Arcade is not currently available in {geoData?.region ?? "your state"} due to local gambling regulations.
           </p>
         </div>
-        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@differentgrindcrew.com</strong></p>
+        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@dgcarcade.io</strong></p>
       </div>
     );
   }
@@ -414,7 +414,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center font-display font-black text-primary-foreground text-xl">D</div>
             <span className="font-display font-bold text-2xl uppercase tracking-widest">DGC Arcade</span>
           </div>
-          <p className="text-muted-foreground text-sm">Different Grind Crew</p>
+          <p className="text-muted-foreground text-sm">DGC Arcade Ltd.</p>
         </div>
 
         {/* Consent card */}
@@ -491,7 +491,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
         </div>
 
         <p className="text-center text-xs text-muted-foreground/50 mt-4">
-          Operated by Medium Rare N.V. · Curaçao Gaming License No. 8048/JAZ
+          Operated by DGC Arcade Ltd. · Curaçao Gaming License No. 8048/JAZ
         </p>
       </div>
     </div>

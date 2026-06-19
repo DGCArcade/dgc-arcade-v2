@@ -190,7 +190,7 @@ export default function Home() {
           <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
             <div className="inline-flex items-center gap-2 bg-primary/10 border border-primary/30 rounded-full px-4 py-1.5">
               <span className="live-dot w-2 h-2 rounded-full bg-green-400 block" />
-              <span className="text-xs font-bold uppercase tracking-widest text-glow-shift">Live • Different Grind Crew</span>
+              <span className="text-xs font-bold uppercase tracking-widest text-glow-shift">Live • DGC Arcade</span>
             </div>
             <LiveOnlineCount />
           </div>
@@ -200,8 +200,7 @@ export default function Home() {
             <span className="text-glow-shift">Always Win</span>
           </h1>
           <p className="text-base sm:text-lg md:text-xl text-muted-foreground mb-10 max-w-lg mx-auto leading-relaxed">
-            High-stakes crypto gaming built for the Different Grind Crew.
-            Provably fair · Instant payouts · No BS.
+            High-stakes crypto gaming. Provably fair · Instant payouts · No BS.
           </p>
 
           <div className="flex flex-wrap gap-4 justify-center">

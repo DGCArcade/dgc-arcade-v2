@@ -30,7 +30,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                     <span className="font-display font-bold text-lg uppercase tracking-widest">DGC Arcade</span>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    High-stakes crypto gaming built for the Different Grind Crew. Provably fair. Instant payouts.
+                    High-stakes crypto gaming. Provably fair. Instant payouts.
                   </p>
                   <div className="mt-3 flex items-center gap-2">
                     <span className="text-xs bg-green-500/10 border border-green-500/30 text-green-400 px-2 py-0.5 rounded-full font-medium">18+</span>
@@ -69,14 +69,12 @@ export function AppLayout({ children }: AppLayoutProps) {
 
               <div className="border-t border-border/30 pt-6 space-y-3">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground/70">
-                  <span>🎰 Operated by <strong className="text-muted-foreground">Medium Rare N.V.</strong></span>
-                  <span>·</span>
-                  <span>Abraham de Veerstraat 9, Willemstad, Curaçao</span>
+                  <span>🎰 Operated by <strong className="text-muted-foreground">DGC Arcade Ltd.</strong></span>
                   <span>·</span>
                   <span>Curaçao Gaming License <strong className="text-muted-foreground">No. 8048/JAZ</strong></span>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground/50">
-                  <span>© {new Date().getFullYear()} DGC Arcade — DifferentGrindCrw.com</span>
+                  <span>© {new Date().getFullYear()} DGC Arcade — DGCArcade.io</span>
                   <span>·</span>
                   <span>All games use provably fair algorithms</span>
                   <span>·</span>

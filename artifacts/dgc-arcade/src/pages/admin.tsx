@@ -2283,7 +2283,7 @@ export default function AdminDashboard() {
                         }
                       } catch (err) {
                         console.error("Reconciliation error:", err);
-                        alert("Reconciliation failed. The server might still be processing. Please wait a moment and refresh.");
+                        alert(`Reconciliation failed: ${err instanceof Error ? err.message : String(err)}`);
                       }
                     }}
                   >
@@ -2386,7 +2386,7 @@ export default function AdminDashboard() {
                                               alert(`${res.message || "Sync issue"}\n\nRaw Plisio Status: ${res.plisioData?.status || 'Unknown'}\nReceived: ${res.plisioData?.received_amount || '0'}`);
                                             }
                                           } catch (err) {
-                                            alert("Sync failed.");
+                                            alert(`Sync failed: ${err instanceof Error ? err.message : String(err)}`);
                                           }
                                         }}>
                                         Smart Sync
@@ -2407,7 +2407,7 @@ export default function AdminDashboard() {
                                               alert(`Error: ${res.message || "Unknown error"}`);
                                             }
                                           } catch (err) {
-                                            alert("Force complete failed.");
+                                            alert(`Force complete failed: ${err instanceof Error ? err.message : String(err)}`);
                                           }
                                         }}>
                                         Smart Force

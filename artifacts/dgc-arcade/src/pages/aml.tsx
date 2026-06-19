@@ -22,7 +22,7 @@ export default function AmlPage() {
 
         <section>
           <h2 className="text-lg font-bold text-foreground mb-3">1. Overview</h2>
-          <p>Medium Rare N.V., operating DGC Arcade under Curaçao Gaming License No. 8048/JAZ, maintains strict Anti-Money Laundering (AML) and Know Your Customer (KYC) policies in compliance with applicable international regulations. We are committed to preventing the use of our Platform for money laundering, terrorist financing, or any other illegal financial activity.</p>
+          <p>DGC Arcade Ltd., operating DGC Arcade under Curaçao Gaming License No. 8048/JAZ, maintains strict Anti-Money Laundering (AML) and Know Your Customer (KYC) policies in compliance with applicable international regulations. We are committed to preventing the use of our Platform for money laundering, terrorist financing, or any other illegal financial activity.</p>
         </section>
 
         <section>
