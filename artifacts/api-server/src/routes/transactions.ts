@@ -304,44 +304,102 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
 
     // ── ACTUAL RECEIVED AMOUNT ─────────────────────────────────────────────
     // received_amount = the real crypto that arrived in our wallet (after network fees).
-    // This is ALWAYS less than or equal to invoice_total_sum (sum expected).
-    // We NEVER credit the invoice amount — only what was actually received.
+    // We NEVER credit the invoice/source amount — only what was actually received.
     const cryptoCurrency = tx.currency || pCurrency || "ETH";
     const cryptoAmountReceived = parseFloat(String(received_amount || "0"));
     const cryptoAmountInvoiced = parseFloat(String(invoice_total_sum || "0"));
-
-    // USD valuation at time of deposit
     const receivedUsdValue = parseFloat(String(received_amount_usd || "0"));
     const sourceUsd = parseFloat(String(source_amount_usd || source_amount || tx.amount));
 
+    // ── STRUCTURED ENTRY LOG ──────────────────────────────────────────────
+    // Full audit trail before any crediting decision is made.
+    req.log.info({
+      event: "plisio_ipn_received",
+      txn_id,
+      tx_db_id: tx.id,
+      user_id: tx.userId,
+      ipn_status: pStatus,
+      currency: cryptoCurrency,
+      invoice_amount_crypto: cryptoAmountInvoiced,
+      received_amount_crypto: cryptoAmountReceived,
+      received_amount_usd: receivedUsdValue,
+      requested_amount_usd: sourceUsd,
+      wallet_address: tx.address ?? null,
+    }, "Plisio IPN: crediting decision start");
+
     // ── STRICT GUARD: require real received data from Plisio ────────────────
-    // If neither received_amount nor received_amount_usd is present, we cannot
-    // determine how much actually arrived. Log and return success so Plisio
-    // doesn't retry, but do NOT credit anything — the sync task will handle it
-    // once Plisio populates the received_amount field.
+    // If neither received_amount nor received_amount_usd is present we cannot
+    // determine how much actually arrived. Return 200 so Plisio doesn't retry;
+    // the background sync will pick it up once Plisio populates the field.
     if (cryptoAmountReceived <= 0 && receivedUsdValue <= 0) {
-      req.log.warn(
-        { txn_id, pStatus, received_amount, received_amount_usd },
-        "Plisio IPN: no received_amount data — skipping credit, will be picked up by sync"
-      );
+      req.log.warn({
+        event: "plisio_ipn_no_received_amount",
+        txn_id,
+        tx_db_id: tx.id,
+        user_id: tx.userId,
+        ipn_status: pStatus,
+        received_amount,
+        received_amount_usd,
+      }, "Plisio IPN: no received_amount data — skipping credit, sync will handle it");
       res.json({ success: true });
       return;
     }
 
     // ── CALCULATE USD CREDIT AMOUNT ─────────────────────────────────────────
-    // Priority: direct USD value from Plisio > ratio of received/invoiced > fallback
+    // Priority 1: Plisio gives us received_amount_usd directly.
+    // Priority 2: We have both received and invoiced crypto amounts → use ratio.
+    // Priority 3: We have received crypto but no invoiced amount → price-lookup.
+    //             NEVER fall back to sourceUsd (invoice amount) — that would credit
+    //             the full invoice value even when only a fraction was paid.
     let creditAmountUsd: number;
+    let exchangeRate: number | null = null;
+    let creditCalcMethod: string;
+
     if (receivedUsdValue > 0) {
-      // Best case: Plisio tells us exactly how much USD was received
       creditAmountUsd = Math.round(receivedUsdValue * 1e8) / 1e8;
+      creditCalcMethod = "plisio_usd_direct";
+      if (cryptoAmountReceived > 0) {
+        exchangeRate = Math.round((receivedUsdValue / cryptoAmountReceived) * 1e8) / 1e8;
+      }
     } else if (cryptoAmountReceived > 0 && cryptoAmountInvoiced > 0 && sourceUsd > 0) {
-      // Calculate the proportion of the invoice that was actually received
       const ratio = cryptoAmountReceived / cryptoAmountInvoiced;
       creditAmountUsd = Math.round(sourceUsd * ratio * 1e8) / 1e8;
+      creditCalcMethod = "ratio_received_over_invoiced";
+      exchangeRate = cryptoAmountReceived > 0 ? Math.round((creditAmountUsd / cryptoAmountReceived) * 1e8) / 1e8 : null;
     } else {
-      // cryptoAmountReceived > 0 but no invoiced amount to ratio against.
-      // Use source USD as a safe fallback since we confirmed crypto arrived.
-      creditAmountUsd = sourceUsd;
+      // cryptoAmountReceived > 0 but invoice_total_sum was not provided.
+      // Look up live price to convert the real received crypto → USD.
+      // NEVER use sourceUsd here — that is the original invoice amount and would
+      // over-credit the user if they only paid a fraction of it.
+      const livePrice = await getCryptoPrice(cryptoCurrency);
+      creditAmountUsd = Math.round(cryptoAmountReceived * livePrice * 1e8) / 1e8;
+      exchangeRate = livePrice;
+      creditCalcMethod = "live_price_lookup";
+
+      req.log.warn({
+        event: "plisio_ipn_no_invoice_total",
+        txn_id,
+        tx_db_id: tx.id,
+        user_id: tx.userId,
+        cryptoCurrency,
+        cryptoAmountReceived,
+        livePrice,
+        creditAmountUsd,
+        requested_amount_usd: sourceUsd,
+      }, "Plisio IPN: invoice_total_sum missing — used live price lookup (NOT invoice amount)");
+    }
+
+    // ── OVERPAYMENT WARNING ───────────────────────────────────────────────
+    if (sourceUsd > 0 && creditAmountUsd > sourceUsd * 1.05) {
+      req.log.warn({
+        event: "plisio_ipn_overpayment",
+        txn_id,
+        tx_db_id: tx.id,
+        user_id: tx.userId,
+        requested_amount_usd: sourceUsd,
+        credit_amount_usd: creditAmountUsd,
+        overpaid_by_usd: creditAmountUsd - sourceUsd,
+      }, "Plisio IPN: overpayment detected — crediting actual received amount");
     }
 
     await db.transaction(async (txn) => {
@@ -349,13 +407,18 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
         .update(transactionsTable)
         .set({ 
           status: "completed", 
-          amount: String(creditAmountUsd), // Track the USD value at time of deposit
+          amount: String(creditAmountUsd),
           metadata: JSON.stringify({
-            received_amount: String(cryptoAmountReceived),
-            invoice_total_sum: String(cryptoAmountInvoiced),
-            source_amount_usd: String(sourceUsd),
-            received_amount_usd: String(receivedUsdValue),
+            invoice_amount_crypto: cryptoAmountInvoiced,
+            received_amount_crypto: cryptoAmountReceived,
+            received_amount_usd: receivedUsdValue,
+            requested_amount_usd: sourceUsd,
             credit_amount_usd: creditAmountUsd,
+            exchange_rate: exchangeRate,
+            credit_calc_method: creditCalcMethod,
+            currency: cryptoCurrency,
+            wallet_address: tx.address ?? null,
+            txn_id,
             paid_at: new Date().toISOString(),
             ipn_status: pStatus,
           })
@@ -365,32 +428,38 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
 
       if (flipped.length === 0) return;
 
-      // 1. Credit Crypto-Native Balance (this makes it LIVE)
-      // Always credit the actual received crypto amount — never the invoice amount.
+      // 1. Credit Crypto-Native Balance — always the actual received crypto, never invoice.
       if (cryptoAmountReceived > 0) {
         await creditCryptoBalance(tx.userId, cryptoCurrency, cryptoAmountReceived, txn);
       } else {
-        // receivedUsdValue > 0 but no crypto amount — credit static USD balance
+        // receivedUsdValue > 0 but no crypto amount — credit static USD balance only
         await txn.update(usersTable).set({ balance: sql`balance + ${creditAmountUsd}` }).where(eq(usersTable.id, tx.userId));
       }
 
-      // 2. Update Stats (totalDeposited and wagerRequirement)
+      // 2. Update Stats
       await txn.update(usersTable).set({
         totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmountUsd}`,
         wagerRequirement: sql`coalesce(wager_requirement, 0) + ${creditAmountUsd * WAGER_MULTIPLIER}`,
       }).where(eq(usersTable.id, tx.userId));
 
-      // 3. Record Ledger
+      // 3. Fetch real pre-credit balance for accurate ledger entry
+      const [preBalance] = await txn
+        .select({ balance: usersTable.balance })
+        .from(usersTable)
+        .where(eq(usersTable.id, tx.userId))
+        .limit(1);
+      const balanceBefore = preBalance ? parseFloat(preBalance.balance) - (cryptoAmountReceived > 0 ? 0 : creditAmountUsd) : 0;
+
+      // 4. Record Ledger
       await recordLedger(txn, {
         userId: tx.userId,
         amount: creditAmountUsd,
-        balanceBefore: 0, // Simplified for ledger
-        balanceAfter: creditAmountUsd,
+        balanceBefore,
+        balanceAfter: balanceBefore + creditAmountUsd,
         reason: "deposit",
         referenceId: tx.id,
         referenceType: "transaction",
-        note: `Credited ${cryptoAmountReceived > 0 ? cryptoAmountReceived + " " + cryptoCurrency : "$" + creditAmountUsd + " USD"} (IPN — actual received)`,
-        // Note: creditAmountUsd reflects the real received value, not the invoice amount.
+        note: `IPN [${pStatus}] credited ${cryptoAmountReceived > 0 ? cryptoAmountReceived + " " + cryptoCurrency : "$" + creditAmountUsd + " USD"} (~$${creditAmountUsd.toFixed(2)}) via ${creditCalcMethod}. Invoice: ${cryptoAmountInvoiced} ${cryptoCurrency}. Txn: ${txn_id}`,
       });
       
       // 4. Referral commission
