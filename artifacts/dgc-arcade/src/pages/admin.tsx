@@ -63,6 +63,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  ExternalLink,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
@@ -2317,10 +2318,34 @@ export default function AdminDashboard() {
                         <TableBody>
                           {bankInvoices.map((inv: any) => {
                             const meta = inv.metadata ? (typeof inv.metadata === 'string' ? JSON.parse(inv.metadata) : inv.metadata) : {};
-                            const receivedCrypto = meta.received_amount;
-                            const invoicedCrypto = meta.invoice_total_sum;
-                            const sourceUsd = meta.source_amount || meta.source_amount_usd || inv.amount;
+                            const receivedCrypto = meta.received_amount_crypto || meta.received_amount;
+                            const invoicedCrypto = meta.invoice_amount_crypto || meta.invoice_total_sum;
+                            const sourceUsd = meta.requested_amount_usd || meta.source_amount || meta.source_amount_usd || inv.amount;
                             const creditedUsd = inv.amount;
+
+                            // Extract on-chain tx hash — from column first, then metadata tx_urls array
+                            let txHash: string | null = inv.txHash || null;
+                            if (!txHash && meta.tx_urls) {
+                              try {
+                                const urls = typeof meta.tx_urls === "string" ? JSON.parse(meta.tx_urls) : meta.tx_urls;
+                                if (Array.isArray(urls) && urls.length > 0) txHash = String(urls[0]);
+                              } catch { /* ignore */ }
+                            }
+
+                            // Get block explorer URL for any currency
+                            const getExplorerUrl = (currency: string | undefined, hash: string) => {
+                              const c = (currency || "ETH").toUpperCase();
+                              if (c === "BTC") return `https://blockstream.info/tx/${hash}`;
+                              if (c === "LTC") return `https://blockchair.com/litecoin/transaction/${hash}`;
+                              if (c === "BNB" || c === "BSC") return `https://bscscan.com/tx/${hash}`;
+                              if (c === "TRX" || c === "USDT_TRX" || c === "USDC_TRX") return `https://tronscan.org/#/transaction/${hash}`;
+                              if (c === "SOL" || c === "USDC_SOL" || c === "USDT_SOL") return `https://solscan.io/tx/${hash}`;
+                              if (c === "MATIC" || c === "POL") return `https://polygonscan.com/tx/${hash}`;
+                              if (c === "DOGE") return `https://blockchair.com/dogecoin/transaction/${hash}`;
+                              if (c === "XRP") return `https://xrpscan.com/tx/${hash}`;
+                              // ETH, USDT, USDC (ERC-20) and default
+                              return `https://etherscan.io/tx/${hash}`;
+                            };
                             
                             return (
                             <TableRow key={inv.txn_id ?? inv.id} className="border-border/30">
@@ -2330,7 +2355,21 @@ export default function AdminDashboard() {
                                   <span className="text-[10px] text-muted-foreground">ID: {inv.userId}</span>
                                 </div>
                               </TableCell>
-                              <TableCell className="font-mono text-xs text-muted-foreground max-w-[90px] truncate" title={inv.txn_id}>{inv.txn_id ?? "—"}</TableCell>
+                              <TableCell className="font-mono text-xs text-muted-foreground max-w-[90px]">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="truncate" title={inv.txn_id ?? ""}>{inv.txn_id ?? "—"}</span>
+                                  {txHash && (
+                                    <button
+                                      onClick={() => window.open(getExplorerUrl(inv.currency, txHash!), "_blank")}
+                                      className="flex items-center gap-0.5 text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors truncate text-left"
+                                      title={`On-chain: ${txHash}`}
+                                    >
+                                      <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
+                                      <span className="truncate font-mono">{txHash.slice(0, 8)}…{txHash.slice(-6)}</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </TableCell>
                               <TableCell><Badge variant="outline" className="text-xs capitalize">{inv.type ?? "invoice"}</Badge></TableCell>
                               <TableCell className="font-mono text-xs">
                                 <div className="flex flex-col">
@@ -2359,12 +2398,18 @@ export default function AdminDashboard() {
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-xs text-muted-foreground">
-                                {inv.created_utc ? new Date(inv.created_utc * 1000).toLocaleString() : "—"}
+                                {inv.created_utc ? new Date(inv.created_utc * 1000).toLocaleString() : inv.createdAt ? new Date(inv.createdAt).toLocaleString() : "—"}
                               </TableCell>
                               <TableCell>
                                 <div className="flex flex-col gap-1">
+                                  {txHash && (
+                                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-cyan-500/40 text-cyan-400 hover:text-cyan-300 hover:border-cyan-400/60 hover:bg-cyan-950/30" title={`View on-chain: ${txHash}`}
+                                      onClick={() => window.open(getExplorerUrl(inv.currency, txHash!), "_blank")}>
+                                      <ExternalLink className="h-3 w-3" /> Chain
+                                    </Button>
+                                  )}
                                   {inv.txn_id && (
-                                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" title="View Invoice"
+                                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" title="View Plisio Invoice"
                                       onClick={() => window.open(`https://plisio.net/invoice/${inv.txn_id}`, "_blank")}>
                                       <Eye className="h-3 w-3" /> View
                                     </Button>
