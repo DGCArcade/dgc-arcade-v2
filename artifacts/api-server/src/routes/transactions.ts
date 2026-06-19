@@ -302,18 +302,68 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       return;
     }
 
-    // ── ACTUAL RECEIVED AMOUNT ─────────────────────────────────────────────
-    // received_amount = the real crypto that arrived in our wallet (after network fees).
-    // We NEVER credit the invoice/source amount — only what was actually received.
+    // ── FULL IPN BODY LOG (debug underpayment issues) ─────────────────────
+    req.log.info({
+      event: "plisio_ipn_full_body",
+      txn_id, ipn_status: String(status).toLowerCase(),
+      ipnBody: JSON.stringify(req.body).substring(0, 4000),
+    }, "Plisio IPN: full body for crediting decision");
+
+    // ── ACTUAL RECEIVED AMOUNT (exhaustive field search) ───────────────────
+    // "Completed Auto" = Plisio auto-completed an underpaid invoice.
+    // We MUST credit the actual received amount, never the invoiced amount.
     const cryptoCurrency = tx.currency || pCurrency || "ETH";
-    const cryptoAmountReceived = parseFloat(String(received_amount || "0"));
-    const cryptoAmountInvoiced = parseFloat(String(invoice_total_sum || "0"));
-    const receivedUsdValue = parseFloat(String(received_amount_usd || "0"));
+    const bodyRaw = req.body as Record<string, unknown>;
+
+    let cryptoAmountReceived = parseFloat(String(
+      received_amount           ||
+      bodyRaw.received_sum      ||
+      bodyRaw.paid_amount       ||
+      bodyRaw.tx_amount         ||
+      bodyRaw.amount_received   ||
+      bodyRaw.actual_amount     ||
+      bodyRaw.sum_received      ||
+      "0"
+    ));
+    const cryptoAmountInvoiced = parseFloat(String(invoice_total_sum || bodyRaw.total_sum || bodyRaw.sum_expected || "0"));
+    let receivedUsdValue = parseFloat(String(received_amount_usd || bodyRaw.received_sum_usd || bodyRaw.amount_usd || "0"));
     const sourceUsd = parseFloat(String(source_amount_usd || source_amount || tx.amount));
 
-    // Also extract from body fields Plisio sends in various formats
-    const bodyRaw = req.body as Record<string, unknown>;
-    const altReceivedCrypto = parseFloat(String(bodyRaw.received_sum || bodyRaw.paid_amount || bodyRaw.tx_amount || "0"));
+    // ── EXTRACT FROM txs ARRAY IN IPN BODY ────────────────────────────────
+    // Plisio IPN sometimes includes txs array with on-chain tx data.
+    // This is the most reliable source for actual received crypto.
+    if (cryptoAmountReceived <= 0) {
+      const rawTxs = bodyRaw.txs ?? bodyRaw.transactions ?? bodyRaw.tx_list;
+      const txsList: any[] = Array.isArray(rawTxs)
+        ? rawTxs
+        : (rawTxs && typeof rawTxs === "object" ? Object.values(rawTxs as object) : []);
+
+      if (txsList.length > 0) {
+        const extracted = txsList.reduce((sum: number, t: any) => {
+          const amt = parseFloat(String(
+            t.amount          ||
+            t.received        ||
+            t.crypto_amount   ||
+            t.source_amount   ||
+            t.value           ||
+            t.sum             ||
+            t.received_amount ||
+            t.incoming        ||
+            "0"
+          ));
+          return sum + amt;
+        }, 0);
+        if (extracted > 0) {
+          cryptoAmountReceived = extracted;
+          req.log.info(
+            { txn_id, cryptoAmountReceived, txsCount: txsList.length },
+            "Plisio IPN: extracted received amount from txs array"
+          );
+        }
+      }
+    }
+
+    const altReceivedCrypto = 0; // already folded into cryptoAmountReceived above
 
     // ── STRUCTURED ENTRY LOG ──────────────────────────────────────────────
     // Full audit trail before any crediting decision is made.

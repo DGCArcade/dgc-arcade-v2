@@ -1617,18 +1617,76 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
 
     const pStatus = String(data.data.status).toLowerCase();
     
-    // ROBUST AMOUNT EXTRACTION: Check every possible field Plisio might use for different coins/statuses
-    // IMPORTANT: Use received_amount/received_sum for ACTUAL received amount.
-    // 'amount' in Plisio response often refers to the EXPECTED invoice amount.
-    let receivedAmount  = parseFloat(String(data.data.received_amount || data.data.received_sum || data.data.paid_amount || "0"));
-    const invoicedAmount  = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.invoice_amount || "0"));
-    const sourceUsd       = parseFloat(String(data.data.source_amount || data.data.source_amount_usd || tx.amount));
-    let receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
+    // ROBUST AMOUNT EXTRACTION: exhaustive field search across all Plisio API versions/coins.
+    // "Completed Auto" = Plisio auto-completed an underpaid invoice — credit ACTUAL, not invoice.
+    let receivedAmount = parseFloat(String(
+      data.data.received_amount ||
+      data.data.received_sum    ||
+      data.data.paid_amount     ||
+      data.data.amount_received ||
+      data.data.actual_amount   ||
+      data.data.sum_received    ||
+      "0"
+    ));
+    const invoicedAmount = parseFloat(String(
+      data.data.invoice_total_sum ||
+      data.data.total_sum         ||
+      data.data.invoice_amount    ||
+      data.data.sum_expected      ||
+      "0"
+    ));
+    const sourceUsd = parseFloat(String(data.data.source_amount || data.data.source_amount_usd || tx.amount));
+    let receivedUsdValue = parseFloat(String(
+      data.data.received_amount_usd ||
+      data.data.received_sum_usd    ||
+      data.data.amount_usd          ||
+      "0"
+    ));
 
-    // Try extracting received amount from txs array (Plisio sometimes stores it there)
-    if (receivedAmount <= 0 && Array.isArray(data.data.txs) && data.data.txs.length > 0) {
-      receivedAmount = data.data.txs.reduce((sum: number, t: any) => sum + parseFloat(String(t.amount || t.received || "0")), 0);
-      req.log.info({ receivedAmount, txsCount: data.data.txs.length }, "Smart Sync: extracted receivedAmount from txs array");
+    // ── FULL RAW RESPONSE LOG ────────────────────────────────────────────
+    req.log.info({
+      event: "plisio_smart_sync_raw",
+      plisioRaw: JSON.stringify(data.data).substring(0, 4000),
+    }, "Smart Sync: raw Plisio API response");
+
+    // ── EXTRACT FROM txs ARRAY (exhaustive, handles array + object formats) ─
+    // Plisio "Completed Auto" = underpaid but auto-completed. txs has the real amount.
+    if (receivedAmount <= 0) {
+      const rawTxs = data.data.txs ?? data.data.transactions ?? data.data.tx_list;
+      const txsList: any[] = Array.isArray(rawTxs)
+        ? rawTxs
+        : (rawTxs && typeof rawTxs === "object" ? Object.values(rawTxs) : []);
+
+      if (txsList.length > 0) {
+        const extracted = txsList.reduce((sum: number, t: any) => {
+          const amt = parseFloat(String(
+            t.amount         ||
+            t.received       ||
+            t.crypto_amount  ||
+            t.source_amount  ||
+            t.value          ||
+            t.sum            ||
+            t.received_amount||
+            t.incoming       ||
+            "0"
+          ));
+          return sum + amt;
+        }, 0);
+        if (extracted > 0) {
+          receivedAmount = extracted;
+          req.log.info({ receivedAmount, txsCount: txsList.length }, "Smart Sync: extracted receivedAmount from txs array");
+        }
+      }
+    }
+
+    // Also try more top-level field name aliases
+    if (receivedAmount <= 0) {
+      receivedAmount = parseFloat(String(
+        data.data.amount_received ||
+        data.data.actual_amount   ||
+        data.data.sum_received    ||
+        "0"
+      ));
     }
     
     // Logic to determine if we should credit

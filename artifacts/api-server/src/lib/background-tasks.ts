@@ -108,34 +108,89 @@ export async function syncPlisioDeposits() {
 
         const pStatus = String(data.data.status).toLowerCase();
         const creditStatuses = ["completed", "mismatch", "overpaid", "finished"];
-        
+
         if (creditStatuses.includes(pStatus)) {
-          // ── ACTUAL RECEIVED AMOUNT ──────────────────────────────────────────
-          // Always use the real received crypto amount from Plisio.
-          // received_amount = what actually arrived in our wallet (after network fees).
-          // We NEVER fall back to the invoice/source amount — doing so would
-          // credit users more than they actually sent.
-          let cryptoAmountReceived = parseFloat(String(data.data.received_amount || data.data.received_sum || data.data.paid_amount || "0"));
-          const cryptoAmountInvoiced = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.invoice_amount || "0"));
+          // ── FULL RAW RESPONSE LOG (debug underpayment issues) ──────────────
+          logger.info({
+            txId: tx.id, plisioTrackId: tx.plisioTrackId, pStatus,
+            plisioRaw: JSON.stringify(data.data).substring(0, 4000),
+          }, "Plisio sync: raw API response for crediting decision");
+
+          // ── EXTRACT RECEIVED AMOUNT (exhaustive field search) ───────────────
+          // Plisio uses different field names depending on API version/coin.
+          // "Completed Auto" means Plisio auto-completed an underpaid invoice —
+          // we MUST use the actual received amount, not the invoiced amount.
+          let cryptoAmountReceived = parseFloat(String(
+            data.data.received_amount ||
+            data.data.received_sum    ||
+            data.data.paid_amount     ||
+            data.data.amount_received ||
+            data.data.actual_amount   ||
+            data.data.sum_received    ||
+            "0"
+          ));
+          const cryptoAmountInvoiced = parseFloat(String(
+            data.data.invoice_total_sum ||
+            data.data.total_sum         ||
+            data.data.invoice_amount    ||
+            data.data.sum_expected      ||
+            "0"
+          ));
           const sourceUsd = parseFloat(String(data.data.source_amount || data.data.source_amount_usd || tx.amount));
-          let receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
+          let receivedUsdValue = parseFloat(String(
+            data.data.received_amount_usd ||
+            data.data.received_sum_usd    ||
+            data.data.amount_usd          ||
+            "0"
+          ));
           const cryptoCurrency = tx.currency || data.data.currency || "ETH";
 
-          // Try extracting received amount from txs array (Plisio sometimes stores it there)
-          if (cryptoAmountReceived <= 0 && Array.isArray(data.data.txs) && data.data.txs.length > 0) {
-            cryptoAmountReceived = data.data.txs.reduce((sum: number, t: any) => sum + parseFloat(String(t.amount || t.received || "0")), 0);
+          // ── EXTRACT FROM txs ARRAY (on-chain tx data, most reliable) ───────
+          // Plisio stores the actual on-chain transactions here.
+          // Handle both array and plain-object (numeric-keyed) formats.
+          if (cryptoAmountReceived <= 0) {
+            const rawTxs = data.data.txs ?? data.data.transactions ?? data.data.tx_list;
+            const txsList: any[] = Array.isArray(rawTxs)
+              ? rawTxs
+              : (rawTxs && typeof rawTxs === "object" ? Object.values(rawTxs) : []);
+
+            if (txsList.length > 0) {
+              const extracted = txsList.reduce((sum: number, t: any) => {
+                const amt = parseFloat(String(
+                  t.amount         ||
+                  t.received       ||
+                  t.crypto_amount  ||
+                  t.source_amount  ||
+                  t.value          ||
+                  t.sum            ||
+                  t.received_amount||
+                  t.incoming       ||
+                  "0"
+                ));
+                return sum + amt;
+              }, 0);
+              if (extracted > 0) {
+                cryptoAmountReceived = extracted;
+                logger.info(
+                  { txId: tx.id, cryptoAmountReceived, txsCount: txsList.length },
+                  "Plisio sync: extracted received amount from txs array"
+                );
+              }
+            }
           }
 
-          // ── STRICT GUARD: require real received data ────────────────────────
-          // For "completed" status: Plisio explicitly marks complete only when the full
-          // invoice was paid. If the polling API doesn't return received_amount (common),
-          // credit sourceUsd directly — Plisio has confirmed receipt.
-          // For mismatch/overpaid: must have actual received_amount (partial payment case).
+          // ── STRICT GUARD ────────────────────────────────────────────────────
+          // If we still have no received amount:
+          // - mismatch/overpaid: ALWAYS skip — we must have the real amount.
+          // - completed: only fall back to sourceUsd if BOTH received_amount AND
+          //   txs are empty (some coins never populate received_amount in GET).
+          //   Log a WARNING so this shows up in production logs.
           if (cryptoAmountReceived <= 0 && receivedUsdValue <= 0) {
             if (pStatus === "completed" && sourceUsd > 0) {
-              logger.info(
-                { txId: tx.id, plisioTrackId: tx.plisioTrackId, pStatus, sourceUsd },
-                "Plisio sync: status=completed but received_amount=0 — crediting invoice amount (Plisio confirmed full payment)"
+              logger.warn(
+                { txId: tx.id, plisioTrackId: tx.plisioTrackId, pStatus, sourceUsd,
+                  note: "received_amount=0 AND txs empty — falling back to invoice amount. Check raw log above for missing fields." },
+                "Plisio sync: FALLBACK to invoice amount (received_amount=0, txs empty) — may over-credit if Completed Auto"
               );
               receivedUsdValue = sourceUsd;
             } else {
