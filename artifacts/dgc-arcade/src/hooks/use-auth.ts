@@ -3,6 +3,13 @@ import { clearAuthToken } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthModal } from "./use-auth-modal";
 
+export interface CryptoBalance {
+  currency: string;
+  amount: number;
+  price: number;
+  usdValue: number;
+}
+
 export function useAuth() {
   const queryClient = useQueryClient();
   const { data: user, isLoading } = useGetMe({
@@ -36,11 +43,14 @@ export function useAuth() {
     }
   };
 
+  const cryptoBalances: CryptoBalance[] = (user as any)?.cryptoBalances ?? [];
+
   return {
     user: user ?? null,
     isLoading,
     isAuthenticated: !!user,
     logout,
     requireAuth,
+    cryptoBalances,
   };
 }

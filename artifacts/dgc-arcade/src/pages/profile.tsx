@@ -13,7 +13,7 @@ import { VipModal, getVipProgress } from "@/components/vip/vip-modal";
 import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
 
 export default function Profile() {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, cryptoBalances } = useAuth();
   const [, setLocation] = useLocation();
 
   const { data: transactions } = useListTransactions({ limit: 50 }, {
@@ -391,8 +391,25 @@ export default function Profile() {
 
         <div className="flex flex-col items-end gap-2">
           <div className="bg-secondary/50 border border-primary/20 rounded-xl p-4 flex flex-col items-end min-w-[200px]">
-            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Available Balance</span>
-            <span className="font-mono font-bold text-3xl text-primary">{formatCurrency(user.balance)}</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Live Balance</span>
+            <span className="font-mono font-bold text-3xl text-primary">{formatCurrency(user.balance as number)}</span>
+            {cryptoBalances.length > 0 && (
+              <div className="mt-2 w-full space-y-1 border-t border-border/30 pt-2">
+                {cryptoBalances.filter(cb => cb.amount > 0).map(cb => (
+                  <div key={cb.currency} className="flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <CoinIcon currency={cb.currency} size={11} />
+                      <span className="font-mono">{cb.amount.toFixed(6)} {cb.currency.split("_")[0]}</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono text-foreground font-bold">{formatCurrency(cb.usdValue)}</div>
+                      <div className="text-[9px] text-muted-foreground">@ ${cb.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="text-[9px] text-muted-foreground/60 mt-1">Updates every 5s · live market price</div>
           </div>
           {/* VIP badge — cursor-pointer so it's obviously clickable */}
           <button onClick={() => setVipOpen(true)}

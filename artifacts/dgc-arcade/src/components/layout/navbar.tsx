@@ -3,7 +3,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAuthModal } from "@/hooks/use-auth-modal";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
-import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound, Star, X, ArrowLeftRight, MessageSquare} from "lucide-react";
+import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound, Star, X, ArrowLeftRight, MessageSquare, TrendingUp, TrendingDown} from "lucide-react";
+import { CoinIcon } from "@/components/wallet/coin-icon";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +21,7 @@ import { useState, useEffect } from "react";
 import { rotateTheme } from "@/lib/theme";
 
 export function Navbar() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, cryptoBalances } = useAuth();
   const authModal = useAuthModal();
   const [location, setLocation] = useLocation();
 
@@ -55,6 +56,28 @@ export function Navbar() {
 
   const wagered = (user as any)?.totalWageredAmount ?? 0;
   const { tier: vipTier, next: vipNext, pct: vipPct } = getVipProgress(wagered);
+
+  // Track previous balance to show up/down trend arrow
+  const [prevBalance, setPrevBalance] = useState<number | null>(null);
+  const [balanceDelta, setBalanceDelta] = useState<"up" | "down" | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    const cur = user.balance as number;
+    if (prevBalance !== null && Math.abs(cur - prevBalance) > 0.0001) {
+      setBalanceDelta(cur > prevBalance ? "up" : "down");
+      const t = setTimeout(() => setBalanceDelta(null), 3000);
+      setPrevBalance(cur);
+      return () => clearTimeout(t);
+    } else {
+      setPrevBalance(cur);
+      return undefined;
+    }
+  }, [user?.balance]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Top crypto holding for the sub-line in navbar
+  const topCrypto = cryptoBalances.length > 0
+    ? cryptoBalances.reduce((a, b) => a.usdValue > b.usdValue ? a : b)
+    : null;
 
   useEffect(() => {
     if (!isCreator || !isAuthenticated) return;
@@ -156,7 +179,21 @@ export function Navbar() {
 
                 <button className="hidden sm:flex items-center gap-2 bg-secondary/80 rounded-full px-4 py-1.5 border border-primary/20 backdrop-blur-sm hover:border-primary/50 transition-colors cursor-pointer" onClick={() => setWalletOpen(true)}>
                   <Wallet className="w-4 h-4 text-primary" />
-                  <span className="font-mono font-bold text-primary text-sm">{formatCurrency(user.balance)}</span>
+                  <div className="flex flex-col items-start leading-none gap-0.5">
+                    <div className="flex items-center gap-1">
+                      <span className={`font-mono font-bold text-sm transition-colors ${balanceDelta === "up" ? "text-emerald-400" : balanceDelta === "down" ? "text-red-400" : "text-primary"}`}>
+                        {formatCurrency(user.balance as number)}
+                      </span>
+                      {balanceDelta === "up" && <TrendingUp className="w-3 h-3 text-emerald-400" />}
+                      {balanceDelta === "down" && <TrendingDown className="w-3 h-3 text-red-400" />}
+                    </div>
+                    {topCrypto && (
+                      <div className="flex items-center gap-0.5 text-[9px] text-muted-foreground font-mono">
+                        <CoinIcon currency={topCrypto.currency} size={9} />
+                        <span>{topCrypto.amount.toFixed(4)} {topCrypto.currency.split("_")[0]}</span>
+                      </div>
+                    )}
+                  </div>
                 </button>
 
                 <DropdownMenu>

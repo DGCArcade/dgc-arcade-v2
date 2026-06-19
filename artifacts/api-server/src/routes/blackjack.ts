@@ -80,7 +80,8 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
     const [game] = await db.select().from(gamesTable).where(eq(gamesTable.id, gameId)).limit(1);
     if (!game || !game.active) { res.status(404).json({ error: "Game not found" }); return; }
 
-    if (parseFloat(user.balance) < amount) {
+    const { totalBalance: bjTotalBalance } = await getUserBalance(user.id);
+    if (bjTotalBalance < amount) {
       res.status(400).json({ error: "Insufficient balance" });
       return;
     }

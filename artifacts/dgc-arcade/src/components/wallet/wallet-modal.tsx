@@ -89,11 +89,11 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
     }
   }, [withdrawCurrency]);
 
-  // Refresh on open + every 15 seconds while open (live prices)
+  // Refresh on open + every 5 seconds while open (live prices)
   useEffect(() => {
     if (!open) return;
     fetchCoinBalances();
-    const interval = setInterval(fetchCoinBalances, 15_000);
+    const interval = setInterval(fetchCoinBalances, 5_000);
     return () => clearInterval(interval);
   }, [open, fetchCoinBalances]);
 
@@ -282,9 +282,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                 </button>
               </div>
               <div className="font-mono font-black text-3xl text-primary">{formatCurrency(liveTotal)}</div>
-              {coinData.totalBalance > 0 && Math.abs(coinData.totalBalance - (user?.balance ?? 0)) > 0.01 && (
-                <div className="text-xs text-muted-foreground mt-1">Live price · updates every 15s</div>
-              )}
+              <div className="text-[10px] text-muted-foreground/60 mt-1">Live market price · updates every 5s</div>
             </div>
             <div className="bg-secondary/40 rounded-xl px-4 py-3 border border-border/30 flex items-center justify-between">
               <div>

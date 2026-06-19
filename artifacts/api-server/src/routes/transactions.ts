@@ -600,8 +600,25 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
 
     // ── Balance check: uses ACTUAL balance (static USD + live crypto valuations) ──
     // This is the real balance — not the invoice amount or any stored figure.
-    const { totalBalance } = await getUserBalance(user.id);
+    const { totalBalance, cryptoBalances } = await getUserBalance(user.id);
     if (totalBalance < amount) { res.status(400).json({ error: "Insufficient balance" }); return; }
+
+    // ── Coin-lock enforcement ──────────────────────────────────────────────────
+    // If the user has deposited crypto (non-zero user_balances rows), they may
+    // only withdraw in a currency they actually hold. This prevents the house
+    // paying out in a currency it never received (e.g. ETH payout for a DOGE
+    // deposit). Legacy users with only a static USD balance skip this check.
+    const hasCryptoHoldings = cryptoBalances.some(cb => cb.amount > 0);
+    if (hasCryptoHoldings) {
+      const holdsCurrency = cryptoBalances.some(cb => cb.currency === currency && cb.amount > 0);
+      if (!holdsCurrency) {
+        const available = cryptoBalances.filter(cb => cb.amount > 0).map(cb => cb.currency).join(", ");
+        res.status(400).json({
+          error: `Coin-locked: you can only withdraw in the currency you deposited. Your holdings: ${available || "none"}`
+        });
+        return;
+      }
+    }
 
     const settings = await getPlatformSettings();
     if (amount < settings.minWithdrawal) { res.status(400).json({ error: `Minimum withdrawal is $${settings.minWithdrawal}` }); return; }
