@@ -13,7 +13,12 @@ const COINGECKO_ID_MAP: Record<string, string> = {
 
 const STABLECOINS = new Set(["USDT_TRX", "USDT_TON", "USDC", "DAI"]);
 
+// Live price cache — expires after CACHE_TTL to trigger fresh fetches
 const priceCache: Record<string, { price: number; timestamp: number }> = {};
+// Last-known-good price — never expires; used as fallback when all providers fail
+// This prevents the "return 0" bug where a transient API outage zeros out balances
+const lastGoodPrice: Record<string, number> = {};
+
 const CACHE_TTL = 5 * 1000; // 5 seconds for real-time market reflection
 
 export async function getCryptoPrice(currency: string): Promise<number> {
@@ -34,6 +39,7 @@ export async function getCryptoPrice(currency: string): Promise<number> {
         const price = parseFloat(data.data?.amount || "0");
         if (price > 0) {
           priceCache[currency] = { price, timestamp: now };
+          lastGoodPrice[currency] = price;
           return price;
         }
       }
@@ -50,6 +56,7 @@ export async function getCryptoPrice(currency: string): Promise<number> {
         const price = data[geckoId]?.usd;
         if (price > 0) {
           priceCache[currency] = { price, timestamp: now };
+          lastGoodPrice[currency] = price;
           return price;
         }
       }
@@ -66,11 +73,21 @@ export async function getCryptoPrice(currency: string): Promise<number> {
         const price = parseFloat(data.data.rate_usd || data.data.price_usd || "0");
         if (price > 0) {
           priceCache[currency] = { price, timestamp: now };
+          lastGoodPrice[currency] = price;
           return price;
         }
       }
     } catch (e) { logger.debug({ currency, err: e }, "Plisio price fetch failed"); }
   }
 
-  return priceCache[currency]?.price || 0;
+  // All providers failed. Return last known good price to avoid returning 0,
+  // which would cause balance miscalculations and potentially allow over-spending.
+  if (lastGoodPrice[currency]) {
+    logger.warn({ currency }, "All price providers failed — using last known good price");
+    return lastGoodPrice[currency];
+  }
+
+  // Truly no price ever fetched for this currency — return 0 as final fallback
+  logger.error({ currency }, "All price providers failed and no cached price available — returning 0");
+  return 0;
 }

@@ -16,6 +16,7 @@ import {
 interface DashboardData {
   username: string;
   accountType: string;
+  balance: number;
   promoBalance: number;
   vaultBalance: number;
   referralCode: string;
@@ -259,6 +260,23 @@ function SpecialtyHub({
   const [createCampaignOpen, setCreateCampaignOpen] = useState(false);
   const [newCampaignName, setNewCampaignName] = useState("");
 
+  const [analytics, setAnalytics] = useState<{
+    registrations: number; ftds: number; deposits: number;
+    totalDeposited: number; totalWagered: number; revenue: number; commission: number;
+  } | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+  const fetchAnalytics = async () => {
+    setAnalyticsLoading(true);
+    try {
+      const res = await fetch("/api/creator/analytics", {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (res.ok) setAnalytics(await res.json());
+    } catch { /* ignore */ }
+    finally { setAnalyticsLoading(false); }
+  };
+
   const [selectedCoin, setSelectedCoin] = useState(() => localStorage.getItem("dgc_payout_coin") || "BTC");
   const [walletAddress, setWalletAddress] = useState(() => localStorage.getItem("dgc_payout_address") || "");
   const [autoSend, setAutoSend] = useState(() => localStorage.getItem("dgc_auto_send") !== "false");
@@ -472,14 +490,25 @@ function SpecialtyHub({
                   <h2 className="font-bold text-base mb-1">Campaigns</h2>
                   <p className="text-sm text-muted-foreground">See the performance of all your campaigns in one simple view.</p>
                 </div>
+                <button
+                  onClick={fetchAnalytics}
+                  disabled={analyticsLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary text-xs font-bold hover:bg-secondary/80 transition-colors disabled:opacity-50">
+                  <RefreshCw className={`w-3 h-3 ${analyticsLoading ? "animate-spin" : ""}`} /> Refresh Stats
+                </button>
               </div>
 
+              {/* Real-data stats — fetched from /api/creator/analytics */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  { label: "Campaign Hits", value: "—" },
-                  { label: "Referred Users", value: String(dashboard.activeReferrals + dashboard.pendingReferrals) },
-                  { label: "Active Players (FTP)", value: String(dashboard.activeReferrals) },
-                  { label: "Combined Commission", value: formatCurrency(dashboard.totalCommissionEarned) },
+                  { label: "Registrations", value: analytics ? String(analytics.registrations) : String(dashboard.activeReferrals + dashboard.pendingReferrals) },
+                  { label: "First-Time Depositors", value: analytics ? String(analytics.ftds) : String(dashboard.activeReferrals) },
+                  { label: "Total Deposited", value: analytics ? formatCurrency(analytics.totalDeposited) : "—" },
+                  { label: "Total Wagered", value: analytics ? formatCurrency(analytics.totalWagered) : "—" },
+                  { label: "House Revenue", value: analytics ? formatCurrency(analytics.revenue) : "—" },
+                  { label: "Deposits (Count)", value: analytics ? String(analytics.deposits) : "—" },
+                  { label: "Commission Earned", value: formatCurrency(dashboard.totalCommissionEarned) },
+                  { label: "Commission Rate", value: `${dashboard.commissionPct}%` },
                 ].map(s => (
                   <div key={s.label} className="p-3 rounded-xl border border-border/50 bg-secondary/30">
                     <div className="font-mono font-black text-base">{s.value}</div>
@@ -487,6 +516,12 @@ function SpecialtyHub({
                   </div>
                 ))}
               </div>
+
+              {!analytics && (
+                <div className="text-xs text-muted-foreground text-center py-2">
+                  Click <strong>Refresh Stats</strong> to load real-time analytics from the server.
+                </div>
+              )}
 
               <div className="flex items-center justify-between">
                 <div className="text-xs text-muted-foreground font-mono">Sorted by: Date Created</div>
@@ -526,6 +561,30 @@ function SpecialtyHub({
               <div>
                 <h2 className="font-bold text-base mb-1">Commission</h2>
                 <p className="text-sm text-muted-foreground">Track your earnings and request your monthly payout below.</p>
+              </div>
+
+              {/* Balance breakdown — clearly separated */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-4 rounded-xl border border-border/50 bg-secondary/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-7 h-7 rounded-lg bg-blue-500/15 border border-blue-500/25 flex items-center justify-center">
+                      <DollarSign className="w-3.5 h-3.5 text-blue-400" />
+                    </div>
+                    <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Casino Balance</span>
+                  </div>
+                  <div className="font-mono font-black text-2xl text-blue-400">{formatCurrency(dashboard.balance)}</div>
+                  <p className="text-xs text-muted-foreground mt-1">Your personal gambling balance — use this to play games.</p>
+                </div>
+                <div className="p-4 rounded-xl border border-green-500/25 bg-green-500/5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-7 h-7 rounded-lg bg-green-500/15 border border-green-500/25 flex items-center justify-center">
+                      <BarChart3 className="w-3.5 h-3.5 text-green-400" />
+                    </div>
+                    <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Creator Earnings</span>
+                  </div>
+                  <div className="font-mono font-black text-2xl text-green-400">{formatCurrency(dashboard.promoBalance)}</div>
+                  <p className="text-xs text-muted-foreground mt-1">Commission earned from referred players — withdraw monthly.</p>
+                </div>
               </div>
 
               {/* Countdown + withdraw button */}

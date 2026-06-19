@@ -13,7 +13,7 @@ export default function TermsPage() {
         <Shield className="w-8 h-8 text-primary" />
         <div>
           <h1 className="text-3xl font-display font-black uppercase tracking-tight">Terms of Service</h1>
-          <p className="text-muted-foreground text-sm">Effective Date: June 11, 2026 · Last Updated: June 11, 2026</p>
+          <p className="text-muted-foreground text-sm">Effective Date: June 11, 2026 · Last Updated: June 19, 2026</p>
         </div>
       </div>
       <div className="prose prose-invert max-w-none space-y-8 text-sm text-muted-foreground leading-relaxed">
@@ -96,27 +96,79 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-foreground mb-3">8. Provably Fair Gaming</h2>
+          <h2 className="text-lg font-bold text-foreground mb-3">8. Chargebacks and Payment Disputes</h2>
+          <p>DGC Arcade operates exclusively with cryptocurrency. Because cryptocurrency transactions are <strong className="text-foreground">irreversible by design</strong>, the following policies apply:</p>
+          <ul className="list-disc pl-5 space-y-2 mt-2">
+            <li><strong className="text-foreground">No chargebacks:</strong> Cryptocurrency deposits cannot be reversed, charged back, or disputed through a payment processor or bank. By depositing, you acknowledge that all transfers are final.</li>
+            <li><strong className="text-foreground">Fraudulent dispute attempts:</strong> Any attempt to initiate a chargeback, reversal, or fraudulent dispute — including filing a claim with a card issuer, exchange, or financial institution — will result in immediate permanent account closure and forfeiture of all funds. We reserve the right to pursue legal action to recover losses, costs, and damages.</li>
+            <li><strong className="text-foreground">Deposit errors:</strong> If you believe a deposit was not credited correctly, contact support within 7 days with your transaction hash. We will investigate and credit any confirmed shortfall. Claims older than 7 days may not be processed.</li>
+            <li><strong className="text-foreground">Withdrawal disputes:</strong> If a withdrawal is not received, contact support within 14 days. Include the transaction ID and destination address. Disputes are investigated on a case-by-case basis.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-foreground mb-3">9. Provably Fair Gaming</h2>
           <p>All games on DGC Arcade use a provably fair algorithm. Each outcome is generated using a combination of a server seed (hashed and committed before the bet) and a client seed that you control. You can verify any historical bet result using our provably fair verification tool. We cannot manipulate outcomes after a bet is placed.</p>
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-foreground mb-3">9. Prohibited Activities</h2>
+          <h2 className="text-lg font-bold text-foreground mb-3">10. Prohibited Activities</h2>
           <p>The following activities will result in immediate permanent account closure and forfeiture of all funds:</p>
           <ul className="list-disc pl-5 space-y-1 mt-2">
             <li>Using bots, scripts, or any automated means to interact with the Platform</li>
             <li>Exploiting software bugs or vulnerabilities — these must be reported immediately to support</li>
             <li>Money laundering, structuring, or any illegal financial activity</li>
             <li>Collusion with other players</li>
-            <li>Creating multiple accounts or bonus abuse</li>
-            <li>Chargeback fraud or disputing legitimate transactions</li>
+            <li>Creating multiple accounts (multi-accounting) or any form of bonus, referral, or affiliate abuse (see Sections 11 and 12)</li>
+            <li>Chargeback fraud or disputing legitimate transactions (see Section 8)</li>
             <li>Using a VPN or proxy to access the Platform from a restricted jurisdiction</li>
             <li>Sharing your account credentials with any other person</li>
           </ul>
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-foreground mb-3">10. Responsible Gambling</h2>
+          <h2 className="text-lg font-bold text-foreground mb-3">11. Bonus and Promotion Abuse</h2>
+          <p>DGC Arcade offers bonuses, promotions, and free play credits at its discretion. The following constitute <strong className="text-foreground">bonus abuse</strong> and will result in forfeiture of the bonus, associated winnings, and potential account closure:</p>
+          <ul className="list-disc pl-5 space-y-2 mt-2">
+            <li><strong className="text-foreground">Multi-accounting for bonuses:</strong> Creating or using more than one account to claim the same bonus, promotion, or welcome offer — including using different devices, IP addresses, email addresses, or payment methods to circumvent the one-account-per-person rule.</li>
+            <li><strong className="text-foreground">Bonus wagering manipulation:</strong> Placing bets specifically designed to exploit bonus wagering requirements without genuine gameplay intent, including low-risk hedging strategies (betting both sides of an outcome, exploiting game mechanics with near-zero house edge to clear wagering requirements).</li>
+            <li><strong className="text-foreground">Unauthorized bonus stacking:</strong> Combining bonuses in ways not explicitly permitted by the promotion terms.</li>
+            <li><strong className="text-foreground">False eligibility claims:</strong> Misrepresenting your identity, location, or account status to qualify for a promotion you are not eligible for.</li>
+            <li><strong className="text-foreground">Wagering requirement circumvention:</strong> Attempting to withdraw bonus-derived funds before meeting the stated wagering requirements.</li>
+          </ul>
+          <p className="mt-2">DGC Arcade uses automated detection and manual review to identify bonus abuse patterns. Suspected abuse may result in bonus forfeiture, account restriction, or permanent closure.</p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-foreground mb-3">12. Referral and Affiliate Program Abuse</h2>
+          <p>The DGC Arcade Referral and Affiliate Program is subject to strict anti-abuse policies. The following activities are <strong className="text-foreground">explicitly prohibited</strong> and will result in commission forfeiture, account closure, and potential legal action:</p>
+          <ul className="list-disc pl-5 space-y-2 mt-2">
+            <li><strong className="text-foreground">Self-referrals:</strong> Using your own referral link — or a link controlled by you — to create new accounts that you control, operate, or fund, for the purpose of generating commission on your own activity.</li>
+            <li><strong className="text-foreground">Multi-account referral rings:</strong> Creating or coordinating a network of accounts that refer each other in a circular or pyramid structure to generate artificial commission.</li>
+            <li><strong className="text-foreground">Incentivized sign-ups:</strong> Paying, bribing, or coercing individuals to sign up using your referral link without their genuine intent to use the Platform.</li>
+            <li><strong className="text-foreground">Fake traffic:</strong> Using bots, click farms, traffic exchanges, or any automated means to inflate click counts, sign-ups, or activity metrics associated with your referral link or campaign.</li>
+            <li><strong className="text-foreground">Bot traffic:</strong> Generating or directing non-human traffic — including automated scripts, headless browsers, or purchased bot traffic — to your referral links or any Platform page.</li>
+            <li><strong className="text-foreground">IP manipulation:</strong> Using VPNs, proxies, or shared IPs to disguise the origin of referred traffic and circumvent our duplicate-referral detection.</li>
+            <li><strong className="text-foreground">Commission fraud:</strong> Any other method of artificially inflating commission, referral counts, or affiliate metrics, including coordinated deposit-and-withdraw cycles designed to generate commission without genuine wagering intent.</li>
+          </ul>
+          <p className="mt-2">DGC Arcade reserves the right to claw back commissions paid on fraudulent referrals at any time, including retroactively. Affiliates under investigation may have payouts suspended pending review.</p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-foreground mb-3">13. Creator Program Conduct</h2>
+          <p>Specialty Creators accepted into the DGC Arcade Creator Program agree to the following additional obligations:</p>
+          <ul className="list-disc pl-5 space-y-2 mt-2">
+            <li><strong className="text-foreground">Accurate representation:</strong> You must not make false, misleading, or exaggerated claims about DGC Arcade, including win rates, withdrawal times, or promotional offers, in any content you produce.</li>
+            <li><strong className="text-foreground">Jurisdictional compliance:</strong> You are solely responsible for ensuring you only promote DGC Arcade to audiences in jurisdictions where online gambling is legal. Knowingly promoting to restricted jurisdictions will result in immediate creator account termination and commission forfeiture.</li>
+            <li><strong className="text-foreground">No traffic manipulation:</strong> You must not use or direct fake traffic, bot traffic, or artificially inflated engagement toward any DGC Arcade link, campaign, or stream. This includes paid bot views, click farms, and view exchange networks.</li>
+            <li><strong className="text-foreground">No self-play commission:</strong> Using your linked personal account or any account you control to generate commission on your own gameplay is strictly prohibited.</li>
+            <li><strong className="text-foreground">Commission clawback:</strong> If we determine that commissions were generated through fraudulent, abusive, or prohibited activity, we reserve the right to deduct those amounts from your Creator Bank balance or future payouts.</li>
+            <li><strong className="text-foreground">Program termination:</strong> DGC Arcade reserves the right to terminate any creator's participation in the program at any time, for any reason, with 7 days' notice. Upon termination, any earned and unpaid commissions will be paid out within 30 days provided no fraud investigation is pending.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-foreground mb-3">14. Responsible Gambling</h2>
           <p>DGC Arcade takes responsible gambling seriously. We offer:</p>
           <ul className="list-disc pl-5 space-y-1 mt-2">
             <li>Deposit limits</li>
@@ -128,22 +180,22 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-foreground mb-3">11. AI Fraud Monitoring</h2>
+          <h2 className="text-lg font-bold text-foreground mb-3">15. AI Fraud Monitoring</h2>
           <p>DGC Arcade uses an AI-powered fraud detection system that monitors all transactions in real time. This system automatically flags transactions that meet risk criteria including unusual velocity, large amounts, new account activity, and suspicious patterns. Flagged transactions are reviewed by our compliance team before processing. You consent to this monitoring by using the Platform.</p>
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-foreground mb-3">12. Limitation of Liability</h2>
+          <h2 className="text-lg font-bold text-foreground mb-3">16. Limitation of Liability</h2>
           <p>DGC Arcade shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of the Platform. Our maximum liability to you in any matter shall not exceed the total amount you deposited in the 30-day period preceding the relevant claim. We are not liable for losses caused by your failure to secure your account credentials or by network failures outside our control.</p>
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-foreground mb-3">13. Governing Law and Disputes</h2>
+          <h2 className="text-lg font-bold text-foreground mb-3">17. Governing Law and Disputes</h2>
           <p>These Terms are governed by the laws of Curaçao. Any dispute shall first be addressed through our customer support process. Unresolved disputes shall be submitted to the exclusive jurisdiction of the courts of Curaçao, except where mandatory local law requires otherwise.</p>
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-foreground mb-3">14. Changes to These Terms</h2>
+          <h2 className="text-lg font-bold text-foreground mb-3">18. Changes to These Terms</h2>
           <p>We reserve the right to modify these Terms at any time. We will provide at least 14 days' notice of material changes via in-app notification or email. Continued use of the Platform after the effective date of changes constitutes your acceptance of the updated Terms. If you disagree with changes, you must close your account before the effective date.</p>
         </section>
 

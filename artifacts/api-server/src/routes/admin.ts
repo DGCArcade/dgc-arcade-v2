@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable, creatorMessagesTable, creatorMessageReadsTable, fraudReviewsTable, referralsTable, userBalancesTable, creatorBankTxnsTable, slotThemesTable } from "@workspace/db";
+import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable, creatorMessagesTable, creatorMessageReadsTable, fraudReviewsTable, referralsTable, userBalancesTable, creatorBankTxnsTable, slotThemesTable, adminAuditLogsTable } from "@workspace/db";
 import { eq, desc, ilike, and, sql, count, or, gt, ne } from "drizzle-orm";
 // Using native fetch available in Node.js 18+
 import { requireAdmin } from "../middlewares/auth.js";
@@ -3323,6 +3323,59 @@ adminRouter.patch("/slots/themes/:id", async (req, res) => {
     }).catch(() => {});
 
     res.json({ theme: updated });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/admin/audit-logs — paginated admin audit log viewer
+// Query: ?page=1&limit=50&action=&adminId=&targetType=
+adminRouter.get("/audit-logs", async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page ?? "1")));
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "50"))));
+    const offset = (page - 1) * limit;
+    const actionFilter = String(req.query.action ?? "").trim();
+    const adminIdFilter = req.query.adminId ? parseInt(String(req.query.adminId)) : null;
+    const targetTypeFilter = String(req.query.targetType ?? "").trim();
+
+    const conditions: any[] = [];
+    if (actionFilter) conditions.push(ilike(adminAuditLogsTable.action, `%${actionFilter}%`));
+    if (adminIdFilter) conditions.push(eq(adminAuditLogsTable.adminId, adminIdFilter));
+    if (targetTypeFilter) conditions.push(eq(adminAuditLogsTable.targetType as any, targetTypeFilter));
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [logs, [{ total }]] = await Promise.all([
+      db
+        .select()
+        .from(adminAuditLogsTable)
+        .where(whereClause)
+        .orderBy(desc(adminAuditLogsTable.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ total: count() })
+        .from(adminAuditLogsTable)
+        .where(whereClause),
+    ]);
+
+    res.json({
+      logs: logs.map(l => ({
+        id: l.id,
+        adminId: l.adminId,
+        adminUsername: l.adminUsername,
+        action: l.action,
+        targetType: l.targetType,
+        targetId: l.targetId,
+        oldValue: l.oldValue ? JSON.parse(l.oldValue) : null,
+        newValue: l.newValue ? JSON.parse(l.newValue) : null,
+        ip: l.ip,
+        note: l.note,
+        createdAt: l.createdAt.toISOString(),
+      })),
+      pagination: { page, limit, total: Number(total), pages: Math.ceil(Number(total) / limit) },
+    });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
   }

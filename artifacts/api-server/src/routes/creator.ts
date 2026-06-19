@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { db, usersTable, creatorBankTxnsTable, referralsTable, creatorLinkedAccountsTable, creatorMessagesTable, creatorMessageReadsTable } from "@workspace/db";
+import { db, usersTable, creatorBankTxnsTable, referralsTable, creatorLinkedAccountsTable, creatorMessagesTable, creatorMessageReadsTable, betsTable, transactionsTable } from "@workspace/db";
 import { eq, and, desc, sum, count, or, inArray, sql, not } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 import { getReferralTier } from "./referrals.js";
@@ -453,6 +453,74 @@ creatorRouter.post("/messages/read", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Creator messages read error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/creator/analytics — aggregate stats across all referred users
+// Returns: registrations, deposits (count + total), total wagered, house revenue, commission
+creatorRouter.get("/analytics", async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+
+    const refs = await db
+      .select({
+        referredId: referralsTable.referredId,
+        status: referralsTable.status,
+        earnedAmount: referralsTable.earnedAmount,
+      })
+      .from(referralsTable)
+      .where(eq(referralsTable.referrerId, userId));
+
+    const registrations = refs.length;
+    const ftds = refs.filter(r => r.status === "active").length;
+    const totalCommission = refs.reduce(
+      (s, r) => s + parseFloat(String(r.earnedAmount ?? "0")),
+      0
+    );
+
+    if (refs.length === 0) {
+      res.json({ registrations: 0, ftds: 0, deposits: 0, totalDeposited: 0, totalWagered: 0, revenue: 0, commission: 0 });
+      return;
+    }
+
+    const referredIds = refs.map(r => r.referredId);
+
+    // Deposits from referred users
+    const [depStats] = await db
+      .select({ cnt: count(), total: sum(transactionsTable.amount) })
+      .from(transactionsTable)
+      .where(
+        and(
+          inArray(transactionsTable.userId, referredIds),
+          eq(transactionsTable.type, "deposit"),
+          eq(transactionsTable.status, "completed")
+        )
+      );
+
+    // Bets from referred users (wager + payout → house revenue)
+    const [betStats] = await db
+      .select({ totalWager: sum(betsTable.amount), totalPayout: sum(betsTable.payout) })
+      .from(betsTable)
+      .where(inArray(betsTable.userId, referredIds));
+
+    const totalDeposited = parseFloat(String(depStats?.total ?? "0"));
+    const depositCount = Number(depStats?.cnt ?? 0);
+    const totalWagered = parseFloat(String(betStats?.totalWager ?? "0"));
+    const totalPayout = parseFloat(String(betStats?.totalPayout ?? "0"));
+    const revenue = Math.max(0, totalWagered - totalPayout);
+
+    res.json({
+      registrations,
+      ftds,
+      deposits: depositCount,
+      totalDeposited,
+      totalWagered,
+      revenue,
+      commission: totalCommission,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Creator analytics error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

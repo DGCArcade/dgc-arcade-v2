@@ -1,5 +1,5 @@
 import { db, usersTable, userBalancesTable } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { getCryptoPrice } from "./price-service.js";
 
 export interface UserBalance {
@@ -45,54 +45,95 @@ export async function getUserBalance(userId: number): Promise<UserBalance> {
 
 /**
  * Deducts an amount from a user's balance, preferring crypto balances first.
- * This ensures that users spend their "real" crypto value before their static bonus/cash balance.
- * Returns the updated total balance or throws if insufficient.
+ *
+ * RACE CONDITION FIX: Uses SELECT FOR UPDATE to acquire row-level locks on the
+ * user and user_balances rows before reading balances. This prevents two concurrent
+ * requests (e.g., simultaneous bet + withdrawal) from both passing the sufficiency
+ * check and both deducting, resulting in a negative balance.
+ *
+ * If a txn is already provided by the caller, the locks are acquired within that
+ * transaction. Otherwise a new transaction is created.
  */
 export async function deductBalance(userId: number, amount: number, txn?: any): Promise<number> {
-  const database = txn || db;
-  
-  // 1. Get current state
-  const { totalBalance, staticBalance, cryptoBalances } = await getUserBalance(userId);
-  if (totalBalance < amount) throw new Error("Insufficient balance");
+  const doDeduct = async (database: any) => {
+    // Acquire row-level locks before reading. Concurrent callers block here until
+    // this transaction commits or rolls back.
+    await database.execute(sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`);
+    await database.execute(sql`SELECT id FROM user_balances WHERE user_id = ${userId} FOR UPDATE`);
 
-  let remainingToDeduct = amount;
+    // Re-read fresh state now that we hold the locks
+    const [lockedUser] = await database
+      .select({ balance: usersTable.balance })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+    if (!lockedUser) throw new Error("User not found");
 
-  // 2. Deduct from crypto balances first (sorted by USD value descending to simplify)
-  const sortedCrypto = [...cryptoBalances].sort((a, b) => b.usdValue - a.usdValue);
-  
-  for (const crypto of sortedCrypto) {
-    if (remainingToDeduct <= 0) break;
-    const deductUsd = Math.min(remainingToDeduct, crypto.usdValue);
-    const deductCryptoAmount = deductUsd / crypto.price;
-    
-    await database.update(userBalancesTable)
-      .set({ amount: sql`amount - ${deductCryptoAmount.toFixed(18)}` })
-      .where(and(eq(userBalancesTable.userId, userId), eq(userBalancesTable.currency, crypto.currency)));
-    
-    remainingToDeduct -= deductUsd;
+    const cryptoRows = await database
+      .select()
+      .from(userBalancesTable)
+      .where(eq(userBalancesTable.userId, userId));
+
+    // Compute live crypto valuations (price fetching is outside DB — safe here)
+    let liveTotalUsd = 0;
+    const balancesWithPrices = await Promise.all(
+      (cryptoRows as typeof cryptoRows).map(async (b: any) => {
+        const price = await getCryptoPrice(b.currency);
+        const usdValue = parseFloat(b.amount) * price;
+        liveTotalUsd += usdValue;
+        return { currency: b.currency as string, amount: parseFloat(b.amount), price, usdValue };
+      })
+    );
+
+    const staticBalance = parseFloat(lockedUser.balance);
+    const totalBalance = liveTotalUsd + staticBalance;
+
+    if (totalBalance < amount) throw new Error("Insufficient balance");
+
+    let remainingToDeduct = amount;
+    const sortedCrypto = [...balancesWithPrices].sort((a, b) => b.usdValue - a.usdValue);
+
+    for (const crypto of sortedCrypto) {
+      if (remainingToDeduct <= 0) break;
+      const deductUsd = Math.min(remainingToDeduct, crypto.usdValue);
+      const deductCryptoAmount = deductUsd / crypto.price;
+
+      await database
+        .update(userBalancesTable)
+        .set({ amount: sql`amount - ${deductCryptoAmount.toFixed(18)}` })
+        .where(and(eq(userBalancesTable.userId, userId), eq(userBalancesTable.currency, crypto.currency)));
+
+      remainingToDeduct -= deductUsd;
+    }
+
+    if (remainingToDeduct > 0) {
+      await database
+        .update(usersTable)
+        .set({ balance: sql`balance - ${remainingToDeduct}` })
+        .where(eq(usersTable.id, userId));
+    }
+
+    return totalBalance - amount;
+  };
+
+  // If caller already opened a transaction, run within it (locks compose).
+  // Otherwise open our own transaction so the lock scope is exactly this deduction.
+  if (txn) {
+    return doDeduct(txn);
+  } else {
+    return db.transaction(doDeduct);
   }
-
-  // 3. Deduct remainder from static balance
-  if (remainingToDeduct > 0) {
-    await database.update(usersTable)
-      .set({ balance: sql`balance - ${remainingToDeduct}` })
-      .where(eq(usersTable.id, userId));
-  }
-
-  return totalBalance - amount;
 }
 
 /**
  * Credits an amount to a user's balance. 
- * FIX: If a currency is provided, it credits ONLY to that crypto balance.
+ * If a currency is provided, it credits ONLY to that crypto balance.
  * If no currency (or USD), it credits to the static bonus balance.
- * This prevents the double-crediting bug where both USD and crypto were being added.
  */
 export async function creditBalance(userId: number, amount: number, currency?: string, txn?: any): Promise<number> {
   const database = txn || db;
   
   if (currency && currency !== "USD") {
-    // Credit to crypto balance
     const price = await getCryptoPrice(currency);
     const cryptoAmount = amount / price;
     
@@ -107,7 +148,6 @@ export async function creditBalance(userId: number, amount: number, currency?: s
         set: { amount: sql`user_balances.amount + ${String(cryptoAmount)}` },
       });
   } else {
-    // Credit to static balance
     await database.update(usersTable)
       .set({ balance: sql`balance + ${amount}` })
       .where(eq(usersTable.id, userId));

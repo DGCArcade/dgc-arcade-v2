@@ -1,0 +1,229 @@
+What Still Needs Work
+1. Balance Service Concurrency (7/10)
+
+This is probably the biggest backend risk I found.
+
+Inside:
+
+deductBalance()
+
+I see:
+
+get current state
+calculate
+update
+
+That pattern is vulnerable if two actions happen simultaneously.
+
+Example:
+
+Bet
+Withdrawal
+
+at the exact same moment.
+
+I'd tell Claude:
+
+Audit balance-service.ts for race conditions and move critical balance operations into database transactions with row-level locking.
+
+2. Owner Logic
+
+I found:
+
+OWNER_USERNAME = "fanodgc"
+
+Hardcoded.
+
+Works.
+
+But long-term:
+
+Not ideal.
+
+I'd move that to:
+
+role
+or
+owner flag
+
+inside database.
+
+Not critical.
+
+3. Fraud Engine (8/10)
+
+Actually much better than expected.
+
+You already check:
+
+VPN
+Account age
+Deposit timing
+Wager ratio
+Historical withdrawals
+
+That's solid.
+
+Still needs:
+
+Velocity checks
+Multi-account detection
+Withdrawal clustering
+
+Eventually.
+
+4. Price Engine Risk
+
+One thing I don't love:
+
+return cachedPrice || 0
+
+If all providers fail:
+
+price becomes:
+
+0
+
+Bad.
+
+Could create weird edge cases.
+
+I'd rather:
+
+last known good price
+
+be retained.
+
+5. Slot Engine
+
+Still my biggest criticism.
+
+Everything else is more mature than the slots.
+
+Current slot score:
+
+Architecture
+
+8.5/10
+
+Actual gameplay
+
+3/10
+
+You have:
+
+Config
+Themes
+Renderer
+Layout
+Animation
+
+But much of it is still framework.
+
+Not feature-complete.
+
+What Shocked Me
+
+Honestly?
+
+The wallet/accounting side.
+
+I expected to find:
+
+user.balance += amount
+
+everywhere.
+
+Instead I found:
+
+ledger
+user balances
+live pricing
+crypto accounting
+
+which is much more serious.
+
+What I Would Fix Before Launch
+
+Priority order:
+
+Critical
+1
+
+Audit:
+
+balance-service.ts
+
+for race conditions.
+
+2
+
+Audit:
+
+transactions.ts
+
+for:
+
+double-credit
+double-withdraw
+duplicate webhook
+
+protection.
+
+3
+
+Audit:
+
+Plisio webhooks
+
+for idempotency.
+
+Every webhook should only process once.
+
+High
+4
+
+Finish admin panel errors.
+
+You told me:
+
+Approve Withdrawal
+Internal Server Error
+
+If that's still happening, fix it before launch.
+
+5
+
+Add:
+
+Sentry
+
+or similar error tracking.
+
+6
+
+Add:
+
+rate limiting
+
+to:
+
+login
+register
+withdraw
+deposit webhook
+
+routes.
+
+Medium
+7
+
+Improve slots.
+
+8
+
+Improve mobile UX.
+
+9
+
+Improve desktop slot experience.
