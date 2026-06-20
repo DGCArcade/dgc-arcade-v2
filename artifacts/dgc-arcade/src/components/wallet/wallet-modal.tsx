@@ -43,7 +43,9 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const [tipUsername, setTipUsername] = useState("");
   const [tipAmount, setTipAmount] = useState(5);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
-  const [depositResult, setDepositResult] = useState<{address: string; qrCode: string; paymentUrl: string} | null>(null);
+  const [depositResult, setDepositResult] = useState<{address: string; qrCode: string; paymentUrl: string; orderId?: string} | null>(null);
+  const [depositStatus, setDepositStatus] = useState<"pending" | "completed" | null>(null);
+  const [depositCredited, setDepositCredited] = useState<{amount: string; currency: string} | null>(null);
   const [copied, setCopied] = useState(false);
 
   // Live coin balance state (refreshed from backend on every open + after withdrawal)
@@ -97,6 +99,39 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
     return () => clearInterval(interval);
   }, [open, fetchCoinBalances]);
 
+  // ── STEP 4: Poll deposit status every 5s while address is shown ────────────
+  // The moment Plisio confirms receipt and our callback credits the balance,
+  // the user sees "✓ Payment Received!" and their new balance live — no redirect needed.
+  useEffect(() => {
+    if (!depositResult?.orderId || depositStatus === "completed") return;
+    const token = localStorage.getItem("dgc_token");
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/transactions/deposit/status/${depositResult.orderId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.credited && d.status === "completed") {
+          setDepositStatus("completed");
+          setDepositCredited({ amount: d.amount, currency: d.currency });
+          // Immediately refresh coin balances and the auth user (live balance)
+          fetchCoinBalances();
+          queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+          toast({
+            title: "✓ Payment Received!",
+            description: `${d.amount} ${d.currency} credited — your balance has been updated.`,
+          });
+        } else {
+          setDepositStatus("pending");
+        }
+      } catch (_) { /* silent — user still sees balance from auth */ }
+    };
+    poll();
+    const interval = setInterval(poll, 5_000);
+    return () => clearInterval(interval);
+  }, [depositResult?.orderId, depositStatus, fetchCoinBalances, queryClient]);
+
   // Fetch vault balance
   useEffect(() => {
     if (!open) return;
@@ -134,12 +169,14 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const handleDeposit = () => {
     initiateDeposit.mutate({ data: { amount, currency } } as any, {
       onSuccess: (res: any) => {
-        setDepositResult({ address: res.address, qrCode: res.qrCode, paymentUrl: res.paymentUrl });
+        setDepositResult({ address: res.address, qrCode: res.qrCode, paymentUrl: res.paymentUrl, orderId: res.orderId });
+        setDepositStatus("pending");
+        setDepositCredited(null);
         setPaymentUrl(res.paymentUrl);
         if (!res?.address && res?.paymentUrl) {
           window.open(res.paymentUrl, "_blank", "noopener,noreferrer");
         }
-        toast({ title: "Deposit Address Ready", description: "Send crypto to the address shown. Balance updates automatically." });
+        toast({ title: "Deposit Address Ready", description: "Send crypto to the address shown. We'll notify you the instant it's confirmed." });
       },
       onError: (err: unknown) => {
         const msg = (err as {data?: {error?: string}})?.data?.error ?? "Error";
@@ -395,15 +432,29 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                       {copied ? "✓ Copied!" : "Copy Address"}
                     </button>
                   </div>
-                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-                    <p className="text-yellow-400 text-xs font-bold uppercase mb-1">Important</p>
-                    <p className="text-xs text-muted-foreground">Only send <span className="font-bold">{selectedCurrency.name}</span> to this address. Wrong coin = permanent loss.</p>
-                  </div>
+                  {depositStatus === "completed" && depositCredited ? (
+                    <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-lg p-4 text-center">
+                      <div className="text-emerald-400 text-lg font-black mb-1">✓ Payment Received!</div>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="text-emerald-300 font-mono font-bold">{depositCredited.amount} {depositCredited.currency}</span> has been credited to your balance.
+                      </p>
+                      <div className="mt-2 text-xs font-mono font-bold text-primary">{formatCurrency(liveTotal)}</div>
+                      <div className="text-[10px] text-muted-foreground">New live balance</div>
+                    </div>
+                  ) : (
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="inline-block w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                        <p className="text-yellow-400 text-xs font-bold uppercase">Waiting for Payment</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Send <span className="font-bold">{selectedCurrency.name}</span> only. Wrong coin = permanent loss. Balance updates automatically the moment payment confirms.</p>
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => window.open(depositResult.paymentUrl, "_blank")}>
                       <ExternalLink className="w-3 h-3 mr-1" />View Invoice
                     </Button>
-                    <Button size="sm" className="flex-1 text-xs" onClick={() => { setDepositResult(null); setPaymentUrl(null); }}>New Deposit</Button>
+                    <Button size="sm" className="flex-1 text-xs" onClick={() => { setDepositResult(null); setPaymentUrl(null); setDepositStatus(null); setDepositCredited(null); }}>New Deposit</Button>
                   </div>
                 </div>
               )}

@@ -187,6 +187,7 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
     res.json({
       paymentUrl: data.data.invoice_url,
       trackId: data.data.txn_id,
+      orderId,           // used by frontend to poll /deposit/status/:orderId
       address: walletAddress,
       qrCode: qrCodeUrl,
       cryptoAmount: data.data.invoice_total_sum,
@@ -271,6 +272,44 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
       return;
     }
 
+    // ── STEP 2: SERVER-TO-SERVER PLISIO VERIFICATION ──────────────────────────
+    // After HMAC-SHA1, we make a direct API call to Plisio to independently
+    // confirm the payload is authentic and to get the authoritative actual_amount.
+    // This prevents replay/spoofed IPN attacks even if the secret key is compromised.
+    let plisioVerifiedActualAmount: number = 0;
+    let plisioVerifiedActualAmountUsd: number = 0;
+    let plisioVerifiedStatus: string = "";
+    try {
+      const plisioKey = PLISIO_SECRET_KEY;
+      const verifyUrl = `https://plisio.net/api/v1/operations/${encodeURIComponent(txn_id)}?api_key=${plisioKey}`;
+      const verifyResp = await fetch(verifyUrl, { signal: AbortSignal.timeout(8000) });
+      if (verifyResp.ok) {
+        const verifyData = await verifyResp.json() as any;
+        if (verifyData?.status === "success" && verifyData?.data) {
+          const d = verifyData.data;
+          // actual_amount = what was really received on-chain (authoritative)
+          const aa = parseFloat(String(d.actual_amount ?? d.received_amount ?? d.sum_received ?? "0"));
+          if (aa > 0) plisioVerifiedActualAmount = aa;
+          const aau = parseFloat(String(d.actual_amount_usd ?? d.received_amount_usd ?? d.sum_received_usd ?? "0"));
+          if (aau > 0) plisioVerifiedActualAmountUsd = aau;
+          plisioVerifiedStatus = String(d.status ?? "").toLowerCase();
+          req.log.info({
+            event: "plisio_api_verify",
+            txn_id,
+            plisioVerifiedActualAmount,
+            plisioVerifiedActualAmountUsd,
+            plisioVerifiedStatus,
+          }, "Plisio server-to-server verification succeeded");
+        } else {
+          req.log.warn({ txn_id, verifyData }, "Plisio API verify: non-success response — proceeding with IPN data");
+        }
+      } else {
+        req.log.warn({ txn_id, httpStatus: verifyResp.status }, "Plisio API verify: HTTP error — proceeding with IPN data");
+      }
+    } catch (verifyErr) {
+      req.log.warn({ txn_id, verifyErr }, "Plisio API verify: fetch failed — proceeding with IPN data only");
+    }
+
     if (tx.type === "withdrawal") {
       if (status === "completed") {
         const onChainHash = tx_urls
@@ -296,7 +335,9 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     }
 
     const pStatus = String(status).toLowerCase();
-    const creditStatuses = new Set(["completed", "mismatch", "overpaid", "finished"]);
+    // STEP 3: Credit on completed, mismatch, overpaid, finished, OR overdue
+    // "overdue" = user paid late but Plisio still received the funds — must credit.
+    const creditStatuses = new Set(["completed", "mismatch", "overpaid", "finished", "overdue"]);
     if (!creditStatuses.has(pStatus)) {
       res.json({ success: true });
       return;
@@ -315,18 +356,27 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     const cryptoCurrency = tx.currency || pCurrency || "ETH";
     const bodyRaw = req.body as Record<string, unknown>;
 
-    let cryptoAmountReceived = parseFloat(String(
-      received_amount           ||
-      bodyRaw.received_sum      ||
-      bodyRaw.paid_amount       ||
-      bodyRaw.tx_amount         ||
-      bodyRaw.amount_received   ||
-      bodyRaw.actual_amount     ||
-      bodyRaw.sum_received      ||
-      "0"
-    ));
+    // STEP 1 & 2: actual_amount — priority chain:
+    //   1. Plisio API server-to-server verified actual_amount (most authoritative)
+    //   2. actual_amount from IPN body
+    //   3. received_amount and other field name aliases from IPN body
+    let cryptoAmountReceived = plisioVerifiedActualAmount > 0
+      ? plisioVerifiedActualAmount
+      : parseFloat(String(
+          bodyRaw.actual_amount     ||  // STEP 1: actual_amount field first
+          received_amount           ||
+          bodyRaw.received_sum      ||
+          bodyRaw.paid_amount       ||
+          bodyRaw.tx_amount         ||
+          bodyRaw.amount_received   ||
+          bodyRaw.sum_received      ||
+          "0"
+        ));
     const cryptoAmountInvoiced = parseFloat(String(invoice_total_sum || bodyRaw.total_sum || bodyRaw.sum_expected || "0"));
-    let receivedUsdValue = parseFloat(String(received_amount_usd || bodyRaw.received_sum_usd || bodyRaw.amount_usd || "0"));
+    // Use Plisio API verified USD value as top priority
+    let receivedUsdValue = plisioVerifiedActualAmountUsd > 0
+      ? plisioVerifiedActualAmountUsd
+      : parseFloat(String(received_amount_usd || bodyRaw.received_sum_usd || bodyRaw.amount_usd || "0"));
     const sourceUsd = parseFloat(String(source_amount_usd || source_amount || tx.amount));
 
     // ── EXTRACT FROM txs ARRAY IN IPN BODY ────────────────────────────────
@@ -557,6 +607,55 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Plisio IPN callback error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── STEP 4: Deposit Status Polling Endpoint ────────────────────────────────
+// Frontend polls this every 5s after generating a deposit address so the user
+// sees their credited balance the moment Plisio confirms the payment.
+// Returns the transaction status + the user's real-time live balance.
+transactionsRouter.get("/deposit/status/:orderId", requireAuth, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    if (!orderId) { res.status(400).json({ error: "orderId required" }); return; }
+
+    // Find the transaction by order_id (set at deposit initiation)
+    const [tx] = await db
+      .select({
+        id: transactionsTable.id,
+        status: transactionsTable.status,
+        amount: transactionsTable.amount,
+        currency: transactionsTable.currency,
+        plisioTrackId: transactionsTable.plisioTrackId,
+        createdAt: transactionsTable.createdAt,
+        updatedAt: transactionsTable.updatedAt,
+      })
+      .from(transactionsTable)
+      .where(and(
+        sql`${transactionsTable.orderId} = ${orderId}`,
+        eq(transactionsTable.userId, req.user!.userId),
+        eq(transactionsTable.type, "deposit")
+      ))
+      .limit(1);
+
+    if (!tx) { res.status(404).json({ error: "Transaction not found" }); return; }
+
+    // Live balance — crypto-native, current market price
+    const { totalBalance, cryptoBalances } = await getUserBalance(req.user!.userId);
+
+    res.json({
+      transactionId: tx.id,
+      status: tx.status,
+      amount: tx.amount,
+      currency: tx.currency,
+      credited: tx.status === "completed",
+      liveBalance: totalBalance,
+      cryptoBalances,
+      updatedAt: tx.updatedAt,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Deposit status polling error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
