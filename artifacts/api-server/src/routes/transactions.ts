@@ -287,10 +287,10 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
         const verifyData = await verifyResp.json() as any;
         if (verifyData?.status === "success" && verifyData?.data) {
           const d = verifyData.data;
-          // actual_amount = what was really received on-chain (authoritative)
-          const aa = parseFloat(String(d.actual_amount ?? d.received_amount ?? d.sum_received ?? "0"));
+          // actual_sum = real incoming crypto amount that landed on the blockchain (authoritative per Plisio docs)
+          const aa = parseFloat(String(d.actual_sum ?? d.actual_amount ?? d.received_amount ?? d.sum_received ?? "0"));
           if (aa > 0) plisioVerifiedActualAmount = aa;
-          const aau = parseFloat(String(d.actual_amount_usd ?? d.received_amount_usd ?? d.sum_received_usd ?? "0"));
+          const aau = parseFloat(String(d.actual_sum_usd ?? d.actual_amount_usd ?? d.received_amount_usd ?? d.sum_received_usd ?? "0"));
           if (aau > 0) plisioVerifiedActualAmountUsd = aau;
           plisioVerifiedStatus = String(d.status ?? "").toLowerCase();
           req.log.info({
@@ -356,22 +356,45 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     const cryptoCurrency = tx.currency || pCurrency || "ETH";
     const bodyRaw = req.body as Record<string, unknown>;
 
-    // STEP 1 & 2: actual_amount — priority chain:
-    //   1. Plisio API server-to-server verified actual_amount (most authoritative)
-    //   2. actual_amount from IPN body
-    //   3. received_amount and other field name aliases from IPN body
-    let cryptoAmountReceived = plisioVerifiedActualAmount > 0
-      ? plisioVerifiedActualAmount
-      : parseFloat(String(
-          bodyRaw.actual_amount     ||  // STEP 1: actual_amount field first
-          received_amount           ||
-          bodyRaw.received_sum      ||
-          bodyRaw.paid_amount       ||
-          bodyRaw.tx_amount         ||
-          bodyRaw.amount_received   ||
-          bodyRaw.sum_received      ||
-          "0"
-        ));
+    // STEP 1 & 2: actual_sum — priority chain:
+    //   1. Plisio API server-to-server verified actual_sum (most authoritative — real on-chain amount)
+    //   2. actual_sum / actual_commission_sum from IPN body (mismatch/overdue — real received amount)
+    //   3. amount from IPN body only when status=completed (Plisio confirms full invoice paid)
+    //   4. other field name aliases as last resort
+    let cryptoAmountReceived: number;
+    if (plisioVerifiedActualAmount > 0) {
+      // Server-verified: always use actual_sum from the operations API
+      cryptoAmountReceived = plisioVerifiedActualAmount;
+    } else {
+      // IPN body fallback — field choice depends on status per Plisio docs:
+      //   completed  → `amount` (full invoice amount confirmed paid)
+      //   mismatch / overdue → `actual_sum` (partial/late real received amount)
+      //   everything else → try actual_sum first, then amount
+      const ipnActualSum = parseFloat(String(bodyRaw.actual_sum || bodyRaw.actual_commission_sum || "0"));
+      const ipnAmount    = parseFloat(String(bodyRaw.amount || received_amount || "0"));
+
+      if (pStatus === "completed") {
+        // Full payment confirmed — use `amount` (invoice total = received total)
+        cryptoAmountReceived = ipnAmount > 0 ? ipnAmount : ipnActualSum;
+      } else if (pStatus === "mismatch" || pStatus === "overdue") {
+        // Partial or late payment — `actual_sum` is the real incoming crypto
+        cryptoAmountReceived = ipnActualSum > 0 ? ipnActualSum : ipnAmount;
+      } else {
+        // overpaid / finished — prefer actual_sum, fall back to amount
+        cryptoAmountReceived = ipnActualSum > 0
+          ? ipnActualSum
+          : parseFloat(String(
+              received_amount         ||
+              bodyRaw.received_sum    ||
+              bodyRaw.paid_amount     ||
+              bodyRaw.tx_amount       ||
+              bodyRaw.amount_received ||
+              bodyRaw.sum_received    ||
+              bodyRaw.amount          ||
+              "0"
+            ));
+      }
+    }
     const cryptoAmountInvoiced = parseFloat(String(invoice_total_sum || bodyRaw.total_sum || bodyRaw.sum_expected || "0"));
     // Use Plisio API verified USD value as top priority
     let receivedUsdValue = plisioVerifiedActualAmountUsd > 0
