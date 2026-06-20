@@ -280,7 +280,7 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     let plisioVerifiedActualAmountUsd: number = 0;
     let plisioVerifiedStatus: string = "";
     try {
-      const plisioKey = PLISIO_SECRET_KEY;
+      const plisioKey = process.env.PLISIO_SECRET_KEY ?? "";
       const verifyUrl = `https://plisio.net/api/v1/operations/${encodeURIComponent(txn_id)}?api_key=${plisioKey}`;
       const verifyResp = await fetch(verifyUrl, { signal: AbortSignal.timeout(8000) });
       if (verifyResp.ok) {
