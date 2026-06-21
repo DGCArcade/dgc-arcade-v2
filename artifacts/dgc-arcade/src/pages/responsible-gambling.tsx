@@ -32,7 +32,7 @@ export default function ResponsibleGamblingPage() {
 
         <section>
           <h2 className="text-lg font-bold text-foreground mb-3">Our Commitment</h2>
-          <p>DGC Arcade is operated by DGC Arcade Ltd. and licensed by the Curaçao Gaming Authority. We are committed to providing a safe and responsible gambling environment. Gambling should always be entertaining — never a way to make money or escape problems.</p>
+          <p>DGC Arcade is operated by DGC Arcade Limited as a licensed gaming platform. We are committed to providing a safe and responsible gaming environment. Play should always be entertaining — never a way to make money or escape problems.</p>
         </section>
 
         <section>

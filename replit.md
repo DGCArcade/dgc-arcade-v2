@@ -1,6 +1,6 @@
 # DGC Arcade
 
-A full-stack crypto gambling arcade platform for Different Grind Crew — featuring slots, blackjack, mines, crash, roulette, dice, plinko, hi-lo, keno, and coin flip, with a live bet feed, tournaments, referrals, daily bonuses, and a wallet system backed by Plisio crypto payments.
+A full-stack licensed gaming platform for DGC Arcade — featuring slots, blackjack, mines, crash, roulette, dice, plinko, hi-lo, keno, and coin flip, with a live bet feed, tournaments, referrals, daily bonuses, and a wallet system backed by Plisio crypto payments.
 
 ## Run & Operate
 

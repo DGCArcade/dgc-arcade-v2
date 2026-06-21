@@ -24,7 +24,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-lg font-bold text-foreground mb-3">1. Company Information</h2>
-          <p>DGC Arcade (the "Platform") is operated by <strong className="text-foreground">DGC Arcade Ltd.</strong>, licensed by the Curaçao Gaming Authority under <strong className="text-foreground">License No. 8048/JAZ</strong>.</p>
+          <p>DGC Arcade (the "Platform") is operated by <strong className="text-foreground">DGC Arcade Limited</strong>, a licensed gaming platform.</p>
           <p className="mt-2">Support: <strong className="text-foreground">support@dgcarcade.io</strong></p>
         </section>
 
@@ -191,7 +191,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-lg font-bold text-foreground mb-3">17. Governing Law and Disputes</h2>
-          <p>These Terms are governed by the laws of Curaçao. Any dispute shall first be addressed through our customer support process. Unresolved disputes shall be submitted to the exclusive jurisdiction of the courts of Curaçao, except where mandatory local law requires otherwise.</p>
+          <p>These Terms are governed by applicable laws for the jurisdictions in which DGC Arcade operates. Any dispute shall first be addressed through our customer support process. Unresolved disputes shall be handled through the appropriate legal venue, except where mandatory local law requires otherwise.</p>
         </section>
 
         <section>
