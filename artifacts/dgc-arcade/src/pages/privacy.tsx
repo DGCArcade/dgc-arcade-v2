@@ -25,7 +25,7 @@ export default function PrivacyPage() {
 
         <section>
           <h2 className="text-lg font-bold text-foreground mb-3">1. Who We Are</h2>
-          <p><strong className="text-foreground">DGC Arcade Limited</strong> ("we", "us", "our", "DGC Arcade") is the operator of the DGC Arcade licensed gaming platform.</p>
+          <p><strong className="text-foreground">DGC Arcade Ltd.</strong> ("we", "us", "our", "DGC Arcade") is the operator of the DGC Arcade licensed gaming platform.</p>
           <p className="mt-2">For all privacy-related inquiries, contact our Data Protection team at <strong className="text-foreground">privacy@dgcarcade.io</strong>.</p>
         </section>
 
@@ -236,7 +236,7 @@ export default function PrivacyPage() {
           <div className="bg-secondary/30 rounded-xl p-4 border border-border/40 space-y-1">
             <p><strong className="text-foreground">Data Protection:</strong> privacy@dgcarcade.io</p>
             <p><strong className="text-foreground">General Support:</strong> support@dgcarcade.io</p>
-            <p><strong className="text-foreground">Operator:</strong> DGC Arcade Limited — DGCArcade.io</p>
+            <p><strong className="text-foreground">Operator:</strong> DGC Arcade Ltd. — DGCArcade.io</p>
           </div>
         </section>
 

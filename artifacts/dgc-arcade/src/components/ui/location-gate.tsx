@@ -414,7 +414,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center font-display font-black text-primary-foreground text-xl">D</div>
             <span className="font-display font-bold text-2xl uppercase tracking-widest">DGC Arcade</span>
           </div>
-          <p className="text-muted-foreground text-sm">DGC Arcade Limited</p>
+          <p className="text-muted-foreground text-sm">DGC Arcade Ltd.</p>
         </div>
 
         {/* Consent card */}
@@ -422,7 +422,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
           <div>
             <h2 className="text-xl font-display font-black uppercase tracking-tight mb-2">Location Verification Required</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              <strong className="text-foreground">DGC Arcade Limited</strong> is a licensed gaming platform. We verify your location before granting access.
+              <strong className="text-foreground">DGC Arcade Ltd.</strong> is a licensed gaming platform. We verify your location before granting access.
             </p>
           </div>
 
@@ -490,7 +490,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
         </div>
 
         <p className="text-center text-xs text-muted-foreground/50 mt-4">
-          Operated by DGC Arcade Limited
+          Operated by DGC Arcade Ltd.
         </p>
       </div>
     </div>

@@ -24,7 +24,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-lg font-bold text-foreground mb-3">1. Company Information</h2>
-          <p>DGC Arcade (the "Platform") is operated by <strong className="text-foreground">DGC Arcade Limited</strong>, a licensed gaming platform.</p>
+          <p>DGC Arcade (the "Platform") is operated by <strong className="text-foreground">DGC Arcade Ltd.</strong>, a licensed gaming platform.</p>
           <p className="mt-2">Support: <strong className="text-foreground">support@dgcarcade.io</strong></p>
         </section>
 

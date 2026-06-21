@@ -69,7 +69,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
               <div className="border-t border-border/30 pt-6 space-y-3">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground/70">
-                  <span>🎰 Operated by <strong className="text-muted-foreground">DGC Arcade Limited</strong></span>
+                  <span>🎰 Operated by <strong className="text-muted-foreground">DGC Arcade Ltd.</strong></span>
                   <span>·</span>
                   <span>Licensed gaming platform</span>
                 </div>
