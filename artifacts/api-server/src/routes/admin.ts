@@ -716,10 +716,14 @@ adminRouter.post("/users/:id/reset", async (req, res) => {
     });
 
     await logAudit({
-      actorId: req.user!.userId,
+      adminId: req.user!.userId,
+      adminUsername: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1))[0]?.username ?? "admin",
       action: "user.reset",
+      targetType: "user",
       targetId: userId,
-      details: { username: target.username },
+      oldValue: { username: target.username },
+      newValue: { balance: 0, stats: "reset" },
+      ip: req.ip,
     });
 
     res.json({ success: true });
@@ -3432,10 +3436,14 @@ adminRouter.post("/creators/:id/deposit", async (req, res) => {
     });
 
     await logAudit({
-      actorId: req.user!.userId,
+      adminId: req.user!.userId,
+      adminUsername: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1))[0]?.username ?? "admin",
       action: "admin_commission_deposit",
+      targetType: "user",
       targetId: creatorId,
-      details: { amount, note, newBalance },
+      oldValue: { promoBalance: target.promoBalance },
+      newValue: { amount, note, newBalance },
+      ip: req.ip,
     });
 
     res.json({ success: true, newPromoBalance: newBalance, username: target.username });

@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Game } from "@workspace/api-client-react/src/generated/api.schemas";
-import { usePlaceBet, getGetMeQueryKey, getListRecentBetsAllQueryKey, getListBetsQueryKey } from "@workspace/api-client-react";
+import { Game, usePlaceBet, getGetMeQueryKey, getListRecentBetsAllQueryKey, getListBetsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -28,8 +27,8 @@ export function Crash({ game }: CrashProps) {
   const [finalMultiplier, setFinalMultiplier] = useState(0);
   const [win, setWin] = useState<boolean | null>(null);
   
-  const animationRef = useRef<number>();
-  const startTimeRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
+  const startTimeRef = useRef<number | undefined>(undefined);
 
   const handleBet = () => {
     requireAuth(() => {

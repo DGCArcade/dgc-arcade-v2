@@ -247,7 +247,7 @@ function SpecialtyHub({
   unreadCount: number;
   onRefresh: () => void;
   onFetchMessages: () => void;
-  messagesBottomRef: React.RefObject<HTMLDivElement>;
+  messagesBottomRef: React.RefObject<HTMLDivElement | null>;
   toast: ReturnType<typeof useToast>["toast"];
 }) {
   const [section, setSection] = useState<"overview" | "campaigns" | "commission" | "referred" | "faq" | "messages">("overview");

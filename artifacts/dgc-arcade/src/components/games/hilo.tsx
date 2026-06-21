@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Game } from "@workspace/api-client-react/src/generated/api.schemas";
+import { Game } from "@workspace/api-client-react";
 import { usePlaceBet, getGetMeQueryKey, getListRecentBetsAllQueryKey, getListBetsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";

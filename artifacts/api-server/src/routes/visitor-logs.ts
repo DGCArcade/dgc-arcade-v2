@@ -14,16 +14,13 @@ visitorLogsRouter.get("/", async (req, res) => {
   const search = typeof req.query.search === "string" ? req.query.search : "";
 
   try {
-    let query = db.select().from(visitorsTable).orderBy(desc(visitorsTable.updatedAt));
+    const searchClause = search
+      ? sql`${visitorsTable.ip} ILIKE ${`%${search}%`} OR ${visitorsTable.city} ILIKE ${`%${search}%`} OR ${visitorsTable.country} ILIKE ${`%${search}%`} OR ${visitorsTable.deviceType} ILIKE ${`%${search}%`}`
+      : undefined;
 
-    if (search) {
-      // Search by IP, city, country, or device
-      query = query.where(
-        sql`${visitorsTable.ip} ILIKE ${`%${search}%`} OR ${visitorsTable.city} ILIKE ${`%${search}%`} OR ${visitorsTable.country} ILIKE ${`%${search}%`} OR ${visitorsTable.deviceType} ILIKE ${`%${search}%`}`
-      );
-    }
-
-    const logs = await query.limit(limit).offset(offset);
+    const logs = searchClause
+      ? await db.select().from(visitorsTable).where(searchClause).orderBy(desc(visitorsTable.updatedAt)).limit(limit).offset(offset)
+      : await db.select().from(visitorsTable).orderBy(desc(visitorsTable.updatedAt)).limit(limit).offset(offset);
 
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)` })

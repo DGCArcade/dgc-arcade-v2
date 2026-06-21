@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { Game } from "@workspace/api-client-react/src/generated/api.schemas";
-import { getGetMeQueryKey } from "@workspace/api-client-react";
+import { Game, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -293,7 +292,7 @@ export function Blackjack({game}:BlackjackProps) {
         </div>
 
         {/* VS DIVIDER */}
-        <div style={{position:"relative",zIndex:10,width:"100%",maxWidth:280,display:"flex",alignItems:"center",gap:14,marginVertical:4}}>
+        <div style={{position:"relative",zIndex:10,width:"100%",maxWidth:280,display:"flex",alignItems:"center",gap:14,margin:"4px 0"}}>
           <div style={{flex:1,height:"1px",background:"linear-gradient(90deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.1) 50%,rgba(255,255,255,0.04) 100%)"}}/>
           <span style={{fontSize:9,fontWeight:700,letterSpacing:5,color:"rgba(255,255,255,0.12)",textTransform:"uppercase"}}>vs</span>
           <div style={{flex:1,height:"1px",background:"linear-gradient(90deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.1) 50%,rgba(255,255,255,0.04) 100%)"}}/>
@@ -324,13 +323,13 @@ export function Blackjack({game}:BlackjackProps) {
         {/* ACTION BUTTONS - COMPACT */}
         {isActive&&(
           <div style={{position:"relative",zIndex:10,display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center",marginTop:4}}>
-            <button onClick={()=>action("hit")} disabled={loading} style={{padding:"10px 20px",borderRadius:12,fontWeight:900,fontSize:12,letterSpacing:3,textTransform:"uppercase",background:"linear-gradient(140deg,#16a34a,#15803d)",color:"#fff",border:"1.5px solid rgba(255,255,255,0.15)",cursor:loading?"not-allowed":"pointer",boxShadow:"0 4px 20px rgba(22,163,74,0.5)",opacity:loading?0.5:1,minWidth:70,transition:"all 0.2s",transform:loading?"scale(0.95)":"scale(1)",fontSize:11}}>HIT</button>
-            <button onClick={()=>action("stand")} disabled={loading} style={{padding:"10px 20px",borderRadius:12,fontWeight:900,fontSize:12,letterSpacing:3,textTransform:"uppercase",background:"linear-gradient(140deg,#dc2626,#b91c1c)",color:"#fff",border:"1.5px solid rgba(255,255,255,0.15)",cursor:loading?"not-allowed":"pointer",boxShadow:"0 4px 20px rgba(220,38,38,0.5)",opacity:loading?0.5:1,minWidth:70,transition:"all 0.2s",transform:loading?"scale(0.95)":"scale(1)",fontSize:11}}>STAND</button>
+            <button onClick={()=>action("hit")} disabled={loading} style={{padding:"10px 20px",borderRadius:12,fontWeight:900,letterSpacing:3,textTransform:"uppercase",background:"linear-gradient(140deg,#16a34a,#15803d)",color:"#fff",border:"1.5px solid rgba(255,255,255,0.15)",cursor:loading?"not-allowed":"pointer",boxShadow:"0 4px 20px rgba(22,163,74,0.5)",opacity:loading?0.5:1,minWidth:70,transition:"all 0.2s",transform:loading?"scale(0.95)":"scale(1)",fontSize:11}}>HIT</button>
+            <button onClick={()=>action("stand")} disabled={loading} style={{padding:"10px 20px",borderRadius:12,fontWeight:900,letterSpacing:3,textTransform:"uppercase",background:"linear-gradient(140deg,#dc2626,#b91c1c)",color:"#fff",border:"1.5px solid rgba(255,255,255,0.15)",cursor:loading?"not-allowed":"pointer",boxShadow:"0 4px 20px rgba(220,38,38,0.5)",opacity:loading?0.5:1,minWidth:70,transition:"all 0.2s",transform:loading?"scale(0.95)":"scale(1)",fontSize:11}}>STAND</button>
             {playerHand.length===2&&user&&parseFloat(String(user.balance))>=amount&&(
-              <button onClick={()=>action("double")} disabled={loading} style={{padding:"10px 18px",borderRadius:12,fontWeight:900,fontSize:12,letterSpacing:3,textTransform:"uppercase",background:"linear-gradient(140deg,#7c3aed,#6d28d9)",color:"#fff",border:"1.5px solid rgba(255,255,255,0.15)",cursor:loading?"not-allowed":"pointer",boxShadow:"0 4px 20px rgba(124,58,237,0.5)",opacity:loading?0.5:1,minWidth:70,transition:"all 0.2s",transform:loading?"scale(0.95)":"scale(1)",fontSize:11}}>DBL</button>
+              <button onClick={()=>action("double")} disabled={loading} style={{padding:"10px 18px",borderRadius:12,fontWeight:900,letterSpacing:3,textTransform:"uppercase",background:"linear-gradient(140deg,#7c3aed,#6d28d9)",color:"#fff",border:"1.5px solid rgba(255,255,255,0.15)",cursor:loading?"not-allowed":"pointer",boxShadow:"0 4px 20px rgba(124,58,237,0.5)",opacity:loading?0.5:1,minWidth:70,transition:"all 0.2s",transform:loading?"scale(0.95)":"scale(1)",fontSize:11}}>DBL</button>
             )}
             {canSplit&&(
-              <button onClick={()=>action("split")} disabled={loading} style={{padding:"10px 18px",borderRadius:12,fontWeight:900,fontSize:12,letterSpacing:3,textTransform:"uppercase",background:"linear-gradient(140deg,#0891b2,#0e7490)",color:"#fff",border:"1.5px solid rgba(255,255,255,0.15)",cursor:loading?"not-allowed":"pointer",boxShadow:"0 4px 20px rgba(8,145,178,0.5)",opacity:loading?0.5:1,minWidth:70,transition:"all 0.2s",transform:loading?"scale(0.95)":"scale(1)",fontSize:11}}>SPLIT</button>
+              <button onClick={()=>action("split")} disabled={loading} style={{padding:"10px 18px",borderRadius:12,fontWeight:900,letterSpacing:3,textTransform:"uppercase",background:"linear-gradient(140deg,#0891b2,#0e7490)",color:"#fff",border:"1.5px solid rgba(255,255,255,0.15)",cursor:loading?"not-allowed":"pointer",boxShadow:"0 4px 20px rgba(8,145,178,0.5)",opacity:loading?0.5:1,minWidth:70,transition:"all 0.2s",transform:loading?"scale(0.95)":"scale(1)",fontSize:11}}>SPLIT</button>
             )}
           </div>
         )}

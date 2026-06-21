@@ -150,6 +150,7 @@ export default function Profile() {
       const interval = setInterval(fetchPlisioBalance, 30000);
       return () => clearInterval(interval);
     }
+    return undefined;
   }, [user?.username, fetchPlisioBalance]);
 
   useEffect(() => {

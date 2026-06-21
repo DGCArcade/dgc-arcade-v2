@@ -526,6 +526,7 @@ function ReelColumn({
       const t = setTimeout(() => setIsLanding(false), 750);
       return () => clearTimeout(t);
     }
+    return undefined;
   }, [spinning, landing]);
 
   const getSymById = (id: string) => allSymbols.find(s => s.id === id) ?? allSymbols[0];

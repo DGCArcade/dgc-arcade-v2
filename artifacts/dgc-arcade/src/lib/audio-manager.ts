@@ -58,6 +58,7 @@ export class AudioManager {
   private masterVolume: number = 0.7;
   private sfxVolume: number = 0.8;
   private musicVolume: number = 0.5;
+  private muted: boolean = false;
   private audioContext: AudioContext | null = null;
   private oscillator: OscillatorNode | null = null;
 
@@ -262,15 +263,17 @@ export class AudioManager {
   }
 
   public mute() {
+    this.muted = true;
     Howler.mute(true);
   }
 
   public unmute() {
+    this.muted = false;
     Howler.mute(false);
   }
 
   public isMuted(): boolean {
-    return Howler.muted();
+    return this.muted;
   }
 
   public dispose() {

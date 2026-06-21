@@ -1404,7 +1404,7 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
         iterationCount++;
 
         // Non-streaming call to handle tool use properly (with retry logic for rate limits)
-        let apiResponse;
+        let apiResponse: Response | undefined;
         let retries = 0;
         const MAX_RETRIES = 3;
         
@@ -1432,6 +1432,12 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
             continue;
           }
           break;
+        }
+
+        if (!apiResponse) {
+          sendEvent("error", { message: "AI service did not respond after retries" });
+          res.end();
+          return;
         }
 
         if (!apiResponse.ok) {
@@ -1578,7 +1584,7 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
     while (iterationCount < MAX_ITERATIONS) {
       iterationCount++;
 
-      let apiResponse;
+      let apiResponse: Response | undefined;
       let retries = 0;
       const MAX_RETRIES = 3;
       
@@ -1606,6 +1612,11 @@ ownerAiRouter.post("/owner-ai/chat", async (req, res) => {
           continue;
         }
         break;
+      }
+
+      if (!apiResponse) {
+        res.json({ error: "AI service did not respond after retries" });
+        return;
       }
 
       if (!apiResponse.ok) {

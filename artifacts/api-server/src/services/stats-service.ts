@@ -1,7 +1,10 @@
 import { db } from "@workspace/db";
 import { betsTable, transactionsTable } from "@workspace/db/schema";
 import { eq, sum, sql, and, gte, lte, count } from "drizzle-orm";
-import { MinLogger } from "../lib/logger";
+
+interface MinLogger {
+  info(obj: Record<string, unknown>, msg: string): void;
+}
 
 export async function getDailyWinLoss(date: Date, log: MinLogger) {
   const startOfDay = new Date(date);
