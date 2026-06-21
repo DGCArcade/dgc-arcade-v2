@@ -34,9 +34,176 @@ export type PayoutOutcome =
   | { outcome: "completed";         id: number; txHash: string | null; amount: number }
   | { outcome: "needs_review";      message: string }
   | { outcome: "reverted_pending";  message: string }
+  | {
+      outcome: "provider_insufficient_funds";
+      message: string;
+      currency: string;
+      requiredCrypto: number;
+      availableCrypto: number | null;
+      requiredUsd: number;
+    }
   | { outcome: "already_processing" }
   | { outcome: "no_key" }
   | { outcome: "no_address" };
+
+export type PayoutReadiness =
+  | {
+      ok: true;
+      currency: string;
+      cryptoAmount: string;
+      rate: number;
+      availableCrypto: number | null;
+    }
+  | {
+      ok: false;
+      reason: "conversion_failed";
+      message: string;
+      currency: string;
+      requiredUsd: number;
+    }
+  | {
+      ok: false;
+      reason: "insufficient_provider_funds";
+      message: string;
+      currency: string;
+      requiredCrypto: number;
+      availableCrypto: number | null;
+      requiredUsd: number;
+    };
+
+function parseNumeric(value: unknown): number | null {
+  const n = typeof value === "number" ? value : parseFloat(String(value ?? ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeCoinKey(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function extractBalanceFromEntry(entry: unknown): number | null {
+  if (typeof entry === "string" || typeof entry === "number") return parseNumeric(entry);
+  if (!entry || typeof entry !== "object") return null;
+  const obj = entry as Record<string, unknown>;
+  return (
+    parseNumeric(obj.balance) ??
+    parseNumeric(obj.available) ??
+    parseNumeric(obj.available_balance) ??
+    parseNumeric(obj.amount)
+  );
+}
+
+async function fetchPlisioProviderBalance(apiKey: string, currency: string, log: MinLogger): Promise<number | null> {
+  const targetKey = normalizeCoinKey(currency);
+
+  try {
+    const params = new URLSearchParams({ api_key: apiKey });
+    const resp = await fetch(
+      `https://api.plisio.net/api/v1/balances?${params.toString()}`,
+      { signal: AbortSignal.timeout(12_000) },
+    );
+    const data = await resp.json() as {
+      status?: string;
+      data?: Record<string, unknown>;
+    };
+    if (data.status === "success" && data.data) {
+      for (const [key, entry] of Object.entries(data.data)) {
+        if (normalizeCoinKey(key) === targetKey) {
+          const balance = extractBalanceFromEntry(entry);
+          if (balance !== null) return balance;
+        }
+      }
+    }
+  } catch (err) {
+    log.error({ err, currency }, "Plisio /balances preflight failed");
+  }
+
+  try {
+    const params = new URLSearchParams({ api_key: apiKey });
+    const resp = await fetch(
+      `https://api.plisio.net/api/v1/currencies/${currency}?${params.toString()}`,
+      { signal: AbortSignal.timeout(10_000) },
+    );
+    const data = await resp.json() as {
+      status?: string;
+      data?: Record<string, unknown>;
+    };
+    if (data.status === "success" && data.data) {
+      return extractBalanceFromEntry(data.data);
+    }
+  } catch (err) {
+    log.error({ err, currency }, "Plisio currency balance preflight failed");
+  }
+
+  return null;
+}
+
+export function extractPlisioErrorMessage(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return String(payload ?? "Unknown Plisio error");
+  const obj = payload as Record<string, unknown>;
+  const data = obj.data && typeof obj.data === "object" ? obj.data as Record<string, unknown> : undefined;
+  const rawMessage = data?.message ?? obj.message ?? obj.error ?? JSON.stringify(payload).slice(0, 200);
+  if (typeof rawMessage !== "string") return String(rawMessage);
+
+  try {
+    const parsed = JSON.parse(rawMessage) as unknown;
+    if (parsed && typeof parsed === "object") {
+      const parts = Object.entries(parsed as Record<string, unknown>).flatMap(([field, value]) => {
+        if (Array.isArray(value)) return value.map((v) => `${field}: ${String(v)}`);
+        return [`${field}: ${String(value)}`];
+      });
+      if (parts.length > 0) return parts.join("; ");
+    }
+  } catch {
+    // Plain text is already useful.
+  }
+
+  return rawMessage;
+}
+
+export function isProviderInsufficientFundsMessage(message: string): boolean {
+  return /insufficient\s+funds|insufficient.*balance|balance.*insufficient/i.test(message);
+}
+
+export async function getPlisioPayoutReadiness(
+  usdAmount: number,
+  currency: string,
+  apiKey: string,
+  log: MinLogger,
+): Promise<PayoutReadiness> {
+  const payoutCurrency = PLISIO_PAYOUT_MAP[currency] ?? currency;
+  const conversion = await usdToCrypto(usdAmount, payoutCurrency, apiKey, log);
+  if (!conversion) {
+    return {
+      ok: false,
+      reason: "conversion_failed",
+      message: "Could not fetch exchange rate to convert USD to crypto. Funds were NOT sent — will retry.",
+      currency: payoutCurrency,
+      requiredUsd: usdAmount,
+    };
+  }
+
+  const requiredCrypto = parseFloat(conversion.cryptoAmount);
+  const availableCrypto = await fetchPlisioProviderBalance(apiKey, payoutCurrency, log);
+  if (availableCrypto !== null && availableCrypto + 1e-12 < requiredCrypto) {
+    return {
+      ok: false,
+      reason: "insufficient_provider_funds",
+      message: `Plisio provider balance is too low for ${payoutCurrency}: need ${requiredCrypto}, available ${availableCrypto}. Add funds to Plisio or choose a funded coin before approving.`,
+      currency: payoutCurrency,
+      requiredCrypto,
+      availableCrypto,
+      requiredUsd: usdAmount,
+    };
+  }
+
+  return {
+    ok: true,
+    currency: payoutCurrency,
+    cryptoAmount: conversion.cryptoAmount,
+    rate: conversion.rate,
+    availableCrypto,
+  };
+}
 
 /**
  * Converts a USD amount to crypto using live exchange rates.
@@ -172,19 +339,30 @@ export async function sendPlisioPayout(
   // source_amount/source_currency are NOT supported on the withdraw endpoint
   // (they only work for the invoice/deposit endpoint). Passing them causes
   // Plisio to return {"amount":"Missing required attribute"}.
-  const conversion = await usdToCrypto(usdAmount, payoutCurrency, PLISIO_KEY, log);
-  if (!conversion) {
+  const readiness = await getPlisioPayoutReadiness(usdAmount, payoutCurrency, PLISIO_KEY, log);
+  if (!readiness.ok && readiness.reason === "conversion_failed") {
     log.error({ txId, usdAmount, currency: payoutCurrency }, "Plisio payout: USD→crypto conversion failed — leaving pending");
     return {
       outcome: "reverted_pending",
-      message: "Could not fetch exchange rate to convert USD to crypto. Funds were NOT sent — will retry.",
+      message: readiness.message,
+    };
+  }
+  if (!readiness.ok && readiness.reason === "insufficient_provider_funds") {
+    log.error({ txId, usdAmount, currency: payoutCurrency, readiness }, "Plisio payout blocked: insufficient provider balance");
+    return {
+      outcome: "provider_insufficient_funds",
+      message: readiness.message,
+      currency: readiness.currency,
+      requiredCrypto: readiness.requiredCrypto,
+      availableCrypto: readiness.availableCrypto,
+      requiredUsd: readiness.requiredUsd,
     };
   }
 
-  const { cryptoAmount, rate } = conversion;
+  const { cryptoAmount, rate } = readiness;
 
   log.info(
-    { txId, usdAmount, cryptoAmount, currency: payoutCurrency, rate },
+    { txId, usdAmount, cryptoAmount, currency: payoutCurrency, rate, availableCrypto: readiness.availableCrypto },
     "Plisio payout: initiating with crypto amount",
   );
 
@@ -267,7 +445,7 @@ export async function sendPlisioPayout(
   }
 
   if (payoutData.status !== "success") {
-    const errMsg = payoutData.data?.message ?? JSON.stringify(payoutData).slice(0, 200);
+    const errMsg = extractPlisioErrorMessage(payoutData);
     const refId = payoutData.data?.txn_id ?? payoutData.data?.id;
     if (refId) {
       log.error({ txId, payoutData, errMsg }, "Plisio payout error WITH reference — needs review");
@@ -275,6 +453,18 @@ export async function sendPlisioPayout(
       return {
         outcome: "needs_review",
         message: `Plisio reported an error but returned a payout reference (${errMsg}). It may have been sent — check your dashboard. Left under review.`,
+      };
+    }
+    if (isProviderInsufficientFundsMessage(errMsg)) {
+      log.error({ txId, payoutData, errMsg }, "Plisio payout rejected: insufficient provider balance");
+      await revertToPending();
+      return {
+        outcome: "provider_insufficient_funds",
+        message: `Plisio provider balance is too low. ${errMsg}. Add funds to Plisio or choose a funded coin before retrying.`,
+        currency: payoutCurrency,
+        requiredCrypto: parseFloat(cryptoAmount),
+        availableCrypto: readiness.availableCrypto,
+        requiredUsd: usdAmount,
       };
     }
     log.error({ txId, payoutData, errMsg }, "Plisio payout rejected (no reference)");

@@ -8,7 +8,7 @@ import { getPlatformSettings } from "../lib/platform-settings.js";
 import { logAudit } from "../services/audit.js";
 import { recordLedger, recordLedgerStandalone } from "../services/ledger.js";
 import { getUserBalance } from "../lib/balance-service.js";
-import { sendPlisioPayout } from "../lib/plisio-payout.js";
+import { getPlisioPayoutReadiness, sendPlisioPayout } from "../lib/plisio-payout.js";
 import { getDailyWinLoss, getDailyWithdrawals, getDailyDeposits } from "../services/stats-service.js";
 import { getCryptoPrice } from "../lib/price-service.js";
 
@@ -894,6 +894,17 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
           return;
         case "reverted_pending":
           res.status(502).json({ error: result.message });
+          return;
+        case "provider_insufficient_funds":
+          res.status(409).json({
+            error: result.message,
+            providerBalance: {
+              currency: result.currency,
+              requiredCrypto: result.requiredCrypto,
+              availableCrypto: result.availableCrypto,
+              requiredUsd: result.requiredUsd,
+            },
+          });
           return;
         case "already_processing":
           res.status(409).json({ error: "This withdrawal is already being processed." });
@@ -1974,7 +1985,35 @@ adminRouter.get("/bank/pending-withdrawals", requireBankSession, async (req, res
       )
       .orderBy(desc(transactionsTable.createdAt))
       .limit(50);
-    res.json({ withdrawals: pending });
+
+    const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY ?? "";
+    const readinessCache = new Map<string, Awaited<ReturnType<typeof getPlisioPayoutReadiness>>>();
+    const withdrawals = await Promise.all(
+      pending.map(async (tx) => {
+        if (!PLISIO_KEY) {
+          return {
+            ...tx,
+            payoutReadiness: {
+              ok: false,
+              reason: "no_key",
+              message: "Plisio API key is not configured. This payout cannot be sent automatically.",
+            },
+          };
+        }
+
+        const amount = parseFloat(tx.amount);
+        const currency = tx.currency ?? "BTC";
+        const cacheKey = `${currency}:${amount}`;
+        let readiness = readinessCache.get(cacheKey);
+        if (!readiness) {
+          readiness = await getPlisioPayoutReadiness(amount, currency, PLISIO_KEY, req.log);
+          readinessCache.set(cacheKey, readiness);
+        }
+        return { ...tx, payoutReadiness: readiness };
+      }),
+    );
+
+    res.json({ withdrawals });
   } catch (err) {
     req.log.error({ err }, "Pending withdrawals error");
     res.status(500).json({ error: "Internal server error" });

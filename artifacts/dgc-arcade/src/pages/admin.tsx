@@ -110,6 +110,33 @@ async function adminFetch(path: string, opts?: RequestInit) {
   return res.json();
 }
 
+function payoutReadinessLabel(readiness: any): { text: string; className: string; blocksApproval: boolean } {
+  if (!readiness) {
+    return { text: "Checking...", className: "text-muted-foreground", blocksApproval: false };
+  }
+  if (readiness.ok === true) {
+    const available = readiness.availableCrypto == null
+      ? "balance unknown"
+      : `${Number(readiness.availableCrypto).toFixed(8)} ${readiness.currency}`;
+    return { text: `Ready (${available})`, className: "text-green-400", blocksApproval: false };
+  }
+  if (readiness.reason === "insufficient_provider_funds") {
+    const available = readiness.availableCrypto == null ? "unknown" : Number(readiness.availableCrypto).toFixed(8);
+    return {
+      text: `Provider low: need ${Number(readiness.requiredCrypto).toFixed(8)} ${readiness.currency}, have ${available}`,
+      className: "text-red-400",
+      blocksApproval: true,
+    };
+  }
+  if (readiness.reason === "no_key") {
+    return { text: "Plisio key missing", className: "text-red-400", blocksApproval: true };
+  }
+  if (readiness.reason === "conversion_failed") {
+    return { text: "Rate unavailable", className: "text-yellow-400", blocksApproval: true };
+  }
+  return { text: readiness.message ?? "Provider status unavailable", className: "text-yellow-400", blocksApproval: false };
+}
+
 interface AdminUser {
   id: number;
   username: string;
@@ -2101,23 +2128,30 @@ export default function AdminDashboard() {
                             <TableHead className="text-xs">User</TableHead>
                             <TableHead className="text-xs">Amount</TableHead>
                             <TableHead className="text-xs">Currency</TableHead>
+                            <TableHead className="text-xs">Provider Balance</TableHead>
                             <TableHead className="text-xs">Address</TableHead>
                             <TableHead className="text-xs">Requested</TableHead>
                             <TableHead className="text-xs">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {bankWithdrawals.map((w: any) => (
+                          {bankWithdrawals.map((w: any) => {
+                            const readiness = payoutReadinessLabel(w.payoutReadiness);
+                            return (
                             <TableRow key={w.id} className="border-border/30">
                               <TableCell className="font-mono text-xs text-muted-foreground">#{w.id}</TableCell>
                               <TableCell className="font-bold text-sm">#{w.userId}</TableCell>
                               <TableCell className="font-mono font-bold">{parseFloat(w.amount).toFixed(8)}</TableCell>
                               <TableCell><Badge variant="outline" className="text-xs">{w.currency}</Badge></TableCell>
+                              <TableCell className={`text-xs max-w-[220px] ${readiness.className}`}>
+                                {readiness.text}
+                              </TableCell>
                               <TableCell className="font-mono text-xs max-w-[100px] truncate text-muted-foreground" title={w.address}>{w.address}</TableCell>
                               <TableCell className="text-xs text-muted-foreground">{w.createdAt ? new Date(w.createdAt).toLocaleString() : "—"}</TableCell>
                               <TableCell>
                                 <div className="flex gap-1.5">
-                                  <Button size="sm" className="bg-green-600 hover:bg-green-700 h-7 text-xs gap-1" disabled={loadingAction === `wd-approve-${w.id}`}
+                                  <Button size="sm" className="bg-green-600 hover:bg-green-700 h-7 text-xs gap-1" disabled={loadingAction === `wd-approve-${w.id}` || readiness.blocksApproval}
+                                    title={readiness.blocksApproval ? readiness.text : "Approve and send via Plisio"}
                                     onClick={async () => {
                                       setLoadingAction(`wd-approve-${w.id}`);
                                       try {
@@ -2144,7 +2178,7 @@ export default function AdminDashboard() {
                                 </div>
                               </TableCell>
                             </TableRow>
-                          ))}
+                          );})}
                         </TableBody>
                       </Table>
                     </div>

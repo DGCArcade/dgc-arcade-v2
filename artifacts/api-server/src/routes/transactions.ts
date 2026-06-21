@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, urlencoded } from "express";
 import { db, usersTable, transactionsTable, referralsTable, userBalancesTable, creatorBankTxnsTable } from "@workspace/db";
 import { eq, desc, and, ne, sql, count, gte } from "drizzle-orm";
 import {
@@ -228,19 +228,60 @@ export function plisioSerialize(body: Record<string, unknown>): string {
   return out + "}";
 }
 
-transactionsRouter.post("/deposit/callback", async (req, res) => {
+export type PlisioCallbackBody = Record<string, unknown> & {
+  txn_id?: string;
+  status?: string;
+  source_amount?: string | number;
+  received_amount?: string | number;
+  invoice_total_sum?: string | number;
+  verify_hash?: string;
+  tx_urls?: string;
+  currency?: string;
+  received_amount_usd?: string | number;
+  source_amount_usd?: string | number;
+};
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function normalizePlisioCallbackBody(body: unknown): PlisioCallbackBody | null {
+  if (isPlainRecord(body)) return body as PlisioCallbackBody;
+  if (typeof body === "string") {
+    const trimmed = body.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (isPlainRecord(parsed)) return parsed as PlisioCallbackBody;
+    } catch {
+      // Plisio commonly posts form-style IPNs. Treat non-JSON text as querystring data.
+    }
+    const params = new URLSearchParams(trimmed);
+    const entries = Array.from(params.entries());
+    if (entries.length === 0) return null;
+    return Object.fromEntries(entries) as PlisioCallbackBody;
+  }
+  return null;
+}
+
+transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type: "*/*" }), async (req, res) => {
   try {
     const clientIp = (req.ip ?? "").replace(/^::ffff:/, "").trim();
+    const callbackBody = normalizePlisioCallbackBody(req.body);
+    if (!callbackBody) {
+      req.log.warn(
+        { clientIp, contentType: req.headers["content-type"] },
+        "Plisio IPN rejected: empty or malformed body",
+      );
+      res.status(400).json({ error: "Malformed callback body" });
+      return;
+    }
+
     const {
       txn_id, status, source_amount, received_amount,
       invoice_total_sum, verify_hash, tx_urls, currency: pCurrency,
       received_amount_usd, source_amount_usd
-    } = req.body as {
-      txn_id?: string; status?: string;
-      source_amount?: string | number; received_amount?: string | number;
-      invoice_total_sum?: string | number; verify_hash?: string; tx_urls?: string;
-      currency?: string; received_amount_usd?: string | number; source_amount_usd?: string | number;
-    };
+    } = callbackBody;
 
     // HMAC-SHA1 — hard gate
     if (PLISIO_SECRET_KEY) {
@@ -250,7 +291,7 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
         return;
       }
       const crypto = await import("crypto");
-      const serialized = plisioSerialize(req.body as Record<string, unknown>);
+      const serialized = plisioSerialize(callbackBody);
       const expectedHash = crypto.createHmac("sha1", PLISIO_SECRET_KEY).update(serialized).digest("hex");
       const want = Buffer.from(expectedHash, "utf8");
       const got  = Buffer.from(String(verify_hash), "utf8");
@@ -347,14 +388,14 @@ transactionsRouter.post("/deposit/callback", async (req, res) => {
     req.log.info({
       event: "plisio_ipn_full_body",
       txn_id, ipn_status: String(status).toLowerCase(),
-      ipnBody: JSON.stringify(req.body).substring(0, 4000),
+      ipnBody: JSON.stringify(callbackBody).substring(0, 4000),
     }, "Plisio IPN: full body for crediting decision");
 
     // ── ACTUAL RECEIVED AMOUNT (exhaustive field search) ───────────────────
     // "Completed Auto" = Plisio auto-completed an underpaid invoice.
     // We MUST credit the actual received amount, never the invoiced amount.
     const cryptoCurrency = tx.currency || pCurrency || "ETH";
-    const bodyRaw = req.body as Record<string, unknown>;
+    const bodyRaw = callbackBody;
 
     // STEP 1 & 2: actual_sum — priority chain:
     //   1. Plisio API server-to-server verified actual_sum (most authoritative — real on-chain amount)
@@ -816,6 +857,30 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
           // Rate fetch failed — left as pending for admin to retry
           req.log.warn({ txId: tx.id, message: payoutResult.message }, "Auto-withdrawal: rate fetch failed, left pending");
           res.json({ success: true, transactionId: tx.id, status: "pending", message: "Payout queued — rate fetch failed, will retry shortly." });
+          return;
+
+        case "provider_insufficient_funds":
+          req.log.error(
+            {
+              txId: tx.id,
+              currency: payoutResult.currency,
+              requiredCrypto: payoutResult.requiredCrypto,
+              availableCrypto: payoutResult.availableCrypto,
+              message: payoutResult.message,
+            },
+            "Auto-withdrawal: Plisio provider balance too low — left pending",
+          );
+          res.json({
+            success: true,
+            transactionId: tx.id,
+            status: "pending",
+            message: payoutResult.message,
+            providerBalance: {
+              currency: payoutResult.currency,
+              requiredCrypto: payoutResult.requiredCrypto,
+              availableCrypto: payoutResult.availableCrypto,
+            },
+          });
           return;
 
         case "needs_review":
