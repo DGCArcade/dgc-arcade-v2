@@ -25,7 +25,7 @@ export default function PrivacyPage() {
 
         <section>
           <h2 className="text-lg font-bold text-foreground mb-3">1. Who We Are</h2>
-          <p><strong className="text-foreground">DGC Arcade Ltd.</strong> ("we", "us", "our", "DGC Arcade") is the operator of the DGC Arcade gaming platform, licensed by the Curaçao Gaming Authority under License No. 8048/JAZ.</p>
+          <p><strong className="text-foreground">DGC Arcade Ltd.</strong> ("we", "us", "our", "DGC Arcade") is the operator of the DGC Arcade licensed gaming platform.</p>
           <p className="mt-2">For all privacy-related inquiries, contact our Data Protection team at <strong className="text-foreground">privacy@dgcarcade.io</strong>.</p>
         </section>
 
@@ -47,7 +47,7 @@ export default function PrivacyPage() {
 
             <div className="bg-secondary/30 rounded-xl p-4 border border-border/40">
               <h3 className="font-bold text-foreground mb-2">2.2 Location Verification Data</h3>
-              <p className="mb-2">Every time you access DGC Arcade, we perform a location check required by our Curaçao Gaming Authority license. This check collects:</p>
+              <p className="mb-2">Every time you access DGC Arcade, we perform a location check required for platform compliance. This check collects:</p>
               <ul className="list-disc pl-4 space-y-1">
                 <li><strong className="text-foreground">IP address</strong> — your public internet address</li>
                 <li><strong className="text-foreground">Country and country code</strong></li>

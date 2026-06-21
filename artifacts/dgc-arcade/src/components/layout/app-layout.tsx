@@ -71,7 +71,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground/70">
                   <span>🎰 Operated by <strong className="text-muted-foreground">DGC Arcade Ltd.</strong></span>
                   <span>·</span>
-                  <span>Curaçao Gaming License <strong className="text-muted-foreground">No. 8048/JAZ</strong></span>
+                  <span>Licensed gaming platform</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground/50">
                   <span>© {new Date().getFullYear()} DGC Arcade — DGCArcade.io</span>

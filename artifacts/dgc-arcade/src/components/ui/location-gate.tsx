@@ -345,7 +345,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
         <div>
           <h1 className="text-3xl font-display font-black uppercase tracking-tight text-destructive mb-2">Access Denied</h1>
           <p className="text-muted-foreground max-w-md text-sm leading-relaxed">
-            Location verification is required by our Curaçao Gaming Authority license. You must consent to location verification before accessing the platform.
+            Location verification is required for platform compliance. You must consent to location verification before accessing the platform.
           </p>
         </div>
         <Button onClick={handleRetry} variant="outline" className="gap-2 font-bold">
@@ -422,8 +422,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
           <div>
             <h2 className="text-xl font-display font-black uppercase tracking-tight mb-2">Location Verification Required</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              DGC Arcade is a licensed gambling platform. To comply with our{" "}
-              <strong className="text-foreground">Curaçao Gaming Authority</strong> license, we must verify your location before granting access.
+              <strong className="text-foreground">DGC Arcade Ltd.</strong> is a licensed gaming platform. We verify your location before granting access.
             </p>
           </div>
 
@@ -491,7 +490,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
         </div>
 
         <p className="text-center text-xs text-muted-foreground/50 mt-4">
-          Operated by DGC Arcade Ltd. · Curaçao Gaming License No. 8048/JAZ
+          Operated by DGC Arcade Ltd.
         </p>
       </div>
     </div>
