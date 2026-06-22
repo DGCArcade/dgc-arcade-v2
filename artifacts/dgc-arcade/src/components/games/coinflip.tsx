@@ -1,33 +1,41 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Game } from "@workspace/api-client-react";
 import { usePlaceBet, getGetMeQueryKey, getListRecentBetsAllQueryKey, getListBetsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
 
-interface CoinflipProps {
-  game: Game;
+function useAccent() {
+  const [id, setId] = useState<ThemeId>(getTheme());
+  useEffect(() => {
+    const h = (e: Event) => setId((e as CustomEvent<ThemeId>).detail);
+    window.addEventListener("dgc-theme-change", h);
+    return () => window.removeEventListener("dgc-theme-change", h);
+  }, []);
+  return THEMES.find(t => t.id === id)?.accent ?? "#FFD700";
 }
+
+interface CoinflipProps { game: Game; }
 
 export function Coinflip({ game }: CoinflipProps) {
   const { user, requireAuth } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const placeBet = usePlaceBet();
-  
-  const [amount, setAmount] = useState<number>(game.minBet);
+  const accent = useAccent();
+
+  const [amount, setAmount] = useState<number>(parseFloat(String(game.minBet ?? 1)));
   const [choice, setChoice] = useState<"heads" | "tails">("heads");
   const [isFlipping, setIsFlipping] = useState(false);
   const [result, setResult] = useState<"heads" | "tails" | null>(null);
   const [win, setWin] = useState<boolean | null>(null);
+  const [rotation, setRotation] = useState(0);
 
   const handleBet = () => {
     requireAuth(() => {
-      if (amount < game.minBet || amount > game.maxBet) {
+      if (amount < parseFloat(String(game.minBet ?? 1)) || amount > parseFloat(String(game.maxBet ?? 1000000))) {
         toast({
           title: "Invalid Bet",
           description: `Bet must be between ${formatCurrency(game.minBet)} and ${formatCurrency(game.maxBet)}`,
@@ -36,7 +44,7 @@ export function Coinflip({ game }: CoinflipProps) {
         return;
       }
       
-      if (user && amount > user.balance) {
+      if (user && amount > parseFloat(String(user.balance))) {
         toast({
           title: "Insufficient funds",
           description: "You do not have enough balance to place this bet.",
@@ -48,6 +56,7 @@ export function Coinflip({ game }: CoinflipProps) {
       setIsFlipping(true);
       setResult(null);
       setWin(null);
+      setRotation(0);
 
       placeBet.mutate(
         { 
@@ -59,28 +68,33 @@ export function Coinflip({ game }: CoinflipProps) {
         },
         {
           onSuccess: (data) => {
-            // Wait for flip animation
             setTimeout(() => {
               setIsFlipping(false);
               const serverResult = data.won ? choice : (choice === "heads" ? "tails" : "heads");
               setResult(serverResult);
               setWin(data.won);
+              setRotation(serverResult === "heads" ? 0 : 180);
               
-              // Invalidate queries
               queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
               queryClient.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
               queryClient.invalidateQueries({ queryKey: getListBetsQueryKey() });
               
               if (data.won) {
                 toast({
-                  title: "You Won!",
+                  title: "You Won! 🎉",
                   description: `Payout: ${formatCurrency(data.payout)}`,
                   className: "bg-green-500 text-white border-green-600",
                 });
+              } else {
+                toast({
+                  title: "You Lost 💀",
+                  description: `Better luck next time!`,
+                  className: "bg-red-500 text-white border-red-600",
+                });
               }
-            }, 1500);
+            }, 2000);
           },
-          onError: (err) => {
+          onError: (err: any) => {
             setIsFlipping(false);
             toast({
               title: "Bet Failed",
@@ -94,101 +108,351 @@ export function Coinflip({ game }: CoinflipProps) {
   };
 
   return (
-    <div className="flex flex-col md:flex-row gap-8">
-      {/* Game Area */}
-      <div className="flex-1 bg-secondary border border-border rounded-xl p-8 flex flex-col items-center justify-center min-h-[400px] relative overflow-hidden">
-        
-        {/* The Coin */}
-        <div className="relative w-48 h-48 perspective-1000">
-          <div 
-            className={`w-full h-full relative preserve-3d transition-transform duration-1000 ease-out
-              ${isFlipping ? 'animate-[spin_1s_linear_infinite]' : ''}
-              ${!isFlipping && result === 'tails' ? 'rotate-y-180' : ''}
-            `}
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", padding: "12px" }}>
+
+      <style>{`
+        @keyframes coin-flip { 
+          0% { transform: rotateY(0deg) rotateX(0deg); }
+          100% { transform: rotateY(3600deg) rotateX(180deg); }
+        }
+        @keyframes result-pop {
+          0% { transform: scale(0.6) translateY(-20px); opacity: 0; }
+          65% { transform: scale(1.1); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+      `}</style>
+
+      {/* COIN DISPLAY */}
+      <div style={{
+        background: "rgba(8,12,26,0.88)",
+        border: "2px solid rgba(255,255,255,0.08)",
+        borderRadius: 16,
+        padding: "24px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 16,
+        minHeight: 420,
+        backdropFilter: "blur(14px)",
+        perspective: "1000px",
+      }}>
+
+        {/* The DGC Coin */}
+        <div style={{
+          position: "relative",
+          width: 200,
+          height: 200,
+          perspective: "1000px",
+        }}>
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              position: "relative",
+              transformStyle: "preserve-3d",
+              transform: isFlipping 
+                ? "rotateY(3600deg) rotateX(180deg)" 
+                : `rotateY(${rotation}deg)`,
+              transition: isFlipping ? "none" : "transform 0.6s cubic-bezier(0.34,1.56,0.64,1)",
+              animation: isFlipping ? "coin-flip 2s linear" : "none",
+            }}
           >
-            {/* Heads Side */}
-            <div className="absolute inset-0 backface-hidden rounded-full bg-gradient-to-br from-yellow-300 to-yellow-600 flex items-center justify-center border-4 border-yellow-200 shadow-xl">
-              <div className="w-36 h-36 rounded-full border-2 border-yellow-200/50 flex items-center justify-center">
-                <span className="font-display font-black text-5xl text-yellow-900 uppercase">H</span>
+            {/* HEADS - DGC Logo */}
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "50%",
+              background: `radial-gradient(circle at 35% 35%, ${accent}ff, ${accent}cc)`,
+              border: `4px solid ${accent}88`,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: `0 0 40px ${accent}66, inset 0 2px 8px rgba(255,255,255,0.3)`,
+              backfaceVisibility: "hidden",
+              WebkitBackfaceVisibility: "hidden",
+            }}>
+              <div style={{
+                position: "absolute",
+                inset: 8,
+                borderRadius: "50%",
+                border: `2px solid ${accent}44`,
+              }} />
+              <div style={{
+                fontSize: 48,
+                fontWeight: 900,
+                color: "#000",
+                letterSpacing: 3,
+                textShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                fontFamily: "'Outfit', sans-serif",
+              }}>
+                DGC
+              </div>
+              <div style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: "rgba(0,0,0,0.6)",
+                letterSpacing: 2,
+                textTransform: "uppercase",
+                marginTop: 4,
+              }}>
+                HEADS
               </div>
             </div>
-            
-            {/* Tails Side */}
-            <div className="absolute inset-0 backface-hidden rounded-full bg-gradient-to-br from-zinc-300 to-zinc-600 flex items-center justify-center border-4 border-zinc-200 shadow-xl rotate-y-180">
-              <div className="w-36 h-36 rounded-full border-2 border-zinc-200/50 flex items-center justify-center">
-                <span className="font-display font-black text-5xl text-zinc-900 uppercase">T</span>
+
+            {/* TAILS - Arcade Logo */}
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "50%",
+              background: "radial-gradient(circle at 35% 35%, #1e293b, #0f172a)",
+              border: "4px solid rgba(255,255,255,0.25)",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 0 40px rgba(255,255,255,0.15), inset 0 2px 8px rgba(0,0,0,0.5)",
+              backfaceVisibility: "hidden",
+              WebkitBackfaceVisibility: "hidden",
+              transform: "rotateY(180deg)",
+            }}>
+              <div style={{
+                position: "absolute",
+                inset: 8,
+                borderRadius: "50%",
+                border: "2px solid rgba(255,255,255,0.1)",
+              }} />
+              <div style={{
+                fontSize: 48,
+                fontWeight: 900,
+                color: "#fff",
+                letterSpacing: 3,
+                textShadow: "0 2px 4px rgba(0,0,0,0.5)",
+                fontFamily: "'Outfit', sans-serif",
+              }}>
+                ♠
+              </div>
+              <div style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: "rgba(255,255,255,0.6)",
+                letterSpacing: 2,
+                textTransform: "uppercase",
+                marginTop: 4,
+              }}>
+                TAILS
               </div>
             </div>
           </div>
         </div>
-        
-        {/* Result Text */}
-        <div className="mt-8 h-8">
-          {win !== null && (
-            <span className={`font-display font-bold text-2xl uppercase tracking-widest ${win ? 'text-green-500' : 'text-destructive'}`}>
-              {win ? 'Winner!' : 'Better Luck Next Time'}
-            </span>
-          )}
-        </div>
+
+        {/* Result */}
+        {win !== null && (
+          <div style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 6,
+            animation: "result-pop 0.6s cubic-bezier(0.34,1.56,0.64,1) both",
+          }}>
+            <div style={{
+              fontSize: 28,
+              fontWeight: 900,
+              textTransform: "uppercase",
+              letterSpacing: 4,
+              color: win ? "#22c55e" : "#ef4444",
+              textShadow: win ? "0 0 20px rgba(34,197,94,0.5)" : "0 0 20px rgba(239,68,68,0.5)",
+              fontFamily: "'Outfit', sans-serif",
+            }}>
+              {win ? "🎉 YOU WIN!" : "💀 YOU LOST"}
+            </div>
+            <div style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: "rgba(255,255,255,0.6)",
+              letterSpacing: 1,
+            }}>
+              {result === "heads" ? "HEADS" : "TAILS"}
+            </div>
+          </div>
+        )}
       </div>
-      
-      {/* Bet Controls */}
-      <div className="w-full md:w-80 bg-card border border-border rounded-xl p-6 flex flex-col gap-6">
-        <div className="space-y-4">
-          <div>
-            <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Bet Amount</Label>
-            <div className="relative mt-2">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono">$</div>
-              <Input 
-                type="number" 
-                value={amount} 
-                onChange={(e) => setAmount(Number(e.target.value))}
-                min={game.minBet}
-                max={game.maxBet}
-                step={1}
-                className="pl-8 font-mono text-lg bg-secondary border-border"
-                disabled={isFlipping}
-              />
-            </div>
-            <div className="flex gap-2 mt-2">
-              <Button variant="outline" size="sm" className="flex-1 text-xs h-7 bg-secondary" onClick={() => setAmount(game.minBet)} disabled={isFlipping}>MIN</Button>
-              <Button variant="outline" size="sm" className="flex-1 text-xs h-7 bg-secondary" onClick={() => setAmount(amount * 2)} disabled={isFlipping}>x2</Button>
-              <Button variant="outline" size="sm" className="flex-1 text-xs h-7 bg-secondary" onClick={() => setAmount(Math.max(game.minBet, amount / 2))} disabled={isFlipping}>/2</Button>
-              <Button variant="outline" size="sm" className="flex-1 text-xs h-7 bg-secondary" onClick={() => user && setAmount(Math.min(user.balance, game.maxBet))} disabled={isFlipping}>MAX</Button>
-            </div>
+
+      {/* CONTROLS */}
+      <div style={{
+        background: "rgba(8,12,26,0.88)",
+        border: "2px solid rgba(255,255,255,0.08)",
+        borderRadius: 16,
+        padding: "12px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+        backdropFilter: "blur(14px)",
+      }}>
+
+        {/* Bet amount */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>
+            Bet Amount
+          </label>
+          <div style={{ position: "relative" }}>
+            <span style={{
+              position: "absolute",
+              left: 10,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "rgba(255,255,255,0.28)",
+              fontFamily: "monospace",
+              fontSize: 13,
+              fontWeight: 700,
+              pointerEvents: "none",
+            }}>$</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={amount}
+              onChange={e => setAmount(parseFloat(e.target.value) || 0)}
+              disabled={isFlipping}
+              style={{
+                width: "100%",
+                paddingLeft: 25,
+                paddingRight: 10,
+                paddingTop: 9,
+                paddingBottom: 9,
+                fontSize: 13,
+                fontWeight: 700,
+                fontFamily: "monospace",
+                background: "rgba(255,255,255,0.05)",
+                border: `1.5px solid ${isFlipping ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.11)"}`,
+                borderRadius: 8,
+                color: "#fff",
+                outline: "none",
+                opacity: isFlipping ? 0.55 : 1,
+              }}
+            />
           </div>
-          
-          <div>
-            <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider mb-2 block">Choose Side</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Button 
-                variant={choice === "heads" ? "default" : "outline"} 
-                className={`font-bold uppercase h-12 ${choice === "heads" ? "bg-yellow-500 hover:bg-yellow-600 text-yellow-950" : "bg-secondary"}`}
-                onClick={() => setChoice("heads")}
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {[
+              { l: "MIN", fn: () => setAmount(parseFloat(String(game.minBet ?? 1))) },
+              { l: "½", fn: () => setAmount(Math.max(parseFloat(String(game.minBet ?? 1)), amount / 2)) },
+              { l: "2×", fn: () => setAmount(Math.min(amount * 2, parseFloat(String(game.maxBet ?? 1000000)))) },
+              { l: "MAX", fn: () => setAmount(Math.min(parseFloat(String(user?.balance ?? 0)), parseFloat(String(game.maxBet ?? 1000000)))) },
+            ].map(({ l, fn }) => (
+              <button
+                key={l}
+                onClick={fn}
                 disabled={isFlipping}
+                style={{
+                  flex: 1,
+                  minWidth: 60,
+                  padding: "8px 10px",
+                  borderRadius: 7,
+                  fontSize: 9,
+                  fontWeight: 700,
+                  letterSpacing: 1.2,
+                  textTransform: "uppercase",
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.09)",
+                  color: "rgba(255,255,255,0.6)",
+                  cursor: isFlipping ? "not-allowed" : "pointer",
+                  transition: "all 0.14s",
+                  opacity: isFlipping ? 0.38 : 1,
+                }}
               >
-                Heads
-              </Button>
-              <Button 
-                variant={choice === "tails" ? "default" : "outline"} 
-                className={`font-bold uppercase h-12 ${choice === "tails" ? "bg-zinc-400 hover:bg-zinc-500 text-zinc-950" : "bg-secondary"}`}
-                onClick={() => setChoice("tails")}
-                disabled={isFlipping}
-              >
-                Tails
-              </Button>
-            </div>
+                {l}
+              </button>
+            ))}
           </div>
         </div>
-        
-        <Button 
-          size="lg" 
-          className="w-full font-display font-black text-xl uppercase tracking-widest h-14 bg-primary text-primary-foreground hover:bg-primary/90 mt-auto"
+
+        {/* Choice */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>
+            Choose Side
+          </label>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[
+              { side: "heads" as const, label: "Heads", color: accent },
+              { side: "tails" as const, label: "Tails", color: "#64748b" },
+            ].map(({ side, label, color }) => (
+              <button
+                key={side}
+                onClick={() => setChoice(side)}
+                disabled={isFlipping}
+                style={{
+                  flex: 1,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  fontSize: 11,
+                  fontWeight: 900,
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                  background: choice === side ? `${color}cc` : "rgba(255,255,255,0.06)",
+                  border: `2px solid ${choice === side ? color : "rgba(255,255,255,0.1)"}`,
+                  color: choice === side ? "#000" : "rgba(255,255,255,0.6)",
+                  cursor: isFlipping ? "not-allowed" : "pointer",
+                  transition: "all 0.16s",
+                  opacity: isFlipping ? 0.38 : 1,
+                  boxShadow: choice === side ? `0 0 16px ${color}44` : "none",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Odds info */}
+        <div style={{
+          background: "rgba(255,255,255,0.04)",
+          border: `1px solid ${accent}33`,
+          borderRadius: 10,
+          padding: "10px",
+          fontSize: 9,
+          fontFamily: "monospace",
+          color: "rgba(255,255,255,0.35)",
+          display: "flex",
+          justifyContent: "space-around",
+          textAlign: "center",
+        }}>
+          <div>
+            <div style={{ color: "rgba(255,255,255,0.45)" }}>Win</div>
+            <div style={{ color: accent, fontWeight: 900, marginTop: 2 }}>2.0x</div>
+          </div>
+          <div>
+            <div style={{ color: "rgba(255,255,255,0.45)" }}>Odds</div>
+            <div style={{ color: accent, fontWeight: 900, marginTop: 2 }}>50/50</div>
+          </div>
+          <div>
+            <div style={{ color: "rgba(255,255,255,0.45)" }}>House Edge</div>
+            <div style={{ color: accent, fontWeight: 900, marginTop: 2 }}>~1%</div>
+          </div>
+        </div>
+
+        {/* Bet button */}
+        <button
           onClick={handleBet}
           disabled={isFlipping}
+          style={{
+            padding: "11px 20px",
+            borderRadius: 10,
+            fontWeight: 900,
+            fontSize: 12,
+            letterSpacing: 3,
+            textTransform: "uppercase",
+            background: `linear-gradient(140deg, ${accent}ee, ${accent}aa)`,
+            color: "#000",
+            border: "none",
+            cursor: isFlipping ? "not-allowed" : "pointer",
+            boxShadow: isFlipping ? "none" : `0 4px 16px ${accent}50`,
+            opacity: isFlipping ? 0.48 : 1,
+            transition: "all 0.16s",
+            fontFamily: "'Outfit', sans-serif",
+          }}
         >
-          {isFlipping ? "Flipping..." : "Place Bet"}
-        </Button>
+          {isFlipping ? "Flipping…" : "Place Bet"}
+        </button>
       </div>
     </div>
   );
