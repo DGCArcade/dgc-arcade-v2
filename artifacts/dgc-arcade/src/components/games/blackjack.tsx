@@ -94,7 +94,7 @@ function PlayingCard({ card, hidden, delay = 0, dealFrom }: {
           borderRadius: 8, overflow: "hidden",
           background: "linear-gradient(145deg, #1e3a8a 0%, #0c1445 100%)",
           border: "2px solid rgba(255,255,255,0.15)",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.1)",
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3
         }}>
           <div style={{ width: 22, height: 22, border: "1.5px solid rgba(255,255,255,0.16)", borderRadius: 3, transform: "rotate(45deg)" }} />
@@ -105,7 +105,7 @@ function PlayingCard({ card, hidden, delay = 0, dealFrom }: {
         <div style={{
           position: "absolute", width: "100%", height: "100%", backfaceVisibility: "hidden",
           borderRadius: 8, background: "#fafafa", border: "1.5px solid #e0e0e0",
-          transform: "rotateY(180deg)", boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+          transform: "rotateY(180deg)", boxShadow: "0 8px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3)",
           padding: 6, display: "flex", flexDirection: "column", justifyContent: "space-between"
         }}>
           <div style={{ textAlign: "left" }}>
@@ -123,23 +123,24 @@ function PlayingCard({ card, hidden, delay = 0, dealFrom }: {
   );
 }
 
-function ScoreBubble({ total, bust, bj, label, side }: { total: number; bust?: boolean; bj?: boolean; label: string; side: "left" | "right" }) {
-  const bg = bust ? "rgba(239,68,68,0.2)" : bj ? "rgba(251,191,36,0.2)" : "rgba(0,0,0,0.6)";
-  const border = bust ? "rgba(239,68,68,0.5)" : bj ? "rgba(251,191,36,0.5)" : "rgba(255,255,255,0.1)";
+function ScoreBubble({ total, bust, bj, label, position }: { total: number; bust?: boolean; bj?: boolean; label: string; position: "above" | "below" }) {
+  const bg = bust ? "rgba(239,68,68,0.3)" : bj ? "rgba(251,191,36,0.3)" : "rgba(0,0,0,0.7)";
+  const border = bust ? "rgba(239,68,68,0.6)" : bj ? "rgba(251,191,36,0.6)" : "rgba(255,255,255,0.2)";
   const color = bust ? "#fca5a5" : bj ? "#fde047" : "#fff";
 
   return (
     <div style={{
-      position: "absolute", top: side === "left" ? "20%" : "65%", [side]: -40,
+      position: "absolute", [position === "above" ? "bottom" : "top"]: "100%", left: "50%", transform: "translateX(-50%)",
+      marginBottom: position === "above" ? 12 : 0, marginTop: position === "below" ? 12 : 0,
       display: "flex", flexDirection: "column", alignItems: "center", gap: 4, zIndex: 30
     }}>
       <div style={{
-        background: bg, border: `1.5px solid ${border}`, borderRadius: 12,
-        padding: "6px 14px", backdropFilter: "blur(8px)", minWidth: 65, textAlign: "center",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.4)"
+        background: bg, border: `2px solid ${border}`, borderRadius: 14,
+        padding: "8px 16px", backdropFilter: "blur(10px)", minWidth: 70, textAlign: "center",
+        boxShadow: "0 12px 40px rgba(0,0,0,0.5), 0 0 20px rgba(0,0,0,0.3)"
       }}>
-        <div style={{ fontSize: 8, fontWeight: 800, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1 }}>{label}</div>
-        <div style={{ fontSize: 24, fontWeight: 900, color, fontFamily: "monospace" }}>{total > 0 ? total : "—"}</div>
+        <div style={{ fontSize: 8, fontWeight: 800, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: 1 }}>{label}</div>
+        <div style={{ fontSize: 26, fontWeight: 900, color, fontFamily: "monospace" }}>{total > 0 ? total : "—"}</div>
       </div>
     </div>
   );
@@ -274,13 +275,19 @@ export function Blackjack({ game }: BlackjackProps) {
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between",
         padding: "40px 20px", overflow: "hidden"
       }}>
+        {/* Semi-transparent overlay for better readability */}
+        <div style={{
+          position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.15)", pointerEvents: "none", borderRadius: 24, zIndex: 1
+        }} />
+
         {/* Table Decoration */}
         <div style={{
           position: "absolute", top: "15%", width: "80%", height: "70%",
-          border: `2px solid ${felt.text}`, borderRadius: "50%", opacity: 0.3, pointerEvents: "none"
+          border: `2px solid ${felt.text}`, borderRadius: "50%", opacity: 0.3, pointerEvents: "none", zIndex: 2
         }} />
         <div style={{
-          position: "absolute", top: "45%", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.5, pointerEvents: "none"
+          position: "absolute", top: "45%", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.5, pointerEvents: "none", zIndex: 2
         }}>
           <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: 4, color: felt.text }}>BLACKJACK PAYS 3 TO 2</div>
           <div style={{ fontSize: 16, fontWeight: 900, letterSpacing: 8, color: felt.text }}>DGC ARCADE</div>
@@ -288,7 +295,7 @@ export function Blackjack({ game }: BlackjackProps) {
         </div>
 
         {/* Deck on Top Right */}
-        <div ref={deckRef} style={{ position: "absolute", top: 20, right: 30, width: 70, height: 100 }}>
+        <div ref={deckRef} style={{ position: "absolute", top: 20, right: 30, width: 70, height: 100, zIndex: 5 }}>
           {[3, 2, 1, 0].map(i => (
             <div key={i} style={{
               position: "absolute", width: 70, height: 100, borderRadius: 6,
@@ -301,11 +308,13 @@ export function Blackjack({ game }: BlackjackProps) {
         </div>
 
         {/* Dealer Hand */}
-        <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center", gap: 10 }}>
-          <ScoreBubble total={dealerTotal ?? (isDone ? handTotal(dealerHand) : 0)} bust={dealerTotal !== null && dealerTotal > 21} label="DEALER" side="left" />
-          <div style={{ display: "flex", gap: 10, minHeight: 118 }}>
+        <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center", gap: 10, zIndex: 10 }}>
+          <div style={{ position: "relative", display: "flex", gap: 10, minHeight: 118 }}>
             {dealerHand.length > 0 ? dealerHand.map((c, i) => (
-              <PlayingCard key={`d-${i}`} card={c} hidden={c.suit === "?"} delay={i * 200} dealFrom={deckRef.current?.getBoundingClientRect()} />
+              <div key={`d-${i}`} style={{ position: "relative" }}>
+                <PlayingCard card={c} hidden={c.suit === "?"} delay={i * 200} dealFrom={deckRef.current?.getBoundingClientRect()} />
+                {i === 0 && <ScoreBubble total={dealerTotal ?? (isDone ? handTotal(dealerHand) : 0)} bust={dealerTotal !== null && dealerTotal > 21} label="DEALER" position="below" />}
+              </div>
             )) : <div style={{ width: 85, height: 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
           </div>
         </div>
@@ -322,11 +331,13 @@ export function Blackjack({ game }: BlackjackProps) {
         )}
 
         {/* Player Hand */}
-        <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center", gap: 10 }}>
-          <ScoreBubble total={playerTotal} bust={playerTotal > 21} bj={status === "player_blackjack"} label="PLAYER" side="right" />
-          <div style={{ display: "flex", gap: 10, minHeight: 118 }}>
+        <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center", gap: 10, zIndex: 10 }}>
+          <div style={{ position: "relative", display: "flex", gap: 10, minHeight: 118 }}>
             {playerHand.length > 0 ? playerHand.map((c, i) => (
-              <PlayingCard key={`p-${i}`} card={c} delay={(i + 2) * 200} dealFrom={deckRef.current?.getBoundingClientRect()} />
+              <div key={`p-${i}`} style={{ position: "relative" }}>
+                <PlayingCard card={c} delay={(i + 2) * 200} dealFrom={deckRef.current?.getBoundingClientRect()} />
+                {i === 0 && <ScoreBubble total={playerTotal} bust={playerTotal > 21} bj={status === "player_blackjack"} label="PLAYER" position="above" />}
+              </div>
             )) : <div style={{ width: 85, height: 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
           </div>
         </div>
