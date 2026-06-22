@@ -186,20 +186,15 @@ export async function syncPlisioDeposits() {
           //   txs are empty (some coins never populate received_amount in GET).
           //   Log a WARNING so this shows up in production logs.
           if (cryptoAmountReceived <= 0 && receivedUsdValue <= 0) {
-            if (pStatus === "completed" && sourceUsd > 0) {
-              logger.warn(
-                { txId: tx.id, plisioTrackId: tx.plisioTrackId, pStatus, sourceUsd,
-                  note: "received_amount=0 AND txs empty — falling back to invoice amount. Check raw log above for missing fields." },
-                "Plisio sync: FALLBACK to invoice amount (received_amount=0, txs empty) — may over-credit if Completed Auto"
-              );
-              receivedUsdValue = sourceUsd;
-            } else {
-              logger.info(
-                { txId: tx.id, plisioTrackId: tx.plisioTrackId, pStatus },
-                "Plisio sync: skipping — no received_amount data yet, will retry next cycle"
-              );
-              continue;
-            }
+            // Even if pStatus === "completed", we MUST NOT fall back to sourceUsd (invoice amount).
+            // "Completed Auto" in Plisio marks an underpaid invoice as completed.
+            // Crediting the full invoice amount would be an over-credit.
+            // If Plisio hasn't provided the actual received amount yet, we skip and wait for the next sync.
+            logger.info(
+              { txId: tx.id, plisioTrackId: tx.plisioTrackId, pStatus },
+              "Plisio sync: skipping — status is completed but NO received_amount data yet (prevents over-crediting partial payments)"
+            );
+            continue;
           }
 
           // ── CALCULATE USD CREDIT AMOUNT ─────────────────────────────────────

@@ -1882,15 +1882,11 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
       ratioUsed = sourceUsd > 0 ? (creditAmount / sourceUsd) : 1;
       receivedUsdValue = creditAmount;
       req.log.info({ receivedAmount, livePrice, creditAmount }, "Smart Sync: crediting with live price lookup");
-    } else if (pStatus === "completed" && sourceUsd > 0) {
-      // Plisio marks "completed" when the FULL invoice amount was received.
-      // The GET operations API doesn't always return received_amount for completed txns
-      // (it's reliably in the IPN webhook but not always in the polling API).
-      // Since "completed" = invoice fulfilled, credit sourceUsd directly.
-      // mismatch/overpaid always need the real received_amount (partial payment cases).
+    } else if (pStatus === "completed" && sourceUsd > 0 && receivedAmount > 0) {
+      // If we have both status=completed AND a real receivedAmount, use it.
       creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
       ratioUsed = 1.0;
-      req.log.info({ pStatus, sourceUsd, creditAmount }, "Smart Sync: status=completed, crediting invoice amount (Plisio confirmed full payment)");
+      req.log.info({ pStatus, sourceUsd, creditAmount }, "Smart Sync: status=completed with received amount, crediting invoice amount");
     } else {
       req.log.warn(
         { pStatus, receivedAmount, invoicedAmount, sourceUsd },

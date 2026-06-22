@@ -555,13 +555,16 @@ transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type:
         requested_amount_usd: sourceUsd,
       }, "Plisio IPN: invoice_total_sum missing — used live price lookup (NOT invoice amount)");
     } else {
-      // status=completed, received_amount=0 — Plisio confirmed full invoice paid.
-      creditAmountUsd = Math.round(sourceUsd * 1e8) / 1e8;
-      creditCalcMethod = "completed_status_invoice_amount";
-      req.log.info({
-        event: "plisio_ipn_completed_fallback",
-        txn_id, tx_db_id: tx.id, user_id: tx.userId, sourceUsd, creditAmountUsd,
-      }, "Plisio IPN: status=completed, crediting invoice amount (no received_amount in payload)");
+      // Plisio marks "completed" when they decide the invoice is fulfilled.
+      // However, "Completed Auto" (partial payment within tolerance) also results in status=completed.
+      // If we have NO received_amount data from any source (IPN, API, or txs array),
+      // we must NOT credit the full invoice amount as it might be a partial payment.
+      req.log.warn({
+        event: "plisio_ipn_completed_no_received_data",
+        txn_id, tx_db_id: tx.id, user_id: tx.userId, sourceUsd,
+      }, "Plisio IPN: status=completed but NO received_amount data found — skipping credit to prevent over-crediting partial payments.");
+      res.json({ success: true });
+      return;
     }
 
     // ── OVERPAYMENT WARNING ───────────────────────────────────────────────
