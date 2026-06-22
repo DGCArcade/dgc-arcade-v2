@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { useAuthModal } from "@/hooks/use-auth-modal";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
-import { Zap, TrendingUp, Shield, ChevronRight, Users } from "lucide-react";
+import { formatCurrency } from "@/lib/format";
+import { Zap, TrendingUp, Shield, ChevronRight, Trophy, Clock, Target } from "lucide-react";
 
 const FEATURES = [
   {
@@ -84,6 +85,9 @@ function LiveJackpotBanner() {
           </div>
           <span className="text-xs text-muted-foreground font-mono tracking-wider">Platform-Wide</span>
         </div>
+        <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+          Every settled bet feeds these live pools automatically. Each bet also rolls a provably-fair jackpot chance; larger wagers improve the odds up to the jackpot cap, and a winning tier resets to its seed after payout.
+        </p>
         {/* Jackpot tiers */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {tiers.map(t => (
@@ -126,17 +130,54 @@ function LiveJackpotBanner() {
 }
 
 // ── Live Online Count ──────────────────────────────────────────────────────────
+function getOnlineVisitorId(): string {
+  const key = "dgc_online_visitor_id";
+  const existing = localStorage.getItem(key);
+  if (existing) return existing;
+  const id = typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `visitor-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  localStorage.setItem(key, id);
+  return id;
+}
+
+async function sendOnlineHeartbeat() {
+  const visitorId = getOnlineVisitorId();
+  await fetch("/api/stats/heartbeat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-visitor-fingerprint": visitorId,
+    },
+    body: JSON.stringify({
+      visitorId,
+      path: window.location.pathname,
+    }),
+  });
+}
+
 function LiveOnlineCount() {
   const [online, setOnline] = useState<number | null>(null);
   useEffect(() => {
-    const fetch_ = () =>
+    let mounted = true;
+    const fetch_ = async () => {
+      await sendOnlineHeartbeat().catch(() => {});
       fetch("/api/stats/live")
         .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d) setOnline(d.onlineNow); })
+        .then(d => { if (d && mounted) setOnline(d.onlineNow); })
         .catch(() => {});
+    };
     fetch_();
-    const iv = window.setInterval(fetch_, 30_000);
-    return () => window.clearInterval(iv);
+    const iv = window.setInterval(fetch_, 10_000);
+    const onFocus = () => fetch_();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      mounted = false;
+      window.clearInterval(iv);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
   }, []);
   if (online === null) return null;
   return (
@@ -146,6 +187,143 @@ function LiveOnlineCount() {
         {online.toLocaleString()} online now
       </span>
       <style>{`@keyframes onlinePulse{0%,100%{opacity:0.5;}50%{opacity:1;box-shadow:0 0 8px #4ade80;}}`}</style>
+    </div>
+  );
+}
+
+// ── Live Tournament Card ──────────────────────────────────────────────────────
+interface Tournament {
+  id: number;
+  name: string;
+  description?: string | null;
+  prize: number;
+  status: "active" | "upcoming" | "ended";
+  startAt: string;
+  endAt: string;
+}
+
+interface TournamentLeader {
+  rank: number;
+  username: string;
+  score: number;
+}
+
+function formatTimeLeft(target: string): string {
+  const ms = new Date(target).getTime() - Date.now();
+  if (ms <= 0) return "ending soon";
+  const minutes = Math.floor(ms / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d ${hours % 24}h left`;
+  if (hours > 0) return `${hours}h ${minutes % 60}m left`;
+  return `${Math.max(1, minutes)}m left`;
+}
+
+function TournamentPulse() {
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [leaders, setLeaders] = useState<TournamentLeader[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch("/api/tournaments");
+        const data = res.ok ? await res.json() as Tournament[] : [];
+        setTournaments(Array.isArray(data) ? data : []);
+        const active = Array.isArray(data) ? data.find(t => t.status === "active") : null;
+        if (active) {
+          const lb = await fetch(`/api/tournaments/${active.id}/leaderboard`);
+          const lbData = lb.ok ? await lb.json() : null;
+          setLeaders(Array.isArray(lbData?.leaderboard) ? lbData.leaderboard.slice(0, 3) : []);
+        } else {
+          setLeaders([]);
+        }
+      } catch {
+        setTournaments([]);
+        setLeaders([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+    const iv = window.setInterval(load, 15_000);
+    return () => window.clearInterval(iv);
+  }, []);
+
+  const tournament =
+    tournaments.find(t => t.status === "active") ??
+    tournaments.find(t => t.status === "upcoming") ??
+    tournaments[0];
+
+  const isActive = tournament?.status === "active";
+
+  return (
+    <div className="rounded-2xl border border-primary/20 bg-card/90 p-5 shadow-[0_0_40px_rgba(255,215,0,0.08)]">
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <div className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-primary mb-2">
+            <Trophy className="w-4 h-4" />
+            Live Tournament
+          </div>
+          <h3 className="font-display font-black text-2xl uppercase tracking-tight">
+            {loading ? "Checking tournaments…" : tournament?.name ?? "No active tournament"}
+          </h3>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest border ${
+          isActive ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-yellow-300 border-yellow-500/30 bg-yellow-500/10"
+        }`}>
+          {tournament?.status ?? "standby"}
+        </span>
+      </div>
+
+      <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+        {tournament?.description ??
+          "When a tournament is active, participation is automatic: log in, play eligible games, and every wager adds to your tournament score. The highest wagered total leads the board."}
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <div className="rounded-xl border border-border/40 bg-secondary/30 p-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-widest mb-1">
+            <Trophy className="w-3.5 h-3.5" /> Prize
+          </div>
+          <div className="font-mono font-black text-lg text-primary">
+            {formatCurrency(tournament?.prize ?? 0)}
+          </div>
+        </div>
+        <div className="rounded-xl border border-border/40 bg-secondary/30 p-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-widest mb-1">
+            <Clock className="w-3.5 h-3.5" /> Time
+          </div>
+          <div className="font-mono font-black text-lg">
+            {tournament ? formatTimeLeft(isActive ? tournament.endAt : tournament.startAt) : "standby"}
+          </div>
+        </div>
+        <div className="rounded-xl border border-border/40 bg-secondary/30 p-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-widest mb-1">
+            <Target className="w-3.5 h-3.5" /> Score
+          </div>
+          <div className="font-mono font-black text-lg">Total wagered</div>
+        </div>
+      </div>
+
+      {leaders.length > 0 ? (
+        <div className="space-y-2 mb-4">
+          {leaders.map((leader) => (
+            <div key={leader.rank} className="flex items-center justify-between rounded-lg bg-secondary/30 border border-border/30 px-3 py-2 text-sm">
+              <span className="font-bold">#{leader.rank} {leader.username}</span>
+              <span className="font-mono text-primary">{formatCurrency(leader.score)}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-border/50 bg-secondary/20 p-4 text-sm text-muted-foreground mb-4">
+          {isActive ? "No leaderboard entries yet. First wagers will appear here live." : "The next active tournament will appear here automatically."}
+        </div>
+      )}
+
+      <div className="text-xs text-muted-foreground leading-relaxed">
+        How to participate: sign in, play while a tournament is active, and every settled wager updates your score automatically. No manual entry is needed.
+      </div>
     </div>
   );
 }
@@ -161,10 +339,6 @@ export default function Home() {
 
   return (
     <div className="space-y-16 pb-16">
-      {/* ── Live Jackpot Banner ───────────────────────────────────────── */}
-      <section>
-        <LiveJackpotBanner />
-      </section>
       {/* ── Hero ─────────────────────────────────────────────────── */}
       <section className="relative rounded-2xl overflow-hidden border border-border/20 min-h-[440px] flex items-center bg-secondary/10">
         <div
@@ -297,6 +471,10 @@ export default function Home() {
           </span>
         </div>
         <LiveFeed />
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_1.1fr] gap-6 items-start">
+          <LiveJackpotBanner />
+          <TournamentPulse />
+        </div>
       </section>
     </div>
   );

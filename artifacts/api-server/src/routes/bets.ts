@@ -12,6 +12,15 @@ import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-ser
 
 export const betsRouter = Router();
 
+const LIVE_FEED_CACHE_MS = 2_000;
+const recentBetsCache = new Map<string, { expiresAt: number; value: unknown }>();
+const highRollersCache = new Map<string, { expiresAt: number; value: unknown }>();
+
+function clearLiveFeedCaches() {
+  recentBetsCache.clear();
+  highRollersCache.clear();
+}
+
 // ─── Game Logic ───────────────────────────────────────────────────────────────
 
 function generateServerSeed(): string {
@@ -358,6 +367,7 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       clientSeed: clientSeedStr,
       meta: { ...resultMeta, userMeta: meta },
     }).returning();
+    clearLiveFeedCaches();
 
     const newBalance = finalBalance;
 
@@ -453,6 +463,15 @@ betsRouter.get("/", requireAuth, async (req, res) => {
 betsRouter.get("/recent-all", optionalAuth, async (req, res) => {
   const limit = parseInt(String(req.query.limit ?? "30"), 10) || 30;
   try {
+    const cacheKey = String(limit);
+    const now = Date.now();
+    const cached = recentBetsCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      res.setHeader("Cache-Control", "public, max-age=1, stale-while-revalidate=2");
+      res.json(cached.value);
+      return;
+    }
+
     const rows = await db.select({
       bet: betsTable, username: usersTable.username, gameName: gamesTable.name,
     }).from(betsTable)
@@ -461,13 +480,16 @@ betsRouter.get("/recent-all", optionalAuth, async (req, res) => {
       .orderBy(desc(betsTable.createdAt))
       .limit(limit);
 
-    res.json(rows.map(({ bet, username, gameName }) => ({
+    const value = rows.map(({ bet, username, gameName }) => ({
       id: bet.id, userId: bet.userId, username, gameId: bet.gameId, gameName,
       amount: parseFloat(bet.amount), payout: parseFloat(bet.payout), won: bet.won,
       multiplier: bet.multiplier ? parseFloat(bet.multiplier) : null,
       serverSeed: null, clientSeed: null, meta: null,
       createdAt: bet.createdAt.toISOString(),
-    })));
+    }));
+    recentBetsCache.set(cacheKey, { value, expiresAt: now + LIVE_FEED_CACHE_MS });
+    res.setHeader("Cache-Control", "public, max-age=1, stale-while-revalidate=2");
+    res.json(value);
   } catch (err) {
     req.log.error({ err }, "Recent bets error");
     res.status(500).json({ error: "Internal server error" });
@@ -478,6 +500,15 @@ betsRouter.get("/recent-all", optionalAuth, async (req, res) => {
 betsRouter.get("/high-rollers", optionalAuth, async (req, res) => {
   const limit = parseInt(String(req.query.limit ?? "20"), 10) || 20;
   try {
+    const cacheKey = String(limit);
+    const now = Date.now();
+    const cached = highRollersCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      res.setHeader("Cache-Control", "public, max-age=1, stale-while-revalidate=2");
+      res.json(cached.value);
+      return;
+    }
+
     const rows = await db.select({
       bet: betsTable, username: usersTable.username, gameName: gamesTable.name,
     }).from(betsTable)
@@ -486,13 +517,16 @@ betsRouter.get("/high-rollers", optionalAuth, async (req, res) => {
       .orderBy(desc(sql`CAST(${betsTable.amount} AS NUMERIC)`))
       .limit(limit);
 
-    res.json(rows.map(({ bet, username, gameName }) => ({
+    const value = rows.map(({ bet, username, gameName }) => ({
       id: bet.id, userId: bet.userId, username, gameId: bet.gameId, gameName,
       amount: parseFloat(bet.amount), payout: parseFloat(bet.payout), won: bet.won,
       multiplier: bet.multiplier ? parseFloat(bet.multiplier) : null,
       serverSeed: null, clientSeed: null, meta: null,
       createdAt: bet.createdAt.toISOString(),
-    })));
+    }));
+    highRollersCache.set(cacheKey, { value, expiresAt: now + LIVE_FEED_CACHE_MS });
+    res.setHeader("Cache-Control", "public, max-age=1, stale-while-revalidate=2");
+    res.json(value);
   } catch (err) {
     req.log.error({ err }, "High rollers error");
     res.status(500).json({ error: "Internal server error" });

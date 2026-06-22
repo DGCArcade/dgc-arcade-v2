@@ -3,6 +3,10 @@ import { db, gamesTable, slotThemesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 export const gamesRouter = Router();
 
+const PUBLIC_GAME_CACHE_MS = 60_000;
+let activeGamesCache: { expiresAt: number; value: ReturnType<typeof formatGame>[] } | null = null;
+let slotThemesCache: { expiresAt: number; value: { themes: typeof slotThemesTable.$inferSelect[] } } | null = null;
+
 // ── Ensure all active slot themes have a corresponding games table entry ──────
 export async function ensureSlotGamesSeeded() {
   try {
@@ -41,8 +45,18 @@ function formatGame(g: typeof gamesTable.$inferSelect) {
 // GET /api/games
 gamesRouter.get("/", async (req, res) => {
   try {
+    const now = Date.now();
+    if (activeGamesCache && activeGamesCache.expiresAt > now) {
+      res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+      res.json(activeGamesCache.value);
+      return;
+    }
+
     const games = await db.select().from(gamesTable).where(eq(gamesTable.active, true));
-    res.json(games.map(formatGame));
+    const value = games.map(formatGame);
+    activeGamesCache = { value, expiresAt: now + PUBLIC_GAME_CACHE_MS };
+    res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+    res.json(value);
   } catch (err) {
     req.log.error({ err }, "List games error");
     res.status(500).json({ error: "Internal server error" });
@@ -52,11 +66,21 @@ gamesRouter.get("/", async (req, res) => {
 // GET /api/games/slot-themes — returns all active slot themes (public)
 gamesRouter.get("/slot-themes", async (req, res) => {
   try {
+    const now = Date.now();
+    if (slotThemesCache && slotThemesCache.expiresAt > now) {
+      res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+      res.json(slotThemesCache.value);
+      return;
+    }
+
     const themes = await db
       .select()
       .from(slotThemesTable)
       .where(eq(slotThemesTable.active, "true"));
-    res.json({ themes });
+    const value = { themes };
+    slotThemesCache = { value, expiresAt: now + PUBLIC_GAME_CACHE_MS };
+    res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+    res.json(value);
   } catch (err) {
     req.log.error({ err }, "List slot themes error");
     res.status(500).json({ error: "Internal server error" });
