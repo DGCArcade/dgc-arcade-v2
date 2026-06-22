@@ -124,23 +124,23 @@ function PlayingCard({ card, hidden, delay = 0, dealFrom }: {
 }
 
 function ScoreBubble({ total, bust, bj, label, position }: { total: number; bust?: boolean; bj?: boolean; label: string; position: "above" | "below" }) {
-  const bg = bust ? "rgba(239,68,68,0.3)" : bj ? "rgba(251,191,36,0.3)" : "rgba(0,0,0,0.7)";
-  const border = bust ? "rgba(239,68,68,0.6)" : bj ? "rgba(251,191,36,0.6)" : "rgba(255,255,255,0.2)";
+  const bg = bust ? "rgba(239,68,68,0.4)" : bj ? "rgba(251,191,36,0.4)" : "rgba(0,0,0,0.8)";
+  const border = bust ? "rgba(239,68,68,0.7)" : bj ? "rgba(251,191,36,0.7)" : "rgba(255,255,255,0.3)";
   const color = bust ? "#fca5a5" : bj ? "#fde047" : "#fff";
 
   return (
     <div style={{
       position: "absolute", [position === "above" ? "bottom" : "top"]: "100%", left: "50%", transform: "translateX(-50%)",
-      marginBottom: position === "above" ? 12 : 0, marginTop: position === "below" ? 12 : 0,
-      display: "flex", flexDirection: "column", alignItems: "center", gap: 4, zIndex: 30
+      marginBottom: position === "above" ? 8 : 0, marginTop: position === "below" ? 8 : 0,
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 2, zIndex: 30
     }}>
       <div style={{
-        background: bg, border: `2px solid ${border}`, borderRadius: 14,
-        padding: "8px 16px", backdropFilter: "blur(10px)", minWidth: 70, textAlign: "center",
-        boxShadow: "0 12px 40px rgba(0,0,0,0.5), 0 0 20px rgba(0,0,0,0.3)"
+        background: bg, border: `1.5px solid ${border}`, borderRadius: 10,
+        padding: "5px 12px", backdropFilter: "blur(10px)", minWidth: 55, textAlign: "center",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.6)"
       }}>
-        <div style={{ fontSize: 8, fontWeight: 800, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: 1 }}>{label}</div>
-        <div style={{ fontSize: 26, fontWeight: 900, color, fontFamily: "monospace" }}>{total > 0 ? total : "—"}</div>
+        <div style={{ fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
+        <div style={{ fontSize: 18, fontWeight: 900, color, fontFamily: "monospace" }}>{total > 0 ? total : "—"}</div>
       </div>
     </div>
   );
@@ -172,6 +172,7 @@ export function Blackjack({ game }: BlackjackProps) {
   const [currentBet, setCurrentBet] = useState(0);
   const [insuranceEligible, setInsuranceEligible] = useState(false);
   const [animatingCards, setAnimatingCards] = useState(false);
+  const [showResult, setShowResult] = useState(false);
 
   const isActive = status === "active";
   const isDone = !["idle", "active"].includes(status);
@@ -189,12 +190,29 @@ export function Blackjack({ game }: BlackjackProps) {
       }).catch(() => {});
   }, []);
 
+  // Show result only after dealer cards finish animating
+  useEffect(() => {
+    if (isDone && !showResult) {
+      // Calculate animation time: dealer has 2+ cards, each with 200ms delay
+      const dealerCardCount = dealerHand.length;
+      const lastCardDelay = dealerCardCount * 200;
+      const animationDuration = 700; // card deal animation is 0.7s
+      const totalDelay = lastCardDelay + animationDuration + 300; // 300ms buffer
+      
+      const timer = setTimeout(() => {
+        setShowResult(true);
+      }, totalDelay);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isDone, dealerHand.length, showResult]);
+
   const deal = useCallback(() => {
     requireAuth(async () => {
       if (!user || amount > parseFloat(String(user.balance))) {
         toast({ title: "Insufficient balance", variant: "destructive" }); return;
       }
-      setLoading(true); setAnimatingCards(true);
+      setLoading(true); setAnimatingCards(true); setShowResult(false);
       try {
         const r = await fetch("/api/blackjack/deal", {
           method: "POST", headers: authHeaders(),
@@ -221,7 +239,7 @@ export function Blackjack({ game }: BlackjackProps) {
 
   const doAction = useCallback(async (act: "hit" | "stand" | "double" | "split" | "insurance") => {
     if (!handId) return;
-    setLoading(true);
+    setLoading(true); setShowResult(false);
     try {
       const r = await fetch("/api/blackjack/action", {
         method: "POST", headers: authHeaders(),
@@ -244,13 +262,19 @@ export function Blackjack({ game }: BlackjackProps) {
   const reset = () => {
     setHandId(null); setPlayerHand([]); setDealerHand([]);
     setPlayerTotal(0); setDealerTotal(null); setStatus("idle");
-    setPayout(0); setCurrentBet(0); setInsuranceEligible(false);
+    setPayout(0); setCurrentBet(0); setInsuranceEligible(false); setShowResult(false);
   };
 
   const handleAmountChange = (val: string) => {
     setAmountStr(val);
     const n = parseFloat(val.replace(/[^0-9.]/g, ""));
     if (!isNaN(n)) setAmount(Math.min(n, maxBet));
+  };
+
+  const handleBetMultiplier = (multiplier: number) => {
+    const newAmount = Math.max(minBet, Math.min(maxBet, amount * multiplier));
+    setAmount(newAmount);
+    setAmountStr(String(newAmount));
   };
 
   return (
@@ -260,11 +284,24 @@ export function Blackjack({ game }: BlackjackProps) {
           0% { transform: translate(var(--deal-start-x, 0), var(--deal-start-y, 0)) rotate(45deg); opacity: 0; }
           100% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
         }
+        @keyframes rainbow-text {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
         .bj-card-inner.is-hidden { transform: rotateY(0deg) !important; }
         .bj-card-inner:not(.is-hidden) { transform: rotateY(180deg); }
         .bj-action-btn { transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); }
         .bj-action-btn:hover:not(:disabled) { transform: translateY(-3px) scale(1.05); filter: brightness(1.1); }
         .bj-action-btn:active:not(:disabled) { transform: scale(0.95); }
+        .bj-rainbow-text {
+          background: linear-gradient(90deg, #FFD700, #FF6B6B, #4ECDC4, #FFD700);
+          background-size: 200% 100%;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          animation: rainbow-text 4s ease infinite;
+        }
       `}</style>
 
       {/* ── TABLE AREA ── */}
@@ -275,22 +312,16 @@ export function Blackjack({ game }: BlackjackProps) {
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between",
         padding: "40px 20px", overflow: "hidden"
       }}>
-        {/* Semi-transparent overlay for better readability */}
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-          background: "rgba(0,0,0,0.15)", pointerEvents: "none", borderRadius: 24, zIndex: 1
-        }} />
-
         {/* Table Decoration */}
         <div style={{
           position: "absolute", top: "15%", width: "80%", height: "70%",
           border: `2px solid ${felt.text}`, borderRadius: "50%", opacity: 0.3, pointerEvents: "none", zIndex: 2
         }} />
         <div style={{
-          position: "absolute", top: "45%", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.5, pointerEvents: "none", zIndex: 2
+          position: "absolute", top: "45%", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.8, pointerEvents: "none", zIndex: 2
         }}>
           <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: 4, color: felt.text }}>BLACKJACK PAYS 3 TO 2</div>
-          <div style={{ fontSize: 16, fontWeight: 900, letterSpacing: 8, color: felt.text }}>DGC ARCADE</div>
+          <div className="bj-rainbow-text" style={{ fontSize: 20, fontWeight: 900, letterSpacing: 8 }}>DGC ARCADE</div>
           <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: 4, color: felt.text }}>INSURANCE PAYS 2 TO 1</div>
         </div>
 
@@ -313,16 +344,16 @@ export function Blackjack({ game }: BlackjackProps) {
             {dealerHand.length > 0 ? dealerHand.map((c, i) => (
               <div key={`d-${i}`} style={{ position: "relative" }}>
                 <PlayingCard card={c} hidden={c.suit === "?"} delay={i * 200} dealFrom={deckRef.current?.getBoundingClientRect()} />
-                {i === 0 && <ScoreBubble total={dealerTotal ?? (isDone ? handTotal(dealerHand) : 0)} bust={dealerTotal !== null && dealerTotal > 21} label="DEALER" position="below" />}
+                {i === 0 && <ScoreBubble total={dealerTotal ?? (isDone && showResult ? handTotal(dealerHand) : 0)} bust={dealerTotal !== null && dealerTotal > 21} label="DEALER" position="below" />}
               </div>
             )) : <div style={{ width: 85, height: 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
           </div>
         </div>
 
-        {/* Result Overlay */}
-        {isDone && (
+        {/* Result Overlay - Only show after dealer cards finish */}
+        {isDone && showResult && (
           <div style={{
-            zIndex: 50, textAlign: "center", background: "rgba(0,0,0,0.8)", padding: "10px 30px", borderRadius: 16,
+            zIndex: 50, textAlign: "center", background: "rgba(0,0,0,0.9)", padding: "12px 32px", borderRadius: 16,
             border: `2px solid ${accent}`, boxShadow: `0 0 30px ${accent}44`, animation: "bj-card-deal 0.5s both"
           }}>
             <div style={{ fontSize: 24, fontWeight: 900, color: accent, letterSpacing: 2 }}>{status.replace("_", " ").toUpperCase()}</div>
@@ -361,9 +392,9 @@ export function Blackjack({ game }: BlackjackProps) {
               }} />
           </div>
           <div style={{ display: "flex", gap: 4 }}>
-            <button onClick={() => setAmount(Math.max(minBet, amount / 2))} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 6, color: "#fff", fontSize: 10, fontWeight: 700 }}>1/2</button>
-            <button onClick={() => setAmount(Math.min(maxBet, amount * 2))} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 6, color: "#fff", fontSize: 10, fontWeight: 700 }}>2x</button>
-            <button onClick={() => setAmount(maxBet)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 6, color: "#fff", fontSize: 10, fontWeight: 700 }}>MAX</button>
+            <button onClick={() => handleBetMultiplier(0.5)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 6, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>1/2</button>
+            <button onClick={() => handleBetMultiplier(2)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 6, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>2x</button>
+            <button onClick={() => { setAmount(maxBet); setAmountStr(String(maxBet)); }} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 6, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>MAX</button>
           </div>
         </div>
 
