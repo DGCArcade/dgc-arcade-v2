@@ -243,9 +243,9 @@ export function WithdrawForm() {
                             : "border-border bg-secondary/50 hover:border-primary/40"
                         }`}
                       >
-                        <CoinIcon coin={c.value} className="w-5 h-5" />
+                        <CoinIcon currency={c.value} className="w-5 h-5" />
                         <div className="text-left">
-                          <div className="text-[10px] font-bold leading-none">{c.label}</div>
+                          <div className="text-[10px] font-bold leading-none">{c.name}</div>
                           <div className="text-[9px] text-muted-foreground font-mono">
                             {formatCurrency(coinData.balances[c.value] ?? 0)}
                           </div>
