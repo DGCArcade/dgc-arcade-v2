@@ -22,9 +22,17 @@ export async function getUserBalance(userId: number): Promise<UserBalance> {
 
   const cryptoBalances = await db.select().from(userBalancesTable).where(eq(userBalancesTable.userId, userId));
   
+  // OPTIMIZATION: Fetch all prices in parallel first, then map. 
+  // This reduces the impact of Oregon-to-Singapore latency by batching operations.
+  const currencies = [...new Set(cryptoBalances.map(b => b.currency))];
+  const priceMap = new Map<string, number>();
+  await Promise.all(currencies.map(async (curr) => {
+    priceMap.set(curr, await getCryptoPrice(curr));
+  }));
+
   let liveTotalUsd = 0;
-  const balancesWithPrices = await Promise.all(cryptoBalances.map(async (b) => {
-    const price = await getCryptoPrice(b.currency);
+  const balancesWithPrices = cryptoBalances.map((b) => {
+    const price = priceMap.get(b.currency) || 0;
     const usdValue = parseFloat(b.amount) * price;
     liveTotalUsd += usdValue;
     return {
@@ -33,7 +41,7 @@ export async function getUserBalance(userId: number): Promise<UserBalance> {
       price,
       usdValue
     };
-  }));
+  });
 
   const staticBalance = parseFloat(user.balance);
   return {
@@ -74,16 +82,20 @@ export async function deductBalance(userId: number, amount: number, txn?: any): 
       .from(userBalancesTable)
       .where(eq(userBalancesTable.userId, userId));
 
-    // Compute live crypto valuations (price fetching is outside DB — safe here)
+    // OPTIMIZATION: Batch price lookups to reduce cross-region latency impact
+    const currencies = [...new Set((cryptoRows as any[]).map(b => b.currency))];
+    const priceMap = new Map<string, number>();
+    await Promise.all(currencies.map(async (curr) => {
+      priceMap.set(curr, await getCryptoPrice(curr));
+    }));
+
     let liveTotalUsd = 0;
-    const balancesWithPrices = await Promise.all(
-      (cryptoRows as typeof cryptoRows).map(async (b: any) => {
-        const price = await getCryptoPrice(b.currency);
-        const usdValue = parseFloat(b.amount) * price;
-        liveTotalUsd += usdValue;
-        return { currency: b.currency as string, amount: parseFloat(b.amount), price, usdValue };
-      })
-    );
+    const balancesWithPrices = (cryptoRows as any[]).map((b) => {
+      const price = priceMap.get(b.currency) || 0;
+      const usdValue = parseFloat(b.amount) * price;
+      liveTotalUsd += usdValue;
+      return { currency: b.currency as string, amount: parseFloat(b.amount), price, usdValue };
+    });
 
     const staticBalance = parseFloat(lockedUser.balance);
     const totalBalance = liveTotalUsd + staticBalance;

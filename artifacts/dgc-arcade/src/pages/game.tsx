@@ -10,6 +10,7 @@ import { Plinko } from "@/components/games/plinko";
 import { HiLo } from "@/components/games/hilo";
 import { Keno } from "@/components/games/keno";
 import { DiceGame } from "@/components/games/dice-game";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { formatCurrency } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { ChevronLeft, Trophy, Timer } from "lucide-react";
@@ -181,7 +182,9 @@ export default function GamePage() {
       </div>
 
       {/* Game Component */}
-      {renderGame()}
+      <ErrorBoundary key={game.slug}>
+        {renderGame()}
+      </ErrorBoundary>
 
       {/* Recent Bets */}
       <section className="pt-4">

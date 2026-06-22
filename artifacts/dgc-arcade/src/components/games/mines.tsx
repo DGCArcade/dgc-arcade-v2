@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
 import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 function getToken() { return localStorage.getItem("dgc_token"); }
 function authHeaders() { return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }; }
@@ -46,7 +47,15 @@ const GRID_CONFIGS: Record<24 | 48 | 60, { cols: number; rows: number; label: st
 
 interface MinesProps { game: Game }
 
-export function Mines({ game }: MinesProps) {
+export function Mines(props: MinesProps) {
+  return (
+    <ErrorBoundary>
+      <MinesGame {...props} />
+    </ErrorBoundary>
+  );
+}
+
+function MinesGame({ game }: MinesProps) {
   const { user, requireAuth } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -71,16 +80,23 @@ export function Mines({ game }: MinesProps) {
   const [lastCell, setLastCell] = useState<number | null>(null);
 
   useEffect(() => {
+    let mounted = true;
     fetch("/api/mines/current", { headers: authHeaders() })
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : null)
       .then(d => {
-        if (d?.sessionId) {
-          setSessionId(d.sessionId); setRevealed(d.revealed);
-          setCurrentMultiplier(d.currentMultiplier); setNextMultiplier(d.nextMultiplier);
-          setMineCount(d.mineCount); setAmount(d.bet); setAmountStr(String(d.bet));
-          setGridSize(d.gridSize || 24); setStatus("active");
+        if (mounted && d?.sessionId) {
+          setSessionId(d.sessionId); 
+          setRevealed(d.revealed || []);
+          setCurrentMultiplier(d.currentMultiplier || 1); 
+          setNextMultiplier(d.nextMultiplier || 1);
+          setMineCount(d.mineCount || 5); 
+          setAmount(d.bet || minBet); 
+          setAmountStr(String(d.bet || minBet));
+          setGridSize(d.gridSize || 24); 
+          setStatus("active");
         }
-      }).catch(() => {});
+      }).catch(err => console.error("Mines session restore failed:", err));
+    return () => { mounted = false; };
   }, []);
 
   const handleAmountChange = (val: string) => {
@@ -110,8 +126,13 @@ export function Mines({ game }: MinesProps) {
         if (!r.ok) { toast({ title: d.error, variant: "destructive" }); return; }
         setSessionId(d.sessionId); setRevealed([]); setMinePositions([]);
         setBustedAt(null); setCurrentMultiplier(1); setNextMultiplier(d.nextMultiplier);
-        setPayout(0); setStatus("active"); setLastCell(null);
-        qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+        setPayout(0); setLastCell(null);
+        
+        // Small delay to ensure state updates don't collide with latency-heavy query invalidations
+        setTimeout(() => {
+          setStatus("active");
+          qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+        }, 50);
       } finally { setLoading(false); }
     });
   };
