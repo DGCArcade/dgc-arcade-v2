@@ -205,6 +205,7 @@ export function Blackjack({ game }: BlackjackProps) {
       
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [isDone, dealerHand.length, showResult]);
 
   const deal = useCallback(() => {
