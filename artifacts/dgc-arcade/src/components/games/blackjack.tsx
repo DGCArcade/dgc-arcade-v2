@@ -337,7 +337,7 @@ export function Blackjack({ game }: BlackjackProps) {
   const chips = [1, 5, 25, 100, 500];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: "100%", padding: "12px" }}>
+    <div style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", maxWidth: "100%", padding: "12px", alignItems: "flex-start" }}>
 
       <style>{`
         @keyframes bj-deal-fly {
@@ -378,7 +378,7 @@ export function Blackjack({ game }: BlackjackProps) {
 
       {/* TABLE */}
       <div style={{
-        position: "relative", width: "100%",
+        position: "relative", flex: 1, minWidth: 0,
         borderRadius: "24px 24px 50% 50% / 24px 24px 38% 38%",
         overflow: "hidden",
         background: felt.felt,
@@ -578,9 +578,11 @@ export function Blackjack({ game }: BlackjackProps) {
       <div style={{
         background: "rgba(8,12,26,0.88)",
         border: "1.5px solid rgba(255,255,255,0.07)",
-        borderRadius: 14, padding: "11px 12px",
+        borderRadius: 14, padding: "14px 14px",
         display: "flex", flexDirection: "column", gap: 10,
         backdropFilter: "blur(14px)",
+        width: 280, flexShrink: 0,
+        position: "sticky", top: 80,
       }}>
 
         {/* Row 1: Bet input + multipliers */}

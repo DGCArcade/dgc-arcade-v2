@@ -7,54 +7,26 @@ import { formatCurrency } from "@/lib/format";
 import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
 
 function getToken() { return localStorage.getItem("dgc_token"); }
-function authHeaders() { return { "Content-Type":"application/json", Authorization:`Bearer ${getToken()}` }; }
+function authHeaders() { return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }; }
 
-// Sound effects (inline base64 or simple Web Audio API)
+// ─── Sound effects ────────────────────────────────────────────────────────────
 const playSound = (type: "click" | "gem" | "bomb" | "cashout") => {
   try {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const now = audioContext.currentTime;
-    const osc = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    osc.connect(gain);
-    gain.connect(audioContext.destination);
-
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
     switch (type) {
-      case "click":
-        osc.frequency.value = 400;
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-        osc.start(now);
-        osc.stop(now + 0.1);
-        break;
-      case "gem":
-        osc.frequency.setValueAtTime(800, now);
-        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-        osc.start(now);
-        osc.stop(now + 0.15);
-        break;
-      case "bomb":
-        osc.frequency.setValueAtTime(150, now);
-        osc.frequency.exponentialRampToValueAtTime(50, now + 0.2);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-        osc.start(now);
-        osc.stop(now + 0.2);
-        break;
-      case "cashout":
-        osc.frequency.setValueAtTime(600, now);
-        osc.frequency.exponentialRampToValueAtTime(1000, now + 0.3);
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-        osc.start(now);
-        osc.stop(now + 0.3);
-        break;
+      case "click":  osc.frequency.value = 400; gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1); osc.start(now); osc.stop(now + 0.1); break;
+      case "gem":    osc.frequency.setValueAtTime(800, now); osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1); gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15); osc.start(now); osc.stop(now + 0.15); break;
+      case "bomb":   osc.frequency.setValueAtTime(150, now); osc.frequency.exponentialRampToValueAtTime(50, now + 0.2); gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2); osc.start(now); osc.stop(now + 0.2); break;
+      case "cashout":osc.frequency.setValueAtTime(600, now); osc.frequency.exponentialRampToValueAtTime(1000, now + 0.3); gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3); osc.start(now); osc.stop(now + 0.3); break;
     }
   } catch (e) {}
 };
 
+// ─── Theme hook ───────────────────────────────────────────────────────────────
 function useAccent() {
   const [id, setId] = useState<ThemeId>(getTheme());
   useEffect(() => {
@@ -65,6 +37,13 @@ function useAccent() {
   return THEMES.find(t => t.id === id)?.accent ?? "#FFD700";
 }
 
+// ─── Grid configs: 24 (6×4), 48 (8×6), 60 (10×6) ───────────────────────────
+const GRID_CONFIGS: Record<24 | 48 | 60, { cols: number; rows: number; label: string }> = {
+  24: { cols: 6, rows: 4,  label: "4×6 · Starter" },
+  48: { cols: 8, rows: 6,  label: "6×8 · Classic" },
+  60: { cols: 10, rows: 6, label: "6×10 · Expert" },
+};
+
 interface MinesProps { game: Game }
 
 export function Mines({ game }: MinesProps) {
@@ -73,61 +52,65 @@ export function Mines({ game }: MinesProps) {
   const qc = useQueryClient();
   const accent = useAccent();
 
-  const [amount, setAmount] = useState<number>(parseFloat(String(game.minBet ?? 1)));
-  const [gridSize, setGridSize] = useState<24 | 48 | 62>(24);
+  const minBet = parseFloat(String(game.minBet ?? 1));
+  const maxBet = parseFloat(String(game.maxBet ?? 1_000_000));
+
+  const [amount, setAmount] = useState<number>(minBet);
+  const [amountStr, setAmountStr] = useState<string>(String(minBet));
+  const [gridSize, setGridSize] = useState<24 | 48 | 60>(24);
   const [mineCount, setMineCount] = useState(5);
-  const [sessionId, setSessionId] = useState<number|null>(null);
+  const [sessionId, setSessionId] = useState<number | null>(null);
   const [revealed, setRevealed] = useState<number[]>([]);
   const [minePositions, setMinePositions] = useState<number[]>([]);
-  const [bustedAt, setBustedAt] = useState<number|null>(null);
+  const [bustedAt, setBustedAt] = useState<number | null>(null);
   const [currentMultiplier, setCurrentMultiplier] = useState(1);
   const [nextMultiplier, setNextMultiplier] = useState(1);
-  const [status, setStatus] = useState<"idle"|"active"|"busted"|"cashed_out">("idle");
+  const [status, setStatus] = useState<"idle" | "active" | "busted" | "cashed_out">("idle");
   const [loading, setLoading] = useState(false);
   const [payout, setPayout] = useState(0);
-  const [lastCell, setLastCell] = useState<number|null>(null);
+  const [lastCell, setLastCell] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/mines/current", { headers: authHeaders() })
-      .then(r=>r.json())
+      .then(r => r.json())
       .then(d => {
-        if (d && d.sessionId) {
-          setSessionId(d.sessionId);
-          setRevealed(d.revealed);
-          setCurrentMultiplier(d.currentMultiplier);
-          setNextMultiplier(d.nextMultiplier);
-          setMineCount(d.mineCount);
-          setAmount(d.bet);
-          setGridSize(d.gridSize || 24);
-          setStatus("active");
+        if (d?.sessionId) {
+          setSessionId(d.sessionId); setRevealed(d.revealed);
+          setCurrentMultiplier(d.currentMultiplier); setNextMultiplier(d.nextMultiplier);
+          setMineCount(d.mineCount); setAmount(d.bet); setAmountStr(String(d.bet));
+          setGridSize(d.gridSize || 24); setStatus("active");
         }
-      }).catch(()=>{});
+      }).catch(() => {});
   }, []);
+
+  const handleAmountChange = (val: string) => {
+    setAmountStr(val);
+    const n = parseFloat(val.replace(/[^0-9.]/g, ""));
+    if (!isNaN(n)) setAmount(Math.min(n, maxBet));
+    else if (val === "" || val === ".") setAmount(0);
+  };
+  const handleAmountBlur = () => {
+    const clamped = Math.max(minBet, Math.min(amount, maxBet));
+    setAmount(clamped); setAmountStr(String(clamped));
+  };
+  const setAmt = (n: number) => { setAmount(n); setAmountStr(String(n)); };
 
   const start = () => {
     requireAuth(async () => {
-      if (!user || amount > parseFloat(String(user.balance))) { 
-        toast({ title:"Insufficient balance", variant:"destructive" }); 
-        return; 
+      if (!user || amount > parseFloat(String(user.balance))) {
+        toast({ title: "Insufficient balance", variant: "destructive" }); return;
       }
-      setLoading(true);
-      playSound("click");
+      setLoading(true); playSound("click");
       try {
-        const r = await fetch("/api/mines/start", { 
-          method:"POST", 
-          headers:authHeaders(), 
-          body:JSON.stringify({gameId:game.id,amount,mineCount,gridSize}) 
+        const r = await fetch("/api/mines/start", {
+          method: "POST", headers: authHeaders(),
+          body: JSON.stringify({ gameId: game.id, amount, mineCount, gridSize }),
         });
         const d = await r.json();
-        if (!r.ok) { toast({ title:d.error, variant:"destructive" }); return; }
-        setSessionId(d.sessionId);
-        setRevealed([]);
-        setMinePositions([]);
-        setBustedAt(null);
-        setCurrentMultiplier(1);
-        setNextMultiplier(d.nextMultiplier);
-        setPayout(0);
-        setStatus("active");
+        if (!r.ok) { toast({ title: d.error, variant: "destructive" }); return; }
+        setSessionId(d.sessionId); setRevealed([]); setMinePositions([]);
+        setBustedAt(null); setCurrentMultiplier(1); setNextMultiplier(d.nextMultiplier);
+        setPayout(0); setStatus("active"); setLastCell(null);
         qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
       } finally { setLoading(false); }
     });
@@ -135,56 +118,44 @@ export function Mines({ game }: MinesProps) {
 
   const reveal = async (cell: number) => {
     if (status !== "active" || revealed.includes(cell) || !sessionId) return;
-    setLoading(true);
-    setLastCell(cell);
-    playSound("click");
+    setLoading(true); setLastCell(cell); playSound("click");
     try {
-      const r = await fetch("/api/mines/reveal", { 
-        method:"POST", 
-        headers:authHeaders(), 
-        body:JSON.stringify({sessionId,cell}) 
+      const r = await fetch("/api/mines/reveal", {
+        method: "POST", headers: authHeaders(),
+        body: JSON.stringify({ sessionId, cell }),
       });
       const d = await r.json();
-      if (!r.ok) { toast({ title:d.error, variant:"destructive" }); return; }
+      if (!r.ok) { toast({ title: d.error, variant: "destructive" }); return; }
       setRevealed(d.revealed);
       if (d.hit) {
-        playSound("bomb");
-        setBustedAt(cell);
-        setMinePositions(d.minePositions);
-        setStatus("busted");
-        qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+        playSound("bomb"); setBustedAt(cell); setMinePositions(d.minePositions);
+        setStatus("busted"); qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
         toast({ title: "BOOM! 💣", description: "You hit a mine!", variant: "destructive" });
       } else {
-        playSound("gem");
-        setCurrentMultiplier(d.currentMultiplier);
-        setNextMultiplier(d.nextMultiplier);
+        playSound("gem"); setCurrentMultiplier(d.currentMultiplier); setNextMultiplier(d.nextMultiplier);
       }
     } finally { setLoading(false); }
   };
 
   const cashout = async () => {
     if (!sessionId || status !== "active" || revealed.length === 0) return;
-    setLoading(true);
-    playSound("cashout");
+    setLoading(true); playSound("cashout");
     try {
-      const r = await fetch("/api/mines/cashout", { 
-        method:"POST", 
-        headers:authHeaders(), 
-        body:JSON.stringify({sessionId}) 
+      const r = await fetch("/api/mines/cashout", {
+        method: "POST", headers: authHeaders(),
+        body: JSON.stringify({ sessionId }),
       });
       const d = await r.json();
-      if (!r.ok) { toast({ title:d.error, variant:"destructive" }); return; }
-      setMinePositions(d.minePositions);
-      setStatus("cashed_out");
-      setPayout(d.payout);
+      if (!r.ok) { toast({ title: d.error, variant: "destructive" }); return; }
+      setMinePositions(d.minePositions); setStatus("cashed_out"); setPayout(d.payout);
       qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
-      toast({ title:`Cashed out! +${formatCurrency(d.payout)}`,className:"bg-green-500 text-white" });
+      toast({ title: `Cashed out! +${formatCurrency(d.payout)}`, className: "bg-green-500 text-white" });
     } finally { setLoading(false); }
   };
 
   const reset = () => {
-    setSessionId(null);setRevealed([]);setMinePositions([]);setBustedAt(null);
-    setCurrentMultiplier(1);setNextMultiplier(1);setPayout(0);setStatus("idle");setLastCell(null);
+    setSessionId(null); setRevealed([]); setMinePositions([]); setBustedAt(null);
+    setCurrentMultiplier(1); setNextMultiplier(1); setPayout(0); setStatus("idle"); setLastCell(null);
   };
 
   const isActive = status === "active";
@@ -192,319 +163,325 @@ export function Mines({ game }: MinesProps) {
   const totalCells = gridSize;
   const safeCells = totalCells - mineCount;
   const cellsRemaining = safeCells - revealed.length;
+  const cfg = GRID_CONFIGS[gridSize];
 
-  const gridCols = gridSize === 24 ? 6 : gridSize === 48 ? 8 : 10;
-  const cellSize = gridSize === 24 ? 56 : gridSize === 48 ? 40 : 32;
+  // Responsive cell sizing
+  const cellSize = gridSize === 24 ? 60 : gridSize === 48 ? 46 : 38;
+  const cellFontSize = gridSize === 24 ? 26 : gridSize === 48 ? 20 : 16;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", padding: "12px" }}>
+    <div style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start" }}>
 
       <style>{`
-        @keyframes mines-reveal { 0% { transform: scale(0.8) rotateY(90deg); opacity: 0; } 100% { transform: scale(1) rotateY(0deg); opacity: 1; } }
-        @keyframes mines-gem-pop { 0% { transform: scale(0.6); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
-        @keyframes mines-bomb-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
-        .mines-cell:hover:not(:disabled) { transform: scale(1.08); }
-        .mines-cell:active:not(:disabled) { transform: scale(0.94); }
+        @keyframes mines-reveal { 0% { transform: scale(0.7) rotateY(90deg); opacity: 0; } 100% { transform: scale(1) rotateY(0deg); opacity: 1; } }
+        @keyframes mines-gem-pop { 0% { transform: scale(0.6); } 50% { transform: scale(1.18); } 100% { transform: scale(1); } }
+        @keyframes mines-bomb-shake { 0%,100% { transform: translateX(0) scale(1); } 20% { transform: translateX(-4px) scale(1.05); } 40% { transform: translateX(4px) scale(1.05); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+        @keyframes mines-bust-flash { 0%,100% { background: rgba(239,68,68,0.15); } 50% { background: rgba(239,68,68,0.35); } }
+        @keyframes mines-cashout-glow { 0%,100% { box-shadow: 0 0 0 2px rgba(34,197,94,0.3); } 50% { box-shadow: 0 0 0 3px rgba(34,197,94,0.7), 0 0 30px rgba(34,197,94,0.3); } }
+        .mines-cell { transition: all 0.15s cubic-bezier(0.34,1.56,0.64,1) !important; }
+        .mines-cell:hover:not(:disabled) { transform: scale(1.1) !important; z-index: 2; }
+        .mines-cell:active:not(:disabled) { transform: scale(0.93) !important; }
+        .mines-grid-bust { animation: mines-bust-flash 0.6s ease-in-out 3; }
+        .mines-grid-cashout { animation: mines-cashout-glow 1.5s ease-in-out infinite; }
+        .mines-size-btn:hover { filter: brightness(1.12); }
       `}</style>
 
-      {/* GRID */}
+      {/* ── GAME GRID ── */}
       <div style={{
+        flex: 1, minWidth: 0,
         background: "rgba(8,12,26,0.88)",
-        border: "2px solid rgba(255,255,255,0.08)",
-        borderRadius: 16,
-        padding: "16px",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 12,
+        border: `2px solid ${isDone && status === "cashed_out" ? "rgba(34,197,94,0.3)" : isDone ? "rgba(239,68,68,0.3)" : "rgba(255,255,255,0.08)"}`,
+        borderRadius: 16, padding: "20px",
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 16,
         backdropFilter: "blur(14px)",
+        transition: "border-color 0.3s ease",
       }}>
 
-        {/* Grid size selector */}
+        {/* Grid size selector (idle only) */}
         {status === "idle" && (
           <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
-            {[24, 48, 62].map(size => (
-              <button
-                key={size}
-                onClick={() => setGridSize(size as 24 | 48 | 62)}
+            {([24, 48, 60] as const).map(size => (
+              <button key={size} onClick={() => setGridSize(size)} className="mines-size-btn"
                 style={{
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: 1.5,
+                  padding: "8px 16px", borderRadius: 9, fontSize: 11, fontWeight: 700, letterSpacing: 1,
                   textTransform: "uppercase",
                   background: gridSize === size ? `${accent}cc` : "rgba(255,255,255,0.06)",
                   border: `2px solid ${gridSize === size ? accent : "rgba(255,255,255,0.1)"}`,
                   color: gridSize === size ? "#000" : "rgba(255,255,255,0.6)",
-                  cursor: "pointer",
-                  transition: "all 0.16s",
-                }}
-              >
-                {size} Boxes
+                  cursor: "pointer", transition: "all 0.16s",
+                  boxShadow: gridSize === size ? `0 0 14px ${accent}44` : "none",
+                }}>
+                <div style={{ fontWeight: 900 }}>{size} Boxes</div>
+                <div style={{ fontSize: 8, fontWeight: 600, opacity: 0.7, marginTop: 1 }}>{GRID_CONFIGS[size].label}</div>
               </button>
             ))}
           </div>
         )}
 
+        {/* Active grid info */}
+        {(isActive || isDone) && (
+          <div style={{ display: "flex", gap: 16, fontSize: 9, fontFamily: "monospace", color: "rgba(255,255,255,0.40)", textTransform: "uppercase", letterSpacing: 1.5 }}>
+            <span>{gridSize} cells · {mineCount} mines</span>
+            {isActive && <span style={{ color: accent }}>Safe left: {cellsRemaining}</span>}
+          </div>
+        )}
+
         {/* Game Grid */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
-          gap: gridSize === 24 ? 6 : gridSize === 48 ? 4 : 3,
-          width: "100%",
-          maxWidth: gridSize === 24 ? 400 : gridSize === 48 ? 400 : 400,
-          margin: "0 auto",
-        }}>
-          {Array.from({length: totalCells}, (_, i) => {
+        <div className={isDone && status === "busted" ? "mines-grid-bust" : isDone && status === "cashed_out" ? "mines-grid-cashout" : ""}
+          style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(${cfg.cols}, ${cellSize}px)`,
+            gap: gridSize === 24 ? 7 : gridSize === 48 ? 5 : 4,
+            margin: "0 auto",
+          }}>
+          {Array.from({ length: totalCells }, (_, i) => {
             const isRevealed = revealed.includes(i);
             const isMine = minePositions.includes(i);
             const isBustedCell = bustedAt === i;
             const isLastGem = lastCell === i && isRevealed && !isMine && isActive;
+            const isGem = isRevealed && !isMine;
+
+            let bg = "rgba(255,255,255,0.05)";
+            let border = "rgba(255,255,255,0.1)";
+            let boxShadow = "inset 0 1px 2px rgba(255,255,255,0.06)";
+            let emoji = "";
+
+            if (isBustedCell) {
+              bg = "rgba(239,68,68,0.28)"; border = "#ef4444";
+              boxShadow = "0 0 24px rgba(239,68,68,0.6)"; emoji = "💣";
+            } else if (isMine && isDone) {
+              bg = "rgba(239,68,68,0.12)"; border = "rgba(239,68,68,0.45)"; emoji = "💣";
+            } else if (isGem) {
+              bg = `${accent}18`; border = `${accent}88`;
+              boxShadow = `0 0 14px ${accent}44`; emoji = "💎";
+            } else if (isActive) {
+              bg = "rgba(255,255,255,0.07)"; border = "rgba(255,255,255,0.14)"; emoji = "?";
+            }
 
             return (
-              <button
-                key={i}
-                onClick={() => reveal(i)}
+              <button key={i} onClick={() => reveal(i)}
                 disabled={!isActive || isRevealed || loading}
                 className="mines-cell"
                 style={{
-                  width: cellSize,
-                  height: cellSize,
-                  borderRadius: 8,
-                  border: isBustedCell ? `2px solid #ef4444` :
-                          isMine && isDone ? `2px solid rgba(239,68,68,0.5)` :
-                          isRevealed ? `2px solid ${accent}88` :
-                          isActive ? `2px solid rgba(255,255,255,0.15)` :
-                          `2px solid rgba(255,255,255,0.06)`,
-                  background: isBustedCell ? "rgba(239,68,68,0.3)" :
-                              isMine && isDone ? "rgba(239,68,68,0.15)" :
-                              isRevealed ? `${accent}15` :
-                              isActive ? "rgba(255,255,255,0.08)" :
-                              "rgba(255,255,255,0.03)",
-                  fontSize: cellSize > 40 ? 24 : cellSize > 30 ? 18 : 14,
-                  fontWeight: 900,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: !isActive || isRevealed || loading ? "not-allowed" : "pointer",
-                  transition: "all 0.16s",
-                  opacity: !isActive && !isDone ? 0.5 : 1,
-                  animation: isBustedCell ? "mines-bomb-shake 0.4s ease-in-out" :
+                  width: cellSize, height: cellSize, borderRadius: gridSize === 24 ? 10 : 8,
+                  border: `2px solid ${border}`, background: bg, boxShadow,
+                  fontSize: cellFontSize, fontWeight: 900, color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: !isActive || isRevealed || loading ? "default" : "pointer",
+                  opacity: !isActive && !isDone ? 0.4 : 1,
+                  animation: isBustedCell ? "mines-bomb-shake 0.5s ease-in-out" :
                              isLastGem ? "mines-gem-pop 0.4s cubic-bezier(0.34,1.56,0.64,1)" :
-                             isRevealed && !isMine ? "mines-reveal 0.4s ease-out" : "none",
-                  boxShadow: isBustedCell ? `0 0 20px rgba(239,68,68,0.5)` :
-                             isRevealed && !isMine ? `0 0 12px ${accent}44` :
-                             isActive && !isRevealed ? `inset 0 1px 2px rgba(255,255,255,0.1)` : "none",
-                }}
-              >
-                {isBustedCell ? "💣" : isMine && isDone ? "💣" : isRevealed ? "💎" : isActive ? "?" : ""}
+                             isGem ? "mines-reveal 0.35s ease-out" : "none",
+                  fontFamily: "monospace",
+                }}>
+                {emoji}
               </button>
             );
           })}
         </div>
 
-        {/* Multiplier display */}
+        {/* Multiplier display during active play */}
         {isActive && revealed.length > 0 && (
-          <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "monospace", color: accent, letterSpacing: 2 }}>
-              {currentMultiplier.toFixed(2)}x
+          <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 3 }}>
+            <div style={{ fontSize: 36, fontWeight: 900, fontFamily: "monospace", color: accent, letterSpacing: 2, textShadow: `0 0 20px ${accent}66` }}>
+              {currentMultiplier.toFixed(2)}×
             </div>
-            <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.45)", letterSpacing: 1.5, textTransform: "uppercase" }}>
-              Next: {nextMultiplier.toFixed(2)}x
+            <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.40)", letterSpacing: 2, textTransform: "uppercase" }}>
+              Next: {nextMultiplier.toFixed(2)}×
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#22c55e", fontFamily: "monospace" }}>
+              +{formatCurrency(amount * currentMultiplier - amount)} profit
             </div>
           </div>
         )}
 
-        {/* Result */}
+        {/* Result banner */}
         {isDone && (
           <div style={{
-            fontSize: 24,
-            fontWeight: 900,
-            textTransform: "uppercase",
-            letterSpacing: 3,
+            fontSize: 28, fontWeight: 900, textTransform: "uppercase", letterSpacing: 3,
             color: status === "cashed_out" ? "#22c55e" : "#ef4444",
-            textShadow: status === "cashed_out" ? "0 0 16px rgba(34,197,94,0.5)" : "0 0 16px rgba(239,68,68,0.5)",
+            textShadow: status === "cashed_out" ? "0 0 20px rgba(34,197,94,0.6)" : "0 0 20px rgba(239,68,68,0.6)",
+            fontFamily: "'Outfit', sans-serif",
           }}>
-            {status === "cashed_out" ? `+${formatCurrency(payout)}` : "BUSTED!"}
+            {status === "cashed_out" ? `🎉 +${formatCurrency(payout)}` : "💣 BUSTED!"}
           </div>
         )}
       </div>
 
-      {/* CONTROLS */}
+      {/* ── BET PANEL (right side) ── */}
       <div style={{
+        width: 280, flexShrink: 0,
         background: "rgba(8,12,26,0.88)",
-        border: "2px solid rgba(255,255,255,0.08)",
-        borderRadius: 16,
-        padding: "12px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
+        border: "1.5px solid rgba(255,255,255,0.07)",
+        borderRadius: 14, padding: "14px",
+        display: "flex", flexDirection: "column", gap: 12,
         backdropFilter: "blur(14px)",
+        position: "sticky", top: 80,
       }}>
+
+        {/* Panel title */}
+        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 3, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: 8 }}>
+          Mines Setup
+        </div>
 
         {/* Bet amount */}
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>
-            Bet Amount
-          </label>
+          <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>Bet Amount</label>
           <div style={{ position: "relative" }}>
-            <span style={{
-              position: "absolute",
-              left: 10,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "rgba(255,255,255,0.28)",
-              fontFamily: "monospace",
-              fontSize: 13,
-              fontWeight: 700,
-              pointerEvents: "none",
-            }}>$</span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={amount}
-              onChange={e => setAmount(parseFloat(e.target.value) || 0)}
+            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.28)", fontFamily: "monospace", fontSize: 13, fontWeight: 700, pointerEvents: "none" }}>$</span>
+            <input type="text" inputMode="decimal" value={amountStr}
+              onChange={e => handleAmountChange(e.target.value)}
+              onBlur={handleAmountBlur}
               disabled={isActive}
               style={{
-                width: "100%",
-                paddingLeft: 25,
-                paddingRight: 10,
-                paddingTop: 9,
-                paddingBottom: 9,
-                fontSize: 13,
-                fontWeight: 700,
-                fontFamily: "monospace",
+                width: "100%", paddingLeft: 25, paddingRight: 10, paddingTop: 9, paddingBottom: 9,
+                fontSize: 13, fontWeight: 700, fontFamily: "monospace",
                 background: "rgba(255,255,255,0.05)",
                 border: `1.5px solid ${isActive ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.11)"}`,
-                borderRadius: 8,
-                color: "#fff",
-                outline: "none",
-                opacity: isActive ? 0.55 : 1,
+                borderRadius: 8, color: "#fff", outline: "none",
+                opacity: isActive ? 0.55 : 1, boxSizing: "border-box",
               }}
             />
           </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {[
+              { l: "MIN", fn: () => setAmt(minBet) },
+              { l: "½",   fn: () => setAmt(Math.max(minBet, Math.floor((amount / 2) * 100) / 100)) },
+              { l: "2×",  fn: () => setAmt(Math.min(amount * 2, maxBet)) },
+              { l: "MAX", fn: () => setAmt(Math.min(parseFloat(String(user?.balance ?? 0)), maxBet)) },
+            ].map(({ l, fn }) => (
+              <button key={l} onClick={fn} disabled={isActive}
+                style={{
+                  flex: 1, padding: "8px 4px", borderRadius: 7, fontSize: 9, fontWeight: 700, letterSpacing: 1,
+                  textTransform: "uppercase", background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.6)",
+                  cursor: isActive ? "not-allowed" : "pointer", transition: "all 0.14s",
+                  opacity: isActive ? 0.38 : 1,
+                }}>{l}</button>
+            ))}
+          </div>
         </div>
 
-        {/* Mine count */}
+        {/* Mine count slider */}
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>
-            Mines: {mineCount}
-          </label>
-          <input
-            type="range"
-            min={1}
-            max={Math.floor(totalCells * 0.8)}
-            value={mineCount}
-            onChange={e => setMineCount(Number(e.target.value))}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>Mines</label>
+            <span style={{ fontSize: 14, fontWeight: 900, color: accent, fontFamily: "monospace" }}>{mineCount}</span>
+          </div>
+          <input type="range" min={1} max={Math.floor(totalCells * 0.8)}
+            value={mineCount} onChange={e => setMineCount(Number(e.target.value))}
             disabled={isActive}
-            style={{
-              width: "100%",
-              accentColor: accent,
-              opacity: isActive ? 0.55 : 1,
-            }}
+            style={{ width: "100%", accentColor: accent, opacity: isActive ? 0.55 : 1 }}
           />
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "monospace" }}>
             <span>1 mine</span>
-            <span>Safe: {safeCells}</span>
+            <span style={{ color: "rgba(255,255,255,0.50)" }}>Safe: {safeCells}</span>
             <span>{Math.floor(totalCells * 0.8)} mines</span>
+          </div>
+          {/* Quick mine presets */}
+          <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+            {[1, 3, 5, 10, 15].filter(v => v <= Math.floor(totalCells * 0.8)).map(v => (
+              <button key={v} onClick={() => { if (!isActive) setMineCount(v); }}
+                disabled={isActive}
+                style={{
+                  flex: 1, minWidth: 28, padding: "5px 4px", borderRadius: 6, fontSize: 9, fontWeight: 700,
+                  border: `1px solid ${mineCount === v ? accent : "rgba(255,255,255,0.12)"}`,
+                  color: mineCount === v ? accent : "rgba(255,255,255,0.40)",
+                  background: mineCount === v ? `${accent}15` : "transparent",
+                  cursor: isActive ? "not-allowed" : "pointer", transition: "all 0.14s",
+                  opacity: isActive ? 0.38 : 1,
+                }}>{v}</button>
+            ))}
           </div>
         </div>
 
-        {/* Stats */}
-        {isActive && (
-          <div style={{
-            background: "rgba(255,255,255,0.04)",
-            border: `1px solid ${accent}33`,
-            borderRadius: 10,
-            padding: "10px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 6,
-            fontSize: 10,
-            fontFamily: "monospace",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "rgba(255,255,255,0.45)" }}>Current</span>
-              <span style={{ color: accent, fontWeight: 900 }}>{currentMultiplier.toFixed(2)}x</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "rgba(255,255,255,0.45)" }}>Profit</span>
-              <span style={{ color: "#22c55e", fontWeight: 900 }}>+{formatCurrency(amount * currentMultiplier - amount)}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "rgba(255,255,255,0.45)" }}>Safe left</span>
-              <span style={{ color: "rgba(255,255,255,0.8)" }}>{cellsRemaining}</span>
-            </div>
-          </div>
-        )}
+        {/* Stats panel */}
+        <div style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${accent}33`, borderRadius: 10, padding: "10px", display: "flex", flexDirection: "column", gap: 6, fontSize: 10, fontFamily: "monospace" }}>
+          {isActive ? (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "rgba(255,255,255,0.45)" }}>Multiplier</span>
+                <span style={{ color: accent, fontWeight: 900 }}>{currentMultiplier.toFixed(2)}×</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "rgba(255,255,255,0.45)" }}>Profit</span>
+                <span style={{ color: "#22c55e", fontWeight: 900 }}>+{formatCurrency(amount * currentMultiplier - amount)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "rgba(255,255,255,0.45)" }}>Safe left</span>
+                <span style={{ color: "rgba(255,255,255,0.8)" }}>{cellsRemaining}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "rgba(255,255,255,0.45)" }}>Next mult</span>
+                <span style={{ color: accent }}>{nextMultiplier.toFixed(2)}×</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "rgba(255,255,255,0.45)" }}>Grid</span>
+                <span style={{ color: "rgba(255,255,255,0.7)" }}>{cfg.cols}×{cfg.rows}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "rgba(255,255,255,0.45)" }}>Safe cells</span>
+                <span style={{ color: "rgba(255,255,255,0.7)" }}>{safeCells}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "rgba(255,255,255,0.45)" }}>Mine density</span>
+                <span style={{ color: mineCount > totalCells * 0.5 ? "#ef4444" : mineCount > totalCells * 0.3 ? "#f59e0b" : "#22c55e" }}>
+                  {Math.round((mineCount / totalCells) * 100)}%
+                </span>
+              </div>
+            </>
+          )}
+        </div>
 
-        {/* Buttons */}
+        {/* Action buttons */}
         {status === "idle" ? (
-          <button
-            onClick={start}
-            disabled={loading}
+          <button onClick={start} disabled={loading}
             style={{
-              padding: "11px 20px",
-              borderRadius: 10,
-              fontWeight: 900,
-              fontSize: 12,
-              letterSpacing: 3,
+              padding: "14px 20px", borderRadius: 10, fontWeight: 900, fontSize: 13, letterSpacing: 3,
               textTransform: "uppercase",
               background: `linear-gradient(140deg, ${accent}ee, ${accent}aa)`,
-              color: "#000",
-              border: "none",
+              color: "#000", border: "none",
               cursor: loading ? "not-allowed" : "pointer",
-              boxShadow: loading ? "none" : `0 4px 16px ${accent}50`,
-              opacity: loading ? 0.48 : 1,
-              transition: "all 0.16s",
+              boxShadow: loading ? "none" : `0 4px 20px ${accent}55`,
+              opacity: loading ? 0.48 : 1, transition: "all 0.16s",
               fontFamily: "'Outfit', sans-serif",
-            }}
-          >
+            }}>
             {loading ? "Starting…" : "Place Bet"}
           </button>
         ) : isActive ? (
-          <button
-            onClick={cashout}
-            disabled={loading || revealed.length === 0}
-            style={{
-              padding: "11px 20px",
-              borderRadius: 10,
-              fontWeight: 900,
-              fontSize: 12,
-              letterSpacing: 3,
-              textTransform: "uppercase",
-              background: "linear-gradient(140deg, #22c55e, #16a34a)",
-              color: "#000",
-              border: "none",
-              cursor: loading || revealed.length === 0 ? "not-allowed" : "pointer",
-              boxShadow: loading || revealed.length === 0 ? "none" : "0 4px 16px rgba(34,197,94,0.5)",
-              opacity: loading || revealed.length === 0 ? 0.48 : 1,
-              transition: "all 0.16s",
-              fontFamily: "'Outfit', sans-serif",
-            }}
-          >
-            Cash Out {revealed.length > 0 ? `(${currentMultiplier.toFixed(2)}x)` : ""}
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <button onClick={cashout} disabled={loading || revealed.length === 0}
+              style={{
+                padding: "14px 20px", borderRadius: 10, fontWeight: 900, fontSize: 12, letterSpacing: 2,
+                textTransform: "uppercase",
+                background: "linear-gradient(140deg, #22c55e, #16a34a)",
+                color: "#000", border: "none",
+                cursor: loading || revealed.length === 0 ? "not-allowed" : "pointer",
+                boxShadow: loading || revealed.length === 0 ? "none" : "0 4px 20px rgba(34,197,94,0.55)",
+                opacity: loading || revealed.length === 0 ? 0.48 : 1, transition: "all 0.16s",
+                fontFamily: "'Outfit', sans-serif",
+              }}>
+              {revealed.length > 0 ? `Cash Out ${currentMultiplier.toFixed(2)}×` : "Reveal a tile first"}
+            </button>
+            {revealed.length > 0 && (
+              <div style={{ textAlign: "center", fontSize: 11, color: "#22c55e", fontFamily: "monospace", fontWeight: 700 }}>
+                +{formatCurrency(amount * currentMultiplier - amount)} profit
+              </div>
+            )}
+          </div>
         ) : isDone ? (
-          <button
-            onClick={reset}
+          <button onClick={reset}
             style={{
-              padding: "11px 20px",
-              borderRadius: 10,
-              fontWeight: 900,
-              fontSize: 12,
-              letterSpacing: 3,
+              padding: "14px 20px", borderRadius: 10, fontWeight: 900, fontSize: 13, letterSpacing: 3,
               textTransform: "uppercase",
               background: `linear-gradient(140deg, ${accent}ee, ${accent}aa)`,
-              color: "#000",
-              border: "none",
-              cursor: "pointer",
-              boxShadow: `0 4px 16px ${accent}50`,
-              transition: "all 0.16s",
+              color: "#000", border: "none", cursor: "pointer",
+              boxShadow: `0 4px 20px ${accent}55`, transition: "all 0.16s",
               fontFamily: "'Outfit', sans-serif",
-            }}
-          >
+            }}>
             New Game
           </button>
         ) : null}
