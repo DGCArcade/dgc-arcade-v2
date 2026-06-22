@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, Fragment } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/format";
+import { TransactionFeed } from "./transaction-feed";
 import {
   Calendar, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownLeft,
   RefreshCw, Users, Wallet, ChevronDown, ChevronUp, Activity,
@@ -446,6 +447,11 @@ export function DGCBankDashboard() {
             </Card>
           </>
         ) : null}
+      </div>
+
+      {/* ── Live Transaction Feed ── */}
+      <div className="mb-8">
+        <TransactionFeed autoRefreshInterval={30000} />
       </div>
 
       {/* ── User Balance Leaderboard ── */}

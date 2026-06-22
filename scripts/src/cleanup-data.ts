@@ -1,46 +1,88 @@
-import { db, usersTable, betsTable, transactionsTable, userBalancesTable, walletLedgerTable, fraudReviewsTable } from "@workspace/db";
-import { ne, sql } from "drizzle-orm";
+import { db, usersTable, betsTable, transactionsTable, minesSessionsTable, userBalancesTable, walletLedgerTable, referralsTable, dailyBonusClaimsTable, deviceHistoryTable, fraudReviewsTable, jackpotPoolTable, tournamentsTable, tournamentEntriesTable, visitorsTable, adminAuditLogsTable, adminMessagesTable, creatorBankTxnsTable, creatorMessagesTable, creatorLinkedAccountsTable } from "@workspace/db";
+import { ne, eq, sql } from "drizzle-orm";
 
-async function main() {
-  console.log("🚀 Starting DGC Bank Data Cleanup...");
+const OWNER_USERNAME = "fanodgc";
+
+async function cleanup() {
+  console.log("Starting data cleanup...");
 
   try {
-    // 1. Clear all bets (history)
-    console.log("  - Clearing all bets...");
+    // 1. Identify the owner user
+    const [owner] = await db.select().from(usersTable).where(eq(usersTable.username, OWNER_USERNAME)).limit(1);
+    
+    if (!owner) {
+      console.error(`Owner user '${OWNER_USERNAME}' not found. Aborting cleanup to prevent complete wipe.`);
+      return;
+    }
+
+    console.log(`Found owner: ${owner.username} (ID: ${owner.id}). Preserving this account.`);
+
+    // 2. Delete related data
+    console.log("Clearing bets...");
     await db.delete(betsTable);
-
-    // 2. Clear all transactions EXCEPT "completed" ones
-    console.log("  - Clearing non-completed transactions...");
-    await db.delete(transactionsTable).where(ne(transactionsTable.status, "completed"));
-
-    // 3. Clear wallet ledger (transaction history)
-    console.log("  - Clearing wallet ledger...");
+    
+    console.log("Clearing transactions...");
+    await db.delete(transactionsTable);
+    
+    console.log("Clearing mines sessions...");
+    await db.delete(minesSessionsTable);
+    
+    console.log("Clearing wallet ledger...");
     await db.delete(walletLedgerTable);
+    
+    console.log("Clearing referral data...");
+    await db.delete(referralsTable);
+    
+    console.log("Clearing daily bonus claims...");
+    await db.delete(dailyBonusClaimsTable);
+    
+    console.log("Clearing device history...");
+    await db.delete(deviceHistoryTable);
+    
+    console.log("Clearing fraud reviews...");
+    await db.delete(fraudReviewsTable);
+    
+    console.log("Clearing tournament data...");
+    await db.delete(tournamentEntriesTable);
+    await db.delete(tournamentsTable);
+    
+    console.log("Clearing visitors...");
+    await db.delete(visitorsTable);
 
-    // 4. Clear fraud reviews (optional based on user request "Clear all previous history")
-    // User said: "Keep all that" for completed transactions, but "AI fraud monitor... stay be on there"
-    // So we'll keep fraud reviews as requested.
+    console.log("Clearing admin logs and messages...");
+    await db.delete(adminAuditLogsTable);
+    await db.delete(adminMessagesTable);
+    await db.delete(creatorBankTxnsTable);
+    await db.delete(creatorMessagesTable);
+    await db.delete(creatorLinkedAccountsTable);
 
-    // 5. Reset user stats (totalBets, totalWon, totalWageredAmount, totalDeposited)
-    // We only reset stats, NOT the balance.
-    console.log("  - Resetting user statistics...");
-    await db.update(usersTable).set({
-      totalBets: 0,
-      totalWon: "0",
-      totalWageredAmount: "0",
-      totalDeposited: "0",
-      wagerRequirement: "0",
-      rakebackClaimed: "0"
-    });
+    // 3. Clear crypto balances for everyone except owner
+    console.log("Clearing other users' crypto balances...");
+    await db.delete(userBalancesTable).where(ne(userBalancesTable.userId, owner.id));
+    
+    // Reset owner stats
+    console.log("Resetting owner stats...");
+    await db.update(usersTable)
+      .set({
+        totalBets: 0,
+        totalWon: "0",
+        totalDeposited: "0",
+        totalWageredAmount: "0",
+        wagerRequirement: "0",
+        rakebackClaimed: "0",
+        withdrawalAttempts: 0,
+        balance: "0",
+      })
+      .where(eq(usersTable.id, owner.id));
 
-    // 6. Clear live crypto balances (user_balances table)
-    console.log("  - Clearing live crypto balances...");
-    await db.delete(userBalancesTable);
+    // 4. Delete all other users
+    console.log("Deleting other users...");
+    await db.delete(usersTable).where(ne(usersTable.id, owner.id));
 
-    console.log("✅ Cleanup complete!");
+    console.log("Cleanup completed successfully.");
   } catch (error) {
-    console.error("❌ Cleanup failed:", error);
+    console.error("Cleanup failed:", error);
   }
 }
 
-main().then(() => process.exit(0));
+cleanup().then(() => process.exit(0));
