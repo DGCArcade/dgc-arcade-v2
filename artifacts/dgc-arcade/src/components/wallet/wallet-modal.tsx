@@ -290,12 +290,13 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   };
 
   // For creators: only Vault tab. For regular: Deposit + Withdraw + Tip + Vault
-  const tabCols = isCreator ? "grid-cols-1" : "grid-cols-4";
+  // On mobile (< sm) use a 2x2 grid; on sm+ use a single row of 4
+  const tabCols = isCreator ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-4";
   const defaultTab = isCreator ? "vault" : "deposit";
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md bg-card border-border/60 backdrop-blur-xl p-0 overflow-y-auto max-h-[90vh]">
+      <DialogContent className="max-w-md w-full bg-card border-border/60 backdrop-blur-xl p-0 overflow-y-auto max-h-[90dvh] sm:max-h-[90vh] mx-0 sm:mx-auto rounded-none sm:rounded-2xl">
         {/* Header */}
         <div className="p-6 pb-0 border-b border-border/40">
           <DialogHeader>

@@ -599,25 +599,25 @@ export function OwnerAiChat({ token }: OwnerAiChatProps) {
 
   const formatTime = (date: Date) => date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-  const chatHeight = isFullscreen ? "h-[calc(100vh-200px)]" : "h-96";
+  const chatHeight = isFullscreen ? "h-[calc(100dvh-200px)]" : "h-96";
 
   return (
-    <div className={`rounded-xl border border-purple-500/30 bg-gradient-to-b from-purple-950/40 to-black/60 shadow-[0_0_60px_rgba(147,51,234,0.15)] overflow-hidden transition-all duration-300 ${isFullscreen ? "fixed inset-4 z-50 rounded-2xl" : ""}`}>
+    <div className={`rounded-xl border border-purple-500/30 bg-gradient-to-b from-purple-950/40 to-black/60 shadow-[0_0_60px_rgba(147,51,234,0.15)] overflow-hidden transition-all duration-300 ${isFullscreen ? "fixed inset-0 sm:inset-4 z-50 rounded-none sm:rounded-2xl" : ""}`}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-purple-500/20 bg-purple-950/30">
-        <div className="flex items-center gap-3">
-        <div className="relative">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-purple-500/20 bg-purple-950/30 flex-wrap gap-2">
+        <div className="flex items-center gap-3 min-w-0">
+        <div className="relative flex-shrink-0">
                 <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 flex items-center justify-center shadow-[0_0_20px_rgba(34,211,238,0.7)]">
                   <Bot className="w-5 h-5 text-white" />
                 </div>
                 <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-400 border-2 border-black animate-pulse" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-sm text-white tracking-wide">DGC-AI1</span>
-                  <span className="text-[10px] font-mono bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-500/30 font-semibold">⚡ GROQ · LLAMA 3.3 · LIVE</span>
+                  <span className="text-[10px] font-mono bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-500/30 font-semibold hidden sm:inline">⚡ GROQ · LLAMA 3.3 · LIVE</span>
                 </div>
-                <p className="text-[10px] text-cyan-400/70 font-mono">Free Tier · Lightning Fast · Neon DB · GitHub · Render</p>
+                <p className="text-[10px] text-cyan-400/70 font-mono hidden sm:block">Free Tier · Lightning Fast · Neon DB · GitHub · Render</p>
               </div>
             </div>
         <div className="flex items-center gap-1">

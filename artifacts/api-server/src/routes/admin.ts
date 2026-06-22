@@ -764,6 +764,7 @@ adminRouter.get("/transactions", requireBankSession, async (req, res) => {
         plisioTrackId: transactionsTable.plisioTrackId,
         orderId: transactionsTable.orderId,
         createdAt: transactionsTable.createdAt,
+        metadata: transactionsTable.metadata,
       })
       .from(transactionsTable)
       .leftJoin(usersTable, eq(transactionsTable.userId, usersTable.id))
@@ -773,11 +774,27 @@ adminRouter.get("/transactions", requireBankSession, async (req, res) => {
       .offset(offset);
 
     res.json({
-      transactions: rows.map((t) => ({
-        ...t,
-        amount: parseFloat(t.amount),
-        createdAt: t.createdAt.toISOString(),
-      })),
+      transactions: rows.map((t) => {
+        // Parse deposit enrichment fields from stored metadata JSON
+        let plisioReceivedCrypto: number | null = null;
+        let plisioReceivedUsd: number | null = null;
+        let plisioSourceUsd: number | null = null;
+        if (t.type === "deposit" && t.metadata) {
+          try {
+            const meta = JSON.parse(t.metadata);
+            plisioReceivedCrypto = meta.received_amount_crypto != null ? parseFloat(String(meta.received_amount_crypto)) : null;
+            plisioReceivedUsd = meta.received_amount_usd != null ? parseFloat(String(meta.received_amount_usd)) : null;
+            plisioSourceUsd = meta.requested_amount_usd != null ? parseFloat(String(meta.requested_amount_usd)) : null;
+          } catch { /* ignore parse errors */ }
+        }
+        const { metadata: _meta, ...rest } = t;
+        return {
+          ...rest,
+          amount: parseFloat(t.amount),
+          createdAt: t.createdAt.toISOString(),
+          ...(t.type === "deposit" ? { plisioReceivedCrypto, plisioReceivedUsd, plisioSourceUsd } : {}),
+        };
+      }),
       total: Number(totalCount?.count ?? 0),
     });
   } catch (err) {

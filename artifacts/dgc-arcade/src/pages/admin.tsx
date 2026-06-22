@@ -1178,6 +1178,7 @@ export default function AdminDashboard() {
         { key: "overview", label: "Overview", icon: Activity },
         { key: "users", label: "Users", icon: Users },
         { key: "bank", label: "DGC Bank", icon: DollarSign },
+        { key: "bank-dashboard", label: "Live Feed", icon: Activity },
         { key: "transactions", label: "Transactions", icon: List },
         { key: "creators", label: "Creators", icon: Star },
         { key: "tournaments", label: "Tournaments", icon: Trophy },
@@ -1196,13 +1197,13 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-8 pb-16">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/40 pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/40 pb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
             <Shield className="w-5 h-5 text-amber-400" />
           </div>
           <div>
-            <h1 className="font-display font-black text-3xl uppercase tracking-widest text-glow-shift-slow">
+            <h1 className="font-display font-black text-2xl sm:text-3xl uppercase tracking-widest text-glow-shift-slow">
               Admin Panel
             </h1>
             <p className="text-muted-foreground text-sm">Full platform control · Logged in as {user?.username}</p>
@@ -1373,8 +1374,8 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border/40 overflow-hidden">
-            <Table>
+          <div className="rounded-xl border border-border/40 overflow-x-auto">
+            <Table className="min-w-[600px]">
               <TableHeader>
                 <TableRow className="border-border/40 bg-secondary/50">
                   <TableHead className="text-xs uppercase tracking-wider">User</TableHead>
@@ -1577,8 +1578,8 @@ export default function AdminDashboard() {
             </select>
           </div>
 
-          <div className="rounded-xl border border-border/40 overflow-hidden">
-            <Table>
+          <div className="rounded-xl border border-border/40 overflow-x-auto">
+            <Table className="min-w-[640px]">
               <TableHeader>
                 <TableRow className="border-border/40 bg-secondary/50">
                   <TableHead className="text-xs uppercase tracking-wider">ID</TableHead>
@@ -1810,7 +1811,7 @@ export default function AdminDashboard() {
                   ) : (
                     <Card className="border-border/60">
                       <div className="overflow-x-auto">
-                        <Table>
+                        <Table className="min-w-[700px]">
                           <TableHeader>
                             <TableRow className="border-border/40">
                               <TableHead className="text-xs">ID</TableHead>
@@ -1833,7 +1834,16 @@ export default function AdminDashboard() {
                                     ? "border-green-500/10 bg-green-950/5"
                                     : "border-border/30"
                               }>
-                                <TableCell className="font-mono text-xs text-muted-foreground">#{tx.id}</TableCell>
+                                <TableCell className="font-mono text-xs text-muted-foreground">
+                                  <button
+                                    className="hover:text-primary hover:underline transition-colors cursor-pointer"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(String(tx.id));
+                                      toast({ title: "Copied", description: `TX ID #${tx.id} copied to clipboard` });
+                                    }}
+                                    title="Click to copy ID"
+                                  >#{tx.id}</button>
+                                </TableCell>
                                 <TableCell className="font-bold text-sm">
                                   {tx.username ? `@${tx.username}` : `#${tx.userId}`}
                                 </TableCell>
@@ -1849,7 +1859,7 @@ export default function AdminDashboard() {
                                 <TableCell className="font-mono font-bold">
                                   <div>
                                     <span className={tx.type === "deposit" ? "text-green-400" : tx.type === "withdrawal" ? "text-amber-400" : ""}>
-                                      {tx.type === "deposit" ? "+" : tx.type === "withdrawal" ? "-" : ""}${parseFloat(tx.amount).toFixed(2)}
+                                      {tx.type === "deposit" ? "+" : tx.type === "withdrawal" ? "-" : ""}{formatCurrency(parseFloat(tx.amount))}
                                     </span>
                                     {(() => {
                                       try {
@@ -1894,13 +1904,35 @@ export default function AdminDashboard() {
                                 </TableCell>
                                 <TableCell>
                                   {tx.type === "deposit" && (
-                                    <div className="flex gap-1">
+                                    <div className="flex flex-col gap-1">
                                       {tx.plisioTrackId && (
                                         <Button size="sm" variant="outline" className="h-7 text-xs gap-1" title="View Invoice"
                                           onClick={() => window.open(`https://plisio.net/invoice/${tx.plisioTrackId}`, "_blank")}>
                                           <Eye className="h-3 w-3" /> View Invoice
                                         </Button>
                                       )}
+                                      {tx.txHash && tx.currency && (() => {
+                                        const EXPLORER_MAP: Record<string, (h: string) => string> = {
+                                          BTC: (h) => `https://www.blockchain.com/btc/tx/${h}`,
+                                          ETH: (h) => `https://etherscan.io/tx/${h}`,
+                                          LTC: (h) => `https://blockchair.com/litecoin/transaction/${h}`,
+                                          DOGE: (h) => `https://blockchair.com/dogecoin/transaction/${h}`,
+                                          SOL: (h) => `https://solscan.io/tx/${h}`,
+                                          BCH: (h) => `https://blockchair.com/bitcoin-cash/transaction/${h}`,
+                                          TRX: (h) => `https://tronscan.org/#/transaction/${h}`,
+                                          XMR: (h) => `https://xmrchain.net/tx/${h}`,
+                                          DASH: (h) => `https://blockchair.com/dash/transaction/${h}`,
+                                          TON: (h) => `https://tonviewer.com/transaction/${h}`,
+                                        };
+                                        const builder = EXPLORER_MAP[tx.currency];
+                                        if (!builder) return null;
+                                        return (
+                                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-blue-500/40 text-blue-400 hover:bg-blue-500/10" title="View on blockchain explorer"
+                                            onClick={() => window.open(builder(tx.txHash), "_blank")}>
+                                            <ExternalLink className="h-3 w-3" /> Chain
+                                          </Button>
+                                        );
+                                      })()}
                                     </div>
                                   )}
                                   {tx.type === "withdrawal" && tx.status === "pending" && (

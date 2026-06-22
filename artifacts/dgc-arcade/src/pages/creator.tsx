@@ -406,7 +406,7 @@ function SpecialtyHub({
                 <p className="text-sm text-muted-foreground">Grow your network and earn monthly commission on every player you refer to DGC Arcade.</p>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 py-4 border-y border-border/50">
+              <div className="grid grid-cols-3 gap-2 sm:gap-4 py-4 border-y border-border/50">
                 {[
                   { value: "10K+", label: "Registered Players" },
                   { value: "15+", label: "Payment Methods" },
@@ -633,8 +633,8 @@ function SpecialtyHub({
               </div>
 
               {/* Commission table */}
-              <div className="rounded-xl border border-border/50 overflow-hidden">
-                <div className="grid grid-cols-4 gap-0 text-xs font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-4 py-2.5 border-b border-border/50">
+              <div className="rounded-xl border border-border/50 overflow-x-auto">
+                <div className="grid grid-cols-4 gap-0 text-xs font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-4 py-2.5 border-b border-border/50 min-w-[320px]">
                   <span>Coin</span>
                   <span>Available</span>
                   <span>Redeemed</span>
@@ -642,7 +642,7 @@ function SpecialtyHub({
                 </div>
                 <div className="divide-y divide-border/50">
                   {[{ label: "USD", symbol: "💵" }].map(c => (
-                    <div key={c.label} className="grid grid-cols-4 gap-0 px-4 py-3 text-sm hover:bg-secondary/20 transition-colors">
+                    <div key={c.label} className="grid grid-cols-4 gap-0 px-4 py-3 text-sm hover:bg-secondary/20 transition-colors min-w-[320px]">
                       <span className="font-mono font-bold flex items-center gap-1.5">{c.symbol} {c.label}</span>
                       <span className="font-mono font-bold text-green-400">{formatCurrency(dashboard.promoBalance)}</span>
                       <span className="font-mono text-muted-foreground">—</span>
@@ -730,13 +730,13 @@ function SpecialtyHub({
                   <p className="text-xs mt-1">Share your link to start building your network.</p>
                 </div>
               ) : (
-                <div className="rounded-xl border border-border/50 overflow-hidden">
-                  <div className="grid grid-cols-4 text-xs font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-4 py-2.5 border-b border-border/50">
+                <div className="rounded-xl border border-border/50 overflow-x-auto">
+                  <div className="grid grid-cols-4 text-xs font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-4 py-2.5 border-b border-border/50 min-w-[320px]">
                     <span className="col-span-2">Player</span><span>Status</span><span>Joined</span>
                   </div>
                   <div className="divide-y divide-border/30">
                     {referrals.map(r => (
-                      <div key={r.id} className="grid grid-cols-4 px-4 py-3 text-sm hover:bg-secondary/20 transition-colors">
+                      <div key={r.id} className="grid grid-cols-4 px-4 py-3 text-sm hover:bg-secondary/20 transition-colors min-w-[320px]">
                         <span className="col-span-2 font-mono font-bold">@{r.username}</span>
                         <span>
                           <span className={`text-xs px-2 py-0.5 rounded-full font-bold uppercase ${r.status === "active" ? "bg-green-500/15 text-green-400" : "bg-yellow-500/15 text-yellow-400"}`}>

@@ -520,7 +520,7 @@ function LiveJackpotTicker() {
         <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
         <span className="text-xs font-bold uppercase tracking-widest text-white/60">Live Jackpots</span>
       </div>
-      <div className="grid grid-cols-4 divide-x divide-white/5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-white/5">
         {tiers.map(t => (
           <div key={t.key} className="flex flex-col items-center py-3 px-2" style={{ background: t.bg }}>
             <span className="text-[10px] font-black uppercase tracking-[0.2em]" style={{ color: t.color }}>{t.label}</span>

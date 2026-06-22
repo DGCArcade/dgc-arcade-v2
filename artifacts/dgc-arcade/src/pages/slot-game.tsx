@@ -601,7 +601,7 @@ function JackpotBanner({ jackpots, accentColor }: { jackpots: { mini: number; mi
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-2 mb-3">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
       {tiers.map(t => (
         <div
           key={t.key}
@@ -832,7 +832,7 @@ function SlotGame({ theme, gameId }: { theme: SlotTheme; gameId: number }) {
         border: `1.5px solid ${accentColor}44`,
         boxShadow: `0 0 60px ${accentColor}22`,
         padding: isFullscreen ? "16px" : "12px",
-        minHeight: isFullscreen ? "100vh" : "auto",
+        minHeight: isFullscreen ? "100dvh" : "auto",
       }}
     >
       {/* ── Top Bar ── */}
@@ -867,21 +867,21 @@ function SlotGame({ theme, gameId }: { theme: SlotTheme; gameId: number }) {
 
       {/* ── Game Banner ── */}
       <div
-        className="relative rounded-xl overflow-hidden py-3 px-4 flex items-center justify-between"
+        className="relative rounded-xl overflow-hidden py-3 px-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0"
         style={{
           background: `linear-gradient(90deg, ${accentColor}22, transparent, ${accentColor}11)`,
           border: `1px solid ${accentColor}33`,
         }}
       >
         <div>
-          <div className="font-black text-xl uppercase tracking-widest" style={{ color: accentColor, textShadow: `0 0 20px ${accentColor}` }}>
+          <div className="font-black text-lg sm:text-xl uppercase tracking-widest" style={{ color: accentColor, textShadow: `0 0 20px ${accentColor}` }}>
             {config.name}
           </div>
           {config.tagline && (
             <div className="text-xs text-white/60 mt-0.5">{config.tagline}</div>
           )}
         </div>
-        <div className="flex items-center gap-3 text-xs font-mono text-white/60">
+        <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono text-white/60 flex-wrap">
           <span className="text-green-400 font-bold">{config.rtp}% RTP</span>
           <span>{REELS} Reels · {config.paylines} Lines</span>
           {config.volatility && (
