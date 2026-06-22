@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { CoinIcon, CURRENCIES } from "@/components/wallet/coin-icon";
 import { formatCurrency } from "@/lib/format";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, ShieldAlert, CheckCircle2 } from "lucide-react";
 
 const withdrawSchema = z.object({
   amount: z.coerce.number().min(1, "Minimum withdrawal is $1"),
@@ -32,6 +32,15 @@ export function WithdrawForm() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isCreator = user?.withdrawalsEnabled === false;
+
+  // Wagering requirement calculation
+  const totalWagered = parseFloat(String((user as any)?.totalWageredAmount ?? 0));
+  const signupBonus = parseFloat(String((user as any)?.signupBonus ?? 100));
+  const wagerRequirement = signupBonus * 1.0; // 100% of signup bonus
+  const wagerRemaining = Math.max(0, wagerRequirement - totalWagered);
+  const wagerProgress = totalWagered / wagerRequirement;
+  const wagerPercentage = Math.min(100, Math.round(wagerProgress * 100));
+  const isWagerMet = wagerRemaining <= 0;
 
   // Live coin balance data from backend
   const [coinData, setCoinData] = useState<CoinBalanceData>({
@@ -62,16 +71,13 @@ export function WithdrawForm() {
 
   useEffect(() => {
     fetchCoinBalances();
-    // Refresh every 15 seconds for live prices
     const interval = setInterval(fetchCoinBalances, 15_000);
     return () => clearInterval(interval);
   }, [fetchCoinBalances]);
 
-  // Live total balance (prefer backend live value, fall back to useAuth)
   const liveTotal = coinData.totalBalance > 0 ? coinData.totalBalance : (user?.balance ?? 0);
   const hasCryptoBalances = Object.keys(coinData.balances).length > 0;
 
-  // Available currencies: coins with live balance, or all coins for old users
   const availableCurrencies = hasCryptoBalances
     ? CURRENCIES.filter(c => (coinData.balances[c.value] ?? 0) > 0)
     : liveTotal > 0 ? CURRENCIES : [];
@@ -83,31 +89,32 @@ export function WithdrawForm() {
     defaultValues: { amount: 1, currency: "", address: "" },
   });
 
-  // Auto-select first available coin once balances load
   useEffect(() => {
     if (!coinBalancesLoading && firstAvailable && !form.getValues("currency")) {
       form.setValue("currency", firstAvailable);
     }
-  }, [coinBalancesLoading, firstAvailable]);
+  }, [coinBalancesLoading, firstAvailable, form]);
 
   const selectedCurrency = form.watch("currency");
-
-  // Max for selected coin
   const coinLiveUsd = coinData.balances[selectedCurrency] ?? 0;
-  const maxForCoin = hasCryptoBalances
-    ? Math.min(coinLiveUsd, liveTotal)
-    : liveTotal;
 
   const onSubmit = (values: z.infer<typeof withdrawSchema>) => {
     if (!user) return;
 
-    // Frontend guard: cannot exceed live total
+    if (!isWagerMet) {
+      toast({
+        title: "Wagering Requirement Not Met",
+        description: `You need to wager ${formatCurrency(wagerRemaining)} more before you can withdraw.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (values.amount > liveTotal) {
       form.setError("amount", { message: `Amount exceeds your live balance of ${formatCurrency(liveTotal)}` });
       return;
     }
 
-    // Frontend guard: cannot exceed coin-specific live balance
     if (hasCryptoBalances) {
       const coinMax = coinData.balances[values.currency] ?? 0;
       if (coinMax > 0 && values.amount > coinMax) {
@@ -124,10 +131,8 @@ export function WithdrawForm() {
         onSuccess: () => {
           toast({ title: "Withdrawal Requested", description: "Your withdrawal is being processed." });
           form.reset({ amount: 1, currency: firstAvailable, address: "" });
-          // Invalidate BOTH transactions list AND user balance
           queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-          // Also refresh live coin balances
           fetchCoinBalances();
         },
         onError: (err) => {
@@ -151,167 +156,161 @@ export function WithdrawForm() {
   }
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-
-        {/* Live balance summary */}
-        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 flex items-center justify-between">
-          <div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Live Balance</div>
-            <div className="font-mono font-black text-xl text-primary">{formatCurrency(liveTotal)}</div>
+    <div className="space-y-6">
+      {/* Wagering Requirement Status Card */}
+      <div className={`rounded-xl border p-5 space-y-4 transition-all ${isWagerMet ? "border-green-500/30 bg-green-500/5" : "border-amber-500/30 bg-amber-500/5"}`}>
+        <div className="flex items-start justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              {isWagerMet ? (
+                <CheckCircle2 className="w-4 h-4 text-green-400" />
+              ) : (
+                <ShieldAlert className="w-4 h-4 text-amber-400" />
+              )}
+              <span className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Wagering Requirement</span>
+            </div>
+            <div className={`text-2xl font-black font-display tracking-tight ${isWagerMet ? "text-green-400" : "text-amber-400"}`}>
+              {wagerPercentage}% Complete
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={fetchCoinBalances}
-            disabled={coinBalancesLoading}
-            className="text-muted-foreground hover:text-primary transition-colors p-2 rounded"
-            title="Refresh live balance"
-          >
-            <RefreshCw className={`w-4 h-4 ${coinBalancesLoading ? "animate-spin" : ""}`} />
-          </button>
+          <div className="text-right space-y-1">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Remaining</span>
+            <div className="font-mono font-black text-lg text-foreground">
+              {formatCurrency(wagerRemaining)}
+            </div>
+          </div>
         </div>
 
-        {/* Currency selector — only coins with live balance are selectable */}
-        <FormField
-          control={form.control}
-          name="currency"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-xs uppercase tracking-wider font-bold">Withdraw In</FormLabel>
-              <FormControl>
-                <div className="flex gap-2 flex-wrap">
-                  {coinBalancesLoading ? (
-                    <div className="h-8 w-full bg-secondary animate-pulse rounded-lg" />
-                  ) : availableCurrencies.length === 0 ? (
-                    <p className="text-xs text-muted-foreground italic">No balance available — deposit first to unlock withdrawals.</p>
-                  ) : (
-                    CURRENCIES.map(c => {
-                      const liveUsd = coinData.balances[c.value] ?? 0;
-                      const isAvailable = hasCryptoBalances ? liveUsd > 0 : liveTotal > 0;
-                      return (
-                        <button
-                          key={c.value}
-                          type="button"
-                          disabled={!isAvailable}
-                          onClick={() => {
-                            field.onChange(c.value);
-                            // Clamp amount to new coin max
-                            const currentAmt = form.getValues("amount");
-                            const newMax = hasCryptoBalances ? Math.min(liveUsd, liveTotal) : liveTotal;
-                            if (currentAmt > newMax) form.setValue("amount", Math.max(1, Math.floor(newMax)));
-                          }}
-                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                            !isAvailable
-                              ? "border-border/20 bg-secondary/20 text-muted-foreground/30 opacity-40 cursor-not-allowed"
-                              : field.value === c.value
-                                ? "border-primary bg-primary/10 text-primary"
-                                : "border-border/50 bg-secondary/40 text-muted-foreground hover:border-primary/40"
-                          }`}
-                          title={
-                            isAvailable
-                              ? hasCryptoBalances
-                                ? `Live: ${formatCurrency(liveUsd)}`
-                                : `Available: ${formatCurrency(liveTotal)}`
-                              : "No balance in this coin"
-                          }
-                        >
-                          <CoinIcon currency={c.value} size={16} />
-                          <span>{c.name === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
-                          {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20">{c.network}</span>}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* Progress bar */}
+        <div className="w-full bg-white/5 rounded-full h-2.5 overflow-hidden border border-white/5">
+          <div
+            className={`h-full transition-all duration-1000 ease-out ${isWagerMet ? "bg-gradient-to-r from-green-500 to-emerald-400" : "bg-gradient-to-r from-amber-500 to-orange-400"}`}
+            style={{ width: `${wagerPercentage}%` }}
+          />
+        </div>
 
-        {/* Amount */}
-        <FormField
-          control={form.control}
-          name="amount"
-          render={({ field }) => (
-            <FormItem>
-              <div className="flex items-center justify-between">
-                <FormLabel className="text-xs uppercase tracking-wider font-bold">Amount (USD)</FormLabel>
-                {selectedCurrency && maxForCoin > 0 && (
-                  <span className="text-xs text-muted-foreground font-mono">
-                    Max: <span className="text-primary font-bold">{formatCurrency(maxForCoin)}</span>
-                    {hasCryptoBalances && coinData.cryptoAmounts[selectedCurrency] && (
-                      <span className="text-muted-foreground/60 ml-1">
-                        ({coinData.cryptoAmounts[selectedCurrency].amount.toFixed(6)} {selectedCurrency.split("_")[0]})
-                      </span>
-                    )}
-                  </span>
-                )}
-              </div>
-              <FormControl>
-                <div className="relative">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono">$</div>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="1"
-                    max={maxForCoin > 0 ? maxForCoin : undefined}
-                    className="pl-8 font-mono bg-secondary"
-                    {...field}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 text-xs font-bold text-primary"
-                    onClick={() => maxForCoin > 0 && form.setValue("amount", Math.floor(maxForCoin * 100) / 100)}
-                    disabled={maxForCoin <= 0}
-                  >
-                    MAX
-                  </Button>
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Address */}
-        <FormField
-          control={form.control}
-          name="address"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-xs uppercase tracking-wider font-bold">
-                {selectedCurrency ? `${selectedCurrency.split("_")[0]} Wallet Address` : "Wallet Address"}
-              </FormLabel>
-              <FormControl>
-                <Input placeholder="Enter destination address" className="font-mono bg-secondary text-xs" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
-          <p className="text-xs text-blue-400/80">
-            <span className="font-bold">Note:</span> Withdrawal limits are based on your live crypto balance at current market prices.
-            {hasCryptoBalances
-              ? " Only coins you have deposited are available for withdrawal."
-              : " Your balance will be converted to the selected coin at the time of withdrawal."}
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-[240px]">
+            {isWagerMet ? (
+              <span className="text-green-400/90">✓ You've met the 100% wagering requirement! Withdrawals are now unlocked.</span>
+            ) : (
+              <span>You must wager 100% of your sign-up bonus before withdrawing. Play any game to unlock!</span>
+            )}
           </p>
+          {!isWagerMet && (
+            <div className="px-2 py-1 rounded bg-amber-500/10 border border-amber-500/20 text-[10px] font-bold text-amber-400 uppercase tracking-tighter">
+              Locked
+            </div>
+          )}
         </div>
+      </div>
 
-        <Button
-          type="submit"
-          className="w-full font-bold uppercase tracking-widest h-12"
-          disabled={requestWithdrawal.isPending || availableCurrencies.length === 0 || !selectedCurrency || liveTotal <= 0}
-        >
-          {requestWithdrawal.isPending
-            ? "Submitting Request..."
-            : (form.watch("amount") >= 10000 ? "Request Withdrawal" : "Instant Withdrawal")}
-        </Button>
-      </form>
-    </Form>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+          {/* Live balance summary */}
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 flex items-center justify-between">
+            <div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Live Balance</div>
+              <div className="font-mono font-black text-xl text-primary">{formatCurrency(liveTotal)}</div>
+            </div>
+            <button
+              type="button"
+              onClick={fetchCoinBalances}
+              disabled={coinBalancesLoading}
+              className="text-muted-foreground hover:text-primary transition-colors p-2 rounded"
+              title="Refresh live balance"
+            >
+              <RefreshCw className={`w-4 h-4 ${coinBalancesLoading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+
+          <FormField
+            control={form.control}
+            name="currency"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs uppercase tracking-wider font-bold">Withdraw In</FormLabel>
+                <FormControl>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {availableCurrencies.map((c) => (
+                      <button
+                        key={c.value}
+                        type="button"
+                        onClick={() => field.onChange(c.value)}
+                        className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${
+                          field.value === c.value
+                            ? "border-primary bg-primary/10"
+                            : "border-border bg-secondary/50 hover:border-primary/40"
+                        }`}
+                      >
+                        <CoinIcon coin={c.value} className="w-5 h-5" />
+                        <div className="text-left">
+                          <div className="text-[10px] font-bold leading-none">{c.label}</div>
+                          <div className="text-[9px] text-muted-foreground font-mono">
+                            {formatCurrency(coinData.balances[c.value] ?? 0)}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="amount"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs uppercase tracking-wider font-bold">Amount (USD)</FormLabel>
+                <FormControl>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono">$</span>
+                    <Input
+                      {...field}
+                      type="number"
+                      placeholder="0.00"
+                      className="pl-7 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => form.setValue("amount", Math.floor(coinLiveUsd * 100) / 100)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase bg-primary/10 hover:bg-primary/20 text-primary px-2 py-1 rounded transition-colors"
+                    >
+                      Max
+                    </button>
+                  </div>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="address"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs uppercase tracking-wider font-bold">Wallet Address</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Enter your crypto address" className="font-mono text-xs" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <Button
+            type="submit"
+            className="w-full h-12 font-display font-black uppercase tracking-widest text-lg"
+            disabled={requestWithdrawal.isPending || !isWagerMet}
+          >
+            {requestWithdrawal.isPending ? "Processing..." : isWagerMet ? "Withdraw Funds" : "Requirement Not Met"}
+          </Button>
+        </form>
+      </Form>
+    </div>
   );
 }

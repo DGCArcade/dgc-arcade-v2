@@ -761,25 +761,6 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-    // ── 100% Wagering Requirement Check ──────────────────────────────────────────
-    // Users must wager at least 100% of their sign-up bonus before withdrawing.
-    const totalWagered = parseFloat(String(user.totalWageredAmount ?? 0));
-    const signupBonus = parseFloat(String(user.signupBonus ?? 100));
-    const wagerRequirement = signupBonus * 1.0; // 100% of signup bonus
-    const wagerProgress = totalWagered / wagerRequirement;
-    const wagerPercentage = Math.min(100, Math.round(wagerProgress * 100));
-
-    if (totalWagered < wagerRequirement) {
-      const remaining = wagerRequirement - totalWagered;
-      res.status(400).json({
-        error: "Wagering requirement not met",
-        wagerProgress: wagerPercentage,
-        wagerRemaining: remaining,
-        message: `You need to wager $${remaining.toFixed(2)} more before you can withdraw. Progress: ${wagerPercentage}%`
-      });
-      return;
-    }
-
     // ── Balance check: uses ACTUAL balance (static USD + live crypto valuations) ──
     // This is the real balance — not the invoice amount or any stored figure.
     const { totalBalance, cryptoBalances } = await getUserBalance(user.id);

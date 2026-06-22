@@ -32,6 +32,8 @@ async function formatUser(user: typeof usersTable.$inferSelect) {
     lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
     telegramUsername: user.telegramUsername ?? null,
     rakebackClaimed: parseFloat(user.rakebackClaimed ?? "0"),
+    signupBonus: parseFloat(user.signupBonus ?? "100"),
+    bonusWagered: parseFloat(user.bonusWagered ?? "0"),
   };
 }
 
@@ -73,7 +75,7 @@ authRouter.post("/register", async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const { signupBonus } = await getPlatformSettings();
     const startingBalance = signupBonus > 0 ? String(signupBonus) : "0";
-    let [user] = await db.insert(usersTable).values({ username, passwordHash, balance: startingBalance, deviceFingerprint }).returning();
+    let [user] = await db.insert(usersTable).values({ username, passwordHash, balance: startingBalance, deviceFingerprint, signupBonus: startingBalance }).returning();
 
     const refCode = 'DGC' + user.id.toString(36).toUpperCase().padStart(4, '0') + crypto.randomBytes(3).toString('hex').toUpperCase();
     await db.update(usersTable).set({ referralCode: refCode }).where(eq(usersTable.id, user.id));
