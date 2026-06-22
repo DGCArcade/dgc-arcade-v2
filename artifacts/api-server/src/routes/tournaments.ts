@@ -4,9 +4,33 @@ import { eq, desc, sql } from "drizzle-orm";
 
 export const tournamentsRouter = Router();
 
+const TOURNAMENT_CACHE_MS = 10_000;
+const LEADERBOARD_CACHE_MS = 5_000;
+
+type TournamentListItem = {
+  id: number;
+  name: string;
+  description: string | null;
+  prize: number;
+  status: "active" | "upcoming" | "ended";
+  startAt: string;
+  endAt: string;
+  createdAt: string;
+};
+
+let tournamentsCache: { expiresAt: number; value: TournamentListItem[] } | null = null;
+const leaderboardCache = new Map<string, { expiresAt: number; value: unknown }>();
+
 // GET /api/tournaments — list all tournaments (active, upcoming, recently ended)
 tournamentsRouter.get("/", async (_req, res) => {
   try {
+    const cacheNow = Date.now();
+    if (tournamentsCache && tournamentsCache.expiresAt > cacheNow) {
+      res.setHeader("Cache-Control", "public, max-age=5, stale-while-revalidate=10");
+      res.json(tournamentsCache.value);
+      return;
+    }
+
     const now = new Date();
     const rows = await db
       .select()
@@ -15,7 +39,7 @@ tournamentsRouter.get("/", async (_req, res) => {
       .limit(20);
 
     // Auto-compute live status from timestamps
-    const result = rows.map(t => ({
+    const result: TournamentListItem[] = rows.map(t => ({
       id: t.id,
       name: t.name,
       description: t.description,
@@ -30,6 +54,8 @@ tournamentsRouter.get("/", async (_req, res) => {
       createdAt: t.createdAt.toISOString(),
     }));
 
+    tournamentsCache = { value: result, expiresAt: cacheNow + TOURNAMENT_CACHE_MS };
+    res.setHeader("Cache-Control", "public, max-age=5, stale-while-revalidate=10");
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
@@ -43,6 +69,15 @@ tournamentsRouter.get("/:id/leaderboard", async (req, res) => {
   if (isNaN(id)) { res.status(400).json({ error: "Invalid tournament ID" }); return; }
 
   try {
+    const cacheKey = String(id);
+    const cacheNow = Date.now();
+    const cached = leaderboardCache.get(cacheKey);
+    if (cached && cached.expiresAt > cacheNow) {
+      res.setHeader("Cache-Control", "public, max-age=3, stale-while-revalidate=5");
+      res.json(cached.value);
+      return;
+    }
+
     const [tournament] = await db.select().from(tournamentsTable).where(eq(tournamentsTable.id, id)).limit(1);
     if (!tournament) { res.status(404).json({ error: "Tournament not found" }); return; }
 
@@ -59,7 +94,7 @@ tournamentsRouter.get("/:id/leaderboard", async (req, res) => {
       .orderBy(desc(sql`CAST(${tournamentEntriesTable.score} AS DECIMAL)`))
       .limit(50);
 
-    res.json({
+    const value = {
       tournament: {
         id: tournament.id,
         name: tournament.name,
@@ -76,7 +111,11 @@ tournamentsRouter.get("/:id/leaderboard", async (req, res) => {
         avatarUrl: e.avatarUrl,
         score: parseFloat(e.score),
       })),
-    });
+    };
+
+    leaderboardCache.set(cacheKey, { value, expiresAt: cacheNow + LEADERBOARD_CACHE_MS });
+    res.setHeader("Cache-Control", "public, max-age=3, stale-while-revalidate=5");
+    res.json(value);
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
   }

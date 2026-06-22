@@ -24,6 +24,13 @@ const JACKPOT_ODDS_PER_DOLLAR: Record<string, number> = {
 
 // Maximum bet amount that counts toward jackpot odds (prevents whale abuse)
 const MAX_JACKPOT_BET = 250;
+const JACKPOT_CACHE_MS = 2_500;
+
+let jackpotCache: { expiresAt: number; value: Record<string, number> } | null = null;
+
+function clearJackpotCache() {
+  jackpotCache = null;
+}
 
 async function ensureJackpots(): Promise<void> {
   for (const [key, seed] of Object.entries(JACKPOT_SEEDS_CENTS)) {
@@ -34,15 +41,20 @@ async function ensureJackpots(): Promise<void> {
 }
 
 async function readJackpots(): Promise<Record<string, number>> {
+  const now = Date.now();
+  if (jackpotCache && jackpotCache.expiresAt > now) return jackpotCache.value;
+
   const rows = await db.select().from(jackpotPoolTable);
   const map: Record<string, number> = {};
   for (const r of rows) map[r.key] = r.valueCents / 100;
-  return {
+  const value = {
     mini:  map.mini  ?? JACKPOT_SEEDS_CENTS.mini  / 100,
     minor: map.minor ?? JACKPOT_SEEDS_CENTS.minor / 100,
     major: map.major ?? JACKPOT_SEEDS_CENTS.major / 100,
     grand: map.grand ?? JACKPOT_SEEDS_CENTS.grand / 100,
   };
+  jackpotCache = { value, expiresAt: now + JACKPOT_CACHE_MS };
+  return value;
 }
 
 // GET /api/jackpot — public, returns live pool values
@@ -50,6 +62,7 @@ jackpotRouter.get("/", async (req, res) => {
   try {
     await ensureJackpots();
     const jackpots = await readJackpots();
+    res.setHeader("Cache-Control", "public, max-age=2, stale-while-revalidate=5");
     res.json(jackpots);
   } catch (err) {
     req.log.error({ err }, "Get jackpot error");
@@ -96,6 +109,7 @@ export async function contributeToJackpot(betAmount: number): Promise<void> {
         },
       });
   }
+  clearJackpotCache();
 }
 
 export interface JackpotWinResult {
@@ -156,6 +170,7 @@ export async function tryJackpotWin(
         if (!wonCents || wonCents <= JACKPOT_SEEDS_CENTS[tier]) continue;
 
         const wonAmount = wonCents / 100;
+        clearJackpotCache();
 
         // Get user balance before credit
         const [user] = await db.select({ balance: usersTable.balance })
