@@ -8,6 +8,7 @@ import { logger } from "./lib/logger";
 import { startBackgroundTasks } from "./lib/background-tasks.js";
 import { logVisitor } from "./services/visitor-service.js";
 import { ensureSlotGamesSeeded } from "./routes/games.js";
+import { pool } from "@workspace/db";
 
 const app: Express = express();
 
@@ -168,5 +169,23 @@ startBackgroundTasks();
 
 // Ensure slot theme games are seeded in the games table (idempotent)
 ensureSlotGamesSeeded().catch(err => console.error("Slot game seeding error:", err));
+
+// ── Mines grid_size migration (idempotent) ────────────────────────────────────
+// The mines_sessions table was originally built with a fixed 25-tile board.
+// The game now supports 24, 48, and 60-tile grids.  We need to store which
+// grid size was active when a session was created so that reveal/cashout always
+// use the correct probability denominator.  This ALTER TABLE is safe to run on
+// every startup — it is a no-op if the column already exists.
+(async () => {
+  try {
+    await pool.query(`
+      ALTER TABLE mines_sessions
+      ADD COLUMN IF NOT EXISTS grid_size INTEGER NOT NULL DEFAULT 24;
+    `);
+    logger.info("Mines migration: grid_size column ensured");
+  } catch (err) {
+    logger.error({ err }, "Mines migration: failed to add grid_size column");
+  }
+})();
 
 export default app;

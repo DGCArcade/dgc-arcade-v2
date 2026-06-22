@@ -9,7 +9,15 @@ import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-ser
 
 export const minesRouter = Router();
 
-function genMines(serverSeed: string, count: number, total = 25): number[] {
+// Valid grid sizes supported by the frontend
+const VALID_GRID_SIZES = [24, 48, 60] as const;
+type GridSize = (typeof VALID_GRID_SIZES)[number];
+
+/**
+ * Generate mine positions using SHA-256 provably-fair seeding.
+ * Uses the actual grid size so positions are always valid indices.
+ */
+function genMines(serverSeed: string, count: number, total: GridSize): number[] {
   const positions: number[] = [];
   for (let i = 0; positions.length < count; i++) {
     const combined = `${serverSeed}:mines:${i}`;
@@ -20,24 +28,58 @@ function genMines(serverSeed: string, count: number, total = 25): number[] {
   return positions;
 }
 
-function calcMultiplier(revealed: number, mineCount: number, total = 25): number {
+/**
+ * Calculate the payout multiplier using the correct combinatorial probability.
+ *
+ * P(all `revealed` picks are safe) = ∏ (total - mines - i) / (total - i)  for i = 0..revealed-1
+ *
+ * This equals C(total-mines, revealed) / C(total, revealed), which is the
+ * hypergeometric probability of drawing `revealed` items from a pool of
+ * (total - mines) safe tiles out of `total` total tiles.
+ *
+ * multiplier = houseEdge / P
+ *
+ * The house edge is 3% (0.97 factor), giving the house a 3% margin on every bet.
+ *
+ * IMPORTANT: `total` MUST match the actual grid size the player is using.
+ * Using a mismatched total causes the probability to be wildly wrong and
+ * produces multipliers that are orders of magnitude too high or too low.
+ */
+function calcMultiplier(
+  revealed: number,
+  mineCount: number,
+  total: GridSize,
+  houseEdge = 0.97,
+): number {
   if (revealed === 0) return 1;
   let prob = 1;
   for (let i = 0; i < revealed; i++) {
     prob *= (total - mineCount - i) / (total - i);
   }
-  return Math.max(0.01, 0.97 / prob);
+  // Cap the maximum multiplier at 10,000× to prevent runaway payouts
+  // from edge-case configurations (e.g., many mines on a small grid).
+  const raw = houseEdge / prob;
+  return Math.min(Math.max(0.01, raw), 10_000);
 }
 
 // POST /api/mines/start
 minesRouter.post("/start", requireAuth, async (req, res) => {
-  const { gameId, amount, mineCount = 5 } = req.body;
+  const { gameId, amount, mineCount = 5, gridSize: rawGridSize = 24 } = req.body;
+
   if (!gameId || !amount || amount <= 0) {
     res.status(400).json({ error: "gameId and amount required" });
     return;
   }
-  if (mineCount < 1 || mineCount > 24) {
-    res.status(400).json({ error: "mineCount must be 1-24" });
+
+  // Validate and normalise gridSize
+  const gridSize: GridSize = VALID_GRID_SIZES.includes(rawGridSize as GridSize)
+    ? (rawGridSize as GridSize)
+    : 24;
+
+  // mineCount must leave at least 1 safe tile
+  const maxMines = gridSize - 1;
+  if (mineCount < 1 || mineCount > maxMines) {
+    res.status(400).json({ error: `mineCount must be 1–${maxMines} for a ${gridSize}-tile grid` });
     return;
   }
 
@@ -75,7 +117,7 @@ minesRouter.post("/start", requireAuth, async (req, res) => {
     await recordTournamentWager(user.id, amount, req.log);
 
     const serverSeed = uuidv4().replace(/-/g, "");
-    const mines = genMines(serverSeed, mineCount);
+    const mines = genMines(serverSeed, mineCount, gridSize);
 
     const [session] = await db.insert(minesSessionsTable).values({
       userId: user.id,
@@ -83,6 +125,8 @@ minesRouter.post("/start", requireAuth, async (req, res) => {
       bet: String(amount),
       serverSeed,
       mineCount,
+      // Store gridSize so reveal/cashout always use the correct total
+      gridSize,
       minePositions: JSON.stringify(mines),
       revealed: "[]",
       status: "active",
@@ -92,9 +136,10 @@ minesRouter.post("/start", requireAuth, async (req, res) => {
     res.json({
       sessionId: session.id,
       mineCount,
+      gridSize,
       bet: amount,
       balance: newBalanceAfterDeduct,
-      nextMultiplier: calcMultiplier(1, mineCount),
+      nextMultiplier: calcMultiplier(1, mineCount, gridSize),
     });
   } catch (err) {
     req.log.error({ err }, "Mines start error");
@@ -119,6 +164,17 @@ minesRouter.post("/reveal", requireAuth, async (req, res) => {
       return;
     }
 
+    // Use the gridSize stored at session creation; fall back to 24 for legacy rows
+    const gridSize: GridSize = VALID_GRID_SIZES.includes((session as any).gridSize as GridSize)
+      ? ((session as any).gridSize as GridSize)
+      : 24;
+
+    // Validate that the cell index is within the actual grid
+    if (cell < 0 || cell >= gridSize) {
+      res.status(400).json({ error: `Cell ${cell} is out of range for a ${gridSize}-tile grid` });
+      return;
+    }
+
     const mines: number[] = JSON.parse(session.minePositions);
     const revealed: number[] = JSON.parse(session.revealed);
 
@@ -129,7 +185,7 @@ minesRouter.post("/reveal", requireAuth, async (req, res) => {
 
     const hitMine = mines.includes(cell);
     const newRevealed = [...revealed, cell];
-    const newMultiplier = calcMultiplier(newRevealed.length, session.mineCount);
+    const newMultiplier = calcMultiplier(newRevealed.length, session.mineCount, gridSize);
 
     if (hitMine) {
       await db.update(minesSessionsTable).set({
@@ -143,7 +199,7 @@ minesRouter.post("/reveal", requireAuth, async (req, res) => {
         amount: session.bet, payout: "0",
         won: false, multiplier: "0",
         serverSeed: session.serverSeed, clientSeed: "mines",
-        meta: { minePositions: mines, revealed: newRevealed, result: "busted" },
+        meta: { minePositions: mines, revealed: newRevealed, result: "busted", gridSize },
       });
 
       res.json({ hit: true, minePositions: mines, revealed: newRevealed, status: "busted", payout: 0 });
@@ -155,11 +211,11 @@ minesRouter.post("/reveal", requireAuth, async (req, res) => {
       currentMultiplier: String(newMultiplier),
     }).where(eq(minesSessionsTable.id, session.id));
 
-    const safeLeft = 25 - session.mineCount - newRevealed.length;
+    const safeLeft = gridSize - session.mineCount - newRevealed.length;
     res.json({
       hit: false, cell, revealed: newRevealed, status: "active",
       currentMultiplier: newMultiplier,
-      nextMultiplier: calcMultiplier(newRevealed.length + 1, session.mineCount),
+      nextMultiplier: calcMultiplier(newRevealed.length + 1, session.mineCount, gridSize),
       safeLeft,
     });
   } catch (err) {
@@ -186,7 +242,13 @@ minesRouter.post("/cashout", requireAuth, async (req, res) => {
       return;
     }
 
-    const multiplier = parseFloat(session.currentMultiplier);
+    // Re-derive the gridSize and re-compute the multiplier server-side
+    // to prevent any client-side tampering with the stored multiplier.
+    const gridSize: GridSize = VALID_GRID_SIZES.includes((session as any).gridSize as GridSize)
+      ? ((session as any).gridSize as GridSize)
+      : 24;
+
+    const multiplier = calcMultiplier(revealed.length, session.mineCount, gridSize);
     const bet = parseFloat(session.bet);
     const payout = bet * multiplier;
 
@@ -195,7 +257,6 @@ minesRouter.post("/cashout", requireAuth, async (req, res) => {
       totalBets: sql`total_bets + 1`,
       totalWon: sql`coalesce(total_won, 0) + ${payout}`,
     }).where(eq(usersTable.id, req.user!.userId));
-    const newBalance = finalBalance;
 
     const mines: number[] = JSON.parse(session.minePositions);
     await db.update(minesSessionsTable).set({ status: "won" }).where(eq(minesSessionsTable.id, session.id));
@@ -205,10 +266,10 @@ minesRouter.post("/cashout", requireAuth, async (req, res) => {
       amount: session.bet, payout: String(payout),
       won: true, multiplier: String(multiplier),
       serverSeed: session.serverSeed, clientSeed: "mines",
-      meta: { minePositions: mines, revealed, result: "cashed_out", multiplier },
+      meta: { minePositions: mines, revealed, result: "cashed_out", multiplier, gridSize },
     });
 
-    res.json({ payout, multiplier, balance: newBalance, minePositions: mines, status: "won" });
+    res.json({ payout, multiplier, balance: finalBalance, minePositions: mines, status: "won" });
   } catch (err) {
     req.log.error({ err }, "Mines cashout error");
     res.status(500).json({ error: "Internal server error" });
@@ -223,15 +284,21 @@ minesRouter.get("/current", requireAuth, async (req, res) => {
       .limit(1);
     if (!session) { res.json(null); return; }
 
+    const gridSize: GridSize = VALID_GRID_SIZES.includes((session as any).gridSize as GridSize)
+      ? ((session as any).gridSize as GridSize)
+      : 24;
+
     const revealed: number[] = JSON.parse(session.revealed);
-    const multiplier = parseFloat(session.currentMultiplier);
+    const multiplier = calcMultiplier(revealed.length, session.mineCount, gridSize);
+
     res.json({
       sessionId: session.id,
       mineCount: session.mineCount,
+      gridSize,
       revealed,
       bet: parseFloat(session.bet),
       currentMultiplier: multiplier,
-      nextMultiplier: calcMultiplier(revealed.length + 1, session.mineCount),
+      nextMultiplier: calcMultiplier(revealed.length + 1, session.mineCount, gridSize),
     });
   } catch (err) {
     req.log.error({ err }, "Mines current error");
