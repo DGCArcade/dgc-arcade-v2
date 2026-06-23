@@ -451,15 +451,15 @@ export function Blackjack({ game }: BlackjackProps) {
   };
 
   return (
-    <div className="bj-game-root" style={{ display: "flex", flexDirection: "row", width: "100%", padding: "12px", gap: 12 }}>
+    <div className="bj-game-root" style={{ display: "flex", flexDirection: "row", width: "100%", padding: "12px", gap: 12, boxSizing: "border-box" }}>
       <style>{`
-        @media (max-width: 767px) {
-          .bj-game-root { flex-direction: column !important; padding: 8px !important; gap: 8px !important; }
-          .bj-table-area { min-height: 460px !important; padding: 20px 8px !important; }
-          .bj-card-container { width: 58px !important; height: 82px !important; }
-          .bj-card-inner { width: 58px !important; height: 82px !important; }
-          .bj-controls-bar { width: 100% !important; gap: 6px !important; padding: 10px !important; }
-          .bj-action-btn { padding: 8px !important; font-size: 11px !important; }
+        @media (max-width: 1024px) {
+          .bj-game-root { flex-direction: column-reverse !important; padding: 8px !important; gap: 12px !important; }
+          .bj-table-area { min-height: auto !important; padding: 30px 10px !important; width: 100% !important; order: 2; }
+          .bj-card-container { width: clamp(45px, 12vw, 65px) !important; height: clamp(65px, 17vw, 90px) !important; }
+          .bj-card-inner { width: 100% !important; height: 100% !important; }
+          .bj-controls-bar { width: 100% !important; gap: 8px !important; padding: 12px !important; order: 1; position: static !important; }
+          .bj-action-btn { padding: 10px !important; font-size: 12px !important; }
         }
         @keyframes bj-card-deal {
           0% { transform: translate(var(--deal-start-x, 0), var(--deal-start-y, 0)) rotate(45deg); opacity: 0; }

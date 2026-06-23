@@ -197,12 +197,14 @@ function MinesGame({ game }: MinesProps) {
     : (gridSize === 24 ? 26 : gridSize === 48 ? 20 : 16);
 
   return (
-    <div className="mines-game-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start" }}>
+    <div className="mines-game-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start", boxSizing: "border-box" }}>
 
       <style>{`
-        @media (max-width: 767px) {
-          .mines-game-root { flex-direction: column !important; padding: 8px !important; gap: 8px !important; }
-          .mines-bet-panel { width: 100% !important; position: static !important; }
+        @media (max-width: 1024px) {
+          .mines-game-root { flex-direction: column-reverse !important; padding: 8px !important; gap: 16px !important; }
+          .mines-bet-panel { width: 100% !important; position: static !important; order: 1; }
+          .mines-grid-container { width: 100% !important; order: 2; min-height: auto !important; padding: 16px 10px !important; }
+          .mines-cell { width: clamp(30px, 12vw, 60px) !important; height: clamp(30px, 12vw, 60px) !important; }
         }
         @keyframes mines-reveal { 0% { transform: scale(0.7) rotateY(90deg); opacity: 0; } 100% { transform: scale(1) rotateY(0deg); opacity: 1; } }
         @keyframes mines-gem-pop { 0% { transform: scale(0.6); } 50% { transform: scale(1.18); } 100% { transform: scale(1); } }
@@ -218,7 +220,7 @@ function MinesGame({ game }: MinesProps) {
       `}</style>
 
       {/* ── GAME GRID ── */}
-      <div style={{
+      <div className="mines-grid-container" style={{
         flex: 1, minWidth: 0,
         background: "rgba(8,12,26,0.88)",
         border: `2px solid ${isDone && status === "cashed_out" ? "rgba(34,197,94,0.3)" : isDone ? "rgba(239,68,68,0.3)" : "rgba(255,255,255,0.08)"}`,
@@ -226,6 +228,7 @@ function MinesGame({ game }: MinesProps) {
         display: "flex", flexDirection: "column", alignItems: "center", gap: 16,
         backdropFilter: "blur(14px)",
         transition: "border-color 0.3s ease",
+        boxSizing: "border-box",
       }}>
 
         {/* Grid size selector (idle only) */}

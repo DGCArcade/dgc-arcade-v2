@@ -76,9 +76,9 @@ export function Roulette({ game }: RouletteProps) {
   const n = pockets.length;
 
   return (
-    <div className="flex flex-col md:flex-row gap-8">
+    <div className="roulette-game-root flex flex-col md:flex-row gap-8">
       {/* Wheel */}
-      <div className="flex-1 bg-secondary border border-border rounded-xl p-4 md:p-6 flex flex-col items-center justify-center min-h-[240px] md:min-h-[440px]">
+      <div className="roulette-wheel-area flex-1 bg-secondary border border-border rounded-xl p-4 md:p-6 flex flex-col items-center justify-center min-h-[240px] md:min-h-[440px]">
         <div className="relative">
           <svg width="220" height="220" viewBox="0 0 220 220" className="drop-shadow-2xl w-full max-w-[220px]">
             {/* Outer ring */}
@@ -137,7 +137,7 @@ export function Roulette({ game }: RouletteProps) {
       </div>
 
       {/* Bet Controls */}
-      <div className="w-full md:w-80 bg-card border border-border rounded-xl p-6 flex flex-col gap-5">
+      <div className="roulette-bet-panel w-full md:w-80 bg-card border border-border rounded-xl p-6 flex flex-col gap-5">
         <div>
           <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Bet Amount</Label>
           <div className="relative mt-2">

@@ -602,7 +602,7 @@ function JackpotBanner({ jackpots, accentColor }: { jackpots: { mini: number; mi
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-1 md:gap-2 mb-2 md:mb-3">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 md:gap-2 mb-2 md:mb-3">
       {tiers.map(t => (
         <div
           key={t.key}
@@ -612,8 +612,8 @@ function JackpotBanner({ jackpots, accentColor }: { jackpots: { mini: number; mi
             border: `1px solid ${t.color}44`,
           }}
         >
-          <span className="font-black text-[9px] tracking-[0.2em] uppercase" style={{ color: t.color }}>{t.label}</span>
-          <span className="font-mono font-black text-sm tabular-nums" style={{ color: t.color, textShadow: `0 0 10px ${t.color}` }}>
+          <span className="font-black text-[8px] sm:text-[9px] tracking-[0.15em] sm:tracking-[0.2em] uppercase" style={{ color: t.color }}>{t.label}</span>
+          <span className="font-mono font-black text-xs sm:text-sm tabular-nums" style={{ color: t.color, textShadow: `0 0 10px ${t.color}` }}>
             ${vals[t.key].toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
@@ -977,36 +977,38 @@ function SlotGame({ theme, gameId }: { theme: SlotTheme; gameId: number }) {
       </div>
 
       {/* ── Controls ── */}
-      <div className="flex items-center gap-3">
-        {/* Balance */}
-        <div className="flex flex-col items-center rounded-xl px-3 py-2 flex-1" style={{ background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.1)" }}>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Balance</span>
-          <span className="font-mono font-bold text-sm text-white">{formatCurrency(user?.balance ?? 0)}</span>
-        </div>
-
-        {/* Bet control */}
-        <div className="flex items-center gap-1 rounded-xl px-2 py-2 flex-1" style={{ background: "rgba(0,0,0,0.5)", border: `1px solid ${accentColor}33` }}>
-          <button
-            className="w-8 h-8 rounded-lg font-bold text-lg flex items-center justify-center hover:bg-white/10 transition-colors disabled:opacity-40"
-            style={{ color: accentColor }}
-            onClick={() => { setBet(b => Math.max(config.minBet, +(b - 0.1).toFixed(2))); soundEngine.buttonClick(); }}
-            disabled={isSpinning}
-          >−</button>
-          <div className="flex flex-col items-center flex-1">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Bet</span>
-            <span className="font-mono font-bold text-sm" style={{ color: accentColor }}>{formatCurrency(bet)}</span>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        <div className="flex items-center gap-3 flex-1">
+          {/* Balance */}
+          <div className="flex flex-col items-center rounded-xl px-3 py-2 flex-1" style={{ background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.1)" }}>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Balance</span>
+            <span className="font-mono font-bold text-sm text-white">{formatCurrency(user?.balance ?? 0)}</span>
           </div>
-          <button
-            className="w-8 h-8 rounded-lg font-bold text-lg flex items-center justify-center hover:bg-white/10 transition-colors disabled:opacity-40"
-            style={{ color: accentColor }}
-            onClick={() => { setBet(b => Math.min(config.maxBet, +(b + 1).toFixed(2))); soundEngine.buttonClick(); }}
-            disabled={isSpinning}
-          >+</button>
+
+          {/* Bet control */}
+          <div className="flex items-center gap-1 rounded-xl px-2 py-2 flex-1" style={{ background: "rgba(0,0,0,0.5)", border: `1px solid ${accentColor}33` }}>
+            <button
+              className="w-8 h-8 rounded-lg font-bold text-lg flex items-center justify-center hover:bg-white/10 transition-colors disabled:opacity-40"
+              style={{ color: accentColor }}
+              onClick={() => { setBet(b => Math.max(config.minBet, +(b - 0.1).toFixed(2))); soundEngine.buttonClick(); }}
+              disabled={isSpinning}
+            >−</button>
+            <div className="flex flex-col items-center flex-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Bet</span>
+              <span className="font-mono font-bold text-sm" style={{ color: accentColor }}>{formatCurrency(bet)}</span>
+            </div>
+            <button
+              className="w-8 h-8 rounded-lg font-bold text-lg flex items-center justify-center hover:bg-white/10 transition-colors disabled:opacity-40"
+              style={{ color: accentColor }}
+              onClick={() => { setBet(b => Math.min(config.maxBet, +(b + 1).toFixed(2))); soundEngine.buttonClick(); }}
+              disabled={isSpinning}
+            >+</button>
+          </div>
         </div>
 
         {/* Spin button */}
         <button
-          className="flex-1 py-3 rounded-xl font-black text-lg uppercase tracking-widest transition-all disabled:opacity-60"
+          className="w-full sm:flex-1 py-4 sm:py-3 rounded-xl font-black text-xl sm:text-lg uppercase tracking-widest transition-all disabled:opacity-60"
           style={{
             background: isSpinning
               ? `rgba(0,0,0,0.5)`
@@ -1024,13 +1026,13 @@ function SlotGame({ theme, gameId }: { theme: SlotTheme; gameId: number }) {
       </div>
 
       {/* ── Bet Presets ── */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-1.5 flex-wrap justify-center sm:justify-start">
         {([config.minBet, 0.1, 0.5, 1, 5, 10, 25, 50] as number[])
           .filter(v => v >= config.minBet && v <= config.maxBet)
           .map(v => (
             <button
               key={v}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40"
+              className="px-2.5 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all disabled:opacity-40"
               style={{
                 background: bet === v ? accentColor : "rgba(255,255,255,0.08)",
                 color: bet === v ? "#000" : accentColor,
@@ -1043,7 +1045,7 @@ function SlotGame({ theme, gameId }: { theme: SlotTheme; gameId: number }) {
             </button>
           ))}
         <button
-          className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40 ml-auto"
+          className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40 sm:ml-auto"
           style={{ background: "rgba(255,255,255,0.08)", color: accentColor, border: `1px solid ${accentColor}44` }}
           onClick={() => { if (user) setBet(Math.min(user.balance, config.maxBet)); soundEngine.buttonClick(); }}
           disabled={isSpinning}
@@ -1053,30 +1055,32 @@ function SlotGame({ theme, gameId }: { theme: SlotTheme; gameId: number }) {
       </div>
 
       {/* ── Auto Spin ── */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-white/40 font-bold uppercase tracking-wider">Auto:</span>
-        {[10, 25, 50, 100].map(n => (
-          <button
-            key={n}
-            className="px-2 py-1 rounded text-xs font-bold transition-all"
-            style={{
-              background: autoSpin && autoCount === n ? accentColor : "rgba(255,255,255,0.06)",
-              color: autoSpin && autoCount === n ? "#000" : "rgba(255,255,255,0.5)",
-              border: `1px solid ${accentColor}22`,
-            }}
-            onClick={() => {
-              if (autoSpin && autoCount === n) { setAutoSpin(false); setAutoCount(0); }
-              else { setAutoCount(n); setAutoSpin(true); }
-              soundEngine.buttonClick();
-            }}
-            disabled={isSpinning && !(autoSpin && autoCount === n)}
-          >
-            {autoSpin && autoCount > 0 && autoCount === n ? `${autoCount}` : n}x
-          </button>
-        ))}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] sm:text-xs text-white/40 font-bold uppercase tracking-wider">Auto:</span>
+        <div className="flex gap-1.5">
+          {[10, 25, 50, 100].map(n => (
+            <button
+              key={n}
+              className="px-2 py-1 rounded text-[10px] sm:text-xs font-bold transition-all"
+              style={{
+                background: autoSpin && autoCount === n ? accentColor : "rgba(255,255,255,0.06)",
+                color: autoSpin && autoCount === n ? "#000" : "rgba(255,255,255,0.5)",
+                border: `1px solid ${accentColor}22`,
+              }}
+              onClick={() => {
+                if (autoSpin && autoCount === n) { setAutoSpin(false); setAutoCount(0); }
+                else { setAutoCount(n); setAutoSpin(true); }
+                soundEngine.buttonClick();
+              }}
+              disabled={isSpinning && !(autoSpin && autoCount === n)}
+            >
+              {autoSpin && autoCount > 0 && autoCount === n ? `${autoCount}` : n}x
+            </button>
+          ))}
+        </div>
         {autoSpin && (
           <button
-            className="px-2 py-1 rounded text-xs font-bold text-red-400 border border-red-400/30 ml-auto"
+            className="px-2 py-1 rounded text-[10px] sm:text-xs font-bold text-red-400 border border-red-400/30 ml-auto"
             onClick={() => { setAutoSpin(false); setAutoCount(0); }}
           >
             Stop

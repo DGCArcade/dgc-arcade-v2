@@ -111,9 +111,9 @@ export function HiLo({ game }: HiLoProps) {
   const loOdds = currentCard ? (currentRankVal + 1) / 13 : 0.5;
 
   return (
-    <div className="flex flex-col md:flex-row gap-8">
+    <div className="hilo-game-root flex flex-col md:flex-row gap-8">
       {/* Game Area */}
-      <div className="flex-1 bg-secondary border border-border rounded-xl p-4 md:p-6 flex flex-col items-center justify-center min-h-[220px] md:min-h-[440px] gap-4 md:gap-6">
+      <div className="hilo-card-area flex-1 bg-secondary border border-border rounded-xl p-4 md:p-6 flex flex-col items-center justify-center min-h-[220px] md:min-h-[440px] gap-4 md:gap-6">
         {/* History */}
         {history.length > 0 && (
           <div className="flex gap-1 justify-center flex-wrap">
@@ -175,7 +175,7 @@ export function HiLo({ game }: HiLoProps) {
       </div>
 
       {/* Controls */}
-      <div className="w-full md:w-72 bg-card border border-border rounded-xl p-6 flex flex-col gap-5">
+      <div className="hilo-bet-panel w-full md:w-72 bg-card border border-border rounded-xl p-6 flex flex-col gap-5">
         <div>
           <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Bet Per Round</Label>
           <div className="relative mt-2">

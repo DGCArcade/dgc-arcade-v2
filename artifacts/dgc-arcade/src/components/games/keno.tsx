@@ -99,9 +99,9 @@ export function Keno({ game }: KenoProps) {
   const payouts = PAYOUT_TABLE[selArr.length] ?? [];
 
   return (
-    <div className="flex flex-col md:flex-row gap-8">
+    <div className="keno-game-root flex flex-col md:flex-row gap-8">
       {/* Grid */}
-      <div className="flex-1 bg-secondary border border-border rounded-xl p-3 md:p-5 flex flex-col gap-3 md:gap-4 min-h-[200px] md:min-h-[440px]">
+      <div className="keno-grid-area flex-1 bg-secondary border border-border rounded-xl p-3 md:p-5 flex flex-col gap-3 md:gap-4 min-h-[200px] md:min-h-[440px]">
         <div className="grid grid-cols-10 gap-1.5">
           {Array.from({length:80},(_,i)=>{
             const n = i+1;
@@ -142,7 +142,7 @@ export function Keno({ game }: KenoProps) {
       </div>
 
       {/* Controls */}
-      <div className="w-full md:w-72 bg-card border border-border rounded-xl p-6 flex flex-col gap-5">
+      <div className="keno-bet-panel w-full md:w-72 bg-card border border-border rounded-xl p-6 flex flex-col gap-5">
         <div>
           <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Bet Amount</Label>
           <div className="relative mt-2">

@@ -1291,9 +1291,16 @@ body {
 .slot-game,
 .bj-game-root,
 .cf-game-root,
-.mines-game-root {
+.mines-game-root,
+.dice-game-root,
+.crash-game-root,
+.plinko-game-root,
+.roulette-game-root,
+.keno-game-root,
+.hilo-game-root {
   max-width: 100%;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 /* Classic Slots — mobile overrides */
@@ -1368,22 +1375,64 @@ body {
 }
 
 /* Ensure game page doesn't overflow on mobile */
-@media (max-width: 767px) {
-  /* Prevent any fixed-width inline styles from causing overflow */
-  .bj-table-area,
-  .cf-table-area {
-    width: 100% !important;
+@media (max-width: 1024px) {
+  /* Global Game Stacking */
+  .bj-game-root,
+  .cf-game-root,
+  .mines-game-root,
+  .dice-game-root,
+  .crash-game-root,
+  .plinko-game-root,
+  .roulette-game-root,
+  .keno-game-root,
+  .hilo-game-root {
+    flex-direction: column-reverse !important;
+    align-items: stretch !important;
+    gap: 16px !important;
   }
+
+  /* Game Panels */
+  .bj-bet-panel,
+  .cf-bet-panel,
+  .mines-bet-panel,
+  .dice-bet-panel,
+  .crash-bet-panel,
+  .plinko-bet-panel,
+  .roulette-bet-panel,
+  .keno-bet-panel,
+  .hilo-bet-panel {
+    width: 100% !important;
+    position: static !important;
+    order: 1 !important;
+  }
+
+  /* Table Areas */
+  .bj-table-area,
+  .cf-table-area,
+  .mines-grid-container,
+  .dice-display-area,
+  .crash-chart-area,
+  .plinko-board-area,
+  .roulette-wheel-area,
+  .keno-grid-area,
+  .hilo-card-area {
+    width: 100% !important;
+    min-height: auto !important;
+    order: 2 !important;
+  }
+
   /* Compact blackjack card sizes on mobile */
   .bj-card-container {
-    width: 58px !important;
-    height: 82px !important;
+    width: clamp(45px, 12vw, 65px) !important;
+    height: clamp(65px, 17vw, 90px) !important;
   }
+
   /* Roulette number grid on mobile */
   .roulette-number-grid {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
   }
+
   /* Plinko board scaling */
   .plinko-board svg {
     max-width: 100% !important;

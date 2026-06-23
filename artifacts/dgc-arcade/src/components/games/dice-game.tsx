@@ -129,9 +129,12 @@ export function DiceGame({ game }: DiceGameProps) {
   };
 
   return (
-    <div className="flex flex-col md:flex-row gap-6">
+    <div className="dice-game-root flex flex-col md:flex-row gap-6">
 
       <style>{`
+        @media (max-width: 1024px) {
+          .dice-game-root { flex-direction: column-reverse !important; gap: 16px !important; }
+        }
         @keyframes dice-bounce {
           0%,100% { transform: translateY(0) rotate(0deg); }
           25%      { transform: translateY(-12px) rotate(-8deg); }
@@ -151,7 +154,7 @@ export function DiceGame({ game }: DiceGameProps) {
       `}</style>
 
       {/* ── Roll Display ── */}
-      <div className="flex-1 bg-secondary border border-border rounded-xl p-4 md:p-8 flex flex-col items-center justify-center min-h-[220px] md:min-h-[460px] gap-4 md:gap-6"
+      <div className="dice-display-area flex-1 bg-secondary border border-border rounded-xl p-4 md:p-8 flex flex-col items-center justify-center min-h-[220px] md:min-h-[460px] gap-4 md:gap-6"
         style={{ background: "rgba(8,12,26,0.85)", border: "1.5px solid rgba(255,255,255,0.08)" }}>
 
         {/* 3D Dice */}
@@ -223,7 +226,7 @@ export function DiceGame({ game }: DiceGameProps) {
       </div>
 
       {/* ── Controls (side panel) ── */}
-      <div className="w-full md:w-80 rounded-xl p-6 flex flex-col gap-5"
+      <div className="dice-bet-panel w-full md:w-80 rounded-xl p-6 flex flex-col gap-5"
         style={{ background: "rgba(8,12,26,0.88)", border: "1.5px solid rgba(255,255,255,0.07)", backdropFilter: "blur(14px)", position: "sticky", top: 80 }}>
 
         {/* Panel title */}

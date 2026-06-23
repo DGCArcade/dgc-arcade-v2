@@ -224,14 +224,14 @@ export function Coinflip({ game }: CoinflipProps) {
     : `0 0 0 2px rgba(255,255,255,0.06), 0 20px 50px rgba(0,0,0,0.70)`;
 
   return (
-    <div className="cf-game-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start" }}>
+    <div className="cf-game-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start", boxSizing: "border-box" }}>
 
       <style>{`
-        @media (max-width: 767px) {
-          .cf-game-root { flex-direction: column !important; padding: 8px !important; gap: 8px !important; }
-          .cf-table-area { min-height: 220px !important; padding-top: 16px !important; padding-bottom: 16px !important; }
-          .cf-bet-panel { width: 100% !important; position: static !important; }
-          .cf-coin-wrap { width: 140px !important; height: 140px !important; }
+        @media (max-width: 1024px) {
+          .cf-game-root { flex-direction: column-reverse !important; padding: 8px !important; gap: 12px !important; }
+          .cf-table-area { min-height: 320px !important; padding-top: 24px !important; padding-bottom: 24px !important; order: 2; width: 100% !important; }
+          .cf-bet-panel { width: 100% !important; position: static !important; order: 1; }
+          .cf-coin-wrap { width: clamp(120px, 35vw, 200px) !important; height: clamp(120px, 35vw, 200px) !important; }
         }
         @keyframes dgc-coin-spin-heads {
           0%   { transform: rotateY(0deg); }

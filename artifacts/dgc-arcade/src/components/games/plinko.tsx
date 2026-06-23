@@ -101,9 +101,9 @@ export function Plinko({ game }: PlinkoProps) {
   };
 
   return (
-    <div className="flex flex-col md:flex-row gap-8">
+    <div className="plinko-game-root flex flex-col md:flex-row gap-8">
       {/* Board */}
-      <div className="flex-1 bg-secondary border border-border rounded-xl p-4 flex flex-col items-center min-h-[440px]">
+      <div className="plinko-board-area flex-1 bg-secondary border border-border rounded-xl p-4 flex flex-col items-center min-h-[440px]">
         <svg ref={boardRef} width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="overflow-visible w-full max-w-[340px]">
           {/* Pegs */}
           {pegs.map((p, i) => (
@@ -142,7 +142,7 @@ export function Plinko({ game }: PlinkoProps) {
       </div>
 
       {/* Controls */}
-      <div className="w-full md:w-72 bg-card border border-border rounded-xl p-6 flex flex-col gap-5">
+      <div className="plinko-bet-panel w-full md:w-72 bg-card border border-border rounded-xl p-6 flex flex-col gap-5">
         <div>
           <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Bet Amount</Label>
           <div className="relative mt-2">
