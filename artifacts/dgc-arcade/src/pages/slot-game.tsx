@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
-import { usePlaceBet, getGetMeQueryKey, getListRecentBetsAllQueryKey, getListBetsQueryKey } from "@workspace/api-client-react";
+import { usePlaceBet, getGetMeQueryKey, getListRecentBetsAllQueryKey, getListBetsQueryKey, useListBets } from "@workspace/api-client-react";
+import { Card } from "@/components/ui/card";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -1206,6 +1207,15 @@ export default function SlotGamePage() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { data: bets } = useListBets({ limit: 10 }, {
+    query: {
+      queryKey: getListBetsQueryKey({ limit: 10 }),
+      refetchInterval: 5000,
+    },
+  });
+
+  const gameBets = Array.isArray(bets) ? bets.filter(b => b.gameId === gameId) : [];
+
   useEffect(() => {
     if (!params.slug) return;
     // Load theme + find the game entry by slug
@@ -1260,6 +1270,43 @@ export default function SlotGamePage() {
         Back to Slots
       </button>
       <SlotGame theme={theme} gameId={gameId} />
+
+      {/* Recent Bets */}
+      <section className="pt-4">
+        <h3 className="font-display font-bold text-2xl uppercase tracking-widest mb-6">Your Recent Bets</h3>
+        <Card className="bg-card border-border overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-muted-foreground uppercase bg-secondary/30">
+                <tr>
+                  <th className="px-6 py-3 font-medium">Time</th>
+                  <th className="px-6 py-3 font-medium text-right">Bet Amount</th>
+                  <th className="px-6 py-3 font-medium text-right">Multiplier</th>
+                  <th className="px-6 py-3 font-medium text-right">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!gameBets.length ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-8 text-center text-muted-foreground font-mono">No recent bets on this game.</td>
+                  </tr>
+                ) : (
+                  gameBets.map(bet => (
+                    <tr key={bet.id} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
+                      <td className="px-6 py-4 text-muted-foreground font-mono text-xs">{new Date(bet.createdAt).toLocaleString()}</td>
+                      <td className="px-6 py-4 text-right font-mono">{formatCurrency(bet.amount)}</td>
+                      <td className="px-6 py-4 text-right font-mono">{bet.multiplier ? `${bet.multiplier.toFixed(2)}x` : "-"}</td>
+                      <td className={`px-6 py-4 text-right font-mono font-bold ${bet.won ? "text-green-400" : "text-muted-foreground"}`}>
+                        {bet.won ? `+${formatCurrency(bet.payout)}` : formatCurrency(0)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </section>
     </div>
   );
 }

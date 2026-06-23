@@ -187,7 +187,7 @@ export default function GamePage() {
       </ErrorBoundary>
 
       {/* Recent Bets */}
-      <section className="pt-4 hidden md:block">
+      <section className="pt-4">
         <h3 className="font-display font-bold text-2xl uppercase tracking-widest mb-6">Your Recent Bets</h3>
         <Card className="bg-card border-border overflow-hidden">
           <div className="overflow-x-auto">
