@@ -248,7 +248,7 @@ export function Slots({ game }: { game: Game }) {
   const [winCells, setWinCells] = useState<Set<string>>(new Set());
   const [winAmount, setWinAmount] = useState<number | null>(null);
   const [celebration, setCelebration] = useState<WinTier | null>(null);
-  const [bet, setBet] = useState(Math.max(game.minBet, 1));
+  const [bet, setBet] = useState(game.minBet);
   const [isSpinning, setIsSpinning] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [symSize, setSymSize] = useState(84);

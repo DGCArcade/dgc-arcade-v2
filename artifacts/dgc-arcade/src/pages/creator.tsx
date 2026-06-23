@@ -406,29 +406,30 @@ function SpecialtyHub({
                 <p className="text-sm text-muted-foreground">Grow your network and earn monthly commission on every player you refer to DGC Arcade.</p>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 sm:gap-4 py-4 border-y border-border/50">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 py-6 border-y border-border/50">
                 {[
-                  { value: "10K+", label: "Registered Players" },
-                  { value: "15+", label: "Payment Methods" },
-                  { value: "50+", label: "Casino Games" },
+                  { value: "10K+", label: "Registered Players", icon: <Users className="w-4 h-4 text-primary/60" /> },
+                  { value: "15+", label: "Payment Methods", icon: <Wallet className="w-4 h-4 text-primary/60" /> },
+                  { value: "50+", label: "Casino Games", icon: <Zap className="w-4 h-4 text-primary/60" /> },
                 ].map(s => (
-                  <div key={s.label} className="text-center">
-                    <div className="font-mono font-black text-xl text-primary">{s.value}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
+                  <div key={s.label} className="text-center flex flex-col items-center p-3 rounded-xl bg-secondary/20 sm:bg-transparent">
+                    <div className="mb-2 sm:hidden">{s.icon}</div>
+                    <div className="font-mono font-black text-2xl text-primary">{s.value}</div>
+                    <div className="text-[10px] sm:text-xs uppercase tracking-widest font-bold text-muted-foreground mt-1">{s.label}</div>
                   </div>
                 ))}
               </div>
 
               <div>
                 <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-2">Your Affiliate Link</div>
-                <div className="flex gap-2">
-                  <div className="flex-1 bg-secondary/80 rounded-lg px-4 py-2.5 font-mono text-sm border border-border/50 text-muted-foreground truncate select-all">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="flex-1 bg-secondary/80 rounded-lg px-4 py-3 font-mono text-xs sm:text-sm border border-border/50 text-muted-foreground truncate select-all">
                     {dashboard.referralLink}
                   </div>
                   <button onClick={copyLink}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-bold text-sm uppercase tracking-widest hover:bg-primary/90 transition-colors whitespace-nowrap">
+                    className="flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-primary text-primary-foreground font-bold text-sm uppercase tracking-widest hover:bg-primary/90 transition-colors whitespace-nowrap">
                     {copied ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    {copied ? "Copied!" : "Copy"}
+                    {copied ? "Copied!" : "Copy Link"}
                   </button>
                 </div>
               </div>
@@ -902,19 +903,19 @@ function RegularHub({
   const tierColor = dashboard.color;
 
   return (
-    <div className="max-w-lg mx-auto pb-16 space-y-0">
-      <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
+    <div className="max-w-lg mx-auto pb-16 space-y-0 px-4 sm:px-0">
+      <div className="rounded-2xl border border-border/50 bg-card overflow-hidden shadow-2xl shadow-black/50">
 
         {/* Affiliate Code */}
-        <div className="p-5 border-b border-border/40">
-          <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Affiliate Code</div>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 bg-secondary/60 rounded-lg px-3 py-2 font-mono text-sm border border-border/40 text-muted-foreground truncate">
+        <div className="p-5 border-b border-border/40 bg-secondary/10">
+          <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Affiliate Code</div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="flex-1 bg-background/60 rounded-lg px-3 py-3 font-mono text-xs border border-border/40 text-muted-foreground truncate select-all">
               {dashboard.referralLink}
             </div>
             <button onClick={copyLink}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-secondary border border-border/50 hover:border-primary/40 font-bold text-xs uppercase tracking-wider transition-colors whitespace-nowrap text-muted-foreground hover:text-foreground">
-              <Copy className="w-3.5 h-3.5" /> Copy
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-primary text-primary-foreground font-bold text-xs uppercase tracking-widest transition-colors whitespace-nowrap shadow-lg shadow-primary/20">
+              <Copy className="w-3.5 h-3.5" /> Copy Link
             </button>
           </div>
         </div>

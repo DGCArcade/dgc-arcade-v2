@@ -696,7 +696,7 @@ function SlotGame({ theme, gameId }: { theme: SlotTheme; gameId: number }) {
   const [landing, setLanding] = useState<boolean[]>(Array(REELS).fill(false));
   const [winCells, setWinCells] = useState<Set<string>>(new Set());
   const [isSpinning, setIsSpinning] = useState(false);
-  const [bet, setBet] = useState(Math.max(config.minBet, 1));
+  const [bet, setBet] = useState(config.minBet);
   const [winAmount, setWinAmount] = useState(0);
   const [winTier, setWinTier] = useState<WinTier | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
@@ -989,7 +989,7 @@ function SlotGame({ theme, gameId }: { theme: SlotTheme; gameId: number }) {
           <button
             className="w-8 h-8 rounded-lg font-bold text-lg flex items-center justify-center hover:bg-white/10 transition-colors disabled:opacity-40"
             style={{ color: accentColor }}
-            onClick={() => { setBet(b => Math.max(config.minBet, +(b - 1).toFixed(2))); soundEngine.buttonClick(); }}
+            onClick={() => { setBet(b => Math.max(config.minBet, +(b - 0.1).toFixed(2))); soundEngine.buttonClick(); }}
             disabled={isSpinning}
           >−</button>
           <div className="flex flex-col items-center flex-1">
@@ -1025,7 +1025,7 @@ function SlotGame({ theme, gameId }: { theme: SlotTheme; gameId: number }) {
 
       {/* ── Bet Presets ── */}
       <div className="flex gap-2 flex-wrap">
-        {([config.minBet, 1, 5, 10, 25, 50] as number[])
+        {([config.minBet, 0.1, 0.5, 1, 5, 10, 25, 50] as number[])
           .filter(v => v >= config.minBet && v <= config.maxBet)
           .map(v => (
             <button

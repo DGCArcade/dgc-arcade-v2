@@ -19,7 +19,7 @@ export const LoginBody = zod.object({
 
 export const BetBody = zod.object({
   gameId: zod.number().int(),
-  amount: zod.number().min(1).max(100_000_000),
+  amount: zod.number().min(0.01).max(100_000_000),
   clientSeed: zod.string().nullable().optional(),
   meta: zod.record(zod.unknown()).nullable().optional(),
 });

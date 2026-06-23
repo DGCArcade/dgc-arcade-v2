@@ -62,7 +62,7 @@ function MinesGame({ game }: MinesProps) {
   const qc = useQueryClient();
   const accent = useAccent();
 
-  const minBet = parseFloat(String(game.minBet ?? 1));
+  const minBet = parseFloat(String(game.minBet ?? 0.01));
   const maxBet = parseFloat(String(game.maxBet ?? 1_000_000));
 
   const [amount, setAmount] = useState<number>(minBet);
@@ -377,6 +377,7 @@ function MinesGame({ game }: MinesProps) {
           <div style={{ display: "flex", gap: 4 }}>
             {[
               { l: "MIN", fn: () => setAmt(minBet) },
+              { l: "0.1", fn: () => setAmt(0.1) },
               { l: "½",   fn: () => setAmt(Math.max(minBet, Math.floor((amount / 2) * 100) / 100)) },
               { l: "2×",  fn: () => setAmt(Math.min(amount * 2, maxBet)) },
               { l: "MAX", fn: () => setAmt(Math.min(parseFloat(String(user?.balance ?? 0)), maxBet)) },
