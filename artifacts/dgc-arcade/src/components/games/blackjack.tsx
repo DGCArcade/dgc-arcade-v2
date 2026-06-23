@@ -12,10 +12,11 @@ type Status = "idle" | "active" | "player_blackjack" | "player_wins" | "dealer_w
 function getToken() { return localStorage.getItem("dgc_token"); }
 function authHeaders() { return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }; }
 
-function handTotal(hand: Card[]): number {
+function handTotal(hand: Card[], showHidden = false): number {
   let t = 0, a = 0;
   for (const c of hand) {
-    if (c.suit === "?") continue;
+    if (c.suit === "?" && !showHidden) continue;
+    const rank = c.suit === "?" ? "10" : c.rank; // Fallback logic if we needed it, but we use actual ranks
     const v = ["J","Q","K"].includes(c.rank) ? 10 : c.rank === "A" ? 11 : parseInt(c.rank);
     if (v === 11) a++;
     t += v;
@@ -524,15 +525,23 @@ export function Blackjack({ game }: BlackjackProps) {
         </div>
 
         {/* Dealer Section */}
-        <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, zIndex: 10 }}>
-          <div style={{ position: "relative", display: "flex", gap: 10, minHeight: 118 }}>
+        <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: isMobile ? 4 : 12, zIndex: 10 }}>
+          <div style={{ position: "relative", display: "flex", gap: isMobile ? 6 : 10, minHeight: isMobile ? 90 : 118 }}>
             {dealerHand.length > 0 ? dealerHand.map((c, i) => (
-              <div key={`d-${i}`} style={{ position: "relative" }}>
+              <div key={`d-${i}`} style={{ position: "relative", transform: isMobile ? "scale(0.85)" : "none", transformOrigin: "top center" }}>
                 <PlayingCard card={c} hidden={c.suit === "?"} delay={i * 200} dealFrom={deckRef.current?.getBoundingClientRect()} />
               </div>
-            )) : <div style={{ width: 85, height: 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
+            )) : <div style={{ width: isMobile ? 70 : 85, height: isMobile ? 98 : 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
           </div>
-          {dealerHand.length > 0 && <ScoreBubble total={dealerTotal ?? (isDone && showResult ? handTotal(dealerHand) : 0)} bust={dealerTotal !== null && dealerTotal > 21} label="DEALER" />}
+          {dealerHand.length > 0 && (
+            <div style={{ marginTop: isMobile ? -12 : 0 }}>
+              <ScoreBubble 
+                total={dealerTotal ?? (isDone && showResult ? handTotal(dealerHand) : handTotal(dealerHand.filter(c => c.suit !== "?")))} 
+                bust={dealerTotal !== null && dealerTotal > 21} 
+                label="DEALER" 
+              />
+            </div>
+          )}
         </div>
 
         {/* Result Overlay */}
@@ -549,14 +558,18 @@ export function Blackjack({ game }: BlackjackProps) {
         )}
 
         {/* Player Section */}
-        <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, zIndex: 10 }}>
-          {playerHand.length > 0 && <ScoreBubble total={playerTotal} bust={playerTotal > 21} bj={status === "player_blackjack"} label="YOU" />}
-          <div style={{ position: "relative", display: "flex", gap: 10, minHeight: 118 }}>
+        <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: isMobile ? 4 : 12, zIndex: 10 }}>
+          {playerHand.length > 0 && (
+            <div style={{ marginBottom: isMobile ? -8 : 0 }}>
+              <ScoreBubble total={playerTotal} bust={playerTotal > 21} bj={status === "player_blackjack"} label="YOU" />
+            </div>
+          )}
+          <div style={{ position: "relative", display: "flex", gap: isMobile ? 6 : 10, minHeight: isMobile ? 90 : 118 }}>
             {playerHand.length > 0 ? playerHand.map((c, i) => (
-              <div key={`p-${i}`} style={{ position: "relative" }}>
+              <div key={`p-${i}`} style={{ position: "relative", transform: isMobile ? "scale(0.85)" : "none", transformOrigin: "bottom center" }}>
                 <PlayingCard card={c} delay={(i + 2) * 200} dealFrom={deckRef.current?.getBoundingClientRect()} />
               </div>
-            )) : <div style={{ width: 85, height: 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
+            )) : <div style={{ width: isMobile ? 70 : 85, height: isMobile ? 98 : 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
           </div>
         </div>
 
@@ -571,8 +584,8 @@ export function Blackjack({ game }: BlackjackProps) {
 
       {/* ── CONTROLS BAR ── */}
       <div className="bj-controls-bar" style={{
-        display: "flex", flexDirection: "column", gap: 12, background: "rgba(8,12,26,0.9)", borderRadius: 12, padding: 14,
-        border: "1px solid rgba(255,255,255,0.08)", width: 280
+        display: "flex", flexDirection: "column", gap: isMobile ? 8 : 12, background: "rgba(8,12,26,0.9)", borderRadius: 12, padding: isMobile ? 10 : 14,
+        border: "1px solid rgba(255,255,255,0.08)", width: isMobile ? "100%" : 280, maxWidth: isMobile ? 320 : 280
       }}>
         {/* Bet Input Row */}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -593,29 +606,29 @@ export function Blackjack({ game }: BlackjackProps) {
         </div>
 
         {/* Bet Multipliers */}
-        <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => handleBetMultiplier(0.5)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>1/2</button>
-          <button onClick={() => handleBetMultiplier(2)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>2x</button>
-          <button onClick={handleMaxBet} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>MAX</button>
+        <div style={{ display: "flex", gap: isMobile ? 4 : 6 }}>
+          <button onClick={() => handleBetMultiplier(0.5)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: isMobile ? 6 : 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>1/2</button>
+          <button onClick={() => handleBetMultiplier(2)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: isMobile ? 6 : 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>2x</button>
+          <button onClick={handleMaxBet} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: isMobile ? 6 : 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>MAX</button>
         </div>
 
         {/* Main Action Buttons */}
         {status === "idle" || isDone ? (
           <button onClick={isDone ? reset : deal} disabled={loading} style={{
-            width: "100%", background: accent, color: "#000", border: "none", borderRadius: 10, padding: 14,
-            fontWeight: 900, fontSize: 14, letterSpacing: 1, cursor: "pointer", boxShadow: `0 4px 15px ${accent}44`, textTransform: "uppercase"
+            width: "100%", background: accent, color: "#000", border: "none", borderRadius: 10, padding: isMobile ? 12 : 14,
+            fontWeight: 900, fontSize: isMobile ? 13 : 14, letterSpacing: 1, cursor: "pointer", boxShadow: `0 4px 15px ${accent}44`, textTransform: "uppercase"
           }}>
             {isDone ? "NEW GAME" : loading ? "DEALING..." : "PLACE BET"}
           </button>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => doAction("hit")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: 12, fontWeight: 900, fontSize: 12 }}>HIT</button>
-              <button onClick={() => doAction("stand")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, padding: 12, fontWeight: 900, fontSize: 12 }}>STAND</button>
+          <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 6 : 8 }}>
+            <div style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
+              <button onClick={() => doAction("hit")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 10 : 12, fontWeight: 900, fontSize: 12 }}>HIT</button>
+              <button onClick={() => doAction("stand")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 10 : 12, fontWeight: 900, fontSize: 12 }}>STAND</button>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => doAction("double")} disabled={loading || playerHand.length !== 2} className="bj-action-btn" style={{ flex: 1, background: "#7c3aed", color: "#fff", border: "none", borderRadius: 8, padding: 10, fontWeight: 800, fontSize: 11 }}>DOUBLE</button>
-              {insuranceEligible && <button onClick={() => doAction("insurance")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#d97706", color: "#fff", border: "none", borderRadius: 8, padding: 10, fontWeight: 800, fontSize: 11 }}>INSURE</button>}
+            <div style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
+              <button onClick={() => doAction("double")} disabled={loading || playerHand.length !== 2} className="bj-action-btn" style={{ flex: 1, background: "#7c3aed", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>DOUBLE</button>
+              {insuranceEligible && <button onClick={() => doAction("insurance")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#d97706", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>INSURE</button>}
             </div>
           </div>
         )}

@@ -190,10 +190,10 @@ function MinesGame({ game }: MinesProps) {
   // Responsive cell sizing
   const isMobile = useIsMobile();
   const cellSize = isMobile
-    ? (gridSize === 24 ? 42 : gridSize === 48 ? 32 : 26)
+    ? (gridSize === 24 ? 42 : gridSize === 48 ? 30 : 24)
     : (gridSize === 24 ? 60 : gridSize === 48 ? 46 : 38);
   const cellFontSize = isMobile
-    ? (gridSize === 24 ? 18 : gridSize === 48 ? 14 : 11)
+    ? (gridSize === 24 ? 18 : gridSize === 48 ? 13 : 10)
     : (gridSize === 24 ? 26 : gridSize === 48 ? 20 : 16);
 
   return (
@@ -264,9 +264,11 @@ function MinesGame({ game }: MinesProps) {
         <div className={isDone && status === "busted" ? "mines-grid-bust" : isDone && status === "cashed_out" ? "mines-grid-cashout" : ""}
           style={{
             display: "grid",
-            gridTemplateColumns: `repeat(${cfg.cols}, ${cellSize}px)`,
-            gap: gridSize === 24 ? 7 : gridSize === 48 ? 5 : 4,
+            gridTemplateColumns: `repeat(${cfg.cols}, minmax(0, 1fr))`,
+            gap: gridSize === 24 ? "7px" : gridSize === 48 ? "5px" : "4px",
             margin: "0 auto",
+            width: "100%",
+            maxWidth: isMobile ? (gridSize === 24 ? "300px" : gridSize === 48 ? "280px" : "280px") : "none",
           }}>
           {Array.from({ length: totalCells }, (_, i) => {
             const isRevealed = revealed.includes(i);
@@ -297,7 +299,7 @@ function MinesGame({ game }: MinesProps) {
                 disabled={!isActive || isRevealed || loading}
                 className="mines-cell"
                 style={{
-                  width: cellSize, height: cellSize, borderRadius: gridSize === 24 ? 10 : 8,
+                  aspectRatio: "1/1", width: "100%", borderRadius: gridSize === 24 ? 10 : 8,
                   border: `2px solid ${border}`, background: bg, boxShadow,
                   fontSize: cellFontSize, fontWeight: 900, color: "#fff",
                   display: "flex", alignItems: "center", justifyContent: "center",
