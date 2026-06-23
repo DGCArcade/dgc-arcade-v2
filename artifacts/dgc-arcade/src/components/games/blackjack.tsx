@@ -279,8 +279,15 @@ export function Blackjack({ game }: BlackjackProps) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start" }}>
+    <div className="bj-game-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start" }}>
       <style>{`
+        @media (max-width: 767px) {
+          .bj-game-root { flex-direction: column !important; padding: 8px !important; gap: 8px !important; }
+          .bj-table-area { min-height: 260px !important; padding: 16px 10px !important; }
+          .bj-bet-panel { width: 100% !important; position: static !important; }
+          .bj-card-container { width: 58px !important; height: 82px !important; }
+          .bj-card-inner { width: 58px !important; height: 82px !important; }
+        }
         @keyframes bj-card-deal {
           0% { transform: translate(var(--deal-start-x, 0), var(--deal-start-y, 0)) rotate(45deg); opacity: 0; }
           100% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
@@ -306,7 +313,7 @@ export function Blackjack({ game }: BlackjackProps) {
       `}</style>
 
       {/* ── TABLE AREA ── */}
-      <div style={{
+      <div className="bj-table-area" style={{
         flex: 1, position: "relative", minHeight: 520, borderRadius: 24,
         background: `radial-gradient(ellipse at 50% 10%, ${felt.felt} 0%, #050505 100%)`,
         border: `4px solid ${felt.rail}`, boxShadow: "0 20px 50px rgba(0,0,0,0.8)",
@@ -376,7 +383,7 @@ export function Blackjack({ game }: BlackjackProps) {
       </div>
 
       {/* ── BET PANEL ── */}
-      <div style={{
+      <div className="bj-bet-panel" style={{
         width: 280, flexShrink: 0, background: "rgba(8,12,26,0.9)", borderRadius: 16, padding: 16,
         border: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", gap: 12,
         position: "sticky", top: 80

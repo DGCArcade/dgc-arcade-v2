@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Game, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -187,13 +188,22 @@ function MinesGame({ game }: MinesProps) {
   const cfg = GRID_CONFIGS[gridSize];
 
   // Responsive cell sizing
-  const cellSize = gridSize === 24 ? 60 : gridSize === 48 ? 46 : 38;
-  const cellFontSize = gridSize === 24 ? 26 : gridSize === 48 ? 20 : 16;
+  const isMobile = useIsMobile();
+  const cellSize = isMobile
+    ? (gridSize === 24 ? 42 : gridSize === 48 ? 32 : 26)
+    : (gridSize === 24 ? 60 : gridSize === 48 ? 46 : 38);
+  const cellFontSize = isMobile
+    ? (gridSize === 24 ? 18 : gridSize === 48 ? 14 : 11)
+    : (gridSize === 24 ? 26 : gridSize === 48 ? 20 : 16);
 
   return (
-    <div style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start" }}>
+    <div className="mines-game-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start" }}>
 
       <style>{`
+        @media (max-width: 767px) {
+          .mines-game-root { flex-direction: column !important; padding: 8px !important; gap: 8px !important; }
+          .mines-bet-panel { width: 100% !important; position: static !important; }
+        }
         @keyframes mines-reveal { 0% { transform: scale(0.7) rotateY(90deg); opacity: 0; } 100% { transform: scale(1) rotateY(0deg); opacity: 1; } }
         @keyframes mines-gem-pop { 0% { transform: scale(0.6); } 50% { transform: scale(1.18); } 100% { transform: scale(1); } }
         @keyframes mines-bomb-shake { 0%,100% { transform: translateX(0) scale(1); } 20% { transform: translateX(-4px) scale(1.05); } 40% { transform: translateX(4px) scale(1.05); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
@@ -330,7 +340,7 @@ function MinesGame({ game }: MinesProps) {
       </div>
 
       {/* ── BET PANEL (right side) ── */}
-      <div style={{
+      <div className="mines-bet-panel" style={{
         width: 280, flexShrink: 0,
         background: "rgba(8,12,26,0.88)",
         border: "1.5px solid rgba(255,255,255,0.07)",

@@ -601,7 +601,7 @@ function JackpotBanner({ jackpots, accentColor }: { jackpots: { mini: number; mi
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+    <div className="grid grid-cols-4 gap-1 md:gap-2 mb-2 md:mb-3">
       {tiers.map(t => (
         <div
           key={t.key}
@@ -706,7 +706,12 @@ function SlotGame({ theme, gameId }: { theme: SlotTheme; gameId: number }) {
   const [autoCount, setAutoCount] = useState(0);
   const autoRef = useRef(false);
 
-  const symSize = REELS >= 5 ? (isFullscreen ? 90 : 72) : (isFullscreen ? 110 : 88);
+  const isMobileView = typeof window !== "undefined" && window.innerWidth < 768;
+  const symSize = isFullscreen
+    ? (REELS >= 5 ? 90 : 110)
+    : isMobileView
+      ? (REELS >= 5 ? Math.floor((window.innerWidth - 40) / REELS) : Math.floor((window.innerWidth - 40) / REELS))
+      : (REELS >= 5 ? 72 : 88);
 
   useEffect(() => { soundEngine.setMuted(muted); }, [muted]);
 
@@ -1246,7 +1251,7 @@ export default function SlotGamePage() {
   }
 
   return (
-    <div className="space-y-4 max-w-2xl mx-auto">
+    <div className="space-y-3 md:space-y-4 w-full md:max-w-2xl md:mx-auto">
       <button
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         onClick={() => setLocation("/slots")}

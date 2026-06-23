@@ -214,9 +214,15 @@ export function Coinflip({ game }: CoinflipProps) {
     : `0 0 0 2px rgba(255,255,255,0.06), 0 20px 50px rgba(0,0,0,0.70)`;
 
   return (
-    <div style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start" }}>
+    <div className="cf-game-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start" }}>
 
       <style>{`
+        @media (max-width: 767px) {
+          .cf-game-root { flex-direction: column !important; padding: 8px !important; gap: 8px !important; }
+          .cf-table-area { min-height: 220px !important; padding-top: 16px !important; padding-bottom: 16px !important; }
+          .cf-bet-panel { width: 100% !important; position: static !important; }
+          .cf-coin-wrap { width: 140px !important; height: 140px !important; }
+        }
         @keyframes dgc-coin-spin {
           0%   { transform: rotateY(0deg); }
           15%  { transform: rotateY(900deg); }
@@ -247,7 +253,7 @@ export function Coinflip({ game }: CoinflipProps) {
       `}</style>
 
       {/* ── TABLE ── */}
-      <div style={{
+      <div className="cf-table-area" style={{
         flex: 1, minWidth: 0,
         position: "relative",
         borderRadius: "24px 24px 50% 50% / 24px 24px 38% 38%",
@@ -310,7 +316,7 @@ export function Coinflip({ game }: CoinflipProps) {
       </div>
 
       {/* ── BET PANEL ── */}
-      <div style={{
+      <div className="cf-bet-panel" style={{
         width: 280, flexShrink: 0,
         background: "rgba(8,12,26,0.88)",
         border: "1.5px solid rgba(255,255,255,0.07)",

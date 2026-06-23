@@ -151,7 +151,7 @@ export function DiceGame({ game }: DiceGameProps) {
       `}</style>
 
       {/* ── Roll Display ── */}
-      <div className="flex-1 bg-secondary border border-border rounded-xl p-8 flex flex-col items-center justify-center min-h-[460px] gap-6"
+      <div className="flex-1 bg-secondary border border-border rounded-xl p-4 md:p-8 flex flex-col items-center justify-center min-h-[220px] md:min-h-[460px] gap-4 md:gap-6"
         style={{ background: "rgba(8,12,26,0.85)", border: "1.5px solid rgba(255,255,255,0.08)" }}>
 
         {/* 3D Dice */}

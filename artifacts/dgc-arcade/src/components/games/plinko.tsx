@@ -104,7 +104,7 @@ export function Plinko({ game }: PlinkoProps) {
     <div className="flex flex-col md:flex-row gap-8">
       {/* Board */}
       <div className="flex-1 bg-secondary border border-border rounded-xl p-4 flex flex-col items-center min-h-[440px]">
-        <svg ref={boardRef} width={W} height={H} className="overflow-visible">
+        <svg ref={boardRef} width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="overflow-visible w-full max-w-[340px]">
           {/* Pegs */}
           {pegs.map((p, i) => (
             <circle key={i} cx={p.x} cy={p.y} r="5" fill="#FF8C00" opacity="0.9" />

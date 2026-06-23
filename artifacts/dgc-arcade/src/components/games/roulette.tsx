@@ -78,9 +78,9 @@ export function Roulette({ game }: RouletteProps) {
   return (
     <div className="flex flex-col md:flex-row gap-8">
       {/* Wheel */}
-      <div className="flex-1 bg-secondary border border-border rounded-xl p-6 flex flex-col items-center justify-center min-h-[440px]">
+      <div className="flex-1 bg-secondary border border-border rounded-xl p-4 md:p-6 flex flex-col items-center justify-center min-h-[240px] md:min-h-[440px]">
         <div className="relative">
-          <svg width="220" height="220" viewBox="0 0 220 220" className="drop-shadow-2xl">
+          <svg width="220" height="220" viewBox="0 0 220 220" className="drop-shadow-2xl w-full max-w-[220px]">
             {/* Outer ring */}
             <circle cx={cx} cy={cy} r={r+14} fill="#1a0a00" stroke="#CC8800" strokeWidth="4"/>
             {/* Rotating wheel */}

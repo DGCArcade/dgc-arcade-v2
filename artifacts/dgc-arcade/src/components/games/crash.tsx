@@ -144,7 +144,7 @@ export function Crash({ game }: CrashProps) {
   return (
     <div className="flex flex-col md:flex-row gap-8">
       {/* Game Area */}
-      <div className="flex-1 bg-secondary border border-border rounded-xl p-8 flex flex-col items-center justify-center min-h-[400px] relative overflow-hidden">
+      <div className="flex-1 bg-secondary border border-border rounded-xl p-4 md:p-8 flex flex-col items-center justify-center min-h-[200px] md:min-h-[400px] relative overflow-hidden">
         
         {/* Background graph line */}
         <div className="absolute inset-0 opacity-10">

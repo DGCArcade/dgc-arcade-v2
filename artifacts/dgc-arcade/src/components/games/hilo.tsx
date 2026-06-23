@@ -113,7 +113,7 @@ export function HiLo({ game }: HiLoProps) {
   return (
     <div className="flex flex-col md:flex-row gap-8">
       {/* Game Area */}
-      <div className="flex-1 bg-secondary border border-border rounded-xl p-6 flex flex-col items-center justify-center min-h-[440px] gap-6">
+      <div className="flex-1 bg-secondary border border-border rounded-xl p-4 md:p-6 flex flex-col items-center justify-center min-h-[220px] md:min-h-[440px] gap-4 md:gap-6">
         {/* History */}
         {history.length > 0 && (
           <div className="flex gap-1 justify-center flex-wrap">

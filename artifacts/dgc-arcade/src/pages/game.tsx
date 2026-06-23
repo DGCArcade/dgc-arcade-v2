@@ -150,7 +150,7 @@ export default function GamePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 md:space-y-6">
       <Link href="/games" className="inline-flex items-center text-sm font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
         <ChevronLeft className="w-4 h-4 mr-1" />Back to Games
       </Link>
@@ -158,16 +158,16 @@ export default function GamePage() {
       {/* Tournament Banner */}
       <TournamentBanner />
 
-      <div className="flex justify-between items-end border-b border-border/50 pb-6">
-        <div>
-          <h1 className="font-display font-black text-4xl uppercase tracking-widest mb-2 text-glow-shift">
+      <div className="flex justify-between items-start md:items-end border-b border-border/50 pb-3 md:pb-6 gap-2">
+        <div className="min-w-0 flex-1">
+          <h1 className="font-display font-black text-2xl md:text-4xl uppercase tracking-widest mb-1 md:mb-2 text-glow-shift truncate">
             {game.name}
           </h1>
-          <div className="flex gap-3 items-center flex-wrap">
-            <p className="text-muted-foreground">{game.description}</p>
+          <div className="flex gap-2 md:gap-3 items-center flex-wrap">
+            <p className="text-muted-foreground text-sm hidden md:block">{game.description}</p>
             {game.houseEdge != null && (
-              <span className="text-xs font-mono bg-secondary px-2 py-1 rounded text-muted-foreground border border-border">
-                House Edge: {game.houseEdge}%
+              <span className="text-xs font-mono bg-secondary px-2 py-0.5 rounded text-muted-foreground border border-border">
+                Edge: {game.houseEdge}%
               </span>
             )}
             <span className="flex items-center gap-1 text-xs font-bold text-green-400">
@@ -175,7 +175,7 @@ export default function GamePage() {
             </span>
           </div>
         </div>
-        <div className="text-right text-xs text-muted-foreground font-mono space-y-0.5">
+        <div className="text-right text-xs text-muted-foreground font-mono space-y-0.5 shrink-0">
           <div>Min <span className="text-foreground">{formatCurrency(game.minBet)}</span></div>
           <div>Max <span className="text-foreground">{formatCurrency(game.maxBet)}</span></div>
         </div>
@@ -187,7 +187,7 @@ export default function GamePage() {
       </ErrorBoundary>
 
       {/* Recent Bets */}
-      <section className="pt-4">
+      <section className="pt-4 hidden md:block">
         <h3 className="font-display font-bold text-2xl uppercase tracking-widest mb-6">Your Recent Bets</h3>
         <Card className="bg-card border-border overflow-hidden">
           <div className="overflow-x-auto">
