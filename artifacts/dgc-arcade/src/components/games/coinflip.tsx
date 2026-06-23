@@ -50,12 +50,19 @@ function DGCCoin({ accent, isFlipping, result }: { accent: string; isFlipping: b
   useEffect(() => {
     if (!spinRef.current) return;
     if (isFlipping) {
+      // While flipping, we don't know the result yet, so we just spin fast
       spinRef.current.style.animation = "none";
       void spinRef.current.offsetWidth; // reflow
-      spinRef.current.style.animation = "dgc-coin-spin 2s cubic-bezier(0.25,0.46,0.45,0.94) forwards";
+      spinRef.current.style.animation = "dgc-coin-spin-heads 3s linear infinite"; 
+    } else if (result) {
+      // When we get the result, we trigger the final landing animation
+      spinRef.current.style.animation = "none";
+      void spinRef.current.offsetWidth; // reflow
+      const animName = result === "heads" ? "dgc-coin-spin-heads" : "dgc-coin-spin-tails";
+      spinRef.current.style.animation = `${animName} 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards`;
     } else {
       spinRef.current.style.animation = "none";
-      spinRef.current.style.transform = result === "tails" ? "rotateY(180deg)" : "rotateY(0deg)";
+      spinRef.current.style.transform = "rotateY(0deg)";
     }
   }, [isFlipping, result]);
 
@@ -178,26 +185,29 @@ export function Coinflip({ game }: CoinflipProps) {
       setWin(null);
       setFlipCount(c => c + 1);
 
-      placeBet.mutate(
-        { data: { gameId: game.id, amount, meta: { choice } } },
-        {
-          onSuccess: (data) => {
-            setTimeout(() => {
-              setIsFlipping(false);
-              const serverResult = data.won ? choice : (choice === "heads" ? "tails" : "heads");
-              setResult(serverResult);
-              setWin(data.won);
-              setPayout(data.payout);
-
-              queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-              queryClient.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
-              queryClient.invalidateQueries({ queryKey: getListBetsQueryKey() });
-
-              if (data.won) {
-                toast({ title: "You Won! 🎉", description: `+${formatCurrency(data.payout)}`, className: "bg-green-500 text-white border-green-600" });
-              }
-            }, 2100);
-          },
+	      placeBet.mutate(
+	        { data: { gameId: game.id, amount, meta: { choice } } },
+	        {
+	          onSuccess: (data) => {
+	            // Immediately stop the generic fast spin and trigger the landing animation
+	            setIsFlipping(false);
+	            const serverResult = data.won ? choice : (choice === "heads" ? "tails" : "heads");
+	            setResult(serverResult);
+	            
+	            // Wait for the landing animation (1.2s) to finish before showing the win/loss banner
+	            setTimeout(() => {
+	              setWin(data.won);
+	              setPayout(data.payout);
+	
+	              queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+	              queryClient.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
+	              queryClient.invalidateQueries({ queryKey: getListBetsQueryKey() });
+	
+	              if (data.won) {
+	                toast({ title: "You Won! 🎉", description: `+${formatCurrency(data.payout)}`, className: "bg-green-500 text-white border-green-600" });
+	              }
+	            }, 1200);
+	          },
           onError: (err: any) => {
             setIsFlipping(false);
             toast({ title: "Bet Failed", description: err.data?.error || "An error occurred", variant: "destructive" });
@@ -223,14 +233,13 @@ export function Coinflip({ game }: CoinflipProps) {
           .cf-bet-panel { width: 100% !important; position: static !important; }
           .cf-coin-wrap { width: 140px !important; height: 140px !important; }
         }
-        @keyframes dgc-coin-spin {
+        @keyframes dgc-coin-spin-heads {
           0%   { transform: rotateY(0deg); }
-          15%  { transform: rotateY(900deg); }
-          35%  { transform: rotateY(1800deg); }
-          55%  { transform: rotateY(2700deg); }
-          75%  { transform: rotateY(3240deg); }
-          90%  { transform: rotateY(3510deg); }
-          100% { transform: rotateY(3600deg); }
+          100% { transform: rotateY(1800deg); } /* Lands on Heads (0/360/etc) */
+        }
+        @keyframes dgc-coin-spin-tails {
+          0%   { transform: rotateY(0deg); }
+          100% { transform: rotateY(1980deg); } /* Lands on Tails (180/540/etc) */
         }
         @keyframes cf-result-pop {
           0%   { transform: scale(0.5) translateY(-20px); opacity: 0; }
