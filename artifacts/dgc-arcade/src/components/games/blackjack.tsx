@@ -61,6 +61,7 @@ class SoundEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private muted = false;
+  private buffers: Record<string, AudioBuffer> = {};
 
   private getCtx(): AudioContext {
     if (!this.ctx) this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -84,152 +85,115 @@ class SoundEngine {
     }
   }
 
-  // Card deal sound
+  private async loadSound(name: string, url: string) {
+    if (this.buffers[name]) return;
+    try {
+      const r = await fetch(url);
+      const b = await r.arrayBuffer();
+      this.buffers[name] = await this.getCtx().decodeAudioData(b);
+    } catch (e) {}
+  }
+
+  private playBuffer(name: string, volume = 0.5) {
+    if (this.muted || !this.buffers[name]) return;
+    const ctx = this.getCtx();
+    const source = ctx.createBufferSource();
+    source.buffer = this.buffers[name];
+    const gain = ctx.createGain();
+    gain.gain.value = volume;
+    source.connect(gain);
+    gain.connect(this.getMasterGain());
+    source.start(0);
+  }
+
+  init() {
+    this.loadSound("blackjack", "/audio/blackjack.wav");
+    this.loadSound("win", "/audio/win.wav");
+    this.loadSound("lose", "/audio/lose.wav");
+  }
+
   cardDeal() {
     if (this.muted) return;
     const ctx = this.getCtx();
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    
     osc.type = "sine";
     osc.frequency.setValueAtTime(600, now);
     osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
-    
     gain.gain.setValueAtTime(0.15, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-    
     osc.connect(gain);
     gain.connect(this.getMasterGain());
     osc.start(now);
     osc.stop(now + 0.1);
   }
 
-  // Blackjack! celebration
   blackjackCheer() {
-    if (this.muted) return;
+    this.playBuffer("blackjack", 0.8);
+    // Add synth celebration too
     const ctx = this.getCtx();
     const now = ctx.currentTime;
-    
-    // Two ascending tones for "Blackjack!"
-    for (let i = 0; i < 2; i++) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(400 + i * 200, now + i * 0.15);
-      osc.frequency.exponentialRampToValueAtTime(600 + i * 200, now + i * 0.15 + 0.2);
-      
-      gain.gain.setValueAtTime(0.2, now + i * 0.15);
-      gain.gain.exponentialRampToValueAtTime(0.05, now + i * 0.15 + 0.25);
-      
-      osc.connect(gain);
-      gain.connect(this.getMasterGain());
-      osc.start(now + i * 0.15);
-      osc.stop(now + i * 0.15 + 0.25);
-    }
-  }
-
-  // Win fanfare
-  winFanfare() {
-    if (this.muted) return;
-    const ctx = this.getCtx();
-    const now = ctx.currentTime;
-    const notes = [523.25, 659.25, 783.99, 1046.5]; // C, E, G, C (major chord arpeggio)
-    
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, now + i * 0.1);
-      
-      gain.gain.setValueAtTime(0.15, now + i * 0.1);
-      gain.gain.exponentialRampToValueAtTime(0.02, now + i * 0.1 + 0.3);
-      
-      osc.connect(gain);
-      gain.connect(this.getMasterGain());
-      osc.start(now + i * 0.1);
-      osc.stop(now + i * 0.1 + 0.3);
-    });
-  }
-
-  // Loss buzz
-  lossBuzz() {
-    if (this.muted) return;
-    const ctx = this.getCtx();
-    const now = ctx.currentTime;
-    
-    // Descending buzz
     for (let i = 0; i < 3; i++) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      
-      osc.type = "square";
-      osc.frequency.setValueAtTime(300 - i * 80, now + i * 0.1);
-      
-      gain.gain.setValueAtTime(0.12, now + i * 0.1);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.15);
-      
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(440 + i * 110, now + i * 0.1);
+      gain.gain.setValueAtTime(0.1, now + i * 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.4);
       osc.connect(gain);
       gain.connect(this.getMasterGain());
       osc.start(now + i * 0.1);
-      osc.stop(now + i * 0.1 + 0.15);
+      osc.stop(now + i * 0.1 + 0.4);
     }
   }
 
-  // Crowd cheer (high-pitched noise burst)
+  winFanfare() {
+    this.playBuffer("win", 0.7);
+    this.crowdCheer();
+  }
+
+  lossBuzz() {
+    this.playBuffer("lose", 0.7);
+    this.crowdSigh();
+  }
+
   crowdCheer() {
     if (this.muted) return;
     const ctx = this.getCtx();
     const now = ctx.currentTime;
-    
-    const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate);
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.8, ctx.sampleRate);
     const data = buffer.getChannelData(0);
-    for (let i = 0; i < buffer.length; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-    
+    for (let i = 0; i < buffer.length; i++) data[i] = Math.random() * 2 - 1;
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    
     const filter = ctx.createBiquadFilter();
     filter.type = "highpass";
-    filter.frequency.setValueAtTime(2000, now);
-    
+    filter.frequency.setValueAtTime(1500, now);
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.15, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
-    
+    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.8);
     source.connect(filter);
     filter.connect(gain);
     gain.connect(this.getMasterGain());
     source.start(now);
   }
 
-  // Crowd sigh (low-pitched noise)
   crowdSigh() {
     if (this.muted) return;
     const ctx = this.getCtx();
     const now = ctx.currentTime;
-    
-    const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.6, ctx.sampleRate);
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * 1.2, ctx.sampleRate);
     const data = buffer.getChannelData(0);
-    for (let i = 0; i < buffer.length; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-    
+    for (let i = 0; i < buffer.length; i++) data[i] = Math.random() * 2 - 1;
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    
     const filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(800, now);
-    
+    filter.frequency.setValueAtTime(600, now);
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.12, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
-    
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 1.2);
     source.connect(filter);
     filter.connect(gain);
     gain.connect(this.getMasterGain());
@@ -314,15 +278,16 @@ function ScoreBubble({ total, bust, bj, label }: { total: number; bust?: boolean
 
   return (
     <div style={{
-      display: "flex", flexDirection: "column", alignItems: "center", gap: 2
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 2, position: "relative"
     }}>
+      {/* Label moved outside to prevent collision */}
+      <div style={{ fontSize: 8, fontWeight: 800, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: 2, marginBottom: -4 }}>{label}</div>
       <div style={{
-        background: bg, border: `1.5px solid ${border}`, borderRadius: 10,
-        padding: "6px 14px", backdropFilter: "blur(10px)", minWidth: 60, textAlign: "center",
-        boxShadow: "0 8px 24px rgba(0,0,0,0.6)"
+        background: bg, border: `1.5px solid ${border}`, borderRadius: 12,
+        padding: "8px 16px", backdropFilter: "blur(12px)", minWidth: 64, textAlign: "center",
+        boxShadow: "0 10px 30px rgba(0,0,0,0.7)", position: "relative"
       }}>
-        <div style={{ fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
-        <div style={{ fontSize: 20, fontWeight: 900, color, fontFamily: "monospace" }}>{total > 0 ? total : "—"}</div>
+        <div style={{ fontSize: 24, fontWeight: 900, color, fontFamily: "monospace", lineHeight: 1 }}>{total > 0 ? total : "—"}</div>
       </div>
     </div>
   );
@@ -404,6 +369,10 @@ export function Blackjack({ game }: BlackjackProps) {
     soundEngine.setMuted(muted);
   }, [muted]);
 
+  useEffect(() => {
+    soundEngine.init();
+  }, []);
+
   const deal = useCallback(() => {
     requireAuth(async () => {
       if (!user || amount > parseFloat(String(user.balance))) {
@@ -473,15 +442,23 @@ export function Blackjack({ game }: BlackjackProps) {
     setAmountStr(String(newAmount));
   };
 
+  const handleMaxBet = () => {
+    if (!user) return;
+    const bal = parseFloat(String(user.balance));
+    const newAmount = Math.max(minBet, Math.min(maxBet, bal));
+    setAmount(newAmount);
+    setAmountStr(String(newAmount));
+  };
+
   return (
-    <div className="bj-game-root" style={{ display: "flex", flexDirection: "column", width: "100%", padding: "12px", gap: 12 }}>
+    <div className="bj-game-root" style={{ display: "flex", flexDirection: "row", width: "100%", padding: "12px", gap: 12 }}>
       <style>{`
         @media (max-width: 767px) {
-          .bj-game-root { padding: 8px !important; gap: 8px !important; }
-          .bj-table-area { min-height: 380px !important; padding: 16px 8px !important; }
+          .bj-game-root { flex-direction: column !important; padding: 8px !important; gap: 8px !important; }
+          .bj-table-area { min-height: 460px !important; padding: 20px 8px !important; }
           .bj-card-container { width: 58px !important; height: 82px !important; }
           .bj-card-inner { width: 58px !important; height: 82px !important; }
-          .bj-controls-bar { gap: 6px !important; padding: 10px !important; }
+          .bj-controls-bar { width: 100% !important; gap: 6px !important; padding: 10px !important; }
           .bj-action-btn { padding: 8px !important; font-size: 11px !important; }
         }
         @keyframes bj-card-deal {
@@ -547,8 +524,7 @@ export function Blackjack({ game }: BlackjackProps) {
         </div>
 
         {/* Dealer Section */}
-        <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, zIndex: 10 }}>
-          <div style={{ fontSize: 8, fontWeight: 800, color: felt.text, textTransform: "uppercase", letterSpacing: 2 }}>DEALER</div>
+        <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, zIndex: 10 }}>
           <div style={{ position: "relative", display: "flex", gap: 10, minHeight: 118 }}>
             {dealerHand.length > 0 ? dealerHand.map((c, i) => (
               <div key={`d-${i}`} style={{ position: "relative" }}>
@@ -573,7 +549,7 @@ export function Blackjack({ game }: BlackjackProps) {
         )}
 
         {/* Player Section */}
-        <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, zIndex: 10 }}>
+        <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, zIndex: 10 }}>
           {playerHand.length > 0 && <ScoreBubble total={playerTotal} bust={playerTotal > 21} bj={status === "player_blackjack"} label="YOU" />}
           <div style={{ position: "relative", display: "flex", gap: 10, minHeight: 118 }}>
             {playerHand.length > 0 ? playerHand.map((c, i) => (
@@ -582,7 +558,6 @@ export function Blackjack({ game }: BlackjackProps) {
               </div>
             )) : <div style={{ width: 85, height: 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
           </div>
-          <div style={{ fontSize: 8, fontWeight: 800, color: felt.text, textTransform: "uppercase", letterSpacing: 2 }}>PLAYER</div>
         </div>
 
         {/* Table Rules */}
@@ -597,7 +572,7 @@ export function Blackjack({ game }: BlackjackProps) {
       {/* ── CONTROLS BAR ── */}
       <div className="bj-controls-bar" style={{
         display: "flex", flexDirection: "column", gap: 12, background: "rgba(8,12,26,0.9)", borderRadius: 12, padding: 14,
-        border: "1px solid rgba(255,255,255,0.08)"
+        border: "1px solid rgba(255,255,255,0.08)", width: 280
       }}>
         {/* Bet Input Row */}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -621,7 +596,7 @@ export function Blackjack({ game }: BlackjackProps) {
         <div style={{ display: "flex", gap: 6 }}>
           <button onClick={() => handleBetMultiplier(0.5)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>1/2</button>
           <button onClick={() => handleBetMultiplier(2)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>2x</button>
-          <button onClick={() => { setAmount(maxBet); setAmountStr(String(maxBet)); }} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>MAX</button>
+          <button onClick={handleMaxBet} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>MAX</button>
         </div>
 
         {/* Main Action Buttons */}
