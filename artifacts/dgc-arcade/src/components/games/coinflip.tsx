@@ -185,29 +185,29 @@ export function Coinflip({ game }: CoinflipProps) {
       setWin(null);
       setFlipCount(c => c + 1);
 
-	      placeBet.mutate(
-	        { data: { gameId: game.id, amount, meta: { choice } } },
-	        {
-	          onSuccess: (data) => {
-	            // Immediately stop the generic fast spin and trigger the landing animation
-	            setIsFlipping(false);
-	            const serverResult = data.won ? choice : (choice === "heads" ? "tails" : "heads");
-	            setResult(serverResult);
-	            
-	            // Wait for the landing animation (1.2s) to finish before showing the win/loss banner
-	            setTimeout(() => {
-	              setWin(data.won);
-	              setPayout(data.payout);
-	
-	              queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-	              queryClient.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
-	              queryClient.invalidateQueries({ queryKey: getListBetsQueryKey() });
-	
-	              if (data.won) {
-	                toast({ title: "You Won! 🎉", description: `+${formatCurrency(data.payout)}`, className: "bg-green-500 text-white border-green-600" });
-	              }
-	            }, 1200);
-	          },
+      placeBet.mutate(
+        { data: { gameId: game.id, amount, meta: { choice } } },
+        {
+          onSuccess: (data) => {
+            // Immediately stop the generic fast spin and trigger the landing animation
+            setIsFlipping(false);
+            const serverResult = data.won ? (choice as "heads" | "tails") : (choice === "heads" ? "tails" : "heads");
+            setResult(serverResult);
+            
+            // Wait for the landing animation (1.2s) to finish before showing the win/loss banner
+            setTimeout(() => {
+              setWin(data.won);
+              setPayout(data.payout);
+
+              queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+              queryClient.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
+              queryClient.invalidateQueries({ queryKey: getListBetsQueryKey() });
+
+              if (data.won) {
+                toast({ title: "You Won! 🎉", description: `+${formatCurrency(data.payout)}`, className: "bg-green-500 text-white border-green-600" });
+              }
+            }, 1200);
+          },
           onError: (err: any) => {
             setIsFlipping(false);
             toast({ title: "Bet Failed", description: err.data?.error || "An error occurred", variant: "destructive" });
