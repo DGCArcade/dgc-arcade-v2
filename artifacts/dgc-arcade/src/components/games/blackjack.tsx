@@ -56,6 +56,189 @@ function useAccent() {
   return THEMES.find(t => t.id === id)?.accent ?? "#FFD700";
 }
 
+// ─── Sound Engine ───────────────────────────────────────────────────────────
+class SoundEngine {
+  private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
+  private muted = false;
+
+  private getCtx(): AudioContext {
+    if (!this.ctx) this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    return this.ctx;
+  }
+
+  private getMasterGain(): GainNode {
+    if (!this.masterGain) {
+      const ctx = this.getCtx();
+      this.masterGain = ctx.createGain();
+      this.masterGain.connect(ctx.destination);
+      this.masterGain.gain.value = 0.3;
+    }
+    return this.masterGain;
+  }
+
+  setMuted(m: boolean) {
+    this.muted = m;
+    if (this.masterGain) {
+      this.masterGain.gain.setTargetAtTime(m ? 0 : 0.3, this.getCtx().currentTime, 0.1);
+    }
+  }
+
+  // Card deal sound
+  cardDeal() {
+    if (this.muted) return;
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(600, now);
+    osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+    
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+    
+    osc.connect(gain);
+    gain.connect(this.getMasterGain());
+    osc.start(now);
+    osc.stop(now + 0.1);
+  }
+
+  // Blackjack! celebration
+  blackjackCheer() {
+    if (this.muted) return;
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+    
+    // Two ascending tones for "Blackjack!"
+    for (let i = 0; i < 2; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(400 + i * 200, now + i * 0.15);
+      osc.frequency.exponentialRampToValueAtTime(600 + i * 200, now + i * 0.15 + 0.2);
+      
+      gain.gain.setValueAtTime(0.2, now + i * 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.05, now + i * 0.15 + 0.25);
+      
+      osc.connect(gain);
+      gain.connect(this.getMasterGain());
+      osc.start(now + i * 0.15);
+      osc.stop(now + i * 0.15 + 0.25);
+    }
+  }
+
+  // Win fanfare
+  winFanfare() {
+    if (this.muted) return;
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+    const notes = [523.25, 659.25, 783.99, 1046.5]; // C, E, G, C (major chord arpeggio)
+    
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + i * 0.1);
+      
+      gain.gain.setValueAtTime(0.15, now + i * 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.02, now + i * 0.1 + 0.3);
+      
+      osc.connect(gain);
+      gain.connect(this.getMasterGain());
+      osc.start(now + i * 0.1);
+      osc.stop(now + i * 0.1 + 0.3);
+    });
+  }
+
+  // Loss buzz
+  lossBuzz() {
+    if (this.muted) return;
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+    
+    // Descending buzz
+    for (let i = 0; i < 3; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = "square";
+      osc.frequency.setValueAtTime(300 - i * 80, now + i * 0.1);
+      
+      gain.gain.setValueAtTime(0.12, now + i * 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.15);
+      
+      osc.connect(gain);
+      gain.connect(this.getMasterGain());
+      osc.start(now + i * 0.1);
+      osc.stop(now + i * 0.1 + 0.15);
+    }
+  }
+
+  // Crowd cheer (high-pitched noise burst)
+  crowdCheer() {
+    if (this.muted) return;
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+    
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < buffer.length; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    
+    const filter = ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.setValueAtTime(2000, now);
+    
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+    
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.getMasterGain());
+    source.start(now);
+  }
+
+  // Crowd sigh (low-pitched noise)
+  crowdSigh() {
+    if (this.muted) return;
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+    
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.6, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < buffer.length; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(800, now);
+    
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+    
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.getMasterGain());
+    source.start(now);
+  }
+}
+
+const soundEngine = new SoundEngine();
+
 // ─── Card Component with Flip Animation ───
 function PlayingCard({ card, hidden, delay = 0, dealFrom }: { 
   card: Card; hidden?: boolean; delay?: number; dealFrom?: { x: number; y: number } 
@@ -76,6 +259,7 @@ function PlayingCard({ card, hidden, delay = 0, dealFrom }: {
       cardRef.current.style.animation = `bj-card-deal 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) both`;
       cardRef.current.style.animationDelay = `${delay}ms`;
       setHasAnimated(true);
+      soundEngine.cardDeal();
     }
   }, [dealFrom, delay, hasAnimated]);
 
@@ -123,24 +307,22 @@ function PlayingCard({ card, hidden, delay = 0, dealFrom }: {
   );
 }
 
-function ScoreBubble({ total, bust, bj, label, position }: { total: number; bust?: boolean; bj?: boolean; label: string; position: "above" | "below" }) {
+function ScoreBubble({ total, bust, bj, label }: { total: number; bust?: boolean; bj?: boolean; label: string }) {
   const bg = bust ? "rgba(239,68,68,0.4)" : bj ? "rgba(251,191,36,0.4)" : "rgba(0,0,0,0.8)";
   const border = bust ? "rgba(239,68,68,0.7)" : bj ? "rgba(251,191,36,0.7)" : "rgba(255,255,255,0.3)";
   const color = bust ? "#fca5a5" : bj ? "#fde047" : "#fff";
 
   return (
     <div style={{
-      position: "absolute", [position === "above" ? "bottom" : "top"]: "100%", left: "50%", transform: "translateX(-50%)",
-      marginBottom: position === "above" ? 8 : 0, marginTop: position === "below" ? 8 : 0,
-      display: "flex", flexDirection: "column", alignItems: "center", gap: 2, zIndex: 30
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 2
     }}>
       <div style={{
         background: bg, border: `1.5px solid ${border}`, borderRadius: 10,
-        padding: "5px 12px", backdropFilter: "blur(10px)", minWidth: 55, textAlign: "center",
+        padding: "6px 14px", backdropFilter: "blur(10px)", minWidth: 60, textAlign: "center",
         boxShadow: "0 8px 24px rgba(0,0,0,0.6)"
       }}>
         <div style={{ fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
-        <div style={{ fontSize: 18, fontWeight: 900, color, fontFamily: "monospace" }}>{total > 0 ? total : "—"}</div>
+        <div style={{ fontSize: 20, fontWeight: 900, color, fontFamily: "monospace" }}>{total > 0 ? total : "—"}</div>
       </div>
     </div>
   );
@@ -173,6 +355,7 @@ export function Blackjack({ game }: BlackjackProps) {
   const [insuranceEligible, setInsuranceEligible] = useState(false);
   const [animatingCards, setAnimatingCards] = useState(false);
   const [showResult, setShowResult] = useState(false);
+  const [muted, setMuted] = useState(false);
 
   const isActive = status === "active";
   const isDone = !["idle", "active"].includes(status);
@@ -193,20 +376,33 @@ export function Blackjack({ game }: BlackjackProps) {
   // Show result only after dealer cards finish animating
   useEffect(() => {
     if (isDone && !showResult) {
-      // Calculate animation time: dealer has 2+ cards, each with 200ms delay
       const dealerCardCount = dealerHand.length;
       const lastCardDelay = dealerCardCount * 200;
-      const animationDuration = 700; // card deal animation is 0.7s
-      const totalDelay = lastCardDelay + animationDuration + 300; // 300ms buffer
+      const animationDuration = 700;
+      const totalDelay = lastCardDelay + animationDuration + 300;
       
       const timer = setTimeout(() => {
         setShowResult(true);
+        // Play sound based on result
+        if (status === "player_blackjack") {
+          soundEngine.blackjackCheer();
+        } else if (status === "player_wins") {
+          soundEngine.winFanfare();
+          setTimeout(() => soundEngine.crowdCheer(), 300);
+        } else if (status === "player_bust" || status === "dealer_wins") {
+          soundEngine.lossBuzz();
+          setTimeout(() => soundEngine.crowdSigh(), 200);
+        }
       }, totalDelay);
       
       return () => clearTimeout(timer);
     }
     return undefined;
-  }, [isDone, dealerHand.length, showResult]);
+  }, [isDone, dealerHand.length, showResult, status]);
+
+  useEffect(() => {
+    soundEngine.setMuted(muted);
+  }, [muted]);
 
   const deal = useCallback(() => {
     requireAuth(async () => {
@@ -222,7 +418,6 @@ export function Blackjack({ game }: BlackjackProps) {
         const d = await r.json();
         if (!r.ok) { toast({ title: d.error, variant: "destructive" }); return; }
         
-        // Wait for animation to finish
         setTimeout(() => {
           setHandId(d.handId); setPlayerHand(d.playerHand); setDealerHand(d.dealerHand);
           setPlayerTotal(d.playerTotal); setStatus(d.status); setPayout(d.payout ?? 0);
@@ -279,65 +474,70 @@ export function Blackjack({ game }: BlackjackProps) {
   };
 
   return (
-    <div className="bj-game-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start" }}>
+    <div className="bj-game-root" style={{ display: "flex", flexDirection: "column", width: "100%", padding: "12px", gap: 12 }}>
       <style>{`
         @media (max-width: 767px) {
-          .bj-game-root { flex-direction: column !important; padding: 8px !important; gap: 8px !important; }
-          .bj-table-area { min-height: 260px !important; padding: 16px 10px !important; }
-          .bj-bet-panel { width: 100% !important; position: static !important; }
+          .bj-game-root { padding: 8px !important; gap: 8px !important; }
+          .bj-table-area { min-height: 380px !important; padding: 16px 8px !important; }
           .bj-card-container { width: 58px !important; height: 82px !important; }
           .bj-card-inner { width: 58px !important; height: 82px !important; }
+          .bj-controls-bar { gap: 6px !important; padding: 10px !important; }
+          .bj-action-btn { padding: 8px !important; font-size: 11px !important; }
         }
         @keyframes bj-card-deal {
           0% { transform: translate(var(--deal-start-x, 0), var(--deal-start-y, 0)) rotate(45deg); opacity: 0; }
           100% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
         }
-        @keyframes rainbow-text {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
+        @keyframes bj-result-pop {
+          0% { transform: scale(0.5); opacity: 0; }
+          50% { transform: scale(1.1); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes bj-pulse-glow {
+          0%, 100% { box-shadow: 0 0 20px rgba(255,215,0,0.3); }
+          50% { box-shadow: 0 0 40px rgba(255,215,0,0.6); }
         }
         .bj-card-inner.is-hidden { transform: rotateY(0deg) !important; }
         .bj-card-inner:not(.is-hidden) { transform: rotateY(180deg); }
         .bj-action-btn { transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); }
-        .bj-action-btn:hover:not(:disabled) { transform: translateY(-3px) scale(1.05); filter: brightness(1.1); }
+        .bj-action-btn:hover:not(:disabled) { transform: translateY(-2px) scale(1.05); filter: brightness(1.1); }
         .bj-action-btn:active:not(:disabled) { transform: scale(0.95); }
-        .bj-rainbow-text {
-          background: linear-gradient(90deg, #FFD700, #FF6B6B, #4ECDC4, #FFD700);
-          background-size: 200% 100%;
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          animation: rainbow-text 4s ease infinite;
+        .bj-result-badge {
+          animation: bj-result-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+        .bj-blackjack-badge {
+          animation: bj-pulse-glow 1.5s ease-in-out infinite;
         }
       `}</style>
 
       {/* ── TABLE AREA ── */}
       <div className="bj-table-area" style={{
-        flex: 1, position: "relative", minHeight: 520, borderRadius: 24,
+        flex: 1, position: "relative", minHeight: 520, 
         background: `radial-gradient(ellipse at 50% 10%, ${felt.felt} 0%, #050505 100%)`,
         border: `4px solid ${felt.rail}`, boxShadow: "0 20px 50px rgba(0,0,0,0.8)",
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between",
-        padding: "40px 20px", overflow: "hidden"
+        padding: "40px 20px", overflow: "hidden", borderRadius: 16
       }}>
         {/* Table Decoration */}
         <div style={{
           position: "absolute", top: "15%", width: "80%", height: "70%",
           border: `2px solid ${felt.text}`, borderRadius: "50%", opacity: 0.3, pointerEvents: "none", zIndex: 2
         }} />
+
+        {/* Game Title */}
         <div style={{
-          position: "absolute", top: "45%", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.8, pointerEvents: "none", zIndex: 2
+          position: "absolute", top: 12, left: 0, right: 0, textAlign: "center",
+          fontSize: 11, fontWeight: 900, letterSpacing: 3, color: felt.text,
+          textTransform: "uppercase", zIndex: 3
         }}>
-          <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: 4, color: felt.text }}>BLACKJACK PAYS 3 TO 2</div>
-          <div className="bj-rainbow-text" style={{ fontSize: 20, fontWeight: 900, letterSpacing: 8 }}>DGC ARCADE</div>
-          <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: 4, color: felt.text }}>INSURANCE PAYS 2 TO 1</div>
+          ♠ Blackjack ♠
         </div>
 
         {/* Deck on Top Right */}
-        <div ref={deckRef} style={{ position: "absolute", top: 20, right: 30, width: 70, height: 100, zIndex: 5 }}>
+        <div ref={deckRef} style={{ position: "absolute", top: 20, right: 20, width: 60, height: 85, zIndex: 5 }}>
           {[3, 2, 1, 0].map(i => (
             <div key={i} style={{
-              position: "absolute", width: 70, height: 100, borderRadius: 6,
+              position: "absolute", width: 60, height: 85, borderRadius: 6,
               background: "linear-gradient(145deg, #1e3a8a, #0c1445)",
               border: "1px solid rgba(255,255,255,0.2)",
               top: i * -1.5, right: i * 1, zIndex: 5 - i,
@@ -346,78 +546,97 @@ export function Blackjack({ game }: BlackjackProps) {
           ))}
         </div>
 
-        {/* Dealer Hand */}
-        <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center", gap: 10, zIndex: 10 }}>
+        {/* Dealer Section */}
+        <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, zIndex: 10 }}>
+          <div style={{ fontSize: 8, fontWeight: 800, color: felt.text, textTransform: "uppercase", letterSpacing: 2 }}>DEALER</div>
           <div style={{ position: "relative", display: "flex", gap: 10, minHeight: 118 }}>
             {dealerHand.length > 0 ? dealerHand.map((c, i) => (
               <div key={`d-${i}`} style={{ position: "relative" }}>
                 <PlayingCard card={c} hidden={c.suit === "?"} delay={i * 200} dealFrom={deckRef.current?.getBoundingClientRect()} />
-                {i === 0 && <ScoreBubble total={dealerTotal ?? (isDone && showResult ? handTotal(dealerHand) : 0)} bust={dealerTotal !== null && dealerTotal > 21} label="DEALER" position="below" />}
               </div>
             )) : <div style={{ width: 85, height: 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
           </div>
+          {dealerHand.length > 0 && <ScoreBubble total={dealerTotal ?? (isDone && showResult ? handTotal(dealerHand) : 0)} bust={dealerTotal !== null && dealerTotal > 21} label="DEALER" />}
         </div>
 
-        {/* Result Overlay - Only show after dealer cards finish */}
+        {/* Result Overlay */}
         {isDone && showResult && (
-          <div style={{
-            zIndex: 50, textAlign: "center", background: "rgba(0,0,0,0.9)", padding: "12px 32px", borderRadius: 16,
-            border: `2px solid ${accent}`, boxShadow: `0 0 30px ${accent}44`, animation: "bj-card-deal 0.5s both"
+          <div className={`bj-result-badge ${status === "player_blackjack" ? "bj-blackjack-badge" : ""}`} style={{
+            zIndex: 50, textAlign: "center", background: "rgba(0,0,0,0.95)", padding: "16px 40px", borderRadius: 16,
+            border: `2px solid ${accent}`, boxShadow: `0 0 40px ${accent}66`
           }}>
-            <div style={{ fontSize: 24, fontWeight: 900, color: accent, letterSpacing: 2 }}>{status.replace("_", " ").toUpperCase()}</div>
-            {payout > 0 && <div style={{ fontSize: 18, fontWeight: 900, color: "#22c55e" }}>+{formatCurrency(payout)}</div>}
+            <div style={{ fontSize: 28, fontWeight: 900, color: accent, letterSpacing: 2, textTransform: "uppercase" }}>
+              {status === "player_blackjack" ? "BLACKJACK!" : status === "player_wins" ? "YOU WIN" : status === "player_bust" ? "BUST" : status === "dealer_wins" ? "DEALER WINS" : "PUSH"}
+            </div>
+            {payout > 0 && <div style={{ fontSize: 20, fontWeight: 900, color: "#22c55e", marginTop: 6 }}>+{formatCurrency(payout)}</div>}
           </div>
         )}
 
-        {/* Player Hand */}
-        <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center", gap: 10, zIndex: 10 }}>
+        {/* Player Section */}
+        <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, zIndex: 10 }}>
+          {playerHand.length > 0 && <ScoreBubble total={playerTotal} bust={playerTotal > 21} bj={status === "player_blackjack"} label="YOU" />}
           <div style={{ position: "relative", display: "flex", gap: 10, minHeight: 118 }}>
             {playerHand.length > 0 ? playerHand.map((c, i) => (
               <div key={`p-${i}`} style={{ position: "relative" }}>
                 <PlayingCard card={c} delay={(i + 2) * 200} dealFrom={deckRef.current?.getBoundingClientRect()} />
-                {i === 0 && <ScoreBubble total={playerTotal} bust={playerTotal > 21} bj={status === "player_blackjack"} label="PLAYER" position="above" />}
               </div>
             )) : <div style={{ width: 85, height: 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
           </div>
+          <div style={{ fontSize: 8, fontWeight: 800, color: felt.text, textTransform: "uppercase", letterSpacing: 2 }}>PLAYER</div>
+        </div>
+
+        {/* Table Rules */}
+        <div style={{
+          position: "absolute", bottom: 16, left: 0, right: 0, textAlign: "center",
+          fontSize: 8, fontWeight: 700, color: felt.text, textTransform: "uppercase", letterSpacing: 1, opacity: 0.7
+        }}>
+          <div>BLACKJACK PAYS 3 TO 2 · INSURANCE PAYS 2 TO 1</div>
         </div>
       </div>
 
-      {/* ── BET PANEL ── */}
-      <div className="bj-bet-panel" style={{
-        width: 280, flexShrink: 0, background: "rgba(8,12,26,0.9)", borderRadius: 16, padding: 16,
-        border: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", gap: 12,
-        position: "sticky", top: 80
+      {/* ── CONTROLS BAR ── */}
+      <div className="bj-controls-bar" style={{
+        display: "flex", flexDirection: "column", gap: 12, background: "rgba(8,12,26,0.9)", borderRadius: 12, padding: 14,
+        border: "1px solid rgba(255,255,255,0.08)"
       }}>
-        <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: 2, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", textAlign: "center" }}>Blackjack Bet</div>
-        
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ position: "relative" }}>
-            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)", fontWeight: 700 }}>$</span>
+        {/* Bet Input Row */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ flex: 1, position: "relative" }}>
+            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)", fontWeight: 700 }}>$</span>
             <input type="text" value={amountStr} onChange={e => handleAmountChange(e.target.value)} disabled={isActive}
               style={{
                 width: "100%", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
-                padding: "10px 10px 10px 25px", color: "#fff", fontWeight: 700, fontFamily: "monospace", outline: "none"
+                padding: "10px 10px 10px 25px", color: "#fff", fontWeight: 700, fontFamily: "monospace", outline: "none", fontSize: 13
               }} />
           </div>
-          <div style={{ display: "flex", gap: 4 }}>
-            <button onClick={() => handleBetMultiplier(0.5)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 6, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>1/2</button>
-            <button onClick={() => handleBetMultiplier(2)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 6, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>2x</button>
-            <button onClick={() => { setAmount(maxBet); setAmountStr(String(maxBet)); }} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 6, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>MAX</button>
-          </div>
+          <button onClick={() => setMuted(!muted)} style={{
+            width: 40, height: 40, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
+            color: muted ? "#ef4444" : "#fff", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center"
+          }}>
+            {muted ? "🔇" : "🔊"}
+          </button>
         </div>
 
+        {/* Bet Multipliers */}
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => handleBetMultiplier(0.5)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>1/2</button>
+          <button onClick={() => handleBetMultiplier(2)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>2x</button>
+          <button onClick={() => { setAmount(maxBet); setAmountStr(String(maxBet)); }} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>MAX</button>
+        </div>
+
+        {/* Main Action Buttons */}
         {status === "idle" || isDone ? (
           <button onClick={isDone ? reset : deal} disabled={loading} style={{
             width: "100%", background: accent, color: "#000", border: "none", borderRadius: 10, padding: 14,
-            fontWeight: 900, fontSize: 14, letterSpacing: 1, cursor: "pointer", boxShadow: `0 4px 15px ${accent}44`
+            fontWeight: 900, fontSize: 14, letterSpacing: 1, cursor: "pointer", boxShadow: `0 4px 15px ${accent}44`, textTransform: "uppercase"
           }}>
             {isDone ? "NEW GAME" : loading ? "DEALING..." : "PLACE BET"}
           </button>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => doAction("hit")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: 12, fontWeight: 900 }}>HIT</button>
-              <button onClick={() => doAction("stand")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, padding: 12, fontWeight: 900 }}>STAND</button>
+              <button onClick={() => doAction("hit")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: 12, fontWeight: 900, fontSize: 12 }}>HIT</button>
+              <button onClick={() => doAction("stand")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, padding: 12, fontWeight: 900, fontSize: 12 }}>STAND</button>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => doAction("double")} disabled={loading || playerHand.length !== 2} className="bj-action-btn" style={{ flex: 1, background: "#7c3aed", color: "#fff", border: "none", borderRadius: 8, padding: 10, fontWeight: 800, fontSize: 11 }}>DOUBLE</button>
@@ -426,15 +645,10 @@ export function Blackjack({ game }: BlackjackProps) {
           </div>
         )}
 
-        <div style={{ marginTop: "auto", padding: 10, background: "rgba(255,255,255,0.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.05)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "rgba(255,255,255,0.4)" }}>
-            <span>Min Bet</span>
-            <span>{formatCurrency(minBet)}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 4 }}>
-            <span>Max Bet</span>
-            <span>{formatCurrency(maxBet)}</span>
-          </div>
+        {/* Min/Max Info */}
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "rgba(255,255,255,0.4)", padding: "0 4px" }}>
+          <span>Min: {formatCurrency(minBet)}</span>
+          <span>Max: {formatCurrency(maxBet)}</span>
         </div>
       </div>
     </div>
