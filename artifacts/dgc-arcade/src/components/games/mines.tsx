@@ -21,8 +21,60 @@ const playSound = (type: "click" | "gem" | "bomb" | "cashout") => {
     osc.connect(gain); gain.connect(ctx.destination);
     switch (type) {
       case "click":  osc.frequency.value = 400; gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1); osc.start(now); osc.stop(now + 0.1); break;
-      case "gem":    osc.frequency.setValueAtTime(800, now); osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1); gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15); osc.start(now); osc.stop(now + 0.15); break;
-      case "bomb":   osc.frequency.setValueAtTime(150, now); osc.frequency.exponentialRampToValueAtTime(50, now + 0.2); gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2); osc.start(now); osc.stop(now + 0.2); break;
+      case "gem": {
+        // High-pitched "ting" sound for diamonds
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.exponentialRampToValueAtTime(2400, now + 0.05);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        
+        // Add a second higher harmonic for extra sparkle
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = "sine";
+        osc2.frequency.setValueAtTime(2400, now);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        gain2.gain.setValueAtTime(0.1, now);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc2.start(now);
+        osc2.stop(now + 0.15);
+        break;
+      }
+      case "bomb": {
+        // Low frequency boom with noise for explosion
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(100, now);
+        osc.frequency.exponentialRampToValueAtTime(20, now + 0.4);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.5);
+        
+        // Create noise for the explosion "crunch"
+        const bufferSize = ctx.sampleRate * 0.5;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        const noiseGain = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(400, now);
+        filter.frequency.exponentialRampToValueAtTime(20, now + 0.4);
+        noise.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(ctx.destination);
+        noiseGain.gain.setValueAtTime(0.2, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+        noise.start(now);
+        noise.stop(now + 0.4);
+        break;
+      }
       case "cashout":osc.frequency.setValueAtTime(600, now); osc.frequency.exponentialRampToValueAtTime(1000, now + 0.3); gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3); osc.start(now); osc.stop(now + 0.3); break;
     }
   } catch (e) {}
@@ -204,7 +256,7 @@ function MinesGame({ game }: MinesProps) {
           .mines-game-root { flex-direction: column-reverse !important; padding: 8px !important; gap: 16px !important; }
           .mines-bet-panel { width: 100% !important; position: static !important; order: 1; }
           .mines-grid-container { width: 100% !important; order: 2; min-height: auto !important; padding: 16px 10px !important; }
-          .mines-cell { width: clamp(30px, 12vw, 60px) !important; height: clamp(30px, 12vw, 60px) !important; }
+          .mines-cell { width: 100% !important; height: auto !important; aspect-ratio: 1/1 !important; }
         }
         @keyframes mines-reveal { 0% { transform: scale(0.7) rotateY(90deg); opacity: 0; } 100% { transform: scale(1) rotateY(0deg); opacity: 1; } }
         @keyframes mines-gem-pop { 0% { transform: scale(0.6); } 50% { transform: scale(1.18); } 100% { transform: scale(1); } }
@@ -268,7 +320,8 @@ function MinesGame({ game }: MinesProps) {
             gap: gridSize === 24 ? "7px" : gridSize === 48 ? "5px" : "4px",
             margin: "0 auto",
             width: "100%",
-            maxWidth: isMobile ? (gridSize === 24 ? "300px" : gridSize === 48 ? "280px" : "280px") : "none",
+            maxWidth: isMobile ? "100%" : "none",
+            boxSizing: "border-box",
           }}>
           {Array.from({ length: totalCells }, (_, i) => {
             const isRevealed = revealed.includes(i);
