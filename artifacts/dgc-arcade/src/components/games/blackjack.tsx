@@ -3,6 +3,7 @@ import { Game, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { formatCurrency } from "@/lib/format";
 import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
 
@@ -302,6 +303,7 @@ export function Blackjack({ game }: BlackjackProps) {
   const queryClient = useQueryClient();
   const felt = useFelt();
   const accent = useAccent();
+  const isMobile = useIsMobile();
   const deckRef = useRef<HTMLDivElement>(null);
 
   const minBet = parseFloat(String(game.minBet ?? 0.01));
