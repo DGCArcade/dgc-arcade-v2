@@ -840,7 +840,7 @@ blackjackRouter.get("/current", requireAuth, async (req, res) => {
 // ─── GET /api/blackjack/verify/:handId ───────────────────────────────────────
 blackjackRouter.get("/verify/:handId", requireAuth, async (req, res) => {
   try {
-    const handId = parseInt(req.params.handId);
+    const handId = parseInt(req.params.handId as string);
     const [hand] = await db.select().from(blackjackHandsTable)
       .where(and(
         eq(blackjackHandsTable.id, handId),

@@ -53,12 +53,29 @@ app.use(cors({
   credentials: true,
 }));
 
-// Security headers (manual — no extra dependency). This is a JSON-only API.
+// Security headers and caching optimization
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  // Compression hint for proxies
+  res.setHeader("Vary", "Accept-Encoding");
+  next();
+});
+
+// ── Response compression and performance headers ──────────────────────────────
+// Cache static assets aggressively
+app.use((req, res, next) => {
+  if (req.url.match(/\.(js|css|png|jpg|gif|svg|woff|woff2|ttf|eot)$/i)) {
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  } else if (req.url.startsWith("/api/games") || req.url.startsWith("/api/leaderboard")) {
+    // Cache public game data for 1 minute
+    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+  } else if (req.method === "GET") {
+    // Default: no cache for dynamic content
+    res.setHeader("Cache-Control", "private, no-cache, no-store, must-revalidate");
+  }
   next();
 });
 
@@ -138,8 +155,17 @@ const withdrawLimiter = rateLimit({
   skip: (req) => isOwnerRequest(req),
 });
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Body parser with size limits for performance
+app.use(express.json({ limit: "10kb" }));
+app.use(express.urlencoded({ extended: true, limit: "10kb" }));
+
+// ── Connection pooling optimization ──────────────────────────────────────────
+// Ensure database connections are properly pooled
+if (pool) {
+  pool.on("error", (err) => {
+    logger.error({ err }, "Unexpected error on idle client in pool");
+  });
+}
 
 // ── Visitor Tracking Middleware ──────────────────────────────────────────────
 app.use((req, _res, next) => {

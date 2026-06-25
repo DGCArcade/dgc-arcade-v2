@@ -33,11 +33,35 @@ export default defineConfig({
       "@assets": path.resolve(import.meta.dirname, "..", "..", "attached_assets"),
     },
     dedupe: ["react", "react-dom"],
+    extensions: [".mjs", ".js", ".ts", ".jsx", ".tsx", ".json"],
   },
   root: path.resolve(import.meta.dirname),
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    // Performance optimizations
+    minify: "terser",
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
+    rollupOptions: {
+      output: {
+        // Code splitting for better caching
+        manualChunks: {
+          vendor: ["react", "react-dom", "wouter"],
+          ui: ["@/components/ui"],
+        },
+      },
+    },
+    // Increase chunk size warning limit
+    chunkSizeWarningLimit: 1000,
+    // Enable CSS code splitting
+    cssCodeSplit: true,
+    // Optimize source maps for production
+    sourcemap: false,
   },
   server: {
     port,
@@ -51,7 +75,15 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:3000",
         changeOrigin: true,
+        rewrite: (path) => path,
       },
+    },
+    // Performance optimizations for dev server
+    middlewareMode: false,
+    hmr: {
+      protocol: "ws",
+      host: "localhost",
+      port: port,
     },
   },
   preview: {
