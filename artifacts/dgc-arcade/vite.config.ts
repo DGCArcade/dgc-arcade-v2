@@ -40,19 +40,15 @@ export default defineConfig({
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
     // Performance optimizations
-    minify: "terser",
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-      },
+    minify: "esbuild", // Default esbuild is faster and doesn't require extra dependency
+    esbuild: {
+      drop: ["console", "debugger"],
     },
     rollupOptions: {
       output: {
         // Code splitting for better caching
         manualChunks: {
-          vendor: ["react", "react-dom", "wouter"],
-          ui: ["@/components/ui"],
+          vendor: ["react", "react-dom", "wouter", "lucide-react", "framer-motion"],
         },
       },
     },
