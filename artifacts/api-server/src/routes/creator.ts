@@ -55,7 +55,17 @@ creatorRouter.get("/dashboard", async (req, res) => {
       .from(referralsTable)
       .where(eq(referralsTable.referrerId, user.id));
 
+    const [specialty] = await db.select({ 
+      commissionRate: usersTable.commissionRate, 
+      displayName: usersTable.displayName 
+    }).from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
+
     const tier = getReferralTier(activeCount);
+    
+    // Override with specialty rates if set
+    const commissionRate = specialty?.commissionRate ? parseFloat(specialty.commissionRate) : tier.commissionRate;
+    const displayName = specialty?.displayName || user.username;
+
     const code = user.referralCode ?? `DGC${user.id}`;
     const siteUrl = process.env.SITE_URL ?? "";
 
@@ -84,18 +94,19 @@ creatorRouter.get("/dashboard", async (req, res) => {
 
     res.json({
       username: user.username,
+      displayName: displayName,
       accountType: user.accountType,
       balance: realWalletBalance, // Spendable/Withdrawable money
       promoBalance: parseFloat(user.promoBalance ?? "0"), // House credits (casino balance)
       vaultBalance: parseFloat(user.vaultBalance ?? "0"),
       referralCode: code,
       referralLink: siteUrl ? `${siteUrl}?ref=${code}` : `/?ref=${code}`,
-      tier: tier.tier,
-      group: tier.group,
-      color: tier.color,
-      emoji: tier.emoji,
-      commissionRate: tier.commissionRate,
-      commissionPct: Math.round(tier.commissionRate * 100),
+      tier: specialty?.commissionRate ? "Specialty" : tier.tier,
+      group: specialty?.commissionRate ? "Partner" : tier.group,
+      color: specialty?.commissionRate ? "#ec4899" : tier.color,
+      emoji: specialty?.commissionRate ? "💎" : tier.emoji,
+      commissionRate: commissionRate,
+      commissionPct: Math.round(commissionRate * 100),
       nextTierAt: tier.nextTierAt,
       description: tier.description,
       isPrivate: tier.isPrivate,

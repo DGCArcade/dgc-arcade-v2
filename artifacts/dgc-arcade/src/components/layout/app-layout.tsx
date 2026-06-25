@@ -1,5 +1,7 @@
 import { ReactNode } from "react";
 import { Link } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { AlertTriangle } from "lucide-react";
 import { Navbar } from "./navbar";
 import { BottomNav } from "./bottom-nav";
 import { AuthModal } from "@/components/auth/auth-modal";
@@ -11,11 +13,21 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  const { user, isAuthenticated } = useAuth();
+  const showEmailNotice = isAuthenticated && user?.email && !user?.emailVerified;
+
   return (
     <LocationGate>
       <div className="min-h-[100dvh] flex flex-col bg-transparent text-foreground selection:bg-primary/30 relative">
         <GalaxyBackground />
         <div className="relative z-10 flex flex-col min-h-[100dvh]">
+          {showEmailNotice && (
+            <div className="bg-amber-500/10 border-b border-amber-500/20 py-2 px-4 flex items-center justify-center gap-2 text-[10px] md:text-xs text-amber-300 font-bold uppercase tracking-wider animate-in fade-in slide-in-from-top-4">
+              <AlertTriangle className="w-3 h-3 md:w-4 md:h-4 text-amber-400" />
+              Your email is unverified. 
+              <Link href="/settings" className="underline hover:text-amber-200 transition-colors">Verify Now</Link>
+            </div>
+          )}
           <Navbar />
           <main className="flex-1 w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-3 md:py-8 pb-20 md:pb-8 flex flex-col overflow-x-hidden">
             {children}

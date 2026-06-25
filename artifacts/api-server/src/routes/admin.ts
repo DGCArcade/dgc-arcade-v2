@@ -2735,10 +2735,12 @@ adminRouter.patch("/users/:id/account-type", async (req, res) => {
   const targetId = parseInt(req.params.id);
   if (isNaN(targetId)) { res.status(400).json({ error: "Invalid user ID" }); return; }
 
-  const { accountType, promoBalance, role } = req.body as {
+  const { accountType, promoBalance, role, commissionRate, displayName } = req.body as {
     accountType?: "normal" | "creator" | "tester";
     promoBalance?: number;
     role?: "player" | "admin";
+    commissionRate?: number;
+    displayName?: string;
   };
 
   const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId)).limit(1);
@@ -2758,6 +2760,14 @@ adminRouter.patch("/users/:id/account-type", async (req, res) => {
     updates.accountType = accountType;
     // creator and tester accounts cannot withdraw
     updates.withdrawalsEnabled = accountType === "normal";
+  }
+
+  // Specialty Creator Fields
+  if (commissionRate !== undefined) {
+    updates.commissionRate = commissionRate !== null ? String(commissionRate) : null;
+  }
+  if (displayName !== undefined) {
+    updates.displayName = displayName;
   }
 
   // Set promo balance (house credits)

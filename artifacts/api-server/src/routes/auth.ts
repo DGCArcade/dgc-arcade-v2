@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { db, usersTable, deviceHistoryTable, userBalancesTable } from "@workspace/db";
-import { eq, ilike, and } from "drizzle-orm";
+import { eq, ilike, and, or } from "drizzle-orm";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { requireAuth, signToken } from "../middlewares/auth.js";
 import { logger } from "../lib/logger.js";
@@ -34,6 +34,8 @@ async function formatUser(user: typeof usersTable.$inferSelect) {
     rakebackClaimed: parseFloat(user.rakebackClaimed ?? "0"),
     signupBonus: parseFloat(user.signupBonus ?? "100"),
     bonusWagered: parseFloat(user.bonusWagered ?? "0"),
+    email: user.email ?? null,
+    emailVerified: user.emailVerified,
   };
 }
 
@@ -60,13 +62,18 @@ function parseUserAgent(ua: string): { deviceType: string; deviceBrowser: string
 authRouter.post("/register", async (req, res) => {
   const parsed = RegisterBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid input" }); return; }
-  const { username, password } = parsed.data;
+  const { username, password, email } = req.body as any; // Allow email from body
   const rawFp = req.headers["x-device-fingerprint"];
   const deviceFingerprint = typeof rawFp === "string" ? rawFp : null;
 
   try {
     const existing = await db.select({ id: usersTable.id }).from(usersTable).where(ilike(usersTable.username, username)).limit(1);
     if (existing.length > 0) { res.status(409).json({ error: "Username already taken" }); return; }
+
+    if (email) {
+      const existingEmail = await db.select({ id: usersTable.id }).from(usersTable).where(ilike(usersTable.email, email)).limit(1);
+      if (existingEmail.length > 0) { res.status(409).json({ error: "Email already registered" }); return; }
+    }
     if (deviceFingerprint) {
       const deviceExists = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.deviceFingerprint, deviceFingerprint)).limit(1);
       if (deviceExists.length > 0) { logger.warn({ deviceFingerprint, username }, "Duplicate device blocked"); res.status(409).json({ error: "An account already exists on this device." }); return; }
@@ -75,7 +82,14 @@ authRouter.post("/register", async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const { signupBonus } = await getPlatformSettings();
     const startingBalance = signupBonus > 0 ? String(signupBonus) : "0";
-    let [user] = await db.insert(usersTable).values({ username, passwordHash, balance: startingBalance, deviceFingerprint, signupBonus: startingBalance }).returning();
+    let [user] = await db.insert(usersTable).values({ 
+      username, 
+      email: email || null,
+      passwordHash, 
+      balance: startingBalance, 
+      deviceFingerprint, 
+      signupBonus: startingBalance 
+    }).returning();
 
     const refCode = 'DGC' + user.id.toString(36).toUpperCase().padStart(4, '0') + crypto.randomBytes(3).toString('hex').toUpperCase();
     await db.update(usersTable).set({ referralCode: refCode }).where(eq(usersTable.id, user.id));
@@ -122,11 +136,14 @@ authRouter.post("/register", async (req, res) => {
 authRouter.post("/login", async (req, res) => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid input" }); return; }
-  const { username, password } = parsed.data;
+  const { username, password } = parsed.data; // 'username' here can be email or username
 
   try {
-    const [user] = await db.select().from(usersTable).where(ilike(usersTable.username, username)).limit(1);
-    if (!user) { res.status(401).json({ error: "Invalid username or password" }); return; }
+    // Allow login via username OR email
+    const [user] = await db.select().from(usersTable)
+      .where(or(ilike(usersTable.username, username), ilike(usersTable.email, username)))
+      .limit(1);
+    if (!user) { res.status(401).json({ error: "Invalid username, email, or password" }); return; }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) { res.status(401).json({ error: "Invalid username or password" }); return; }

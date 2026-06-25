@@ -5,6 +5,10 @@ import { z } from "zod/v4";
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
+  email: text("email").unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  emailVerificationCode: text("email_verification_code"),
+  emailVerificationExpiresAt: timestamp("email_verification_expires_at", { withTimezone: true }),
   passwordHash: text("password_hash").notNull(),
   balance: numeric("balance", { precision: 18, scale: 8 }).notNull().default("0"),
   avatarUrl: text("avatar_url"),
@@ -53,6 +57,9 @@ export const usersTable = pgTable("users", {
   telegramUsername: text("telegram_username"),
   rakebackClaimed: numeric("rakeback_claimed", { precision: 18, scale: 8 }).notNull().default("0"),
   withdrawalAttempts: integer("withdrawal_attempts").notNull().default(0),
+  // Specialty Creator Fields
+  commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }), // Override standard tier rate
+  displayName: text("display_name"), // Custom display name for creators
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({

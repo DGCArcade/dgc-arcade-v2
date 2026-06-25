@@ -119,19 +119,52 @@ usersRouter.patch("/me/username", requireAuth, async (req, res) => {
 });
 
 usersRouter.patch("/me/profile", requireAuth, async (req, res) => {
-  const { telegramUsername } = req.body as { telegramUsername?: string };
-  let tg: string | null = null;
+  const { telegramUsername, email } = req.body as { telegramUsername?: string; email?: string };
+  const updates: any = {};
+  
   if (telegramUsername !== undefined) {
-    if (telegramUsername === "") { tg = null; }
+    if (telegramUsername === "") { updates.telegramUsername = null; }
     else {
       const cleaned = telegramUsername.replace(/^@/, "").trim();
-      if (!/^[a-zA-Z0-9_]{5,32}$/.test(cleaned)) { res.status(400).json({ error: "Invalid Telegram username (5-32 chars, letters/numbers/underscores)" }); return; }
-      tg = cleaned;
+      if (!/^[a-zA-Z0-9_]{5,32}$/.test(cleaned)) { res.status(400).json({ error: "Invalid Telegram username" }); return; }
+      updates.telegramUsername = cleaned;
     }
   }
+
+  if (email !== undefined) {
+    if (email === "") { updates.email = null; updates.emailVerified = false; }
+    else {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { res.status(400).json({ error: "Invalid email address" }); return; }
+      // Check if email is taken
+      const [existing] = await db.select({ id: usersTable.id }).from(usersTable).where(ilike(usersTable.email, email)).limit(1);
+      if (existing && existing.id !== req.user!.userId) { res.status(409).json({ error: "Email already taken" }); return; }
+      updates.email = email;
+      updates.emailVerified = false; // Reset verification on change
+    }
+  }
+
   try {
-    await db.update(usersTable).set({ telegramUsername: tg }).where(eq(usersTable.id, req.user!.userId));
-    res.json({ success: true, telegramUsername: tg });
+    await db.update(usersTable).set(updates).where(eq(usersTable.id, req.user!.userId));
+    res.json({ success: true, ...updates });
+  } catch { res.status(500).json({ error: "Internal server error" }); }
+});
+
+usersRouter.patch("/me/password", requireAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+  if (!currentPassword || !newPassword) { res.status(400).json({ error: "Current and new password required" }); return; }
+  if (newPassword.length < 6) { res.status(400).json({ error: "New password must be at least 6 characters" }); return; }
+  
+  try {
+    const bcrypt = await import("bcryptjs");
+    const [user] = await db.select({ passwordHash: usersTable.passwordHash }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+    
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) { res.status(401).json({ error: "Incorrect current password" }); return; }
+    
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await db.update(usersTable).set({ passwordHash: newHash }).where(eq(usersTable.id, req.user!.userId));
+    res.json({ success: true, message: "Password updated successfully" });
   } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
@@ -162,7 +195,23 @@ usersRouter.post("/me/request-deletion", requireAuth, async (req, res) => {
 
 usersRouter.get("/me", requireAuth, async (req, res) => {
   try {
-    const [user] = await db.select({ id: usersTable.id, username: usersTable.username, balance: usersTable.balance, role: usersTable.role, totalBets: usersTable.totalBets, totalWon: usersTable.totalWon, totalWageredAmount: usersTable.totalWageredAmount, createdAt: usersTable.createdAt, usernameChangedAt: usersTable.usernameChangedAt, deletionRequestedAt: usersTable.deletionRequestedAt, lastLoginAt: usersTable.lastLoginAt, telegramUsername: usersTable.telegramUsername, rakebackClaimed: usersTable.rakebackClaimed }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+    const [user] = await db.select({ 
+      id: usersTable.id, 
+      username: usersTable.username, 
+      email: usersTable.email,
+      emailVerified: usersTable.emailVerified,
+      balance: usersTable.balance, 
+      role: usersTable.role, 
+      totalBets: usersTable.totalBets, 
+      totalWon: usersTable.totalWon, 
+      totalWageredAmount: usersTable.totalWageredAmount, 
+      createdAt: usersTable.createdAt, 
+      usernameChangedAt: usersTable.usernameChangedAt, 
+      deletionRequestedAt: usersTable.deletionRequestedAt, 
+      lastLoginAt: usersTable.lastLoginAt, 
+      telegramUsername: usersTable.telegramUsername, 
+      rakebackClaimed: usersTable.rakebackClaimed 
+    }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
     const now = Date.now();
     const canChangeUsername = !user.usernameChangedAt || (now - new Date(user.usernameChangedAt).getTime()) >= 90*24*60*60*1000;
@@ -178,6 +227,8 @@ usersRouter.get("/me", requireAuth, async (req, res) => {
     res.json({ 
       id: user.id, 
       username: user.username, 
+      email: user.email ?? null,
+      emailVerified: user.emailVerified,
       balance: finalBalance, 
       cryptoBalances: balancesWithPrices,
       role: user.role, 
