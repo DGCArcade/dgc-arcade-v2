@@ -298,6 +298,23 @@ adminRouter.get("/bank/user-balances", requireBankSession, async (req, res) => {
   }
 });
 
+adminRouter.post("/test-email", async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Email required" });
+  
+  try {
+    const { sendVerificationEmail } = await import("../lib/mail-service.js");
+    await sendVerificationEmail(email, "Owner Test", "TEST-CODE-123");
+    res.json({ success: true, message: "Test email sent successfully!" });
+  } catch (err: any) {
+    res.status(500).json({ 
+      success: false, 
+      error: err.message, 
+      details: "This error comes directly from your Proton SMTP server." 
+    });
+  }
+});
+
 adminRouter.get("/users/:id", async (req, res) => {
   const userId = parseInt(req.params.id, 10);
 

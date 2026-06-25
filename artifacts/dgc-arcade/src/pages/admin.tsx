@@ -1282,13 +1282,35 @@ export default function AdminDashboard() {
               { label: "Total Users", value: stats?.totalUsers ?? "—", icon: Users, color: "text-blue-400", bg: "from-blue-500/10 to-transparent", tab: "users" as TabKey, detail: "Total registered accounts on the platform." },
               { label: "Total Bets", value: stats?.totalBets ?? "—", icon: Activity, color: "text-purple-400", bg: "from-purple-500/10 to-transparent", tab: "users" as TabKey, detail: "Lifetime bets placed across all games. Click a user to see their full history." },
               { label: "Total Wagered", value: stats ? formatCurrency(stats.totalWagered) : "—", icon: TrendingUp, color: "text-green-400", bg: "from-green-500/10 to-transparent", tab: "users" as TabKey, detail: "Total USD-equivalent wagered by all players. See Users tab for per-player wager totals." },
-              { label: "Biggest Win", value: stats ? formatCurrency(stats.biggestWin) : "—", icon: TrendingUp, color: "text-primary", bg: "from-primary/10 to-transparent", tab: "users" as TabKey, detail: "Largest single payout ever recorded. Sort Users by 'Total Won' to see top winners." },
+              { 
+                label: "Email Test", 
+                value: "DIAGNOSTIC", 
+                icon: Send, 
+                color: "text-pink-400", 
+                bg: "from-pink-500/10 to-transparent", 
+                tab: "overview" as TabKey, 
+                detail: "Click to send a test email and see real-time SMTP errors from Proton.",
+                onClick: async () => {
+                  const email = prompt("Enter email to send test to:");
+                  if (!email) return;
+                  try {
+                    const res = await adminFetch("/test-email", {
+                      method: "POST",
+                      body: JSON.stringify({ email })
+                    });
+                    if (res.success) alert("SUCCESS: Proton Mail accepted the email!");
+                    else alert(`FAILED: ${res.error}\n\n${res.details}`);
+                  } catch (e: any) {
+                    alert(`Network Error: ${e.message}`);
+                  }
+                }
+              },
             ].map((s) => (
               <Card
                 key={s.label}
                 role="button"
                 tabIndex={0}
-                onClick={() => navigateToTab(s.tab)}
+                onClick={() => s.onClick ? s.onClick() : navigateToTab(s.tab)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigateToTab(s.tab); } }}
                 className="bg-secondary/40 border-border/40 card-hover-glow overflow-hidden cursor-pointer hover:border-primary/40 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
               >

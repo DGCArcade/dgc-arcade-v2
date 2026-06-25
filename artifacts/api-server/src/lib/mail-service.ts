@@ -133,7 +133,7 @@ export async function sendVerificationEmail(email: string, username: string, cod
 
   try {
     await transporter.sendMail({
-      from: SMTP_USER, // Using raw email to satisfy strict SMTP providers like Proton
+      from: `"Different Grind Crew" <${SMTP_USER}>`,
       to: email,
       subject: "Action Required: Verify Your DGC Arcade Account",
       html: getEmailTemplate(content, THEMES.GALAXY),
@@ -163,7 +163,7 @@ export async function sendPasswordResetEmail(email: string, username: string, to
 
   try {
     await transporter.sendMail({
-      from: SMTP_USER, // Using raw email to satisfy strict SMTP providers like Proton
+      from: `"Different Grind Crew" <${SMTP_USER}>`,
       to: email,
       subject: "Security: Password Reset Request",
       html: getEmailTemplate(content, THEMES.NEON), // Use Neon theme for security alerts
