@@ -1,53 +1,26 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 /**
  * Professional Mail Service for DGC Arcade
- * Configured for Proton Mail / SMTP delivery with retry logic
+ * Configured for Resend for automated emails
+ * Proton Mail still handles manual communications
  */
 
-const SMTP_HOST = process.env.SMTP_HOST || "";
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || "587");
-const SMTP_USER = process.env.SMTP_USER || "";
-const SMTP_PASS = process.env.SMTP_PASS || "";
-const SITE_URL = process.env.SITE_URL || "https://dgcarcade.io";
+const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+const SENDER_EMAIL = process.env.SENDER_EMAIL || "noreply@differentgrindcrew.com";
+const SITE_URL = process.env.SITE_URL || "https://differentgrindcrew.com";
 
-// Retry configuration
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 2000; // 2 seconds
+let resend: Resend | null = null;
 
-let transporter: nodemailer.Transporter | null = null;
-
-function initializeTransporter() {
-  if (transporter) return transporter;
-
-  transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465, // true for 465, false for other ports
-    auth: {
-      user: SMTP_USER,
-      password: SMTP_PASS,
-    },
-    connectionTimeout: 10000, // 10 seconds
-    socketTimeout: 10000, // 10 seconds
-    pool: {
-      maxConnections: 5,
-      maxMessages: 100,
-      rateDelta: 4000,
-      rateLimit: 14,
-    },
-  } as any);
-
-  // Verify connection on startup
-  transporter.verify((err, success) => {
-    if (err) {
-      console.error("SMTP connection verification failed:", err.message);
-    } else if (success) {
-      console.log("SMTP connection verified successfully");
-    }
-  });
-
-  return transporter;
+function getResendClient(): Resend {
+  if (resend) return resend;
+  
+  if (!RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY environment variable is not set");
+  }
+  
+  resend = new Resend(RESEND_API_KEY);
+  return resend;
 }
 
 // Themes for emails to keep it "Best of the Best"
@@ -143,31 +116,12 @@ function getEmailTemplate(content: string, theme = THEMES.GALAXY) {
   `;
 }
 
-async function sendEmailWithRetry(mailOptions: any, attempt = 1): Promise<void> {
-  if (!SMTP_HOST || !SMTP_USER) {
-    console.warn("Mail service not configured. Email not sent.");
+export async function sendVerificationEmail(email: string, username: string, code: string) {
+  if (!RESEND_API_KEY) {
+    console.warn("Resend API key not configured. Email not sent.");
     return;
   }
 
-  const transporter = initializeTransporter();
-
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Email sent successfully to ${mailOptions.to}`);
-  } catch (err: any) {
-    console.error(`Email send attempt ${attempt} failed:`, err.message);
-
-    if (attempt < MAX_RETRIES) {
-      console.log(`Retrying email send in ${RETRY_DELAY}ms...`);
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-      return sendEmailWithRetry(mailOptions, attempt + 1);
-    } else {
-      throw new Error(`Failed to send email after ${MAX_RETRIES} attempts: ${err.message}`);
-    }
-  }
-}
-
-export async function sendVerificationEmail(email: string, username: string, code: string) {
   const verifyUrl = `${SITE_URL}/settings?verify=${code}`;
   const content = `
     <h2 style="color: white; font-size: 24px; margin-bottom: 15px;">Welcome to the Elite, ${username}</h2>
@@ -180,12 +134,19 @@ export async function sendVerificationEmail(email: string, username: string, cod
   `;
 
   try {
-    await sendEmailWithRetry({
-      from: `"Different Grind Crew" <${SMTP_USER}>`,
+    const resendClient = getResendClient();
+    const result = await resendClient.emails.send({
+      from: SENDER_EMAIL,
       to: email,
       subject: "Action Required: Verify Your DGC Arcade Account",
       html: getEmailTemplate(content, THEMES.GALAXY),
     });
+
+    if (result.error) {
+      throw new Error(`Resend error: ${result.error.message}`);
+    }
+
+    console.log(`Verification email sent to ${email}. Message ID: ${result.data?.id}`);
   } catch (err: any) {
     console.error("Failed to send verification email:", err.message);
     throw err;
@@ -193,6 +154,11 @@ export async function sendVerificationEmail(email: string, username: string, cod
 }
 
 export async function sendPasswordResetEmail(email: string, username: string, token: string) {
+  if (!RESEND_API_KEY) {
+    console.warn("Resend API key not configured. Email not sent.");
+    return;
+  }
+
   const resetUrl = `${SITE_URL}/reset-password?token=${token}`;
   const content = `
     <h2 style="color: white; font-size: 24px; margin-bottom: 15px;">Security Update</h2>
@@ -205,12 +171,19 @@ export async function sendPasswordResetEmail(email: string, username: string, to
   `;
 
   try {
-    await sendEmailWithRetry({
-      from: `"Different Grind Crew" <${SMTP_USER}>`,
+    const resendClient = getResendClient();
+    const result = await resendClient.emails.send({
+      from: SENDER_EMAIL,
       to: email,
       subject: "Security: Password Reset Request",
       html: getEmailTemplate(content, THEMES.NEON),
     });
+
+    if (result.error) {
+      throw new Error(`Resend error: ${result.error.message}`);
+    }
+
+    console.log(`Password reset email sent to ${email}. Message ID: ${result.data?.id}`);
   } catch (err: any) {
     console.error("Failed to send password reset email:", err.message);
     throw err;
