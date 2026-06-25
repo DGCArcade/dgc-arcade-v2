@@ -510,41 +510,13 @@ betsRouter.get("/recent-all", optionalAuth, async (req, res) => {
       return;
     }
 
-    let rows;
-    try {
-      rows = await db.select({
-        bet: betsTable, username: usersTable.username, gameName: gamesTable.name,
-      }).from(betsTable)
-        .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
-        .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
-        .orderBy(desc(betsTable.createdAt))
-        .limit(limit);
-    } catch (err: any) {
-      if (err.message.includes("server_seed_hash") || err.message.includes("client_seed") || err.message.includes("nonce")) {
-        rows = await db.select({
-          bet: {
-            id: betsTable.id,
-            userId: betsTable.userId,
-            gameId: betsTable.gameId,
-            amount: betsTable.amount,
-            payout: betsTable.payout,
-            won: betsTable.won,
-            multiplier: betsTable.multiplier,
-            serverSeed: betsTable.serverSeed,
-            meta: betsTable.meta,
-            createdAt: betsTable.createdAt,
-          },
-          username: usersTable.username,
-          gameName: gamesTable.name,
-        }).from(betsTable)
-          .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
-          .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
-          .orderBy(desc(betsTable.createdAt))
-          .limit(limit);
-      } else {
-        throw err;
-      }
-    }
+    const rows = await db.select({
+      bet: betsTable, username: usersTable.username, gameName: gamesTable.name,
+    }).from(betsTable)
+      .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
+      .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
+      .orderBy(desc(betsTable.createdAt))
+      .limit(limit);
 
     const value = rows.map(({ bet, username, gameName }) => ({
       id: bet.id, userId: bet.userId, username, gameId: bet.gameId, gameName,
@@ -575,41 +547,13 @@ betsRouter.get("/high-rollers", optionalAuth, async (req, res) => {
       return;
     }
 
-    let rows;
-    try {
-      rows = await db.select({
-        bet: betsTable, username: usersTable.username, gameName: gamesTable.name,
-      }).from(betsTable)
-        .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
-        .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
-        .orderBy(desc(sql`CAST(${betsTable.amount} AS NUMERIC)`))
-        .limit(limit);
-    } catch (err: any) {
-      if (err.message.includes("server_seed_hash") || err.message.includes("client_seed") || err.message.includes("nonce")) {
-        rows = await db.select({
-          bet: {
-            id: betsTable.id,
-            userId: betsTable.userId,
-            gameId: betsTable.gameId,
-            amount: betsTable.amount,
-            payout: betsTable.payout,
-            won: betsTable.won,
-            multiplier: betsTable.multiplier,
-            serverSeed: betsTable.serverSeed,
-            meta: betsTable.meta,
-            createdAt: betsTable.createdAt,
-          },
-          username: usersTable.username,
-          gameName: gamesTable.name,
-        }).from(betsTable)
-          .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
-          .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
-          .orderBy(desc(sql`CAST(${betsTable.amount} AS NUMERIC)`))
-          .limit(limit);
-      } else {
-        throw err;
-      }
-    }
+    const rows = await db.select({
+      bet: betsTable, username: usersTable.username, gameName: gamesTable.name,
+    }).from(betsTable)
+      .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
+      .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
+      .orderBy(desc(sql`CAST(${betsTable.amount} AS NUMERIC)`))
+      .limit(limit);
 
     const value = rows.map(({ bet, username, gameName }) => ({
       id: bet.id, userId: bet.userId, username, gameId: bet.gameId, gameName,
