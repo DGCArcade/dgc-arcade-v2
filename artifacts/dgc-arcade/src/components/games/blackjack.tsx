@@ -360,6 +360,13 @@ export function Blackjack({ game }: BlackjackProps) {
   const [animatingCards, setAnimatingCards] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [isSplit, setIsSplit] = useState(false);
+  const [splitHands, setSplitHands] = useState<[Card[], Card[]] | null>(null);
+  const [activeHandIndex, setActiveHandIndex] = useState(0);
+  const [hand1Total, setHand1Total] = useState(0);
+  const [hand2Total, setHand2Total] = useState(0);
+  const [hand1Status, setHand1Status] = useState("active");
+  const [hand2Status, setHand2Status] = useState("active");
   const [serverSeedHash, setServerSeedHash] = useState<string | null>(null);
   const [clientSeed, setClientSeed] = useState<string | null>(null);
   const [nonce, setNonce] = useState<number | null>(null);
@@ -372,7 +379,18 @@ export function Blackjack({ game }: BlackjackProps) {
       .then(r => r.json())
       .then(d => {
         if (d?.handId) {
-          setHandId(d.handId);       setPlayerHand(d.playerHand); setDealerHand(d.dealerHand);
+          setHandId(d.handId);       if (d.isSplit) {
+        setIsSplit(true);
+        setSplitHands(d.splitHands);
+        setActiveHandIndex(d.activeHandIndex);
+        setHand1Total(d.hand1Total);
+        setHand2Total(d.hand2Total);
+        setHand1Status(d.hand1Status);
+        setHand2Status(d.hand2Status);
+      } else {
+        setPlayerHand(d.playerHand);
+      }
+      setDealerHand(d.dealerHand);
       setPlayerTotal(d.playerTotal); setStatus(d.status); setCurrentBet(d.bet ?? 0);
       setInsuranceEligible(d.insuranceEligible ?? false);
       setServerSeedHash(d.serverSeedHash ?? null);
@@ -436,7 +454,19 @@ export function Blackjack({ game }: BlackjackProps) {
         if (!r.ok) { toast({ title: d.error, variant: "destructive" }); return; }
         
         setTimeout(() => {
-          setHandId(d.handId); setPlayerHand(d.playerHand); setDealerHand(d.dealerHand);
+          setHandId(d.handId);
+          if (d.isSplit) {
+            setIsSplit(true);
+            setSplitHands(d.splitHands);
+            setActiveHandIndex(d.activeHandIndex);
+            setHand1Total(d.hand1Total);
+            setHand2Total(d.hand2Total);
+            setHand1Status(d.hand1Status);
+            setHand2Status(d.hand2Status);
+          } else {
+            setPlayerHand(d.playerHand);
+          }
+          setDealerHand(d.dealerHand);
           setPlayerTotal(d.playerTotal); setStatus(d.status); setPayout(d.payout ?? 0);
           setCurrentBet(amount); setInsuranceEligible(d.insuranceEligible ?? false);
           setDealerTotal(d.dealerTotal ?? null);
@@ -464,7 +494,18 @@ export function Blackjack({ game }: BlackjackProps) {
       const d = await r.json();
       if (!r.ok) { toast({ title: d.error, variant: "destructive" }); return; }
       
-      setPlayerHand(d.playerHand); setDealerHand(d.dealerHand);
+      if (d.isSplit) {
+        setIsSplit(true);
+        setSplitHands(d.splitHands);
+        setActiveHandIndex(d.activeHandIndex);
+        setHand1Total(d.hand1Total);
+        setHand2Total(d.hand2Total);
+        setHand1Status(d.hand1Status);
+        setHand2Status(d.hand2Status);
+      } else {
+        setPlayerHand(d.playerHand);
+      }
+      setDealerHand(d.dealerHand);
       setPlayerTotal(d.playerTotal); setDealerTotal(d.dealerTotal ?? null);
       setStatus(d.status as Status); setPayout(d.payout ?? 0);
       setServerSeedHash(d.serverSeedHash ?? null);
@@ -493,6 +534,8 @@ export function Blackjack({ game }: BlackjackProps) {
     setHandId(null); setPlayerHand([]); setDealerHand([]);
     setPlayerTotal(0); setDealerTotal(null); setStatus("idle");
     setPayout(0); setCurrentBet(0); setInsuranceEligible(false); setShowResult(false);
+    setIsSplit(false); setSplitHands(null); setActiveHandIndex(0);
+    setHand1Total(0); setHand2Total(0); setHand1Status("active"); setHand2Status("active");
     setServerSeedHash(null); setClientSeed(null); setNonce(null);
   };
 
@@ -624,18 +667,49 @@ export function Blackjack({ game }: BlackjackProps) {
 
         {/* Player Section */}
         <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: isMobile ? 4 : 12, zIndex: 10 }}>
-          {playerHand.length > 0 && (
-            <div style={{ marginBottom: isMobile ? -8 : 0 }}>
-              <ScoreBubble total={playerTotal} bust={playerTotal > 21} bj={status === "player_blackjack"} label="YOU" />
+          {!isSplit ? (
+            <>
+              {playerHand.length > 0 && (
+                <div style={{ marginBottom: isMobile ? -8 : 0 }}>
+                  <ScoreBubble total={playerTotal} bust={playerTotal > 21} bj={status === "player_blackjack"} label="YOU" />
+                </div>
+              )}
+              <div style={{ position: "relative", display: "flex", gap: isMobile ? 6 : 10, minHeight: isMobile ? 90 : 118 }}>
+                {playerHand.length > 0 ? playerHand.map((c, i) => (
+                  <div key={`p-${i}`} style={{ position: "relative", transform: isMobile ? "scale(1.0)" : "none", transformOrigin: "bottom center" }}>
+                    <PlayingCard card={c} delay={(i + 2) * 200} dealFrom={deckRef.current?.getBoundingClientRect()} isMobile={isMobile} />
+                  </div>
+                )) : <div style={{ width: isMobile ? 70 : 85, height: isMobile ? 98 : 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
+              </div>
+            </>
+          ) : (
+            <div style={{ display: "flex", gap: isMobile ? 12 : 40, justifyContent: "center", width: "100%" }}>
+              {/* Hand 1 */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: activeHandIndex === 0 ? 1 : 0.5, transform: activeHandIndex === 0 ? "scale(1.05)" : "scale(0.95)", transition: "all 0.3s" }}>
+                <ScoreBubble total={hand1Total} bust={hand1Total > 21} label="HAND 1" />
+                <div style={{ display: "flex", gap: 4, position: "relative" }}>
+                  {splitHands?.[0].map((c, i) => (
+                    <div key={`s1-${i}`} style={{ marginLeft: i > 0 ? (isMobile ? -25 : -40) : 0 }}>
+                      <PlayingCard card={c} isMobile={isMobile} />
+                    </div>
+                  ))}
+                </div>
+                {hand1Status !== "active" && <div style={{ fontSize: 10, fontWeight: 900, color: accent }}>{hand1Status.replace("_", " ").toUpperCase()}</div>}
+              </div>
+              {/* Hand 2 */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: activeHandIndex === 1 ? 1 : 0.5, transform: activeHandIndex === 1 ? "scale(1.05)" : "scale(0.95)", transition: "all 0.3s" }}>
+                <ScoreBubble total={hand2Total} bust={hand2Total > 21} label="HAND 2" />
+                <div style={{ display: "flex", gap: 4, position: "relative" }}>
+                  {splitHands?.[1].map((c, i) => (
+                    <div key={`s2-${i}`} style={{ marginLeft: i > 0 ? (isMobile ? -25 : -40) : 0 }}>
+                      <PlayingCard card={c} isMobile={isMobile} />
+                    </div>
+                  ))}
+                </div>
+                {hand2Status !== "active" && <div style={{ fontSize: 10, fontWeight: 900, color: accent }}>{hand2Status.replace("_", " ").toUpperCase()}</div>}
+              </div>
             </div>
           )}
-          <div style={{ position: "relative", display: "flex", gap: isMobile ? 6 : 10, minHeight: isMobile ? 90 : 118 }}>
-            {playerHand.length > 0 ? playerHand.map((c, i) => (
-              <div key={`p-${i}`} style={{ position: "relative", transform: isMobile ? "scale(1.0)" : "none", transformOrigin: "bottom center" }}>
-                <PlayingCard card={c} delay={(i + 2) * 200} dealFrom={deckRef.current?.getBoundingClientRect()} isMobile={isMobile} />
-              </div>
-            )) : <div style={{ width: isMobile ? 70 : 85, height: isMobile ? 98 : 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
-          </div>
         </div>
 
         {/* Table Rules */}

@@ -345,7 +345,7 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
           userId: user.id, gameId: hand.gameId,
           amount: String(finalBet), payout: String(payout),
           won: payout > 0, multiplier: String(finalBet > 0 ? payout / finalBet : 0),
-          serverSeed, clientSeed,
+          serverSeed, serverSeedHash, clientSeed, nonce,
           meta: { playerHand, dealerHand, result: "insurance_win", action: "insurance", nonce, serverSeedHash },
         });
 
@@ -499,7 +499,7 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
           amount: String(totalBet), payout: String(totalPayout),
           won: totalPayout > totalBet,
           multiplier: String(totalBet > 0 ? totalPayout / totalBet : 0),
-          serverSeed, clientSeed,
+          serverSeed, serverSeedHash, clientSeed, nonce,
           meta: { splitHands: [hand1, hand2], dealerHand, hand1Status, hand2Status, action: "split", nonce, serverSeedHash },
         });
 
