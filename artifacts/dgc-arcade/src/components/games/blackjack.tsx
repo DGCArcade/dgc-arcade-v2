@@ -380,12 +380,9 @@ export function Blackjack({ game }: BlackjackProps) {
   const [showResult, setShowResult] = useState(false);
   const [muted, setMuted] = useState(false);
   const [isSplit, setIsSplit] = useState(false);
-  const [splitHands, setSplitHands] = useState<[Card[], Card[]] | null>(null);
+  const [splitHands, setSplitHands] = useState<Card[][] | null>(null);
   const [activeHandIndex, setActiveHandIndex] = useState(0);
-  const [hand1Total, setHand1Total] = useState(0);
-  const [hand2Total, setHand2Total] = useState(0);
-  const [hand1Status, setHand1Status] = useState("active");
-  const [hand2Status, setHand2Status] = useState("active");
+  const [splitStatuses, setSplitStatuses] = useState<string[]>([]);
   const [serverSeedHash, setServerSeedHash] = useState<string | null>(null);
   const [clientSeed, setClientSeed] = useState<string | null>(null);
   const [nonce, setNonce] = useState<number | null>(null);
@@ -402,10 +399,7 @@ export function Blackjack({ game }: BlackjackProps) {
         setIsSplit(true);
         setSplitHands(d.splitHands);
         setActiveHandIndex(d.activeHandIndex);
-        setHand1Total(d.hand1Total);
-        setHand2Total(d.hand2Total);
-        setHand1Status(d.hand1Status);
-        setHand2Status(d.hand2Status);
+        setSplitStatuses(d.splitStatuses || []);
       } else {
         setPlayerHand(d.playerHand);
       }
@@ -488,10 +482,7 @@ export function Blackjack({ game }: BlackjackProps) {
             setIsSplit(true);
             setSplitHands(d.splitHands);
             setActiveHandIndex(d.activeHandIndex);
-            setHand1Total(d.hand1Total);
-            setHand2Total(d.hand2Total);
-            setHand1Status(d.hand1Status);
-            setHand2Status(d.hand2Status);
+            setSplitStatuses(d.splitStatuses || []);
           } else {
             setPlayerHand(d.playerHand);
           }
@@ -527,10 +518,7 @@ export function Blackjack({ game }: BlackjackProps) {
         setIsSplit(true);
         setSplitHands(d.splitHands);
         setActiveHandIndex(d.activeHandIndex);
-        setHand1Total(d.hand1Total);
-        setHand2Total(d.hand2Total);
-        setHand1Status(d.hand1Status);
-        setHand2Status(d.hand2Status);
+        setSplitStatuses(d.splitStatuses || []);
       } else {
         setPlayerHand(d.playerHand);
       }
@@ -725,31 +713,35 @@ export function Blackjack({ game }: BlackjackProps) {
               </div>
             </>
           ) : (
-            <div style={{ display: "flex", gap: isMobile ? 12 : 40, justifyContent: "center", width: "100%" }}>
-              {/* Hand 1 */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: activeHandIndex === 0 ? 1 : 0.5, transform: activeHandIndex === 0 ? "scale(1.05)" : "scale(0.95)", transition: "all 0.3s" }}>
-                <ScoreBubble total={hand1Total} displayTotal={getSoftTotalString(splitHands?.[0] ?? [])} bust={hand1Total > 21} label="HAND 1" />
-                <div style={{ display: "flex", gap: 4, position: "relative" }}>
-                  {splitHands?.[0].map((c, i) => (
-                    <div key={`s1-${i}`} style={{ marginLeft: i > 0 ? (isMobile ? -25 : -40) : 0 }}>
-                      <PlayingCard card={c} isMobile={isMobile} />
+            <div style={{ display: "flex", gap: isMobile ? 8 : 20, justifyContent: "center", width: "100%", flexWrap: "wrap" }}>
+              {splitHands?.map((hand, idx) => (
+                <div key={`split-hand-${idx}`} style={{ 
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 8, 
+                  opacity: activeHandIndex === idx ? 1 : 0.5, 
+                  transform: activeHandIndex === idx ? "scale(1.05)" : "scale(0.95)", 
+                  transition: "all 0.3s",
+                  minWidth: isMobile ? 120 : 160
+                }}>
+                  <ScoreBubble 
+                    total={handTotal(hand)} 
+                    displayTotal={getSoftTotalString(hand)} 
+                    bust={handTotal(hand) > 21} 
+                    label={`HAND ${idx + 1}`} 
+                  />
+                  <div style={{ display: "flex", gap: 4, position: "relative" }}>
+                    {hand.map((c, i) => (
+                      <div key={`sh-${idx}-${i}`} style={{ marginLeft: i > 0 ? (isMobile ? -25 : -40) : 0 }}>
+                        <PlayingCard card={c} isMobile={isMobile} />
+                      </div>
+                    ))}
+                  </div>
+                  {splitStatuses[idx] && splitStatuses[idx] !== "active" && (
+                    <div style={{ fontSize: 10, fontWeight: 900, color: accent }}>
+                      {splitStatuses[idx].replace("_", " ").toUpperCase()}
                     </div>
-                  ))}
+                  )}
                 </div>
-                {hand1Status !== "active" && <div style={{ fontSize: 10, fontWeight: 900, color: accent }}>{hand1Status.replace("_", " ").toUpperCase()}</div>}
-              </div>
-              {/* Hand 2 */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: activeHandIndex === 1 ? 1 : 0.5, transform: activeHandIndex === 1 ? "scale(1.05)" : "scale(0.95)", transition: "all 0.3s" }}>
-                <ScoreBubble total={hand2Total} displayTotal={getSoftTotalString(splitHands?.[1] ?? [])} bust={hand2Total > 21} label="HAND 2" />
-                <div style={{ display: "flex", gap: 4, position: "relative" }}>
-                  {splitHands?.[1].map((c, i) => (
-                    <div key={`s2-${i}`} style={{ marginLeft: i > 0 ? (isMobile ? -25 : -40) : 0 }}>
-                      <PlayingCard card={c} isMobile={isMobile} />
-                    </div>
-                  ))}
-                </div>
-                {hand2Status !== "active" && <div style={{ fontSize: 10, fontWeight: 900, color: accent }}>{hand2Status.replace("_", " ").toUpperCase()}</div>}
-              </div>
+              ))}
             </div>
           )}
         </div>
@@ -810,7 +802,8 @@ export function Blackjack({ game }: BlackjackProps) {
             <div style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
               <button onClick={() => doAction("double")} disabled={loading || (isSplit ? (splitHands?.[activeHandIndex]?.length ?? 0) !== 2 : playerHand.length !== 2)} className="bj-action-btn" style={{ flex: 1, background: "#7c3aed", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>DOUBLE</button>
               {insuranceEligible && <button onClick={() => doAction("insurance")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#d97706", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>INSURE</button>}
-              {playerHand.length === 2 && playerHand[0].rank === playerHand[1].rank && (
+              {((!isSplit && playerHand.length === 2 && playerHand[0].rank === playerHand[1].rank) || 
+                 (isSplit && splitHands?.[activeHandIndex]?.length === 2 && splitHands[activeHandIndex][0].rank === splitHands[activeHandIndex][1].rank && splitHands.length < 4)) && (
                 <button onClick={() => doAction("split")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#0ea5e9", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>SPLIT</button>
               )}
             </div>

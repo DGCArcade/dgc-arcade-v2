@@ -20,11 +20,11 @@ type Card = { suit: Suit; rank: Rank };
  */
 interface SplitState {
   isSplit: true;
-  hands: [Card[], Card[]];
-  activeHandIndex: 0 | 1;
-  bets: [number, number];
-  statuses: [string, string];
-  payouts: [number, number];
+  hands: Card[][];
+  activeHandIndex: number;
+  bets: number[];
+  statuses: string[];
+  payouts: number[];
 }
 
 const SUITS: Suit[] = ["♠", "♥", "♦", "♣"];
@@ -472,9 +472,9 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
       const splitState: SplitState = {
         isSplit: true,
         hands: [hand1, hand2],
-        activeHandIndex: isAceSplit ? 0 : 0,
+        activeHandIndex: 0,
         bets: [bet, bet],
-        statuses: [hand1Status as any, hand2Status as any],
+        statuses: [hand1Status, hand2Status],
         payouts: [0, 0],
       };
 
@@ -632,7 +632,6 @@ async function handleSplitAction(
     if (isBust(activeHand)) {
       splitState.statuses[activeIdx] = "dealer_wins";
     } else if (handTotal(activeHand) === 21) {
-      // Auto-advance to next hand or play dealer
       splitState.statuses[activeIdx] = "stand_pending";
     }
     splitState.hands[activeIdx] = activeHand;
@@ -643,131 +642,163 @@ async function handleSplitAction(
       res.status(400).json({ error: "Double only on first two cards" });
       return;
     }
+    const originalBet = parseFloat(hand.bet);
     try {
-      await deductBalance(user.id, bet);
+      await deductBalance(user.id, originalBet);
       await db.update(usersTable)
-        .set({ totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${bet}` })
+        .set({ totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${originalBet}` })
         .where(eq(usersTable.id, user.id));
     } catch (err: any) {
       res.status(400).json({ error: err.message || "Insufficient balance for double" });
       return;
     }
-    splitState.bets[activeIdx] = bet * 2;
+    splitState.bets[activeIdx] = originalBet * 2;
     activeHand = [...activeHand, deck.shift()!];
     splitState.hands[activeIdx] = activeHand;
     splitState.statuses[activeIdx] = "stood";
-  }
-
-  // Advance to next hand if current hand is done
-  const currentStatus = splitState.statuses[activeIdx];
-  const handDone = currentStatus === "dealer_wins" || currentStatus === "stood" || currentStatus === "stand_pending";
-
-  if (handDone && activeIdx === 0 && splitState.statuses[1] === "active") {
-    splitState.activeHandIndex = 1;
-    splitState.hands[activeIdx] = activeHand;
-
-    await db.update(blackjackHandsTable).set({
-      playerHand: JSON.stringify(splitState),
-      deckState: JSON.stringify(deck),
-    }).where(eq(blackjackHandsTable.id, hand.id));
-
-    const { totalBalance } = await getUserBalance(user.id);
-    res.json({
-      handId: hand.id,
-      isSplit: true,
-      splitHands: splitState.hands,
-      activeHandIndex: 1,
-      hand1Total: handTotal(splitState.hands[0]),
-      hand2Total: handTotal(splitState.hands[1]),
-      dealerHand: [dealerHand[0], { suit: "?", rank: "?" }],
-      dealerTotal: null,
-      hand1Status: splitState.statuses[0],
-      hand2Status: "active",
-      status: "active",
-      payout: 0,
-      balance: totalBalance,
-      serverSeedHash, clientSeed, nonce,
-    });
-    return;
-  }
-
-  // Both hands done — play dealer and settle
-  if (handDone && (activeIdx === 1 || splitState.statuses[1] !== "active")) {
-    splitState.hands[activeIdx] = activeHand;
-
-    // Play out dealer
-    while (dealerShouldHit(dealerHand)) {
-      dealerHand = [...dealerHand, deck.shift()!];
+  } else if (action === "split") {
+    // RESPLIT LOGIC
+    if (activeHand.length !== 2 || activeHand[0].rank !== activeHand[1].rank) {
+      res.status(400).json({ error: "Cannot split these cards" });
+      return;
+    }
+    if (splitState.hands.length >= 4) {
+      res.status(400).json({ error: "Maximum of 4 split hands allowed" });
+      return;
+    }
+    const originalBet = parseFloat(hand.bet);
+    try {
+      await deductBalance(user.id, originalBet);
+      await db.update(usersTable)
+        .set({ totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${originalBet}` })
+        .where(eq(usersTable.id, user.id));
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || "Insufficient balance for resplit" });
+      return;
     }
 
-    // Resolve each hand
-    // Only hands already marked "dealer_wins" (busted player) skip resolution.
-    // "stood" and "stand_pending" (hit-to-21 auto-stand) both need resolveHand.
-    const finalStatuses: [string, string] = ["dealer_wins", "dealer_wins"];
-    for (let i = 0; i < 2; i++) {
-      const hs = splitState.statuses[i];
-      if (hs === "dealer_wins") {
-        // Player busted — dealer wins regardless
-        finalStatuses[i] = "dealer_wins";
-      } else {
-        // "stood" or "stand_pending" — compare totals properly
-        finalStatuses[i] = resolveHand(splitState.hands[i], dealerHand);
+    // Split the current active hand into two
+    const card1 = activeHand[0];
+    const card2 = activeHand[1];
+    const newCard1 = deck.shift()!;
+    const newCard2 = deck.shift()!;
+
+    // Replace the current hand with the first split hand
+    splitState.hands[activeIdx] = [card1, newCard1];
+    splitState.statuses[activeIdx] = "active";
+    splitState.bets[activeIdx] = originalBet;
+    splitState.payouts[activeIdx] = 0;
+
+    // Insert the new second split hand right after the current one
+    splitState.hands.splice(activeIdx + 1, 0, [card2, newCard2]);
+    splitState.statuses.splice(activeIdx + 1, 0, "active");
+    splitState.bets.splice(activeIdx + 1, 0, originalBet);
+    splitState.payouts.splice(activeIdx + 1, 0, 0);
+
+    // Active hand index stays the same — player plays out the new hand1 first
+    activeHand = splitState.hands[activeIdx];
+  }
+
+  // Logic to advance to the next active hand or finish the game
+  let currentHandStatus = splitState.statuses[activeIdx];
+  let isCurrentHandDone = currentHandStatus === "dealer_wins" || currentHandStatus === "stood" || currentHandStatus === "stand_pending";
+
+  if (isCurrentHandDone) {
+    // Find the next active hand
+    let nextHandIdx = -1;
+    for (let i = activeIdx + 1; i < splitState.hands.length; i++) {
+      if (splitState.statuses[i] === "active") {
+        nextHandIdx = i;
+        break;
       }
     }
 
-    const p1 = calcPayout(finalStatuses[0], splitState.bets[0]);
-    const p2 = calcPayout(finalStatuses[1], splitState.bets[1]);
-    const totalPayout = p1 + p2;
-    const totalBet = splitState.bets[0] + splitState.bets[1];
+    if (nextHandIdx !== -1) {
+      // Advance to next hand
+      splitState.activeHandIndex = nextHandIdx;
+      await db.update(blackjackHandsTable).set({
+        playerHand: JSON.stringify(splitState),
+        deckState: JSON.stringify(deck),
+      }).where(eq(blackjackHandsTable.id, hand.id));
 
-    splitState.statuses = finalStatuses;
-    splitState.payouts = [p1, p2];
+      const { totalBalance } = await getUserBalance(user.id);
+      res.json({
+        handId: hand.id,
+        isSplit: true,
+        splitHands: splitState.hands,
+        activeHandIndex: nextHandIdx,
+        dealerHand: [dealerHand[0], { suit: "?", rank: "?" }],
+        dealerTotal: null,
+        splitStatuses: splitState.statuses,
+        status: "active",
+        payout: 0,
+        balance: totalBalance,
+        serverSeedHash, clientSeed, nonce,
+      });
+      return;
+    } else {
+      // All hands done — play dealer and settle
+      while (dealerShouldHit(dealerHand)) {
+        dealerHand = [...dealerHand, deck.shift()!];
+      }
 
-    await creditBalance(user.id, totalPayout);
-    await db.update(usersTable).set({
-      totalBets: sql`total_bets + 1`,
-      totalWon: sql`coalesce(total_won, 0) + ${totalPayout}`,
-    }).where(eq(usersTable.id, user.id));
-    await db.insert(betsTable).values({
-      userId: user.id, gameId: hand.gameId,
-      amount: String(totalBet), payout: String(totalPayout),
-      won: totalPayout > totalBet,
-      multiplier: String(totalBet > 0 ? totalPayout / totalBet : 0),
-      serverSeed, serverSeedHash, clientSeed, nonce,
-      meta: { splitHands: splitState.hands, dealerHand, finalStatuses, action: "split_complete" },
-    });
+      const finalStatuses: string[] = [];
+      let totalPayout = 0;
+      let totalBet = 0;
 
-    await db.update(blackjackHandsTable).set({
-      playerHand: JSON.stringify(splitState),
-      dealerHand: JSON.stringify(dealerHand),
-      deckState: JSON.stringify(deck),
-      status: "split_complete",
-      bet: String(totalBet),
-    }).where(eq(blackjackHandsTable.id, hand.id));
+      for (let i = 0; i < splitState.hands.length; i++) {
+        const hs = splitState.statuses[i];
+        const resStatus = hs === "dealer_wins" ? "dealer_wins" : resolveHand(splitState.hands[i], dealerHand);
+        finalStatuses.push(resStatus);
+        const p = calcPayout(resStatus, splitState.bets[i]);
+        splitState.payouts[i] = p;
+        totalPayout += p;
+        totalBet += splitState.bets[i];
+      }
 
-    const { totalBalance } = await getUserBalance(user.id);
-    res.json({
-      handId: hand.id,
-      isSplit: true,
-      splitHands: splitState.hands,
-      activeHandIndex: activeIdx,
-      hand1Total: handTotal(splitState.hands[0]),
-      hand2Total: handTotal(splitState.hands[1]),
-      dealerHand,
-      dealerTotal: handTotal(dealerHand),
-      hand1Status: finalStatuses[0],
-      hand2Status: finalStatuses[1],
-      status: "split_complete",
-      payout: totalPayout,
-      balance: totalBalance,
-      serverSeedHash, clientSeed, nonce,
-    });
-    return;
+      splitState.statuses = finalStatuses;
+      await creditBalance(user.id, totalPayout);
+      await db.update(usersTable).set({
+        totalBets: sql`total_bets + 1`,
+        totalWon: sql`coalesce(total_won, 0) + ${totalPayout}`,
+      }).where(eq(usersTable.id, user.id));
+
+      await db.insert(betsTable).values({
+        userId: user.id, gameId: hand.gameId,
+        amount: String(totalBet), payout: String(totalPayout),
+        won: totalPayout > totalBet,
+        multiplier: String(totalBet > 0 ? totalPayout / totalBet : 0),
+        serverSeed, serverSeedHash, clientSeed, nonce,
+        meta: { splitHands: splitState.hands, dealerHand, finalStatuses, action: "split_complete" },
+      });
+
+      await db.update(blackjackHandsTable).set({
+        playerHand: JSON.stringify(splitState),
+        dealerHand: JSON.stringify(dealerHand),
+        deckState: JSON.stringify(deck),
+        status: "split_complete",
+        bet: String(totalBet),
+      }).where(eq(blackjackHandsTable.id, hand.id));
+
+      const { totalBalance } = await getUserBalance(user.id);
+      res.json({
+        handId: hand.id,
+        isSplit: true,
+        splitHands: splitState.hands,
+        activeHandIndex: activeIdx,
+        dealerHand,
+        dealerTotal: handTotal(dealerHand),
+        splitStatuses: finalStatuses,
+        status: "split_complete",
+        payout: totalPayout,
+        balance: totalBalance,
+        serverSeedHash, clientSeed, nonce,
+      });
+      return;
+    }
   }
 
   // Still playing current hand
-  splitState.hands[activeIdx] = activeHand;
-
   await db.update(blackjackHandsTable).set({
     playerHand: JSON.stringify(splitState),
     deckState: JSON.stringify(deck),
@@ -779,12 +810,9 @@ async function handleSplitAction(
     isSplit: true,
     splitHands: splitState.hands,
     activeHandIndex: activeIdx,
-    hand1Total: handTotal(splitState.hands[0]),
-    hand2Total: handTotal(splitState.hands[1]),
     dealerHand: [dealerHand[0], { suit: "?", rank: "?" }],
     dealerTotal: null,
-    hand1Status: splitState.statuses[0],
-    hand2Status: splitState.statuses[1],
+    splitStatuses: splitState.statuses,
     status: "active",
     payout: 0,
     balance: totalBalance,
