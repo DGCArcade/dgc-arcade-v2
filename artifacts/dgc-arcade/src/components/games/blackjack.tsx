@@ -551,8 +551,7 @@ export function Blackjack({ game }: BlackjackProps) {
     setHandId(null); setPlayerHand([]); setDealerHand([]);
     setPlayerTotal(0); setDealerTotal(null); setStatus("idle");
     setPayout(0); setCurrentBet(0); setInsuranceEligible(false); setShowResult(false);
-    setIsSplit(false); setSplitHands(null); setActiveHandIndex(0);
-    setHand1Total(0); setHand2Total(0); setHand1Status("active"); setHand2Status("active");
+    setIsSplit(false); setSplitHands(null); setActiveHandIndex(0); setSplitStatuses([]);
     setServerSeedHash(null); setClientSeed(null); setNonce(null);
   };
 
@@ -683,10 +682,9 @@ export function Blackjack({ game }: BlackjackProps) {
                 : status === "dealer_wins" ? "DEALER WINS"
                 : status === "push" ? "PUSH"
                 : status === "split_complete" ? (
-                    hand1Status === "dealer_wins" && hand2Status === "dealer_wins" ? "DEALER WINS"
-                    : hand1Status === "push" && hand2Status === "push" ? "PUSH"
-                    : (hand1Status === "player_wins" || hand1Status === "player_blackjack") &&
-                      (hand2Status === "player_wins" || hand2Status === "player_blackjack") ? "YOU WIN"
+                    splitStatuses.every(s => s === "dealer_wins") ? "DEALER WINS"
+                    : splitStatuses.every(s => s === "push") ? "PUSH"
+                    : splitStatuses.every(s => s === "player_wins" || s === "player_blackjack") ? "YOU WIN"
                     : "SPLIT RESULT"
                   )
                 : "PUSH"}
