@@ -199,9 +199,9 @@ export function Coinflip({ game }: CoinflipProps) {
             setResult(serverResult);
             
             setBetId(data.bet.id);
-            setServerSeedHash(data.bet.serverSeedHash);
-            setClientSeed(data.bet.clientSeed);
-            setNonce(data.bet.nonce);
+            setServerSeedHash(data.bet.serverSeedHash ?? null);
+            setClientSeed(data.bet.clientSeed ?? null);
+            setNonce(data.bet.nonce ?? null);
 
             // Wait for the landing animation (1.2s) to finish before showing the win/loss banner
             setTimeout(() => {

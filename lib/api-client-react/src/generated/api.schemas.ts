@@ -108,6 +108,9 @@ export interface BetRecord {
   /** @nullable */
   clientSeed?: string | null;
   /** @nullable */
+  serverSeedHash?: string | null;
+  nonce?: number;
+  /** @nullable */
   meta?: BetRecordMeta;
   createdAt: string;
 }

@@ -118,9 +118,9 @@ export function DiceGame({ game }: DiceGameProps) {
           setWon(data.won);
           setPayout(data.payout);
           setBetId(data.bet.id);
-          setServerSeedHash(data.bet.serverSeedHash);
-          setClientSeed(data.bet.clientSeed);
-          setNonce(data.bet.nonce);
+          setServerSeedHash(data.bet.serverSeedHash ?? null);
+          setClientSeed(data.bet.clientSeed ?? null);
+          setNonce(data.bet.nonce ?? null);
           setRolling(false);
           qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
           qc.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
