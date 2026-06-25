@@ -919,6 +919,13 @@ blackjackRouter.get("/verify/:handId", async (req, res) => {
         "3. Compare the resulting hash to serverSeedHash shown before the game",
         "4. If they match, the outcome was not manipulated",
       ],
+      provablyFairPhilosophy: {
+        standard: "SHA-256 (Secure Hash Algorithm 256-bit)",
+        origin: "Developed by the National Security Agency (NSA) and published by NIST.",
+        patentStatus: "Released under a royalty-free license; it is a global public standard for cryptographic integrity.",
+        whyWeUseIt: "SHA-256 is a 'one-way' function. It is mathematically impossible to reverse-engineer the original seed from the hash. By showing you the hash BEFORE you play, and revealing the seed AFTER, we prove the game outcome was locked in and never changed.",
+        integrityNote: "This is the same cryptographic standard that secures Bitcoin and global banking. It ensures that neither the player nor the house can cheat."
+      }
     });
   } catch (err) {
     req.log.error({ err }, "Blackjack verify error");
