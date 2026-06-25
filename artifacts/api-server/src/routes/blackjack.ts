@@ -863,14 +863,12 @@ blackjackRouter.get("/current", requireAuth, async (req, res) => {
 });
 
 // ─── GET /api/blackjack/verify/:handId ───────────────────────────────────────
-blackjackRouter.get("/verify/:handId", requireAuth, async (req, res) => {
+blackjackRouter.get("/verify/:handId", async (req, res) => {
   try {
     const handId = parseInt(req.params.handId as string);
     const [hand] = await db.select().from(blackjackHandsTable)
-      .where(and(
-        eq(blackjackHandsTable.id, handId),
-        eq(blackjackHandsTable.userId, req.user!.userId)
-      )).limit(1);
+      .where(eq(blackjackHandsTable.id, handId))
+      .limit(1);
 
     if (!hand) { res.status(404).json({ error: "Hand not found" }); return; }
 

@@ -834,8 +834,28 @@ export function Blackjack({ game }: BlackjackProps) {
             <div style={{ marginBottom: 2 }}>Client Seed: {clientSeed}</div>
             <div>Nonce: {nonce}</div>
             <div style={{ marginTop: 6, fontSize: 7, color: "rgba(255,255,255,0.4)" }}>
-              After game completes, verify at /api/blackjack/verify/{handId}
+              After game completes, verify at:
+              <a 
+                href={`/api/blackjack/verify/${handId}`} 
+                target="_blank" 
+                rel="noreferrer"
+                style={{ color: accent, marginLeft: 4, textDecoration: "underline" }}
+              >
+                /api/blackjack/verify/{handId}
+              </a>
             </div>
+            {isDone && (
+              <button
+                onClick={() => window.open(`/api/blackjack/verify/${handId}`, '_blank')}
+                style={{
+                  marginTop: 8, width: "100%", padding: "4px 8px", background: "rgba(255,255,255,0.1)",
+                  border: "1px solid rgba(255,255,255,0.2)", borderRadius: 4, color: "#fff",
+                  fontSize: 8, fontWeight: 900, cursor: "pointer"
+                }}
+              >
+                VERIFY OUTCOME
+              </button>
+            )}
           </div>
         )}
       </div>
