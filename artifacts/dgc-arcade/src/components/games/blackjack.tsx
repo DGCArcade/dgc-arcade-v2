@@ -206,8 +206,8 @@ class SoundEngine {
 const soundEngine = new SoundEngine();
 
 // ─── Card Component with Flip Animation ───
-function PlayingCard({ card, hidden, delay = 0, dealFrom }: { 
-  card: Card; hidden?: boolean; delay?: number; dealFrom?: { x: number; y: number } 
+function PlayingCard({ card, hidden, delay = 0, dealFrom, isMobile }: { 
+  card: Card; hidden?: boolean; delay?: number; dealFrom?: { x: number; y: number }; isMobile?: boolean 
 }) {
   const isRed = card.suit === "♥" || card.suit === "♦";
   const clr = isRed ? "#dc2626" : "#1a1a2e";
@@ -231,7 +231,9 @@ function PlayingCard({ card, hidden, delay = 0, dealFrom }: {
 
   return (
     <div ref={cardRef} className="bj-card-container" style={{
-      width: 85, height: 118, borderRadius: 8, position: "relative",
+      width: isMobile ? "clamp(55px, 15vw, 85px)" : 85, 
+      height: isMobile ? "clamp(75px, 20vw, 118px)" : 118, 
+      borderRadius: 8, position: "relative",
       perspective: 1000,
     }}>
       <div className={`bj-card-inner ${hidden ? "is-hidden" : ""}`} style={{
@@ -530,8 +532,8 @@ export function Blackjack({ game }: BlackjackProps) {
         <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: isMobile ? 4 : 12, zIndex: 10 }}>
           <div style={{ position: "relative", display: "flex", gap: isMobile ? 6 : 10, minHeight: isMobile ? 90 : 118 }}>
             {dealerHand.length > 0 ? dealerHand.map((c, i) => (
-              <div key={`d-${i}`} style={{ position: "relative", transform: isMobile ? "scale(0.85)" : "none", transformOrigin: "top center" }}>
-                <PlayingCard card={c} hidden={c.suit === "?"} delay={i * 200} dealFrom={deckRef.current?.getBoundingClientRect()} />
+              <div key={`d-${i}`} style={{ position: "relative", transform: isMobile ? "scale(1.0)" : "none", transformOrigin: "top center" }}>
+                <PlayingCard card={c} hidden={c.suit === "?"} delay={i * 200} dealFrom={deckRef.current?.getBoundingClientRect()} isMobile={isMobile} />
               </div>
             )) : <div style={{ width: isMobile ? 70 : 85, height: isMobile ? 98 : 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
           </div>
@@ -568,8 +570,8 @@ export function Blackjack({ game }: BlackjackProps) {
           )}
           <div style={{ position: "relative", display: "flex", gap: isMobile ? 6 : 10, minHeight: isMobile ? 90 : 118 }}>
             {playerHand.length > 0 ? playerHand.map((c, i) => (
-              <div key={`p-${i}`} style={{ position: "relative", transform: isMobile ? "scale(0.85)" : "none", transformOrigin: "bottom center" }}>
-                <PlayingCard card={c} delay={(i + 2) * 200} dealFrom={deckRef.current?.getBoundingClientRect()} />
+              <div key={`p-${i}`} style={{ position: "relative", transform: isMobile ? "scale(1.0)" : "none", transformOrigin: "bottom center" }}>
+                <PlayingCard card={c} delay={(i + 2) * 200} dealFrom={deckRef.current?.getBoundingClientRect()} isMobile={isMobile} />
               </div>
             )) : <div style={{ width: isMobile ? 70 : 85, height: isMobile ? 98 : 118, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 8 }} />}
           </div>
@@ -631,6 +633,9 @@ export function Blackjack({ game }: BlackjackProps) {
             <div style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
               <button onClick={() => doAction("double")} disabled={loading || playerHand.length !== 2} className="bj-action-btn" style={{ flex: 1, background: "#7c3aed", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>DOUBLE</button>
               {insuranceEligible && <button onClick={() => doAction("insurance")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#d97706", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>INSURE</button>}
+              {playerHand.length === 2 && playerHand[0].rank === playerHand[1].rank && (
+                <button onClick={() => doAction("split")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#0ea5e9", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>SPLIT</button>
+              )}
             </div>
           </div>
         )}

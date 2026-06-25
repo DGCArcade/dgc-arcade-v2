@@ -1423,8 +1423,14 @@ body {
 
   /* Compact blackjack card sizes on mobile */
   .bj-card-container {
-    width: clamp(45px, 12vw, 65px) !important;
-    height: clamp(65px, 17vw, 90px) !important;
+    width: clamp(55px, 15vw, 85px) !important;
+    height: clamp(75px, 20vw, 118px) !important;
+  }
+
+  .bj-table-area {
+    padding: 40px 10px !important;
+    gap: 30px !important;
+    min-height: 400px !important;
   }
 
   /* Roulette number grid on mobile */
