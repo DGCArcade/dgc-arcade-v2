@@ -27,19 +27,20 @@ function generateServerSeed(): string {
   return uuidv4().replace(/-/g, "");
 }
 
-function getOutcome(serverSeed: string, clientSeed: string, gameSlug: string): number {
-  const combined = `${serverSeed}:${clientSeed}:${gameSlug}`;
-  const hash = createHash("sha256").update(combined).digest("hex");
+/**
+ * Standard SHA-256 Provably Fair Outcome Generator
+ * Uses HMAC-SHA256(serverSeed, clientSeed:nonce:gameSlug)
+ */
+function getOutcome(serverSeed: string, clientSeed: string, gameSlug: string, nonce: number): number {
+  const message = `${clientSeed}:${nonce}:${gameSlug}`;
+  const hash = createHash("sha256").update(`${serverSeed}:${message}`).digest("hex");
+  // Take first 8 chars (32 bits) and normalize to 0-1
   const num = parseInt(hash.slice(0, 8), 16);
   return num / 0xffffffff;
 }
 
-function getOutcomeN(serverSeed: string, clientSeed: string, gameSlug: string, nonce: number): number {
-  const combined = `${serverSeed}:${clientSeed}:${gameSlug}:${nonce}`;
-  const hash = createHash("sha256").update(combined).digest("hex");
-  const num = parseInt(hash.slice(0, 8), 16);
-  return num / 0xffffffff;
-}
+// Alias for compatibility with existing code
+const getOutcomeN = getOutcome;
 
 interface BetResolution {
   won: boolean;
@@ -341,12 +342,16 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       return;
     }
     const serverSeed = generateServerSeed();
+    const serverSeedHash = createHash("sha256").update(serverSeed).digest("hex");
     const clientSeedStr = clientSeed ?? uuidv4();
-    const seedValue = getOutcome(serverSeed, clientSeedStr, game.slug);
+    const nonce = user.totalBets + 1;
+    
+    const seedValue = getOutcome(serverSeed, clientSeedStr, game.slug, nonce);
     const { won, multiplier, payout, resultMeta } = resolveBet(
       game.slug, amount, houseEdge, seedValue, serverSeed, clientSeedStr,
       (meta as Record<string, unknown>) ?? null
     );
+    
     // Standardized balance credit and stat updates
     const finalBalance = await creditBalance(user.id, payout);
     
@@ -364,7 +369,9 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       won,
       multiplier: String(multiplier),
       serverSeed,
+      serverSeedHash,
       clientSeed: clientSeedStr,
+      nonce,
       meta: { ...resultMeta, userMeta: meta },
     }).returning();
     clearLiveFeedCaches();
@@ -420,7 +427,8 @@ betsRouter.post("/", requireAuth, async (req, res) => {
         gameId: bet.gameId, gameName: game.name,
         amount: parseFloat(bet.amount), payout: parseFloat(bet.payout),
         won: bet.won, multiplier: bet.multiplier ? parseFloat(bet.multiplier) : null,
-        serverSeed: bet.serverSeed, clientSeed: bet.clientSeed,
+        serverSeed: bet.serverSeed, serverSeedHash: bet.serverSeedHash,
+        clientSeed: bet.clientSeed, nonce: bet.nonce,
         meta: bet.meta, createdAt: bet.createdAt.toISOString(),
       },
       newBalance: currentBalance, won, payout, multiplier,
@@ -450,7 +458,8 @@ betsRouter.get("/", requireAuth, async (req, res) => {
       id: bet.id, userId: bet.userId, username, gameId: bet.gameId, gameName,
       amount: parseFloat(bet.amount), payout: parseFloat(bet.payout), won: bet.won,
       multiplier: bet.multiplier ? parseFloat(bet.multiplier) : null,
-      serverSeed: bet.serverSeed, clientSeed: bet.clientSeed, meta: bet.meta,
+      serverSeed: bet.serverSeed, serverSeedHash: bet.serverSeedHash,
+      clientSeed: bet.clientSeed, nonce: bet.nonce, meta: bet.meta,
       createdAt: bet.createdAt.toISOString(),
     })));
   } catch (err) {

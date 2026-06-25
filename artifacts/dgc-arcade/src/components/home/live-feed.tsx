@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { Shield, ChevronDown, ChevronUp, ExternalLink, Info } from "lucide-react";
 
 function getToken() { return typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null; }
 
@@ -17,10 +18,16 @@ interface Bet {
   payout: number;
   won: boolean;
   multiplier?: number | null;
+  serverSeed?: string | null;
+  serverSeedHash?: string | null;
+  clientSeed?: string | null;
+  nonce?: number | null;
+  meta?: any;
   createdAt: string;
 }
 
 function BetsTable({ bets, loading, emptyMsg }: { bets: Bet[]; loading?: boolean; emptyMsg?: string }) {
+  const [expandedBet, setExpandedBet] = useState<number | null>(null);
   const [newIds, setNewIds] = useState<Set<number>>(new Set());
   const prevIds = useState<Set<number>>(new Set())[0];
 
@@ -85,22 +92,76 @@ function BetsTable({ bets, loading, emptyMsg }: { bets: Bet[]; loading?: boolean
           </thead>
           <tbody>
             {bets.map(bet => (
-              <tr key={bet.id}
-                className={`border-b border-border/50 transition-all duration-500 ${newIds.has(bet.id) ? "bg-primary/8" : "hover:bg-secondary/20"}`}>
-                <td className="px-4 py-3 font-medium">
-                  <Link href={`/games/${bet.gameId}`} className="hover:text-primary transition-colors text-sm font-bold">{bet.gameName}</Link>
-                </td>
-                <td className="px-4 py-3">
-                  <span className="font-mono text-muted-foreground text-sm">{bet.username}</span>
-                </td>
-                <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(bet.amount)}</td>
-                <td className="px-4 py-3 text-right font-mono text-sm">
-                  {bet.multiplier ? `${bet.multiplier.toFixed(2)}x` : "-"}
-                </td>
-                <td className={`px-4 py-3 text-right font-mono font-bold text-sm ${bet.won ? "text-green-400" : "text-muted-foreground/60"}`}>
-                  {bet.won ? `+${formatCurrency(bet.payout)}` : "-"}
-                </td>
-              </tr>
+              <>
+                <tr key={bet.id}
+                  onClick={() => bet.serverSeedHash && setExpandedBet(expandedBet === bet.id ? null : bet.id)}
+                  className={`border-b border-border/50 transition-all duration-500 cursor-pointer ${newIds.has(bet.id) ? "bg-primary/8" : "hover:bg-secondary/20"} ${expandedBet === bet.id ? "bg-secondary/40" : ""}`}>
+                  <td className="px-4 py-3 font-medium">
+                    <div className="flex items-center gap-2">
+                      {bet.serverSeedHash && (expandedBet === bet.id ? <ChevronUp className="w-3 h-3 text-primary" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />)}
+                      <Link href={`/games/${bet.gameId}`} className="hover:text-primary transition-colors text-sm font-bold">{bet.gameName}</Link>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="font-mono text-muted-foreground text-sm">{bet.username}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(bet.amount)}</td>
+                  <td className="px-4 py-3 text-right font-mono text-sm">
+                    {bet.multiplier ? `${bet.multiplier.toFixed(2)}x` : "-"}
+                  </td>
+                  <td className={`px-4 py-3 text-right font-mono font-bold text-sm ${bet.won ? "text-green-400" : "text-muted-foreground/60"}`}>
+                    <div className="flex items-center justify-end gap-2">
+                      {bet.won ? `+${formatCurrency(bet.payout)}` : "-"}
+                      {bet.serverSeedHash && <Shield className="w-3 h-3 text-green-500/50" />}
+                    </div>
+                  </td>
+                </tr>
+                {expandedBet === bet.id && bet.serverSeedHash && (
+                  <tr className="bg-secondary/20 border-b border-border/50">
+                    <td colSpan={5} className="px-4 py-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
+                            <Shield className="w-3.5 h-3.5" /> Provably Fair Data
+                          </div>
+                          <div className="space-y-2">
+                            <div className="bg-black/40 rounded p-2 border border-border/40">
+                              <div className="text-[10px] uppercase text-muted-foreground font-bold mb-1">Server Seed Hash (Public)</div>
+                              <div className="font-mono text-[10px] break-all text-muted-foreground/80">{bet.serverSeedHash}</div>
+                            </div>
+                            {bet.serverSeed && (
+                              <div className="bg-black/40 rounded p-2 border border-green-500/20">
+                                <div className="text-[10px] uppercase text-green-400 font-bold mb-1">Server Seed (Revealed)</div>
+                                <div className="font-mono text-[10px] break-all text-green-300/90">{bet.serverSeed}</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                            <Info className="w-3.5 h-3.5" /> Verification Inputs
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-black/40 rounded p-2 border border-border/40">
+                              <div className="text-[10px] uppercase text-muted-foreground font-bold mb-1">Client Seed</div>
+                              <div className="font-mono text-[10px] truncate text-muted-foreground/80">{bet.clientSeed || "N/A"}</div>
+                            </div>
+                            <div className="bg-black/40 rounded p-2 border border-border/40">
+                              <div className="text-[10px] uppercase text-muted-foreground font-bold mb-1">Nonce</div>
+                              <div className="font-mono text-[10px] text-muted-foreground/80">{bet.nonce || "0"}</div>
+                            </div>
+                          </div>
+                          <div className="flex justify-end">
+                            <Link href="/profile" className="text-[10px] uppercase font-bold text-primary hover:underline flex items-center gap-1">
+                              Verify in Tool <ExternalLink className="w-2.5 h-2.5" />
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
             ))}
           </tbody>
         </table>

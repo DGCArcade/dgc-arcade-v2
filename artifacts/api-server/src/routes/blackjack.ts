@@ -218,8 +218,8 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
         amount: String(amount), payout: String(payout),
         won: payout > 0,
         multiplier: String(amount > 0 ? payout / amount : 0),
-        serverSeed, clientSeed,
-        meta: { playerHand, dealerHand, result: status, nonce, serverSeedHash },
+        serverSeed, serverSeedHash, clientSeed, nonce,
+        meta: { playerHand, dealerHand, result: status },
       });
     }
 
@@ -566,8 +566,8 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
         amount: String(finalBet), payout: String(payout),
         won: payout > 0 && status !== "push",
         multiplier: String(finalBet > 0 ? payout / finalBet : 0),
-        serverSeed, clientSeed,
-        meta: { playerHand, dealerHand, result: status, action, nonce, serverSeedHash },
+        serverSeed, serverSeedHash, clientSeed, nonce,
+        meta: { playerHand, dealerHand, result: status, action },
       });
     }
 
@@ -719,8 +719,8 @@ async function handleSplitAction(
       amount: String(totalBet), payout: String(totalPayout),
       won: totalPayout > totalBet,
       multiplier: String(totalBet > 0 ? totalPayout / totalBet : 0),
-      serverSeed, clientSeed,
-      meta: { splitHands: splitState.hands, dealerHand, finalStatuses, action: "split_complete", nonce, serverSeedHash },
+      serverSeed, serverSeedHash, clientSeed, nonce,
+      meta: { splitHands: splitState.hands, dealerHand, finalStatuses, action: "split_complete" },
     });
 
     await db.update(blackjackHandsTable).set({

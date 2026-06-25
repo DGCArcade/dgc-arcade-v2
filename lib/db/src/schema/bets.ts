@@ -13,7 +13,9 @@ export const betsTable = pgTable("bets", {
   won: boolean("won").notNull().default(false),
   multiplier: numeric("multiplier", { precision: 10, scale: 4 }),
   serverSeed: text("server_seed"),
+  serverSeedHash: text("server_seed_hash"),
   clientSeed: text("client_seed"),
+  nonce: integer("nonce").notNull().default(0),
   meta: jsonb("meta"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

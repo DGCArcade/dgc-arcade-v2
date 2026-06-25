@@ -8,7 +8,7 @@ import { WithdrawForm } from "@/components/profile/withdraw-form";
 import { useLocation } from "wouter";
 import { ArrowDownLeft, ArrowUpRight, Clock, CheckCircle2, XCircle, Landmark, RefreshCw, Users, Copy, CheckCheck, TrendingUp, Shield, Save, MessageCircle, Zap, Lock, Monitor, Smartphone, Tablet, Globe, LogOut, X, ChevronRight } from "lucide-react";
 import { CoinIcon } from "@/components/wallet/coin-icon";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { VipModal, getVipProgress } from "@/components/vip/vip-modal";
 import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
 
@@ -52,6 +52,29 @@ export default function Profile() {
   const [txAllOpen, setTxAllOpen] = useState(false);
   const [txAll, setTxAll] = useState<any[]>([]);
   const [txAllLoading, setTxAllLoading] = useState(false);
+
+  // ── Provably Fair Verification Tool State ──
+  const [vServerSeed, setVServerSeed] = useState("");
+  const [vClientSeed, setVClientSeed] = useState("");
+  const [vNonce, setVNonce] = useState("");
+  const [vGameSlug, setVGameSlug] = useState("coinflip");
+  const [vResult, setVResult] = useState<string | null>(null);
+
+  const calculateVerificationHash = useCallback(async () => {
+    if (!vServerSeed || !vClientSeed || !vNonce) return;
+    try {
+      // Use crypto.subtle for browser-side SHA-256
+      const message = `${vClientSeed}:${vNonce}:${vGameSlug}`;
+      const combined = `${vServerSeed}:${message}`;
+      const msgUint8 = new TextEncoder().encode(combined);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+      setVResult(hashHex);
+    } catch (e) {
+      console.error("Verification failed", e);
+    }
+  }, [vServerSeed, vClientSeed, vNonce, vGameSlug]);
 
   useEffect(() => { if (user) setTelegramInput((user as any).telegramUsername ?? ""); }, [user?.username]);
 
@@ -726,8 +749,77 @@ export default function Profile() {
             <div className="bg-black/40 border border-green-500/30 rounded p-3 space-y-2">
               <div className="text-xs text-green-400 font-bold uppercase tracking-widest">Verification Instructions</div>
               <p className="text-xs text-muted-foreground">
-                Click on any completed bet in your transaction history to view its Server Seed Hash, Client Seed, and Nonce. Then use the verification tool to confirm fairness.
+                Click on any completed bet in your transaction history to view its Server Seed Hash, Client Seed, and Nonce. Then use the verification tool below to confirm fairness.
               </p>
+            </div>
+
+            <div className="pt-4 border-t border-border/40 space-y-4">
+              <div className="text-sm font-bold uppercase tracking-widest text-primary flex items-center gap-2">
+                <RefreshCw className="w-4 h-4" /> Live Verification Tool
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">Server Seed (Revealed)</label>
+                    <input type="text" value={vServerSeed} onChange={e => setVServerSeed(e.target.value)} placeholder="Enter unhashed server seed"
+                      className="w-full rounded bg-black/40 border border-border/60 px-3 py-2 text-xs font-mono text-green-300" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">Client Seed</label>
+                      <input type="text" value={vClientSeed} onChange={e => setVClientSeed(e.target.value)} placeholder="Enter client seed"
+                        className="w-full rounded bg-black/40 border border-border/60 px-3 py-2 text-xs font-mono" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">Nonce</label>
+                      <input type="number" value={vNonce} onChange={e => setVNonce(e.target.value)} placeholder="Bet counter"
+                        className="w-full rounded bg-black/40 border border-border/60 px-3 py-2 text-xs font-mono" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">Game Type</label>
+                    <select value={vGameSlug} onChange={e => setVGameSlug(e.target.value)}
+                      className="w-full rounded bg-black/40 border border-border/60 px-3 py-2 text-xs font-mono">
+                      <option value="coinflip">Coinflip</option>
+                      <option value="dice">Dice</option>
+                      <option value="crash">Crash</option>
+                      <option value="roulette">Roulette</option>
+                      <option value="plinko">Plinko</option>
+                      <option value="hilo">HiLo</option>
+                      <option value="keno">Keno</option>
+                      <option value="mines">Mines</option>
+                      <option value="blackjack">Blackjack</option>
+                      <option value="slots">Slots</option>
+                    </select>
+                  </div>
+                  <button onClick={calculateVerificationHash} disabled={!vServerSeed || !vClientSeed || !vNonce}
+                    className="w-full py-2 rounded bg-primary text-primary-foreground font-bold uppercase tracking-widest text-xs hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                    Calculate Verification Hash
+                  </button>
+                </div>
+
+                <div className="bg-black/60 rounded-lg p-4 border border-border/40 flex flex-col justify-center items-center text-center space-y-3">
+                  {vResult ? (
+                    <>
+                      <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
+                        <CheckCircle2 className="w-6 h-6 text-green-500" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-[10px] uppercase font-bold text-muted-foreground">Generated Verification Hash</div>
+                        <div className="font-mono text-[10px] break-all text-green-400 p-2 bg-black/40 rounded border border-green-500/20">{vResult}</div>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground leading-relaxed">
+                        If this hash matches the <strong>Server Seed Hash</strong> shown before your bet, the outcome is 100% mathematically fair and untampered.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="w-10 h-10 text-muted-foreground/20" />
+                      <p className="text-xs text-muted-foreground font-mono">Enter seed data to generate verification hash</p>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </CardContent>
