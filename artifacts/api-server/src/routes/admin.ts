@@ -325,18 +325,104 @@ adminRouter.get("/bank/user-balances", requireBankSession, async (req, res) => {
 });
 
 adminRouter.post("/test-email", async (req, res) => {
-  const { email } = req.body;
+  const { email, emailType = "welcome" } = req.body;
   if (!email) return res.status(400).json({ error: "Email required" });
   
   try {
-    const { sendVerificationEmail } = await import("../lib/mail-service.js");
-    await sendVerificationEmail(email, "Owner Test", "TEST-CODE-123");
-    return res.json({ success: true, message: "Test email sent successfully!" });
+    const {
+      sendWelcomeEmail,
+      sendLoginSecurityEmail,
+      sendDepositConfirmationEmail,
+      sendWithdrawalConfirmationEmail,
+      sendEmailVerificationEmail,
+      sendPasswordResetEmail,
+      sendSuspiciousActivityEmail
+    } = await import("../lib/mail-service.js");
+
+    const testUsername = "TestUser";
+    const testToken = "test-token-" + Date.now();
+    const siteUrl = process.env.SITE_URL || "https://differentgrindcrew.com";
+
+    switch (emailType) {
+      case "welcome":
+        await sendWelcomeEmail(email, testUsername, "player");
+        break;
+      case "login-security":
+        await sendLoginSecurityEmail(
+          email,
+          testUsername,
+          "192.168.1.1",
+          "San Francisco, CA, USA",
+          "Chrome on macOS",
+          testToken
+        );
+        break;
+      case "deposit":
+        await sendDepositConfirmationEmail(
+          email,
+          testUsername,
+          "1.5",
+          "BTC",
+          "0x123abc456def789ghi"
+        );
+        break;
+      case "withdrawal":
+        await sendWithdrawalConfirmationEmail(
+          email,
+          testUsername,
+          "0.5",
+          "ETH",
+          "0xabcdef123456789ghijklmnop"
+        );
+        break;
+      case "verification":
+        await sendEmailVerificationEmail(
+          email,
+          testUsername,
+          "123456",
+          `${siteUrl}/verify?code=test-verification-code`
+        );
+        break;
+      case "password-reset":
+        await sendPasswordResetEmail(
+          email,
+          testUsername,
+          `${siteUrl}/reset-password?token=${testToken}`
+        );
+        break;
+      case "suspicious":
+        await sendSuspiciousActivityEmail(
+          email,
+          testUsername,
+          "203.0.113.42",
+          "Moscow, Russia",
+          "Firefox on Windows"
+        );
+        break;
+      default:
+        return res.status(400).json({ 
+          error: "Invalid email type",
+          availableTypes: [
+            "welcome",
+            "login-security",
+            "deposit",
+            "withdrawal",
+            "verification",
+            "password-reset",
+            "suspicious"
+          ]
+        });
+    }
+
+    return res.json({ 
+      success: true, 
+      message: `Test ${emailType} email sent successfully to ${email}!` 
+    });
   } catch (err: any) {
     return res.status(500).json({ 
       success: false, 
       error: err.message, 
-      details: "This error comes directly from your Proton SMTP server." 
+      details: "Check your Resend API key and domain configuration." 
     });
   }
 });
