@@ -598,10 +598,16 @@ betsRouter.get("/verify/:betId", async (req, res) => {
 
     if (!bet) { res.status(404).json({ error: "Bet not found" }); return; }
 
+    const serverSeed = bet.serverSeed || "";
+    const serverSeedStoredHash = createHash("sha256").update(serverSeed).digest("hex");
+    const isVerified = bet.serverSeedHash === serverSeedStoredHash;
+
     res.json({
       betId: bet.id,
       game: bet.gameName,
-      serverSeed: bet.serverSeed,
+      verified: isVerified,
+      verificationStatus: isVerified ? "SUCCESS: Cryptographic signature matches" : "FAILED: Signature mismatch",
+      serverSeed,
       serverSeedHash: bet.serverSeedHash,
       clientSeed: bet.clientSeed,
       nonce: bet.nonce,
@@ -611,6 +617,11 @@ betsRouter.get("/verify/:betId", async (req, res) => {
       multiplier: bet.multiplier,
       meta: bet.meta,
       createdAt: bet.createdAt,
+      verificationSteps: [
+        { step: 1, action: "Retrieve revealed Server Seed", value: serverSeed },
+        { step: 2, action: "Hash Server Seed with SHA-256", result: serverSeedStoredHash },
+        { step: 3, action: "Compare with pre-game Server Hash", match: isVerified }
+      ],
       verificationInstructions: [
         "1. Combine serverSeed + clientSeed + nonce + gameSlug",
         "2. Run SHA256(serverSeed:clientSeed:nonce:gameSlug) to derive the outcome",

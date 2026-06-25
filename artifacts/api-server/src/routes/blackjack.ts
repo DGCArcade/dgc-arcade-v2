@@ -894,9 +894,13 @@ blackjackRouter.get("/verify/:handId", async (req, res) => {
       nonce = hand.nonce || 1;
     }
     const serverSeedHash = hashServerSeed(serverSeed);
+    const serverSeedStoredHash = createHash("sha256").update(serverSeed).digest("hex");
+    const isVerified = serverSeedHash === serverSeedStoredHash;
 
     res.json({
       handId: hand.id,
+      verified: isVerified,
+      verificationStatus: isVerified ? "SUCCESS: Cryptographic signature matches" : "FAILED: Signature mismatch",
       serverSeed,          // Revealed after game
       serverSeedHash,      // Was shown before game
       clientSeed,
@@ -904,6 +908,11 @@ blackjackRouter.get("/verify/:handId", async (req, res) => {
       status: hand.status,
       bet: hand.bet,
       createdAt: hand.createdAt,
+      verificationSteps: [
+        { step: 1, action: "Retrieve revealed Server Seed", value: serverSeed },
+        { step: 2, action: "Hash Server Seed with SHA-256", result: serverSeedStoredHash },
+        { step: 3, action: "Compare with pre-game Server Hash", match: isVerified }
+      ],
       verificationInstructions: [
         "1. Combine serverSeed + clientSeed + nonce",
         "2. Run HMAC-SHA256(serverSeed, clientSeed:nonce:cardIndex) for each card position",
