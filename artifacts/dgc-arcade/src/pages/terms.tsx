@@ -107,8 +107,22 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-foreground mb-3">9. Provably Fair Gaming</h2>
-          <p>All games on DGC Arcade use a provably fair algorithm. Each outcome is generated using a combination of a server seed (hashed and committed before the bet) and a client seed that you control. You can verify any historical bet result using our provably fair verification tool. We cannot manipulate outcomes after a bet is placed.</p>
+          <h2 className="text-lg font-bold text-foreground mb-3">9. Provably Fair Gaming & Cryptographic Integrity</h2>
+          <p>DGC Arcade is built on the principle of absolute transparency. All games on the Platform utilize <strong className="text-foreground">Provably Fair</strong> algorithms, which provide mathematical proof that neither the Platform nor the player can manipulate the outcome of any game.</p>
+          <div className="mt-4 space-y-4">
+            <div className="bg-secondary/30 rounded-xl p-4 border border-border/40">
+              <h3 className="font-bold text-foreground mb-2">9.1 SHA-256 Standard</h3>
+              <p>We utilize the <strong className="text-foreground">SHA-256 (Secure Hash Algorithm 256-bit)</strong>, a cryptographic standard developed by the NSA. This is the same industrial-grade security used to secure the Bitcoin network and global financial systems. SHA-256 is a "one-way" function, ensuring that once a result is hashed, it cannot be reversed or altered.</p>
+            </div>
+            <div className="bg-secondary/30 rounded-xl p-4 border border-border/40">
+              <h3 className="font-bold text-foreground mb-2">9.2 The Verification Process</h3>
+              <p>For every game played, a <strong className="text-foreground">Server Seed</strong> is generated and its hash is committed before the bet is placed. By combining this with a <strong className="text-foreground">Client Seed</strong> provided by the user, the final outcome is determined. After the game, the Server Seed is revealed, allowing the user to verify the result against the original hash. Detailed technical steps can be found on our <Link href="/provably-fair" className="text-primary hover:underline">Provably Fair Page</Link>.</p>
+            </div>
+            <div className="bg-secondary/30 rounded-xl p-4 border border-border/40">
+              <h3 className="font-bold text-foreground mb-2">9.3 No Manipulation</h3>
+              <p>Because the hash is committed before the game begins, DGC Arcade has no way to change the outcome once the player places their bet. This ensures a 100% fair and transparent gaming environment.</p>
+            </div>
+          </div>
         </section>
 
         <section>

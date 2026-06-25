@@ -76,7 +76,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground/50">
                   <span>© {new Date().getFullYear()} DGC Arcade — DGCArcade.io</span>
                   <span>·</span>
-                  <span>All games use provably fair algorithms</span>
+                  <Link href="/provably-fair" className="hover:text-foreground transition-colors font-medium underline underline-offset-2">All games use provably fair algorithms</Link>
                   <span>·</span>
                   <span className="text-yellow-500/70 font-medium">⚠ Gambling can be addictive. Play responsibly. 18+ only.</span>
                 </div>

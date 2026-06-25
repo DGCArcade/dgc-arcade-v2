@@ -22,6 +22,7 @@ const ResponsibleGamblingPage = lazy(() => import("@/pages/responsible-gambling"
 const AmlPage = lazy(() => import("@/pages/aml"));
 const Settings = lazy(() => import("@/pages/settings"));
 const CreatorPage = lazy(() => import("@/pages/creator"));
+const ProvablyFairPage = lazy(() => import("@/pages/provably-fair"));
 
 // Loading fallback component
 function PageLoader() {
@@ -80,6 +81,7 @@ function Router() {
           <Route path="/aml" component={AmlPage} />
           <Route path="/settings" component={Settings} />
           <Route path="/creator" component={CreatorPage} />
+          <Route path="/provably-fair" component={ProvablyFairPage} />
           <Route component={NotFound} />
         </Switch>
       </Suspense>
