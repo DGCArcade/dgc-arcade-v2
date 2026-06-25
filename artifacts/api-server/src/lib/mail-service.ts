@@ -21,6 +21,99 @@ const transporter = nodemailer.createTransport({
   },
 } as any);
 
+// Themes for emails to keep it "Best of the Best"
+const THEMES = {
+  GALAXY: {
+    bg: "#0a0a0a",
+    primary: "#ff0080", // Neon Pink
+    secondary: "#7928ca", // Purple
+    accent: "#0070f3", // Blue
+    text: "#ffffff",
+    muted: "#888888"
+  },
+  NEON: {
+    bg: "#000000",
+    primary: "#00ff00", // Lime
+    secondary: "#00e5ff", // Cyan
+    accent: "#ff00ff", // Magenta
+    text: "#ffffff",
+    muted: "#666666"
+  }
+};
+
+function getEmailTemplate(content: string, theme = THEMES.GALAXY) {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: ${theme.bg}; color: ${theme.text}; }
+        .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+        .card { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 24px; padding: 40px; text-align: center; }
+        .logo-container { margin-bottom: 30px; }
+        .logo { 
+          font-size: 36px; 
+          font-weight: 900; 
+          text-transform: uppercase; 
+          letter-spacing: -1px;
+          background: linear-gradient(to right, ${theme.primary}, ${theme.secondary}, ${theme.accent});
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          display: inline-block;
+        }
+        .tagline { color: ${theme.muted}; font-size: 10px; text-transform: uppercase; letter-spacing: 3px; margin-top: 5px; font-weight: 700; }
+        .content { font-size: 16px; line-height: 1.6; color: rgba(255, 255, 255, 0.8); margin-bottom: 30px; text-align: left; }
+        .btn { 
+          display: inline-block; 
+          background: linear-gradient(45deg, ${theme.primary}, ${theme.secondary}); 
+          color: white; 
+          padding: 16px 40px; 
+          border-radius: 12px; 
+          text-decoration: none; 
+          font-weight: 800; 
+          font-size: 16px; 
+          text-transform: uppercase; 
+          letter-spacing: 1px;
+          box-shadow: 0 10px 20px rgba(255, 0, 128, 0.2);
+        }
+        .footer { margin-top: 40px; text-align: center; color: ${theme.muted}; font-size: 12px; }
+        .confidential { 
+          margin-top: 20px; 
+          padding-top: 20px; 
+          border-top: 1px solid rgba(255, 255, 255, 0.05); 
+          font-size: 10px; 
+          font-style: italic; 
+          color: rgba(255, 255, 255, 0.3);
+          line-height: 1.4;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="card">
+          <div class="logo-container">
+            <div class="logo">DGC Arcade</div>
+            <div class="tagline">High-Stakes Crypto Gaming</div>
+          </div>
+          <div class="content">
+            ${content}
+          </div>
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} DGC Arcade Ltd. · Licensed Gaming Platform</p>
+            <p>All games use provably fair algorithms. Play responsibly.</p>
+            <div class="confidential">
+              CONFIDENTIALITY NOTICE: This email and any attachments are confidential and intended solely for the use of the individual or entity to whom they are addressed. If you have received this email in error, please notify the system manager. This message contains proprietary information and is intended only for the individual named. If you are not the named addressee, you should not disseminate, distribute or copy this e-mail.
+            </div>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
 export async function sendVerificationEmail(email: string, username: string, code: string) {
   if (!SMTP_HOST || !SMTP_USER) {
     console.warn("Mail service not configured. Email not sent.");
@@ -28,43 +121,27 @@ export async function sendVerificationEmail(email: string, username: string, cod
   }
 
   const verifyUrl = `${SITE_URL}/settings?verify=${code}`;
-
-  const html = `
-    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 40px; border-radius: 20px; border: 1px solid #333;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #ff0080; font-size: 32px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; margin: 0;">DGC Arcade</h1>
-        <p style="color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">High-Stakes Crypto Gaming</p>
-      </div>
-      
-      <h2 style="font-size: 24px; margin-bottom: 20px;">Welcome, ${username}!</h2>
-      <p style="font-size: 16px; line-height: 1.6; color: #ccc;">
-        To secure your account and enable full platform features, please verify your email address by clicking the button below:
-      </p>
-      
-      <div style="text-align: center; margin: 40px 0;">
-        <a href="${verifyUrl}" style="background: #ff0080; color: white; padding: 15px 35px; border-radius: 10px; text-decoration: none; font-weight: bold; font-size: 18px; display: inline-block; box-shadow: 0 4px 15px rgba(255,0,128,0.3);">
-          VERIFY EMAIL NOW
-        </a>
-      </div>
-      
-      <p style="font-size: 14px; color: #666; text-align: center;">
-        If you didn't create an account on DGC Arcade, you can safely ignore this email.
-      </p>
-      
-      <hr style="border: 0; border-top: 1px solid #333; margin: 40px 0;">
-      
-      <div style="text-align: center; font-size: 12px; color: #444;">
-        © ${new Date().getFullYear()} DGC Arcade Ltd. · All Rights Reserved
-      </div>
+  const content = `
+    <h2 style="color: white; font-size: 24px; margin-bottom: 15px;">Welcome to the Elite, ${username}</h2>
+    <p>You've just taken the first step into the most secure and high-stakes crypto arcade on the planet.</p>
+    <p>To finalize your account and unlock instant withdrawals, please verify your email address below:</p>
+    <div style="text-align: center; margin: 40px 0;">
+      <a href="${verifyUrl}" class="btn">VERIFY ACCOUNT</a>
     </div>
+    <p style="font-size: 13px;">Link expires in 24 hours. If you did not initiate this request, please secure your account immediately.</p>
   `;
 
-  await transporter.sendMail({
-    from: `"DGC Arcade" <${SMTP_USER}>`,
-    to: email,
-    subject: "Verify your DGC Arcade account",
-    html,
-  });
+  try {
+    await transporter.sendMail({
+      from: `"DGC Arcade" <${SMTP_USER}>`,
+      to: email,
+      subject: "Action Required: Verify Your DGC Arcade Account",
+      html: getEmailTemplate(content, THEMES.GALAXY),
+    });
+    console.log(`Verification email sent to ${email}`);
+  } catch (err) {
+    console.error("Failed to send verification email:", err);
+  }
 }
 
 export async function sendPasswordResetEmail(email: string, username: string, token: string) {
@@ -74,34 +151,25 @@ export async function sendPasswordResetEmail(email: string, username: string, to
   }
 
   const resetUrl = `${SITE_URL}/reset-password?token=${token}`;
-
-  const html = `
-    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 40px; border-radius: 20px; border: 1px solid #333;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #ff0080; font-size: 32px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; margin: 0;">DGC Arcade</h1>
-      </div>
-      
-      <h2 style="font-size: 24px; margin-bottom: 20px;">Password Reset</h2>
-      <p style="font-size: 16px; line-height: 1.6; color: #ccc;">
-        Hi ${username}, we received a request to reset your password. Click the button below to choose a new one:
-      </p>
-      
-      <div style="text-align: center; margin: 40px 0;">
-        <a href="${resetUrl}" style="background: #333; color: white; padding: 15px 35px; border-radius: 10px; text-decoration: none; font-weight: bold; font-size: 18px; display: inline-block; border: 1px solid #ff0080;">
-          RESET PASSWORD
-        </a>
-      </div>
-      
-      <p style="font-size: 14px; color: #666; text-align: center;">
-        This link will expire in 1 hour. If you didn't request this, you can safely ignore this email.
-      </p>
+  const content = `
+    <h2 style="color: white; font-size: 24px; margin-bottom: 15px;">Security Update</h2>
+    <p>Hi ${username}, we received a request to reset your DGC Arcade password.</p>
+    <p>Click the button below to establish your new secure credentials:</p>
+    <div style="text-align: center; margin: 40px 0;">
+      <a href="${resetUrl}" class="btn">RESET PASSWORD</a>
     </div>
+    <p style="font-size: 13px; color: #ff4d4d;">This link is valid for 60 minutes only. If you did not request this reset, your account may be at risk—please contact support immediately.</p>
   `;
 
-  await transporter.sendMail({
-    from: `"DGC Arcade" <${SMTP_USER}>`,
-    to: email,
-    subject: "Password Reset Request - DGC Arcade",
-    html,
-  });
+  try {
+    await transporter.sendMail({
+      from: `"DGC Arcade" <${SMTP_USER}>`,
+      to: email,
+      subject: "Security: Password Reset Request",
+      html: getEmailTemplate(content, THEMES.NEON), // Use Neon theme for security alerts
+    });
+    console.log(`Password reset email sent to ${email}`);
+  } catch (err) {
+    console.error("Failed to send password reset email:", err);
+  }
 }
