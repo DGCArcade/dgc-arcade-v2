@@ -2,6 +2,7 @@ import { useState } from "react";
 import { X, ChevronRight, Crown, Zap, Gift, Star, TrendingUp, MessageCircle, Lock } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { useAuth } from "@/hooks/use-auth";
+import { DailyBonusModal } from "@/components/ui/daily-bonus-modal";
 
 export const VIP_TIERS = [
   { id: 0, name: "ROOKIE GRINDER",  shortName: "Rookie",  min: 0,         rakebackPct: 5,  color: "#cd7f32", icon: "🥉" },
@@ -33,6 +34,7 @@ export function VipModal({ open, onClose }: VipModalProps) {
   const [claiming, setClaiming] = useState(false);
   const [claimMsg, setClaimMsg] = useState<string | null>(null);
   const [tab, setTab] = useState<"overview" | "tiers">("overview");
+  const [bonusOpen, setBonusOpen] = useState(false);
 
   const wagered = (user as any)?.totalWageredAmount ?? 0;
   const rakebackClaimed = (user as any)?.rakebackClaimed ?? 0;
@@ -135,10 +137,12 @@ export function VipModal({ open, onClose }: VipModalProps) {
                     <div className="text-xs text-muted-foreground">Free daily reload — available to all members</div>
                   </div>
                 </div>
-                <button onClick={onClose} className="flex items-center gap-1 text-xs text-green-400 font-bold uppercase tracking-widest hover:text-green-300 transition-colors">
+                <button onClick={() => setBonusOpen(true)} className="flex items-center gap-1 text-xs text-green-400 font-bold uppercase tracking-widest hover:text-green-300 transition-colors">
                   Claim <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              <DailyBonusModal open={bonusOpen} onClose={() => setBonusOpen(false)} />
 
               <div className="rounded-xl border border-border/60 p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
