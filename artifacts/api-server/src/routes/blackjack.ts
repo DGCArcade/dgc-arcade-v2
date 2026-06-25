@@ -4,7 +4,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 import { v4 as uuidv4 } from "uuid";
-import { createHash } from "crypto";
+import { createHash, createHmac } from "crypto";
 
 export const blackjackRouter = Router();
 
@@ -13,11 +13,24 @@ type Suit = "♠" | "♥" | "♦" | "♣";
 type Rank = "A" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K";
 type Card = { suit: Suit; rank: Rank };
 
+/**
+ * Split state stored in the `playerHand` JSON field when a split occurs.
+ * hands[0] = first split hand, hands[1] = second split hand
+ * activeHandIndex = 0 or 1
+ */
+interface SplitState {
+  isSplit: true;
+  hands: [Card[], Card[]];
+  activeHandIndex: 0 | 1;
+  bets: [number, number];
+  statuses: [string, string];
+  payouts: [number, number];
+}
+
 const SUITS: Suit[] = ["♠", "♥", "♦", "♣"];
 const RANKS: Rank[] = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
-const NUM_DECKS = 6; // Standard casino 6-deck shoe
+const NUM_DECKS = 6;
 
-/** Build a multi-deck shoe */
 function buildShoe(): Card[] {
   const deck: Card[] = [];
   for (let d = 0; d < NUM_DECKS; d++)
@@ -27,15 +40,21 @@ function buildShoe(): Card[] {
   return deck;
 }
 
-/** Cryptographically seeded Fisher-Yates shuffle */
-function shuffleShoe(seed: string, deck: Card[]): Card[] {
+/** HMAC-SHA256 seeded Fisher-Yates shuffle — provably fair */
+function shuffleShoe(serverSeed: string, clientSeed: string, nonce: number, deck: Card[]): Card[] {
   const d = [...deck];
   for (let i = d.length - 1; i > 0; i--) {
-    const h = createHash("sha256").update(`${seed}:${i}`).digest("hex");
+    const h = createHmac("sha256", serverSeed)
+      .update(`${clientSeed}:${nonce}:${i}`)
+      .digest("hex");
     const j = parseInt(h.slice(0, 8), 16) % (i + 1);
     [d[i], d[j]] = [d[j], d[i]];
   }
   return d;
+}
+
+function hashServerSeed(serverSeed: string): string {
+  return createHash("sha256").update(serverSeed).digest("hex");
 }
 
 function cardValue(rank: Rank): number {
@@ -55,17 +74,7 @@ function handTotal(hand: Card[]): number {
   return total;
 }
 
-/** Soft hand = has an ace counting as 11 */
 function isSoftHand(hand: Card[]): boolean {
-  let total = 0, aces = 0;
-  for (const c of hand) {
-    const v = cardValue(c.rank);
-    if (v === 11) aces++;
-    total += v;
-  }
-  // Soft if reducing aces still keeps total <= 21 but at least one ace counts as 11
-  while (total > 21 && aces > 0) { total -= 10; aces--; }
-  // Re-check: if original total (before reduction) had an ace as 11 and total <= 21
   let rawTotal = 0, rawAces = 0;
   for (const c of hand) {
     const v = cardValue(c.rank);
@@ -81,14 +90,10 @@ function isBlackjack(hand: Card[]): boolean {
   return hand.length === 2 && handTotal(hand) === 21;
 }
 
-/**
- * Dealer hits on soft 17 — standard Vegas Strip / most US casino rule
- * House edge: ~0.5% with basic strategy
- */
 function dealerShouldHit(hand: Card[]): boolean {
   const total = handTotal(hand);
   if (total < 17) return true;
-  if (total === 17 && isSoftHand(hand)) return true; // Hit soft 17
+  if (total === 17 && isSoftHand(hand)) return true;
   return false;
 }
 
@@ -103,9 +108,16 @@ function resolveHand(playerHand: Card[], dealerHand: Card[]): string {
   return "push";
 }
 
+function calcPayout(status: string, bet: number): number {
+  if (status === "player_wins") return bet * 2;
+  if (status === "player_blackjack") return bet * 2.5;
+  if (status === "push") return bet;
+  return 0;
+}
+
 // ─── POST /api/blackjack/deal ─────────────────────────────────────────────────
 blackjackRouter.post("/deal", requireAuth, async (req, res) => {
-  const { gameId, amount } = req.body;
+  const { gameId, amount, clientSeed: rawClientSeed } = req.body;
   if (!gameId || !amount || amount <= 0) {
     res.status(400).json({ error: "gameId and amount required" });
     return;
@@ -118,7 +130,6 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
     const [game] = await db.select().from(gamesTable).where(eq(gamesTable.id, gameId)).limit(1);
     if (!game || !game.active) { res.status(404).json({ error: "Game not found" }); return; }
 
-    // Validate bet limits
     const minBet = parseFloat(String(game.minBet ?? "1"));
     const maxBet = parseFloat(String(game.maxBet ?? "10000"));
     if (amount < minBet) { res.status(400).json({ error: `Minimum bet is $${minBet}` }); return; }
@@ -130,7 +141,7 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
       return;
     }
 
-    // Auto-resolve any stale active hands (cleanup so player can always start fresh)
+    // Auto-resolve stale active hands
     await db.update(blackjackHandsTable)
       .set({ status: "dealer_wins" })
       .where(and(
@@ -138,7 +149,6 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
         eq(blackjackHandsTable.status, "active")
       ));
 
-    // Deduct bet
     let currentBalance: number;
     try {
       currentBalance = await deductBalance(user.id, amount);
@@ -150,11 +160,14 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
       return;
     }
 
-    // Build and shuffle 6-deck shoe
+    // Provably fair: server seed + client seed + nonce
     const serverSeed = uuidv4().replace(/-/g, "");
-    const shoe = shuffleShoe(serverSeed, buildShoe());
+    const serverSeedHash = hashServerSeed(serverSeed);
+    const clientSeed = rawClientSeed || uuidv4().replace(/-/g, "").slice(0, 16);
+    const nonce = 1;
 
-    // Deal: player[0], dealer[0], player[1], dealer[1] — standard deal order
+    const shoe = shuffleShoe(serverSeed, clientSeed, nonce, buildShoe());
+
     const playerHand: Card[] = [shoe[0], shoe[2]];
     const dealerHand: Card[] = [shoe[1], shoe[3]];
     const remainingDeck = shoe.slice(4);
@@ -165,33 +178,35 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
     let status = "active";
     let payout = 0;
 
-    // Immediate resolution checks
     const playerBJ = isBlackjack(playerHand);
     const dealerBJ = isBlackjack(dealerHand);
 
     if (playerBJ && dealerBJ) {
       status = "push";
-      payout = amount; // Push — return bet
+      payout = amount;
     } else if (playerBJ) {
       status = "player_blackjack";
-      payout = amount * 2.5; // 3:2 payout
+      payout = amount * 2.5;
     } else if (dealerBJ) {
       status = "dealer_wins";
       payout = 0;
     }
 
+    // Store clientSeed and nonce in the serverSeed field (packed) for retrieval
+    // Format: "serverSeed|clientSeed|nonce"
+    const seedPack = `${serverSeed}|${clientSeed}|${nonce}`;
+
     const [hand] = await db.insert(blackjackHandsTable).values({
       userId: user.id,
       gameId: game.id,
       bet: String(amount),
-      serverSeed,
+      serverSeed: seedPack,
       deckState: JSON.stringify(remainingDeck),
       playerHand: JSON.stringify(playerHand),
       dealerHand: JSON.stringify(dealerHand),
       status,
     }).returning();
 
-    // Settle immediately if not active
     if (status !== "active") {
       currentBalance = await creditBalance(user.id, payout);
       await db.update(usersTable).set({
@@ -203,8 +218,8 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
         amount: String(amount), payout: String(payout),
         won: payout > 0,
         multiplier: String(amount > 0 ? payout / amount : 0),
-        serverSeed, clientSeed: "blackjack",
-        meta: { playerHand, dealerHand, result: status },
+        serverSeed, clientSeed,
+        meta: { playerHand, dealerHand, result: status, nonce, serverSeedHash },
       });
     }
 
@@ -217,8 +232,12 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
       status,
       payout,
       bet: amount,
-      balance: currentBalance,
+      balance: currentBalance!,
       insuranceEligible: status === "active" ? insuranceEligible : false,
+      // Provably fair info (pre-reveal)
+      serverSeedHash,
+      clientSeed,
+      nonce,
     });
   } catch (err) {
     req.log.error({ err }, "Blackjack deal error");
@@ -227,7 +246,6 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
 });
 
 // ─── POST /api/blackjack/action ───────────────────────────────────────────────
-// action: "hit" | "stand" | "double" | "split" | "insurance"
 blackjackRouter.post("/action", requireAuth, async (req, res) => {
   const { handId, action } = req.body;
   if (!handId || !action) {
@@ -253,11 +271,28 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(401).json({ error: "User not found" }); return; }
 
-    let playerHand: Card[] = JSON.parse(hand.playerHand);
-    let dealerHand: Card[] = JSON.parse(hand.dealerHand);
+    // Unpack seed info
+    const seedParts = hand.serverSeed.split("|");
+    const serverSeed = seedParts[0];
+    const clientSeed = seedParts[1] || "default";
+    const nonce = parseInt(seedParts[2] || "1");
+    const serverSeedHash = hashServerSeed(serverSeed);
+
     let deck: Card[] = JSON.parse(hand.deckState);
     const bet = parseFloat(hand.bet);
 
+    // ── Check if this is a split hand ────────────────────────────────────────
+    let rawPlayerHand: any;
+    try { rawPlayerHand = JSON.parse(hand.playerHand); } catch { rawPlayerHand = []; }
+
+    const isSplitHand = rawPlayerHand?.isSplit === true;
+
+    if (isSplitHand) {
+      return handleSplitAction(req, res, hand, user, rawPlayerHand as SplitState, deck, action, serverSeed, clientSeed, nonce, serverSeedHash);
+    }
+
+    let playerHand: Card[] = rawPlayerHand as Card[];
+    let dealerHand: Card[] = JSON.parse(hand.dealerHand);
     let status: string = hand.status;
     let payout = 0;
     let finalBet = bet;
@@ -287,8 +322,7 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
 
       const dealerHasBlackjack = isBlackjack(dealerHand);
       if (dealerHasBlackjack) {
-        // Insurance pays 2:1 — player wins insurance side bet but loses main bet
-        payout = insuranceBet * 3; // Return insurance + 2:1 profit
+        payout = insuranceBet * 3;
         status = "dealer_wins";
         finalBet = bet + insuranceBet;
 
@@ -301,8 +335,8 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
           userId: user.id, gameId: hand.gameId,
           amount: String(finalBet), payout: String(payout),
           won: payout > 0, multiplier: String(finalBet > 0 ? payout / finalBet : 0),
-          serverSeed: hand.serverSeed, clientSeed: "blackjack",
-          meta: { playerHand, dealerHand, result: "insurance_win", action: "insurance" },
+          serverSeed, clientSeed,
+          meta: { playerHand, dealerHand, result: "insurance_win", action: "insurance", nonce, serverSeedHash },
         });
 
         await db.update(blackjackHandsTable).set({
@@ -318,10 +352,10 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
           playerTotal: handTotal(playerHand),
           dealerTotal: handTotal(dealerHand),
           status, payout, balance: totalBalance,
+          serverSeedHash, clientSeed, nonce,
         });
         return;
       } else {
-        // Insurance loses, game continues normally
         await db.update(blackjackHandsTable).set({
           deckState: JSON.stringify(deck),
         }).where(eq(blackjackHandsTable.id, hand.id));
@@ -334,6 +368,7 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
           dealerTotal: null,
           status: "active", payout: 0,
           insuranceLost: true, balance: totalBalance,
+          serverSeedHash, clientSeed, nonce,
         });
         return;
       }
@@ -347,13 +382,11 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
       if (isBust(playerHand)) {
         status = "dealer_wins";
       } else if (handTotal(playerHand) === 21) {
-        // Auto-stand at 21 — play out dealer
         while (dealerShouldHit(dealerHand)) {
           dealerHand = [...dealerHand, deck.shift()!];
         }
         status = resolveHand(playerHand, dealerHand);
       }
-      // else status stays "active" — player can keep hitting
     }
 
     // ── STAND ─────────────────────────────────────────────────────────────────
@@ -380,9 +413,7 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
         return;
       }
       finalBet = bet * 2;
-      // Exactly one more card
       playerHand = [...playerHand, deck.shift()!];
-      // Dealer plays out
       while (dealerShouldHit(dealerHand)) {
         dealerHand = [...dealerHand, deck.shift()!];
       }
@@ -404,28 +435,126 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
         res.status(400).json({ error: err.message || "Insufficient balance for split" });
         return;
       }
-      finalBet = bet * 2;
-      // Keep first card, deal new second card
-      playerHand = [playerHand[0], deck.shift()!];
 
-      // Split aces: one card each, auto-stand (standard rule)
-      if (playerHand[0].rank === "A") {
+      // Build two hands: each gets the original card + one new card
+      const card1 = playerHand[0];
+      const card2 = playerHand[1];
+      const newCard1 = deck.shift()!; // dealt to hand 1
+      const newCard2 = deck.shift()!; // dealt to hand 2
+
+      const hand1: Card[] = [card1, newCard1];
+      const hand2: Card[] = [card2, newCard2];
+
+      // For split aces: auto-stand both hands (standard rule)
+      const isAceSplit = card1.rank === "A";
+      let hand1Status = "active";
+      let hand2Status = "active";
+
+      if (isAceSplit) {
+        // Play out dealer once and resolve both
         while (dealerShouldHit(dealerHand)) {
           dealerHand = [...dealerHand, deck.shift()!];
         }
-        status = resolveHand(playerHand, dealerHand);
+        hand1Status = resolveHand(hand1, dealerHand);
+        hand2Status = resolveHand(hand2, dealerHand);
       }
-      // Other splits: continue playing
+
+      const splitState: SplitState = {
+        isSplit: true,
+        hands: [hand1, hand2],
+        activeHandIndex: isAceSplit ? 0 : 0,
+        bets: [bet, bet],
+        statuses: [hand1Status as any, hand2Status as any],
+        payouts: [0, 0],
+      };
+
+      // Determine overall hand status
+      const overallStatus = (hand1Status !== "active" && hand2Status !== "active") ? "split_complete" : "active";
+
+      // If ace split, settle immediately
+      if (isAceSplit) {
+        const p1 = calcPayout(hand1Status, bet);
+        const p2 = calcPayout(hand2Status, bet);
+        splitState.payouts = [p1, p2];
+        const totalPayout = p1 + p2;
+        const totalBet = bet * 2;
+
+        await creditBalance(user.id, totalPayout);
+        await db.update(usersTable).set({
+          totalBets: sql`total_bets + 1`,
+          totalWon: sql`coalesce(total_won, 0) + ${totalPayout}`,
+        }).where(eq(usersTable.id, user.id));
+        await db.insert(betsTable).values({
+          userId: user.id, gameId: hand.gameId,
+          amount: String(totalBet), payout: String(totalPayout),
+          won: totalPayout > totalBet,
+          multiplier: String(totalBet > 0 ? totalPayout / totalBet : 0),
+          serverSeed, clientSeed,
+          meta: { splitHands: [hand1, hand2], dealerHand, hand1Status, hand2Status, action: "split", nonce, serverSeedHash },
+        });
+
+        await db.update(blackjackHandsTable).set({
+          playerHand: JSON.stringify(splitState),
+          dealerHand: JSON.stringify(dealerHand),
+          deckState: JSON.stringify(deck),
+          status: "split_complete",
+          bet: String(totalBet),
+        }).where(eq(blackjackHandsTable.id, hand.id));
+
+        const { totalBalance } = await getUserBalance(user.id);
+        res.json({
+          handId: hand.id,
+          isSplit: true,
+          splitHands: [hand1, hand2],
+          activeHandIndex: 0,
+          hand1Total: handTotal(hand1),
+          hand2Total: handTotal(hand2),
+          dealerHand,
+          dealerTotal: handTotal(dealerHand),
+          hand1Status,
+          hand2Status,
+          status: "split_complete",
+          payout: totalPayout,
+          balance: totalBalance,
+          serverSeedHash, clientSeed, nonce,
+        });
+        return;
+      }
+
+      // Non-ace split: save split state, player plays hand 1 first
+      await db.update(blackjackHandsTable).set({
+        playerHand: JSON.stringify(splitState),
+        dealerHand: JSON.stringify(dealerHand),
+        deckState: JSON.stringify(deck),
+        status: "active",
+        bet: String(bet * 2),
+      }).where(eq(blackjackHandsTable.id, hand.id));
+
+      const { totalBalance } = await getUserBalance(user.id);
+      res.json({
+        handId: hand.id,
+        isSplit: true,
+        splitHands: [hand1, hand2],
+        activeHandIndex: 0,
+        hand1Total: handTotal(hand1),
+        hand2Total: handTotal(hand2),
+        dealerHand: [dealerHand[0], { suit: "?", rank: "?" }],
+        dealerTotal: null,
+        hand1Status: "active",
+        hand2Status: "active",
+        status: "active",
+        payout: 0,
+        balance: totalBalance,
+        serverSeedHash, clientSeed, nonce,
+      });
+      return;
     }
 
     // ── SETTLE COMPLETED HANDS ────────────────────────────────────────────────
     const isComplete = status !== "active";
 
     if (isComplete) {
-      if (status === "player_wins") payout = finalBet * 2;
-      else if (status === "player_blackjack") payout = finalBet * 2.5;
-      else if (status === "push") payout = finalBet;
-      else payout = 0;
+      payout = calcPayout(status, finalBet);
 
       await creditBalance(user.id, payout);
       await db.update(usersTable).set({
@@ -437,8 +566,8 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
         amount: String(finalBet), payout: String(payout),
         won: payout > 0 && status !== "push",
         multiplier: String(finalBet > 0 ? payout / finalBet : 0),
-        serverSeed: hand.serverSeed, clientSeed: "blackjack",
-        meta: { playerHand, dealerHand, result: status, action },
+        serverSeed, clientSeed,
+        meta: { playerHand, dealerHand, result: status, action, nonce, serverSeedHash },
       });
     }
 
@@ -461,12 +590,193 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
       status,
       payout,
       balance: totalBalance,
+      serverSeedHash, clientSeed, nonce,
     });
   } catch (err) {
     req.log.error({ err }, "Blackjack action error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// ─── Handle actions on a split hand ──────────────────────────────────────────
+async function handleSplitAction(
+  req: any, res: any,
+  hand: any, user: any,
+  splitState: SplitState,
+  deck: Card[],
+  action: string,
+  serverSeed: string,
+  clientSeed: string,
+  nonce: number,
+  serverSeedHash: string,
+) {
+  const activeIdx = splitState.activeHandIndex;
+  let activeHand = [...splitState.hands[activeIdx]];
+  let dealerHand: Card[] = JSON.parse(hand.dealerHand);
+  const bet = splitState.bets[activeIdx];
+
+  if (action === "hit") {
+    const newCard = deck.shift()!;
+    activeHand = [...activeHand, newCard];
+
+    if (isBust(activeHand)) {
+      splitState.statuses[activeIdx] = "dealer_wins";
+    } else if (handTotal(activeHand) === 21) {
+      // Auto-advance to next hand or play dealer
+      splitState.statuses[activeIdx] = "stand_pending";
+    }
+    splitState.hands[activeIdx] = activeHand;
+  } else if (action === "stand" || splitState.statuses[activeIdx] === "stand_pending") {
+    splitState.statuses[activeIdx] = "stood";
+  } else if (action === "double") {
+    if (activeHand.length !== 2) {
+      res.status(400).json({ error: "Double only on first two cards" });
+      return;
+    }
+    try {
+      await deductBalance(user.id, bet);
+      await db.update(usersTable)
+        .set({ totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${bet}` })
+        .where(eq(usersTable.id, user.id));
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || "Insufficient balance for double" });
+      return;
+    }
+    splitState.bets[activeIdx] = bet * 2;
+    activeHand = [...activeHand, deck.shift()!];
+    splitState.hands[activeIdx] = activeHand;
+    splitState.statuses[activeIdx] = "stood";
+  }
+
+  // Advance to next hand if current hand is done
+  const currentStatus = splitState.statuses[activeIdx];
+  const handDone = currentStatus === "dealer_wins" || currentStatus === "stood" || currentStatus === "stand_pending";
+
+  if (handDone && activeIdx === 0 && splitState.statuses[1] === "active") {
+    splitState.activeHandIndex = 1;
+    splitState.hands[activeIdx] = activeHand;
+
+    await db.update(blackjackHandsTable).set({
+      playerHand: JSON.stringify(splitState),
+      deckState: JSON.stringify(deck),
+    }).where(eq(blackjackHandsTable.id, hand.id));
+
+    const { totalBalance } = await getUserBalance(user.id);
+    res.json({
+      handId: hand.id,
+      isSplit: true,
+      splitHands: splitState.hands,
+      activeHandIndex: 1,
+      hand1Total: handTotal(splitState.hands[0]),
+      hand2Total: handTotal(splitState.hands[1]),
+      dealerHand: [dealerHand[0], { suit: "?", rank: "?" }],
+      dealerTotal: null,
+      hand1Status: splitState.statuses[0],
+      hand2Status: "active",
+      status: "active",
+      payout: 0,
+      balance: totalBalance,
+      serverSeedHash, clientSeed, nonce,
+    });
+    return;
+  }
+
+  // Both hands done — play dealer and settle
+  if (handDone && (activeIdx === 1 || splitState.statuses[1] !== "active")) {
+    splitState.hands[activeIdx] = activeHand;
+
+    // Play out dealer
+    while (dealerShouldHit(dealerHand)) {
+      dealerHand = [...dealerHand, deck.shift()!];
+    }
+
+    // Resolve each hand
+    const finalStatuses: [string, string] = ["dealer_wins", "dealer_wins"];
+    for (let i = 0; i < 2; i++) {
+      const hs = splitState.statuses[i];
+      if (hs === "dealer_wins") {
+        finalStatuses[i] = "dealer_wins";
+      } else {
+        finalStatuses[i] = resolveHand(splitState.hands[i], dealerHand);
+      }
+    }
+
+    const p1 = calcPayout(finalStatuses[0], splitState.bets[0]);
+    const p2 = calcPayout(finalStatuses[1], splitState.bets[1]);
+    const totalPayout = p1 + p2;
+    const totalBet = splitState.bets[0] + splitState.bets[1];
+
+    splitState.statuses = finalStatuses;
+    splitState.payouts = [p1, p2];
+
+    await creditBalance(user.id, totalPayout);
+    await db.update(usersTable).set({
+      totalBets: sql`total_bets + 1`,
+      totalWon: sql`coalesce(total_won, 0) + ${totalPayout}`,
+    }).where(eq(usersTable.id, user.id));
+    await db.insert(betsTable).values({
+      userId: user.id, gameId: hand.gameId,
+      amount: String(totalBet), payout: String(totalPayout),
+      won: totalPayout > totalBet,
+      multiplier: String(totalBet > 0 ? totalPayout / totalBet : 0),
+      serverSeed, clientSeed,
+      meta: { splitHands: splitState.hands, dealerHand, finalStatuses, action: "split_complete", nonce, serverSeedHash },
+    });
+
+    await db.update(blackjackHandsTable).set({
+      playerHand: JSON.stringify(splitState),
+      dealerHand: JSON.stringify(dealerHand),
+      deckState: JSON.stringify(deck),
+      status: "split_complete",
+      bet: String(totalBet),
+    }).where(eq(blackjackHandsTable.id, hand.id));
+
+    const { totalBalance } = await getUserBalance(user.id);
+    res.json({
+      handId: hand.id,
+      isSplit: true,
+      splitHands: splitState.hands,
+      activeHandIndex: activeIdx,
+      hand1Total: handTotal(splitState.hands[0]),
+      hand2Total: handTotal(splitState.hands[1]),
+      dealerHand,
+      dealerTotal: handTotal(dealerHand),
+      hand1Status: finalStatuses[0],
+      hand2Status: finalStatuses[1],
+      status: "split_complete",
+      payout: totalPayout,
+      balance: totalBalance,
+      serverSeedHash, clientSeed, nonce,
+    });
+    return;
+  }
+
+  // Still playing current hand
+  splitState.hands[activeIdx] = activeHand;
+
+  await db.update(blackjackHandsTable).set({
+    playerHand: JSON.stringify(splitState),
+    deckState: JSON.stringify(deck),
+  }).where(eq(blackjackHandsTable.id, hand.id));
+
+  const { totalBalance } = await getUserBalance(user.id);
+  res.json({
+    handId: hand.id,
+    isSplit: true,
+    splitHands: splitState.hands,
+    activeHandIndex: activeIdx,
+    hand1Total: handTotal(splitState.hands[0]),
+    hand2Total: handTotal(splitState.hands[1]),
+    dealerHand: [dealerHand[0], { suit: "?", rank: "?" }],
+    dealerTotal: null,
+    hand1Status: splitState.statuses[0],
+    hand2Status: splitState.statuses[1],
+    status: "active",
+    payout: 0,
+    balance: totalBalance,
+    serverSeedHash, clientSeed, nonce,
+  });
+}
 
 // ─── GET /api/blackjack/current ───────────────────────────────────────────────
 blackjackRouter.get("/current", requireAuth, async (req, res) => {
@@ -479,21 +789,96 @@ blackjackRouter.get("/current", requireAuth, async (req, res) => {
 
     if (!hand) { res.json(null); return; }
 
-    const playerHand: Card[] = JSON.parse(hand.playerHand);
+    const seedParts = hand.serverSeed.split("|");
+    const serverSeed = seedParts[0];
+    const clientSeed = seedParts[1] || "default";
+    const nonce = parseInt(seedParts[2] || "1");
+    const serverSeedHash = hashServerSeed(serverSeed);
+
+    let rawPlayerHand: any;
+    try { rawPlayerHand = JSON.parse(hand.playerHand); } catch { rawPlayerHand = []; }
+
+    const isSplitHand = rawPlayerHand?.isSplit === true;
     const dealerHand: Card[] = JSON.parse(hand.dealerHand);
     const dealerUpcard = dealerHand[0];
 
-    res.json({
-      handId: hand.id,
-      playerHand,
-      dealerHand: [dealerUpcard, { suit: "?", rank: "?" }],
-      playerTotal: handTotal(playerHand),
-      status: hand.status,
-      bet: parseFloat(hand.bet),
-      insuranceEligible: dealerUpcard.rank === "A" && playerHand.length === 2,
-    });
+    if (isSplitHand) {
+      const splitState = rawPlayerHand as SplitState;
+      res.json({
+        handId: hand.id,
+        isSplit: true,
+        splitHands: splitState.hands,
+        activeHandIndex: splitState.activeHandIndex,
+        hand1Total: handTotal(splitState.hands[0]),
+        hand2Total: handTotal(splitState.hands[1]),
+        dealerHand: [dealerUpcard, { suit: "?", rank: "?" }],
+        hand1Status: splitState.statuses[0],
+        hand2Status: splitState.statuses[1],
+        status: hand.status,
+        bet: parseFloat(hand.bet),
+        serverSeedHash, clientSeed, nonce,
+      });
+    } else {
+      const playerHand: Card[] = rawPlayerHand as Card[];
+      res.json({
+        handId: hand.id,
+        playerHand,
+        dealerHand: [dealerUpcard, { suit: "?", rank: "?" }],
+        playerTotal: handTotal(playerHand),
+        status: hand.status,
+        bet: parseFloat(hand.bet),
+        insuranceEligible: dealerUpcard.rank === "A" && playerHand.length === 2,
+        serverSeedHash, clientSeed, nonce,
+      });
+    }
   } catch (err) {
     req.log.error({ err }, "Blackjack current error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── GET /api/blackjack/verify/:handId ───────────────────────────────────────
+blackjackRouter.get("/verify/:handId", requireAuth, async (req, res) => {
+  try {
+    const handId = parseInt(req.params.handId);
+    const [hand] = await db.select().from(blackjackHandsTable)
+      .where(and(
+        eq(blackjackHandsTable.id, handId),
+        eq(blackjackHandsTable.userId, req.user!.userId)
+      )).limit(1);
+
+    if (!hand) { res.status(404).json({ error: "Hand not found" }); return; }
+
+    // Only reveal server seed after hand is complete
+    if (hand.status === "active") {
+      res.status(400).json({ error: "Hand still in progress — server seed revealed after completion" });
+      return;
+    }
+
+    const seedParts = hand.serverSeed.split("|");
+    const serverSeed = seedParts[0];
+    const clientSeed = seedParts[1] || "default";
+    const nonce = parseInt(seedParts[2] || "1");
+    const serverSeedHash = hashServerSeed(serverSeed);
+
+    res.json({
+      handId: hand.id,
+      serverSeed,          // Revealed after game
+      serverSeedHash,      // Was shown before game
+      clientSeed,
+      nonce,
+      status: hand.status,
+      bet: hand.bet,
+      createdAt: hand.createdAt,
+      verificationInstructions: [
+        "1. Combine serverSeed + clientSeed + nonce",
+        "2. Run HMAC-SHA256(serverSeed, clientSeed:nonce:cardIndex) for each card position",
+        "3. Compare the resulting hash to serverSeedHash shown before the game",
+        "4. If they match, the outcome was not manipulated",
+      ],
+    });
+  } catch (err) {
+    req.log.error({ err }, "Blackjack verify error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

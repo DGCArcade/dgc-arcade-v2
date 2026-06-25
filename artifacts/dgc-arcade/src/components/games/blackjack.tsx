@@ -10,6 +10,67 @@ import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
 interface Card { suit: string; rank: string }
 type Status = "idle" | "active" | "player_blackjack" | "player_wins" | "dealer_wins" | "push" | "player_bust";
 
+// ─── Cyberpunk Voice Lines ───────────────────────────────────────────────────
+const VOICE_LINES = {
+  split: [
+    "Splitting the pair — dual execution mode activated",
+    "Neural net says: SPLIT. Two hands, double the gains",
+    "Blockchain confirmed — you're going dual-stack",
+    "Quantum split detected. Playing both timelines",
+    "Hash collision avoided — splitting your way to victory",
+    "Dual-chain strategy engaged",
+    "The algorithm approves — split it up",
+    "Splitting cards — parallel processing initiated",
+    "Two hands are better than one — let's go",
+    "Ledger split confirmed — play on",
+  ],
+  hit: [
+    "Another card incoming — hit confirmed",
+    "Pulling from the deck — let's see what the hash gives us",
+    "One more card — the matrix decides",
+    "Hitting the chain — new card deployed",
+    "Requesting card from the oracle",
+    "Decrypting your next card",
+    "Fetching from the ledger",
+    "Card incoming — neural net activated",
+    "One more hit — let's go",
+  ],
+  stand: [
+    "Standing firm — your hand is locked in",
+    "Committing to the blockchain — no more moves",
+    "Hand frozen — dealer's turn",
+    "Stake finalized — dealer plays",
+    "Your move is complete — let the house try",
+    "Locking in your position",
+    "Standing pat — dealer's move",
+  ],
+  win: [
+    "You crushed it — hash verified victory",
+    "Cryptographic win confirmed",
+    "The blockchain doesn't lie — you won",
+    "Neural net says: VICTORY",
+    "Consensus achieved — you're up",
+    "Ledger updated — profit recorded",
+    "Quantum advantage realized",
+    "Winner winner — crypto dinner",
+  ],
+  lose: [
+    "The house wins this round — better luck next hash",
+    "Blockchain says: dealer wins",
+    "Consensus against you — try again",
+    "The oracle has spoken — dealer prevails",
+    "Ledger updated — loss recorded",
+    "Quantum state collapsed — dealer wins",
+  ],
+  blackjack: [
+    "BLACKJACK — natural 21, cryptographically confirmed",
+    "Perfect hash — BLACKJACK",
+    "The algorithm smiles — BLACKJACK",
+    "Quantum superposition resolved — BLACKJACK",
+    "Ledger spike — BLACKJACK",
+  ],
+};
+
 function getToken() { return localStorage.getItem("dgc_token"); }
 function authHeaders() { return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }; }
 
@@ -201,6 +262,40 @@ class SoundEngine {
     gain.connect(this.getMasterGain());
     source.start(now);
   }
+
+  splitChime() {
+    if (this.muted) return;
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+    // Two-tone chime for split
+    for (let i = 0; i < 2; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880 + i * 220, now + i * 0.15);
+      gain.gain.setValueAtTime(0.12, now + i * 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.25);
+      osc.connect(gain);
+      gain.connect(this.getMasterGain());
+      osc.start(now + i * 0.15);
+      osc.stop(now + i * 0.15 + 0.25);
+    }
+  }
+
+  announceVoiceLine(category: keyof typeof VOICE_LINES) {
+    if (this.muted) return;
+    const lines = VOICE_LINES[category];
+    const line = lines[Math.floor(Math.random() * lines.length)];
+    // Use Web Speech API for voice announcement
+    if ("speechSynthesis" in window) {
+      const utterance = new SpeechSynthesisUtterance(line);
+      utterance.rate = 1.1;
+      utterance.pitch = 1;
+      utterance.volume = 0.7;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    }
+  }
 }
 
 const soundEngine = new SoundEngine();
@@ -356,11 +451,14 @@ export function Blackjack({ game }: BlackjackProps) {
         // Play sound based on result
         if (status === "player_blackjack") {
           soundEngine.blackjackCheer();
+          soundEngine.announceVoiceLine("blackjack");
         } else if (status === "player_wins") {
           soundEngine.winFanfare();
+          soundEngine.announceVoiceLine("win");
           setTimeout(() => soundEngine.crowdCheer(), 300);
         } else if (status === "player_bust" || status === "dealer_wins") {
           soundEngine.lossBuzz();
+          soundEngine.announceVoiceLine("lose");
           setTimeout(() => soundEngine.crowdSigh(), 200);
         }
       }, totalDelay);
@@ -423,6 +521,17 @@ export function Blackjack({ game }: BlackjackProps) {
       setStatus(d.status as Status); setPayout(d.payout ?? 0);
       if (act === "double" || act === "split") setCurrentBet(prev => prev * 2);
       if (act === "insurance") setInsuranceEligible(false);
+      
+      // Play voice lines for actions
+      if (act === "split") {
+        soundEngine.splitChime();
+        soundEngine.announceVoiceLine("split");
+      } else if (act === "hit") {
+        soundEngine.announceVoiceLine("hit");
+      } else if (act === "stand") {
+        soundEngine.announceVoiceLine("stand");
+      }
+      
       queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
     } catch (e: any) {
       toast({ title: "Action failed", variant: "destructive" });

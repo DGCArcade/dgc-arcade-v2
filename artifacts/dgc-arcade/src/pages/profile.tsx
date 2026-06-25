@@ -700,6 +700,39 @@ export default function Profile() {
         </Card>
       )}
 
+      {/* Provably Fair Verification */}
+      <Card className="bg-card border-border">
+        <CardHeader>
+          <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2">
+            <Shield className="w-5 h-5 text-green-500" />
+            <span className="text-glow-shift">Provably Fair · SHA-256</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="bg-secondary/50 border border-green-500/20 rounded-lg p-4 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Every bet in DGC Arcade is mathematically verifiable using SHA-256 cryptography. After each game, you can verify that your outcome was not manipulated by the house.
+            </p>
+            <div className="space-y-2 text-xs font-mono">
+              <div><span className="text-muted-foreground">How it works:</span></div>
+              <ol className="list-decimal list-inside space-y-1 text-muted-foreground ml-2">
+                <li>Before each bet, a Server Seed Hash is generated and shown to you</li>
+                <li>You provide a Client Seed (or we generate one for you)</li>
+                <li>After the game, the unhashed Server Seed is revealed</li>
+                <li>You can verify: HMAC-SHA256(serverSeed, clientSeed:nonce:cardIndex) matches the hash</li>
+                <li>If it matches, the outcome is 100% mathematically fair</li>
+              </ol>
+            </div>
+            <div className="bg-black/40 border border-green-500/30 rounded p-3 space-y-2">
+              <div className="text-xs text-green-400 font-bold uppercase tracking-widest">Verification Instructions</div>
+              <p className="text-xs text-muted-foreground">
+                Click on any completed bet in your transaction history to view its Server Seed Hash, Client Seed, and Nonce. Then use the verification tool to confirm fairness.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Owner AI Assistant — only visible to the platform owner (fanodgc) */}
       {(user.role === "owner" || user.username === "fanodgc" || user.role === "admin") ? (
         <div className="space-y-2">
