@@ -25,7 +25,23 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div className="bg-amber-500/10 border-b border-amber-500/20 py-2 px-4 flex items-center justify-center gap-2 text-[10px] md:text-xs text-amber-300 font-bold uppercase tracking-wider animate-in fade-in slide-in-from-top-4">
               <AlertTriangle className="w-3 h-3 md:w-4 md:h-4 text-amber-400" />
               Your email is unverified. 
-              <Link href="/settings" className="underline hover:text-amber-200 transition-colors">Verify Now</Link>
+              <button 
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`${window.location.origin}/api/users/me/verify/resend`, {
+                      method: "POST",
+                      headers: { "Authorization": `Bearer ${localStorage.getItem("dgc_token")}` }
+                    });
+                    if (res.ok) alert("Verification email sent!");
+                    else window.location.href = "/settings";
+                  } catch {
+                    window.location.href = "/settings";
+                  }
+                }}
+                className="underline hover:text-amber-200 transition-colors ml-1"
+              >
+                Verify Now
+              </button>
             </div>
           )}
           <Navbar />

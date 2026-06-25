@@ -173,9 +173,27 @@ export default function Settings() {
             <div className="text-right">
               <div className="font-mono text-sm">{meData?.email || "Not set"}</div>
               {meData?.email && (
-                <Badge variant={meData.emailVerified ? "default" : "outline"} className={`text-[10px] h-4 ${meData.emailVerified ? "bg-green-500/20 text-green-400" : "text-amber-400 border-amber-500/30"}`}>
-                  {meData.emailVerified ? "Verified" : "Unverified"}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant={meData.emailVerified ? "default" : "outline"} className={`text-[10px] h-4 ${meData.emailVerified ? "bg-green-500/20 text-green-400" : "text-amber-400 border-amber-500/30"}`}>
+                    {meData.emailVerified ? "Verified" : "Unverified"}
+                  </Badge>
+                  {!meData.emailVerified && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await apiCall("/api/users/me/verify/resend", "POST");
+                          if (res.success) alert("Verification email sent!");
+                          else alert(res.error || "Failed to send email.");
+                        } catch {
+                          alert("Network error.");
+                        }
+                      }}
+                      className="text-[10px] uppercase font-black text-primary hover:underline"
+                    >
+                      Resend
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>

@@ -159,6 +159,31 @@ usersRouter.patch("/me/profile", requireAuth, async (req, res) => {
   } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
+// Resend verification email
+usersRouter.post("/me/verify/resend", requireAuth, async (req, res) => {
+  try {
+    const [user] = await db.select({ 
+      id: usersTable.id, 
+      username: usersTable.username, 
+      email: usersTable.email, 
+      emailVerified: usersTable.emailVerified 
+    }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+    if (user.emailVerified) { res.status(400).json({ error: "Email already verified" }); return; }
+    if (!user.email) { res.status(400).json({ error: "No email set" }); return; }
+
+    const code = Math.random().toString(36).substring(2, 15);
+    await db.update(usersTable).set({ emailVerificationCode: code }).where(eq(usersTable.id, req.user!.userId));
+    
+    await sendVerificationEmail(user.email, user.username, code);
+    res.json({ success: true, message: "Verification email sent" });
+  } catch (err: any) {
+    req.log.error({ err }, "Resend verification error");
+    res.status(500).json({ error: "Failed to send email", details: err.message });
+  }
+});
+
 usersRouter.patch("/me/password", requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
   if (!currentPassword || !newPassword) { res.status(400).json({ error: "Current and new password required" }); return; }
