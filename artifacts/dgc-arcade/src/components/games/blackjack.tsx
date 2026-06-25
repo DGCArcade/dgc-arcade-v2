@@ -8,7 +8,7 @@ import { formatCurrency } from "@/lib/format";
 import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
 
 interface Card { suit: string; rank: string }
-type Status = "idle" | "active" | "player_blackjack" | "player_wins" | "dealer_wins" | "push" | "player_bust";
+type Status = "idle" | "active" | "player_blackjack" | "player_wins" | "dealer_wins" | "push" | "player_bust" | "split_complete";
 
 // Voice announcements disabled - using original sounds only
 const VOICE_LINES = {
@@ -27,13 +27,32 @@ function handTotal(hand: Card[], showHidden = false): number {
   let t = 0, a = 0;
   for (const c of hand) {
     if (c.suit === "?" && !showHidden) continue;
-    const rank = c.suit === "?" ? "10" : c.rank; // Fallback logic if we needed it, but we use actual ranks
     const v = ["J","Q","K"].includes(c.rank) ? 10 : c.rank === "A" ? 11 : parseInt(c.rank);
     if (v === 11) a++;
     t += v;
   }
   while (t > 21 && a > 0) { t -= 10; a--; }
   return t;
+}
+
+function isSoftHand(hand: Card[], showHidden = false): boolean {
+  let t = 0, a = 0;
+  for (const c of hand) {
+    if (c.suit === "?" && !showHidden) continue;
+    const v = ["J","Q","K"].includes(c.rank) ? 10 : c.rank === "A" ? 11 : parseInt(c.rank);
+    if (v === 11) a++;
+    t += v;
+  }
+  return a > 0 && t <= 21;
+}
+
+function getSoftTotalString(hand: Card[], showHidden = false): string {
+  const total = handTotal(hand, showHidden);
+  if (total === 0) return "—";
+  if (isSoftHand(hand, showHidden) && total < 21) {
+    return `${total - 10}/${total}`;
+  }
+  return String(total);
 }
 
 const FELT_MAP: Record<ThemeId, { felt: string; rail: string; glow: string; text: string }> = {
@@ -309,7 +328,7 @@ function PlayingCard({ card, hidden, delay = 0, dealFrom, isMobile }: {
   );
 }
 
-function ScoreBubble({ total, bust, bj, label }: { total: number; bust?: boolean; bj?: boolean; label: string }) {
+function ScoreBubble({ total, displayTotal, bust, bj, label }: { total: number; displayTotal?: string; bust?: boolean; bj?: boolean; label: string }) {
   const bg = bust ? "rgba(239,68,68,0.4)" : bj ? "rgba(251,191,36,0.4)" : "rgba(0,0,0,0.8)";
   const border = bust ? "rgba(239,68,68,0.7)" : bj ? "rgba(251,191,36,0.7)" : "rgba(255,255,255,0.3)";
   const color = bust ? "#fca5a5" : bj ? "#fde047" : "#fff";
@@ -325,7 +344,7 @@ function ScoreBubble({ total, bust, bj, label }: { total: number; bust?: boolean
         padding: "8px 16px", backdropFilter: "blur(12px)", minWidth: 64, textAlign: "center",
         boxShadow: "0 10px 30px rgba(0,0,0,0.7)", position: "relative"
       }}>
-        <div style={{ fontSize: 24, fontWeight: 900, color, fontFamily: "monospace", lineHeight: 1 }}>{total > 0 ? total : "—"}</div>
+        <div style={{ fontSize: 24, fontWeight: 900, color, fontFamily: "monospace", lineHeight: 1 }}>{displayTotal ?? (total > 0 ? total : "—")}</div>
       </div>
     </div>
   );
@@ -372,7 +391,7 @@ export function Blackjack({ game }: BlackjackProps) {
   const [nonce, setNonce] = useState<number | null>(null);
 
   const isActive = status === "active";
-  const isDone = !["idle", "active"].includes(status);
+  const isDone = !["idle", "active"].includes(status);  // includes split_complete, player_wins, dealer_wins, push, etc.
   
   useEffect(() => {
     fetch("/api/blackjack/current", { headers: authHeaders() })
@@ -423,6 +442,16 @@ export function Blackjack({ game }: BlackjackProps) {
           soundEngine.lossBuzz();
           soundEngine.announceVoiceLine("lose");
           setTimeout(() => soundEngine.crowdSigh(), 200);
+        } else if (status === "split_complete") {
+          // Play win or loss sound based on net payout vs total bet
+          if (payout > currentBet) {
+            soundEngine.winFanfare();
+            soundEngine.announceVoiceLine("win");
+          } else if (payout === 0) {
+            soundEngine.lossBuzz();
+            soundEngine.announceVoiceLine("lose");
+          }
+          // If payout === currentBet it's a net push — no sound needed
         }
       }, totalDelay);
       
@@ -645,6 +674,7 @@ export function Blackjack({ game }: BlackjackProps) {
             <div style={{ marginTop: isMobile ? -12 : 0 }}>
               <ScoreBubble 
                 total={dealerTotal ?? (isDone && showResult ? handTotal(dealerHand) : handTotal(dealerHand.filter(c => c.suit !== "?")))} 
+                displayTotal={isDone && showResult ? getSoftTotalString(dealerHand) : getSoftTotalString(dealerHand.filter(c => c.suit !== "?"))}
                 bust={dealerTotal !== null && dealerTotal > 21} 
                 label="DEALER" 
               />
@@ -659,7 +689,19 @@ export function Blackjack({ game }: BlackjackProps) {
             border: `2px solid ${accent}`, boxShadow: `0 0 40px ${accent}66`
           }}>
             <div style={{ fontSize: 28, fontWeight: 900, color: accent, letterSpacing: 2, textTransform: "uppercase" }}>
-              {status === "player_blackjack" ? "BLACKJACK!" : status === "player_wins" ? "YOU WIN" : status === "player_bust" ? "BUST" : status === "dealer_wins" ? "DEALER WINS" : "PUSH"}
+              {status === "player_blackjack" ? "BLACKJACK!"
+                : status === "player_wins" ? "YOU WIN"
+                : status === "player_bust" ? "BUST"
+                : status === "dealer_wins" ? "DEALER WINS"
+                : status === "push" ? "PUSH"
+                : status === "split_complete" ? (
+                    hand1Status === "dealer_wins" && hand2Status === "dealer_wins" ? "DEALER WINS"
+                    : hand1Status === "push" && hand2Status === "push" ? "PUSH"
+                    : (hand1Status === "player_wins" || hand1Status === "player_blackjack") &&
+                      (hand2Status === "player_wins" || hand2Status === "player_blackjack") ? "YOU WIN"
+                    : "SPLIT RESULT"
+                  )
+                : "PUSH"}
             </div>
             {payout > 0 && <div style={{ fontSize: 20, fontWeight: 900, color: "#22c55e", marginTop: 6 }}>+{formatCurrency(payout)}</div>}
           </div>
@@ -671,7 +713,7 @@ export function Blackjack({ game }: BlackjackProps) {
             <>
               {playerHand.length > 0 && (
                 <div style={{ marginBottom: isMobile ? -8 : 0 }}>
-                  <ScoreBubble total={playerTotal} bust={playerTotal > 21} bj={status === "player_blackjack"} label="YOU" />
+                  <ScoreBubble total={playerTotal} displayTotal={getSoftTotalString(playerHand)} bust={playerTotal > 21} bj={status === "player_blackjack"} label="YOU" />
                 </div>
               )}
               <div style={{ position: "relative", display: "flex", gap: isMobile ? 6 : 10, minHeight: isMobile ? 90 : 118 }}>
@@ -686,7 +728,7 @@ export function Blackjack({ game }: BlackjackProps) {
             <div style={{ display: "flex", gap: isMobile ? 12 : 40, justifyContent: "center", width: "100%" }}>
               {/* Hand 1 */}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: activeHandIndex === 0 ? 1 : 0.5, transform: activeHandIndex === 0 ? "scale(1.05)" : "scale(0.95)", transition: "all 0.3s" }}>
-                <ScoreBubble total={hand1Total} bust={hand1Total > 21} label="HAND 1" />
+                <ScoreBubble total={hand1Total} displayTotal={getSoftTotalString(splitHands?.[0] ?? [])} bust={hand1Total > 21} label="HAND 1" />
                 <div style={{ display: "flex", gap: 4, position: "relative" }}>
                   {splitHands?.[0].map((c, i) => (
                     <div key={`s1-${i}`} style={{ marginLeft: i > 0 ? (isMobile ? -25 : -40) : 0 }}>
@@ -698,7 +740,7 @@ export function Blackjack({ game }: BlackjackProps) {
               </div>
               {/* Hand 2 */}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: activeHandIndex === 1 ? 1 : 0.5, transform: activeHandIndex === 1 ? "scale(1.05)" : "scale(0.95)", transition: "all 0.3s" }}>
-                <ScoreBubble total={hand2Total} bust={hand2Total > 21} label="HAND 2" />
+                <ScoreBubble total={hand2Total} displayTotal={getSoftTotalString(splitHands?.[1] ?? [])} bust={hand2Total > 21} label="HAND 2" />
                 <div style={{ display: "flex", gap: 4, position: "relative" }}>
                   {splitHands?.[1].map((c, i) => (
                     <div key={`s2-${i}`} style={{ marginLeft: i > 0 ? (isMobile ? -25 : -40) : 0 }}>
@@ -766,7 +808,7 @@ export function Blackjack({ game }: BlackjackProps) {
               <button onClick={() => doAction("stand")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 10 : 12, fontWeight: 900, fontSize: 12 }}>STAND</button>
             </div>
             <div style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
-              <button onClick={() => doAction("double")} disabled={loading || playerHand.length !== 2} className="bj-action-btn" style={{ flex: 1, background: "#7c3aed", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>DOUBLE</button>
+              <button onClick={() => doAction("double")} disabled={loading || (isSplit ? (splitHands?.[activeHandIndex]?.length ?? 0) !== 2 : playerHand.length !== 2)} className="bj-action-btn" style={{ flex: 1, background: "#7c3aed", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>DOUBLE</button>
               {insuranceEligible && <button onClick={() => doAction("insurance")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#d97706", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>INSURE</button>}
               {playerHand.length === 2 && playerHand[0].rank === playerHand[1].rank && (
                 <button onClick={() => doAction("split")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#0ea5e9", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>SPLIT</button>

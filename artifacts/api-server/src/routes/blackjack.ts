@@ -701,12 +701,16 @@ async function handleSplitAction(
     }
 
     // Resolve each hand
+    // Only hands already marked "dealer_wins" (busted player) skip resolution.
+    // "stood" and "stand_pending" (hit-to-21 auto-stand) both need resolveHand.
     const finalStatuses: [string, string] = ["dealer_wins", "dealer_wins"];
     for (let i = 0; i < 2; i++) {
       const hs = splitState.statuses[i];
       if (hs === "dealer_wins") {
+        // Player busted — dealer wins regardless
         finalStatuses[i] = "dealer_wins";
       } else {
+        // "stood" or "stand_pending" — compare totals properly
         finalStatuses[i] = resolveHand(splitState.hands[i], dealerHand);
       }
     }
