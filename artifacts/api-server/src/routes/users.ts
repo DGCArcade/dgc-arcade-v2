@@ -4,6 +4,7 @@ import { eq, ilike, sql } from "drizzle-orm";
 import { getCryptoPrice } from "../lib/price-service.js";
 import { getUserBalance } from "../lib/balance-service.js";
 import { requireAuth } from "../middlewares/auth.js";
+import { sendVerificationEmail } from "../lib/mail-service.js";
 export const usersRouter = Router();
 
 const VIP_TIERS = [
@@ -131,7 +132,7 @@ usersRouter.patch("/me/profile", requireAuth, async (req, res) => {
     }
   }
 
-  if (email !== undefined) {
+    if (email !== undefined) {
     if (email === "") { updates.email = null; updates.emailVerified = false; }
     else {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { res.status(400).json({ error: "Invalid email address" }); return; }
@@ -140,6 +141,15 @@ usersRouter.patch("/me/profile", requireAuth, async (req, res) => {
       if (existing && existing.id !== req.user!.userId) { res.status(409).json({ error: "Email already taken" }); return; }
       updates.email = email;
       updates.emailVerified = false; // Reset verification on change
+      
+      // Send verification email
+      const [currentUser] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+      if (currentUser) {
+        // Simple verification code for now
+        const code = Math.random().toString(36).substring(2, 15);
+        await db.update(usersTable).set({ emailVerificationCode: code }).where(eq(usersTable.id, req.user!.userId));
+        void sendVerificationEmail(email, currentUser.username, code);
+      }
     }
   }
 
