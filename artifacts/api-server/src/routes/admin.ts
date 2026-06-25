@@ -737,9 +737,11 @@ adminRouter.delete("/users/:id", async (req, res) => {
     // Log the action
     await logAudit({
       adminId,
+      adminUsername: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, adminId)).limit(1))[0]?.username || "unknown",
       action: "delete_user",
+      targetType: "user",
       targetId: userId,
-      details: `Deleted user: ${target.username}`,
+      note: `Deleted user: ${target.username}`,
     });
 
     res.json({ success: true, message: `User ${target.username} deleted successfully` });
