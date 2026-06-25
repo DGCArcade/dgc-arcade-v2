@@ -4,7 +4,7 @@ import { eq, ilike, sql } from "drizzle-orm";
 import { getCryptoPrice } from "../lib/price-service.js";
 import { getUserBalance } from "../lib/balance-service.js";
 import { requireAuth } from "../middlewares/auth.js";
-import { sendVerificationEmail } from "../lib/mail-service.js";
+import { sendEmailVerificationEmail } from "../lib/mail-service.js";
 export const usersRouter = Router();
 
 const VIP_TIERS = [
@@ -148,7 +148,7 @@ usersRouter.patch("/me/profile", requireAuth, async (req, res) => {
         // Simple verification code for now
         const code = Math.random().toString(36).substring(2, 15);
         await db.update(usersTable).set({ emailVerificationCode: code }).where(eq(usersTable.id, req.user!.userId));
-        void sendVerificationEmail(email, currentUser.username, code);
+        void sendEmailVerificationEmail(email, currentUser.username, code, `${process.env.SITE_URL}/verify?code=${code}`);
       }
     }
   }
@@ -176,7 +176,7 @@ usersRouter.post("/me/verify/resend", requireAuth, async (req, res) => {
     const code = Math.random().toString(36).substring(2, 15);
     await db.update(usersTable).set({ emailVerificationCode: code }).where(eq(usersTable.id, req.user!.userId));
     
-    await sendVerificationEmail(user.email, user.username, code);
+    await sendEmailVerificationEmail(user.email, user.username, code, `${process.env.SITE_URL}/verify?code=${code}`);
     res.json({ success: true, message: "Verification email sent" });
   } catch (err: any) {
     req.log.error({ err }, "Resend verification error");
