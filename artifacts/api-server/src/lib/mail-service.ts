@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 
 /**
  * Professional Mail Service for DGC Arcade
- * Configured for Proton Mail / SMTP delivery
+ * Configured for Proton Mail / SMTP delivery with retry logic
  */
 
 const SMTP_HOST = process.env.SMTP_HOST || "";
@@ -11,15 +11,44 @@ const SMTP_USER = process.env.SMTP_USER || "";
 const SMTP_PASS = process.env.SMTP_PASS || "";
 const SITE_URL = process.env.SITE_URL || "https://dgcarcade.io";
 
-const transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: SMTP_PORT,
-  secure: SMTP_PORT === 465, // true for 465, false for other ports
-  auth: {
-    user: SMTP_USER,
-    password: SMTP_PASS,
-  },
-} as any);
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000; // 2 seconds
+
+let transporter: nodemailer.Transporter | null = null;
+
+function initializeTransporter() {
+  if (transporter) return transporter;
+
+  transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465, // true for 465, false for other ports
+    auth: {
+      user: SMTP_USER,
+      password: SMTP_PASS,
+    },
+    connectionTimeout: 10000, // 10 seconds
+    socketTimeout: 10000, // 10 seconds
+    pool: {
+      maxConnections: 5,
+      maxMessages: 100,
+      rateDelta: 4000,
+      rateLimit: 14,
+    },
+  } as any);
+
+  // Verify connection on startup
+  transporter.verify((err, success) => {
+    if (err) {
+      console.error("SMTP connection verification failed:", err.message);
+    } else if (success) {
+      console.log("SMTP connection verified successfully");
+    }
+  });
+
+  return transporter;
+}
 
 // Themes for emails to keep it "Best of the Best"
 const THEMES = {
@@ -114,12 +143,31 @@ function getEmailTemplate(content: string, theme = THEMES.GALAXY) {
   `;
 }
 
-export async function sendVerificationEmail(email: string, username: string, code: string) {
+async function sendEmailWithRetry(mailOptions: any, attempt = 1): Promise<void> {
   if (!SMTP_HOST || !SMTP_USER) {
     console.warn("Mail service not configured. Email not sent.");
     return;
   }
 
+  const transporter = initializeTransporter();
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Email sent successfully to ${mailOptions.to}`);
+  } catch (err: any) {
+    console.error(`Email send attempt ${attempt} failed:`, err.message);
+
+    if (attempt < MAX_RETRIES) {
+      console.log(`Retrying email send in ${RETRY_DELAY}ms...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return sendEmailWithRetry(mailOptions, attempt + 1);
+    } else {
+      throw new Error(`Failed to send email after ${MAX_RETRIES} attempts: ${err.message}`);
+    }
+  }
+}
+
+export async function sendVerificationEmail(email: string, username: string, code: string) {
   const verifyUrl = `${SITE_URL}/settings?verify=${code}`;
   const content = `
     <h2 style="color: white; font-size: 24px; margin-bottom: 15px;">Welcome to the Elite, ${username}</h2>
@@ -132,24 +180,19 @@ export async function sendVerificationEmail(email: string, username: string, cod
   `;
 
   try {
-    await transporter.sendMail({
+    await sendEmailWithRetry({
       from: `"Different Grind Crew" <${SMTP_USER}>`,
       to: email,
       subject: "Action Required: Verify Your DGC Arcade Account",
       html: getEmailTemplate(content, THEMES.GALAXY),
     });
-    console.log(`Verification email sent to ${email}`);
-  } catch (err) {
-    console.error("Failed to send verification email:", err);
+  } catch (err: any) {
+    console.error("Failed to send verification email:", err.message);
+    throw err;
   }
 }
 
 export async function sendPasswordResetEmail(email: string, username: string, token: string) {
-  if (!SMTP_HOST || !SMTP_USER) {
-    console.warn("Mail service not configured. Email not sent.");
-    return;
-  }
-
   const resetUrl = `${SITE_URL}/reset-password?token=${token}`;
   const content = `
     <h2 style="color: white; font-size: 24px; margin-bottom: 15px;">Security Update</h2>
@@ -162,14 +205,14 @@ export async function sendPasswordResetEmail(email: string, username: string, to
   `;
 
   try {
-    await transporter.sendMail({
+    await sendEmailWithRetry({
       from: `"Different Grind Crew" <${SMTP_USER}>`,
       to: email,
       subject: "Security: Password Reset Request",
-      html: getEmailTemplate(content, THEMES.NEON), // Use Neon theme for security alerts
+      html: getEmailTemplate(content, THEMES.NEON),
     });
-    console.log(`Password reset email sent to ${email}`);
-  } catch (err) {
-    console.error("Failed to send password reset email:", err);
+  } catch (err: any) {
+    console.error("Failed to send password reset email:", err.message);
+    throw err;
   }
 }

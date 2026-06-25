@@ -12,6 +12,32 @@ import { getPlisioPayoutReadiness, sendPlisioPayout } from "../lib/plisio-payout
 import { getDailyWinLoss, getDailyWithdrawals, getDailyDeposits } from "../services/stats-service.js";
 import { getCryptoPrice } from "../lib/price-service.js";
 
+// Rate limiting to prevent double-clicks and abuse
+const requestTimestamps = new Map<string, number[]>();
+const RATE_LIMIT_WINDOW = 1000; // 1 second
+const MAX_REQUESTS_PER_WINDOW = 1; // 1 request per second per action
+
+function getRateLimitKey(userId: number, action: string): string {
+  return `${userId}:${action}`;
+}
+
+function checkRateLimit(userId: number, action: string): boolean {
+  const key = getRateLimitKey(userId, action);
+  const now = Date.now();
+  const timestamps = requestTimestamps.get(key) || [];
+  
+  // Remove old timestamps outside the window
+  const recentTimestamps = timestamps.filter(t => now - t < RATE_LIMIT_WINDOW);
+  
+  if (recentTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
+    return false; // Rate limited
+  }
+  
+  recentTimestamps.push(now);
+  requestTimestamps.set(key, recentTimestamps);
+  return true; // Allowed
+}
+
 export const adminRouter = Router();
 
 adminRouter.use(requireAdmin);
@@ -672,28 +698,54 @@ adminRouter.patch("/users/:id", async (req, res) => {
 // DELETE /api/admin/users/:id
 adminRouter.delete("/users/:id", async (req, res) => {
   const userId = parseInt(req.params.id, 10);
+  const adminId = req.user!.userId;
 
-  if (userId === req.user!.userId) {
+  // Rate limiting: prevent double-clicks
+  if (!checkRateLimit(adminId, `delete-user-${userId}`)) {
+    res.status(429).json({ error: "Too many requests. Please wait before trying again." });
+    return;
+  }
+
+  if (userId === adminId) {
     res.status(400).json({ error: "Cannot delete your own admin account" });
     return;
   }
 
-  // Protect superadmin
-  const [target] = await db.select({ username: usersTable.username, role: usersTable.role }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-  if (isOwnerAccount(target)) {
-    res.status(403).json({ error: "This account is protected and cannot be deleted." });
+  if (isNaN(userId) || userId <= 0) {
+    res.status(400).json({ error: "Invalid user ID" });
     return;
   }
 
   try {
+    // Protect superadmin
+    const [target] = await db.select({ username: usersTable.username, role: usersTable.role }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (!target) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    if (isOwnerAccount(target)) {
+      res.status(403).json({ error: "This account is protected and cannot be deleted." });
+      return;
+    }
+
+    // Delete all related data in correct order
     await db.delete(transactionsTable).where(eq(transactionsTable.userId, userId));
     await db.delete(betsTable).where(eq(betsTable.userId, userId));
+    await db.delete(userBalancesTable).where(eq(userBalancesTable.userId, userId));
     await db.delete(usersTable).where(eq(usersTable.id, userId));
 
-    res.json({ success: true });
-  } catch (err) {
+    // Log the action
+    await logAudit({
+      adminId,
+      action: "delete_user",
+      targetId: userId,
+      details: `Deleted user: ${target.username}`,
+    });
+
+    res.json({ success: true, message: `User ${target.username} deleted successfully` });
+  } catch (err: any) {
     req.log.error({ err }, "Admin delete user error");
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Failed to delete user", details: err.message });
   }
 });
 
