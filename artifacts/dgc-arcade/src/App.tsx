@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout/app-layout";
 import { useEffect, Suspense, lazy, useMemo } from "react";
+import { useAuth } from "@/hooks/use-auth";
 
 // Lazy load heavy pages for better initial load
 const Home = lazy(() => import("@/pages/home"));
@@ -52,9 +53,32 @@ const queryClient = new QueryClient({
 // Scroll to top whenever the route changes
 function ScrollToTop() {
   const [location] = useLocation();
+  const { user } = useAuth();
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [location]);
+
+  // Live Tracking Beacon
+  useEffect(() => {
+    if (!user) return;
+    const reportActivity = async () => {
+      try {
+        await fetch("/api/admin/report-activity", {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${localStorage.getItem("dgc_token")}`
+          },
+          body: JSON.stringify({ page: location, timestamp: Date.now() })
+        });
+      } catch (e) {}
+    };
+    reportActivity();
+    const interval = setInterval(reportActivity, 30000); // Heartbeat every 30s
+    return () => clearInterval(interval);
+  }, [location, user]);
+
   return null;
 }
 

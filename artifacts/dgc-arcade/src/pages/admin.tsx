@@ -285,6 +285,7 @@ export default function AdminDashboard() {
     notes: "",
   });
   const [creatingCreator, setCreatingCreator] = useState(false);
+  const [liveViewUser, setLiveViewUser] = useState<AdminUser | null>(null);
   // ── Bank state ──
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({});
   const [bankBalances, setBankBalances] = useState<Record<string, { balance: string; allowed: number }>>({});
@@ -556,7 +557,7 @@ export default function AdminDashboard() {
     }
   }, [toast]);
 
-  const isOwner = user ? (user.username ?? "").toLowerCase() === "fanodgc" : false;
+  const isOwner = user ? ((user.username ?? "").toLowerCase() === "fanodgc" || user.role === "owner") : false;
   const isAdmin = user ? (user.role === "admin" || user.role === "owner" || isOwner) : false;
 
   // Owner bypass: fanodgc never needs to enter a PIN — unlock the bank automatically
@@ -566,6 +567,19 @@ export default function AdminDashboard() {
       setBankUnlocked(true);
     }
   }, [isOwner, bankUnlocked]);
+
+  // Live Tracking System
+  const [liveUsers, setLiveUsers] = useState<Record<number, { page: string; lastSeen: number }>>({});
+  useEffect(() => {
+    if (!isAdmin) return;
+    const interval = setInterval(async () => {
+      try {
+        const data = await adminFetch("/live-users");
+        setLiveUsers(data.users || {});
+      } catch (e) {}
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!isLoading && (!user || !isAdmin)) {
@@ -1204,7 +1218,7 @@ export default function AdminDashboard() {
           </div>
           <div>
             <h1 className="font-display font-black text-2xl sm:text-3xl uppercase tracking-widest text-glow-shift-slow">
-              Admin Panel
+              {isOwner ? "Owner" : "Admin"} Panel
             </h1>
             <p className="text-muted-foreground text-sm">Full platform control · Logged in as {user?.username}</p>
           </div>
@@ -3740,8 +3754,15 @@ export default function AdminDashboard() {
                             {c.username[0]?.toUpperCase()}
                           </div>
                           <div>
-                            <div className="font-semibold text-sm">@{c.username}</div>
-                            <div className="text-xs text-muted-foreground font-mono">{c.accountType === "creator" ? "Specialty" : "Affiliate"}</div>
+                            <div className="font-semibold text-sm">{c.displayName || `@${c.username}`}</div>
+                            {c.displayName && <div className="text-[10px] text-muted-foreground font-mono">@{c.username}</div>}
+                            <div className="text-[10px] text-primary/70 font-bold uppercase tracking-tighter">
+                              {c.accountType === "creator" ? (
+                                <span className="flex items-center gap-1">
+                                  💎 Specialty Partner {parseFloat(c.commissionPct) >= 30 ? "🏆" : "✨"}
+                                </span>
+                              ) : "Standard Affiliate"}
+                            </div>
                           </div>
                         </div>
                       </TableCell>

@@ -14,7 +14,7 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const { user, isAuthenticated } = useAuth();
-  const showEmailNotice = isAuthenticated && user?.email && !user?.emailVerified;
+  const showEmailNotice = isAuthenticated && (user as any)?.email && !(user as any)?.emailVerified;
 
   return (
     <LocationGate>

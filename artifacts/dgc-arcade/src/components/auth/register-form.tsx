@@ -39,6 +39,7 @@ const registerSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters").max(24, "Username must be max 24 characters"),
   email: z.string().email("Invalid email address").optional().or(z.literal("")),
   password: z.string().min(6, "Password must be at least 6 characters"),
+  promoCode: z.string().optional().or(z.literal("")),
 });
 
 export function RegisterForm() {
@@ -53,22 +54,27 @@ export function RegisterForm() {
       username: "",
       email: "",
       password: "",
+      promoCode: "",
     },
   });
 
-  // Extract referral code from URL on mount
+  // Extract referral code and promo code from URL on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const ref = params.get("ref");
     if (ref) {
       localStorage.setItem("dgc_referral", ref);
     }
-  }, []);
+    const promo = params.get("promo");
+    if (promo) {
+      form.setValue("promoCode", promo);
+    }
+  }, [form]);
 
   const onSubmit = async (values: z.infer<typeof registerSchema>) => {
     try {
       const fp = getDeviceFingerprint();
-      const referralCode = localStorage.getItem("dgc_referral");
+      const referralCode = localStorage.getItem("dgc_referral") || values.promoCode;
       const apiUrl = (import.meta.env.VITE_API_URL ?? "") + "/api/auth/register";
       const res = await fetch(apiUrl, {
         method: "POST",
@@ -127,6 +133,19 @@ export function RegisterForm() {
               <FormLabel>Password</FormLabel>
               <FormControl>
                 <Input type="password" placeholder="Choose a password" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="promoCode"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Promo / Referral Code (Optional)</FormLabel>
+              <FormControl>
+                <Input placeholder="Enter code" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>

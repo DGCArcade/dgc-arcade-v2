@@ -49,6 +49,8 @@ export interface User {
   createdAt: string;
   accountType?: string;
   withdrawalsEnabled?: boolean;
+  email?: string | null;
+  emailVerified?: boolean;
 }
 
 export interface AuthResult {

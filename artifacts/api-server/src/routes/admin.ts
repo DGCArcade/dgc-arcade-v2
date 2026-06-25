@@ -349,9 +349,9 @@ adminRouter.get("/users/:id", async (req, res) => {
         createdAt: user.createdAt.toISOString(),
         accountType: user.accountType,
         withdrawalsEnabled: user.withdrawalsEnabled,
-        promoBalance: parseFloat(user.promoBalance),
-        totalDeposited: parseFloat(user.totalDeposited),
-        totalWageredAmount: parseFloat(user.totalWageredAmount),
+        promoBalance: parseFloat(user.promoBalance ?? "0"),
+        totalDeposited: parseFloat(user.totalDeposited ?? "0"),
+        totalWageredAmount: parseFloat(user.totalWageredAmount ?? "0"),
         // ── Location / geo ──
         locationVerified: user.locationVerified,
         geoIp: user.geoIp,
@@ -2628,6 +2628,32 @@ adminRouter.post("/transactions/sync-plisio", requireBankSession, async (req, re
     req.log.error({ err }, "sync-plisio error");
     res.status(500).json({ error: "Internal server error" });
   }
+});
+
+// GET /api/admin/live-users
+// Returns a map of user IDs to their last seen page and timestamp
+adminRouter.get("/live-users", async (req, res) => {
+  if (!(global as any).__liveUsers) (global as any).__liveUsers = {};
+  const now = Date.now();
+  // Clean up stale users (inactive for > 1 min)
+  for (const [uid, data] of Object.entries((global as any).__liveUsers)) {
+    if (now - (data as any).lastSeen > 60000) delete (global as any).__liveUsers[uid];
+  }
+  res.json({ users: (global as any).__liveUsers });
+});
+
+// POST /api/admin/report-activity
+// Publicly accessible beacon for users to report their current page
+adminRouter.post("/report-activity", async (req, res) => {
+  if (!req.user) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const { page, timestamp } = req.body as { page: string; timestamp: number };
+  if (!(global as any).__liveUsers) (global as any).__liveUsers = {};
+  (global as any).__liveUsers[req.user.userId] = { 
+    page, 
+    lastSeen: timestamp || Date.now(),
+    username: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user.userId)).limit(1))[0]?.username ?? "unknown"
+  };
+  res.json({ success: true });
 });
 
 // GET /api/admin/stats
