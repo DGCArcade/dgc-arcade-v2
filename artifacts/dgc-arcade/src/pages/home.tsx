@@ -15,7 +15,7 @@ const FEATURES = [
     icon: Zap,
     title: "Instant Payouts",
     desc: "Withdraw winnings to your wallet in seconds. No delays, no paperwork.",
-    link: "/terms#payouts",
+    link: "/instant-payouts",
     detail: "Automated processing via Plisio. Most withdrawals are confirmed on-chain within 10 minutes."
   },
   {
@@ -29,7 +29,7 @@ const FEATURES = [
     icon: Shield,
     title: "Crypto Native",
     desc: "Deposit and withdraw with Bitcoin, Ethereum, USDT and more.",
-    link: "/privacy#data",
+    link: "/crypto-native",
     detail: "No banks, no limits. We support BTC, ETH, LTC, USDT, and more for ultimate financial freedom."
   },
 ];
