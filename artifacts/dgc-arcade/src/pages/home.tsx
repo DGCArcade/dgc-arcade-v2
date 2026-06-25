@@ -15,16 +15,22 @@ const FEATURES = [
     icon: Zap,
     title: "Instant Payouts",
     desc: "Withdraw winnings to your wallet in seconds. No delays, no paperwork.",
+    link: "/terms#payouts",
+    detail: "Automated processing via Plisio. Most withdrawals are confirmed on-chain within 10 minutes."
   },
   {
     icon: TrendingUp,
     title: "Provably Fair",
     desc: "Every result is cryptographically verifiable. The math doesn't lie.",
+    link: "/provably-fair",
+    detail: "Uses SHA-256 hashing. You can verify every single bet against our server seed after the game."
   },
   {
     icon: Shield,
     title: "Crypto Native",
     desc: "Deposit and withdraw with Bitcoin, Ethereum, USDT and more.",
+    link: "/privacy#data",
+    detail: "No banks, no limits. We support BTC, ETH, LTC, USDT, and more for ultimate financial freedom."
   },
 ];
 
@@ -448,14 +454,24 @@ export default function Home() {
         {FEATURES.map((f) => (
           <div
             key={f.title}
-            className="rounded-xl border border-border/40 bg-secondary/30 p-6 flex flex-col gap-4 hover:border-primary/30 transition-colors card-hover-glow backdrop-blur-sm"
+            role="button"
+            onClick={() => setLocation(f.link)}
+            className="rounded-xl border border-border/40 bg-secondary/30 p-6 flex flex-col gap-4 hover:border-primary/40 hover:bg-secondary/50 transition-all card-hover-glow backdrop-blur-sm cursor-pointer group"
           >
-            <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <f.icon className="w-5 h-5 text-primary" />
+            <div className="flex items-center justify-between">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <f.icon className="w-5 h-5 text-primary" />
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
             </div>
             <div>
-              <h3 className="font-display font-bold text-lg uppercase tracking-wider mb-1">{f.title}</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
+              <h3 className="font-display font-bold text-lg uppercase tracking-wider mb-1 group-hover:text-primary transition-colors">{f.title}</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-3">{f.desc}</p>
+              <div className="pt-3 border-t border-border/20">
+                <p className="text-[10px] text-muted-foreground/60 uppercase font-black tracking-widest leading-tight group-hover:text-muted-foreground transition-colors">
+                  {f.detail}
+                </p>
+              </div>
             </div>
           </div>
         ))}
