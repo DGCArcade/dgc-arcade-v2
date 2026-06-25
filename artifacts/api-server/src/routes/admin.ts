@@ -305,9 +305,9 @@ adminRouter.post("/test-email", async (req, res) => {
   try {
     const { sendVerificationEmail } = await import("../lib/mail-service.js");
     await sendVerificationEmail(email, "Owner Test", "TEST-CODE-123");
-    res.json({ success: true, message: "Test email sent successfully!" });
+    return res.json({ success: true, message: "Test email sent successfully!" });
   } catch (err: any) {
-    res.status(500).json({ 
+    return res.status(500).json({ 
       success: false, 
       error: err.message, 
       details: "This error comes directly from your Proton SMTP server." 
