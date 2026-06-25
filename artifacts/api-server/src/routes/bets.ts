@@ -445,21 +445,50 @@ betsRouter.get("/", requireAuth, async (req, res) => {
   const parsed = ListBetsQueryParams.safeParse(req.query);
   const limit = parsed.success ? (parsed.data.limit ?? 20) : 20;
   try {
-    const rows = await db.select({
-      bet: betsTable, username: usersTable.username, gameName: gamesTable.name,
-    }).from(betsTable)
-      .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
-      .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
-      .where(eq(betsTable.userId, req.user!.userId))
-      .orderBy(desc(betsTable.createdAt))
-      .limit(limit);
+    let rows;
+    try {
+      rows = await db.select({
+        bet: betsTable, username: usersTable.username, gameName: gamesTable.name,
+      }).from(betsTable)
+        .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
+        .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
+        .where(eq(betsTable.userId, req.user!.userId))
+        .orderBy(desc(betsTable.createdAt))
+        .limit(limit);
+    } catch (err: any) {
+      if (err.message.includes("server_seed_hash") || err.message.includes("client_seed") || err.message.includes("nonce")) {
+        rows = await db.select({
+          bet: {
+            id: betsTable.id,
+            userId: betsTable.userId,
+            gameId: betsTable.gameId,
+            amount: betsTable.amount,
+            payout: betsTable.payout,
+            won: betsTable.won,
+            multiplier: betsTable.multiplier,
+            serverSeed: betsTable.serverSeed,
+            meta: betsTable.meta,
+            createdAt: betsTable.createdAt,
+          },
+          username: usersTable.username,
+          gameName: gamesTable.name,
+        }).from(betsTable)
+          .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
+          .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
+          .where(eq(betsTable.userId, req.user!.userId))
+          .orderBy(desc(betsTable.createdAt))
+          .limit(limit);
+      } else {
+        throw err;
+      }
+    }
 
-    res.json(rows.map(({ bet, username, gameName }) => ({
+    res.json(rows.map(({ bet, username, gameName }: any) => ({
       id: bet.id, userId: bet.userId, username, gameId: bet.gameId, gameName,
       amount: parseFloat(bet.amount), payout: parseFloat(bet.payout), won: bet.won,
       multiplier: bet.multiplier ? parseFloat(bet.multiplier) : null,
-      serverSeed: bet.serverSeed, serverSeedHash: bet.serverSeedHash,
-      clientSeed: bet.clientSeed, nonce: bet.nonce, meta: bet.meta,
+      serverSeed: bet.serverSeed, serverSeedHash: bet.serverSeedHash || null,
+      clientSeed: bet.clientSeed || null, nonce: bet.nonce || 0, meta: bet.meta,
       createdAt: bet.createdAt.toISOString(),
     })));
   } catch (err) {
@@ -481,13 +510,41 @@ betsRouter.get("/recent-all", optionalAuth, async (req, res) => {
       return;
     }
 
-    const rows = await db.select({
-      bet: betsTable, username: usersTable.username, gameName: gamesTable.name,
-    }).from(betsTable)
-      .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
-      .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
-      .orderBy(desc(betsTable.createdAt))
-      .limit(limit);
+    let rows;
+    try {
+      rows = await db.select({
+        bet: betsTable, username: usersTable.username, gameName: gamesTable.name,
+      }).from(betsTable)
+        .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
+        .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
+        .orderBy(desc(betsTable.createdAt))
+        .limit(limit);
+    } catch (err: any) {
+      if (err.message.includes("server_seed_hash") || err.message.includes("client_seed") || err.message.includes("nonce")) {
+        rows = await db.select({
+          bet: {
+            id: betsTable.id,
+            userId: betsTable.userId,
+            gameId: betsTable.gameId,
+            amount: betsTable.amount,
+            payout: betsTable.payout,
+            won: betsTable.won,
+            multiplier: betsTable.multiplier,
+            serverSeed: betsTable.serverSeed,
+            meta: betsTable.meta,
+            createdAt: betsTable.createdAt,
+          },
+          username: usersTable.username,
+          gameName: gamesTable.name,
+        }).from(betsTable)
+          .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
+          .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
+          .orderBy(desc(betsTable.createdAt))
+          .limit(limit);
+      } else {
+        throw err;
+      }
+    }
 
     const value = rows.map(({ bet, username, gameName }) => ({
       id: bet.id, userId: bet.userId, username, gameId: bet.gameId, gameName,
@@ -518,13 +575,41 @@ betsRouter.get("/high-rollers", optionalAuth, async (req, res) => {
       return;
     }
 
-    const rows = await db.select({
-      bet: betsTable, username: usersTable.username, gameName: gamesTable.name,
-    }).from(betsTable)
-      .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
-      .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
-      .orderBy(desc(sql`CAST(${betsTable.amount} AS NUMERIC)`))
-      .limit(limit);
+    let rows;
+    try {
+      rows = await db.select({
+        bet: betsTable, username: usersTable.username, gameName: gamesTable.name,
+      }).from(betsTable)
+        .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
+        .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
+        .orderBy(desc(sql`CAST(${betsTable.amount} AS NUMERIC)`))
+        .limit(limit);
+    } catch (err: any) {
+      if (err.message.includes("server_seed_hash") || err.message.includes("client_seed") || err.message.includes("nonce")) {
+        rows = await db.select({
+          bet: {
+            id: betsTable.id,
+            userId: betsTable.userId,
+            gameId: betsTable.gameId,
+            amount: betsTable.amount,
+            payout: betsTable.payout,
+            won: betsTable.won,
+            multiplier: betsTable.multiplier,
+            serverSeed: betsTable.serverSeed,
+            meta: betsTable.meta,
+            createdAt: betsTable.createdAt,
+          },
+          username: usersTable.username,
+          gameName: gamesTable.name,
+        }).from(betsTable)
+          .innerJoin(usersTable, eq(betsTable.userId, usersTable.id))
+          .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
+          .orderBy(desc(sql`CAST(${betsTable.amount} AS NUMERIC)`))
+          .limit(limit);
+      } else {
+        throw err;
+      }
+    }
 
     const value = rows.map(({ bet, username, gameName }) => ({
       id: bet.id, userId: bet.userId, username, gameId: bet.gameId, gameName,

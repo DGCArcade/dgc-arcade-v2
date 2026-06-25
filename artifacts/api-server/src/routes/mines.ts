@@ -17,10 +17,10 @@ type GridSize = (typeof VALID_GRID_SIZES)[number];
  * Generate mine positions using SHA-256 provably-fair seeding.
  * Uses the actual grid size so positions are always valid indices.
  */
-function genMines(serverSeed: string, count: number, total: GridSize): number[] {
+function genMines(serverSeed: string, clientSeed: string, nonce: number, count: number, total: GridSize): number[] {
   const positions: number[] = [];
   for (let i = 0; positions.length < count; i++) {
-    const combined = `${serverSeed}:mines:${i}`;
+    const combined = `${serverSeed}:${clientSeed}:${nonce}:mines:${i}`;
     const h = createHash("sha256").update(combined).digest("hex");
     const pos = parseInt(h.slice(0, 8), 16) % total;
     if (!positions.includes(pos)) positions.push(pos);
@@ -64,7 +64,7 @@ function calcMultiplier(
 
 // POST /api/mines/start
 minesRouter.post("/start", requireAuth, async (req, res) => {
-  const { gameId, amount, mineCount = 5, gridSize: rawGridSize = 24 } = req.body;
+  const { gameId, amount, mineCount = 5, gridSize: rawGridSize = 24, clientSeed: rawClientSeed } = req.body;
 
   if (!gameId || !amount || amount <= 0) {
     res.status(400).json({ error: "gameId and amount required" });
@@ -117,13 +117,17 @@ minesRouter.post("/start", requireAuth, async (req, res) => {
     await recordTournamentWager(user.id, amount, req.log);
 
     const serverSeed = uuidv4().replace(/-/g, "");
-    const mines = genMines(serverSeed, mineCount, gridSize);
+    const clientSeed = rawClientSeed || uuidv4().replace(/-/g, "").slice(0, 16);
+    const nonce = (user.totalBets || 0) + 1;
+    const mines = genMines(serverSeed, clientSeed, nonce, mineCount, gridSize);
 
     const [session] = await db.insert(minesSessionsTable).values({
       userId: user.id,
       gameId,
       bet: String(amount),
       serverSeed,
+      clientSeed,
+      nonce,
       mineCount,
       // Store gridSize so reveal/cashout always use the correct total
       gridSize,
@@ -198,7 +202,10 @@ minesRouter.post("/reveal", requireAuth, async (req, res) => {
         userId: session.userId, gameId: session.gameId,
         amount: session.bet, payout: "0",
         won: false, multiplier: "0",
-        serverSeed: session.serverSeed, clientSeed: "mines",
+        serverSeed: session.serverSeed, 
+        serverSeedHash: createHash("sha256").update(session.serverSeed).digest("hex"),
+        clientSeed: session.clientSeed || "mines",
+        nonce: session.nonce || 0,
         meta: { minePositions: mines, revealed: newRevealed, result: "busted", gridSize },
       });
 
@@ -265,7 +272,10 @@ minesRouter.post("/cashout", requireAuth, async (req, res) => {
       userId: session.userId, gameId: session.gameId,
       amount: session.bet, payout: String(payout),
       won: true, multiplier: String(multiplier),
-      serverSeed: session.serverSeed, clientSeed: "mines",
+      serverSeed: session.serverSeed,
+      serverSeedHash: createHash("sha256").update(session.serverSeed).digest("hex"),
+      clientSeed: session.clientSeed || "mines",
+      nonce: session.nonce || 0,
       meta: { minePositions: mines, revealed, result: "cashed_out", multiplier, gridSize },
     });
 
@@ -299,6 +309,9 @@ minesRouter.get("/current", requireAuth, async (req, res) => {
       bet: parseFloat(session.bet),
       currentMultiplier: multiplier,
       nextMultiplier: calcMultiplier(revealed.length + 1, session.mineCount, gridSize),
+      clientSeed: session.clientSeed,
+      nonce: session.nonce,
+      serverSeedHash: createHash("sha256").update(session.serverSeed).digest("hex"),
     });
   } catch (err) {
     req.log.error({ err }, "Mines current error");

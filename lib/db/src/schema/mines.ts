@@ -8,6 +8,8 @@ export const minesSessionsTable = pgTable("mines_sessions", {
   gameId: integer("game_id").notNull().references(() => gamesTable.id),
   bet: numeric("bet", { precision: 18, scale: 8 }).notNull(),
   serverSeed: text("server_seed").notNull(),
+  clientSeed: text("client_seed"),
+  nonce: integer("nonce").notNull().default(1),
   mineCount: integer("mine_count").notNull().default(5),
   /**
    * gridSize stores the actual number of tiles on the board (24, 48, or 60).

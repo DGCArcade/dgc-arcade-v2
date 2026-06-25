@@ -44,8 +44,10 @@ function buildShoe(): Card[] {
 function shuffleShoe(serverSeed: string, clientSeed: string, nonce: number, deck: Card[]): Card[] {
   const d = [...deck];
   for (let i = d.length - 1; i > 0; i--) {
+    // Standard provably fair outcome generation for each swap
+    const message = `${clientSeed}:${nonce}:${i}:blackjack`;
     const h = createHmac("sha256", serverSeed)
-      .update(`${clientSeed}:${nonce}:${i}`)
+      .update(message)
       .digest("hex");
     const j = parseInt(h.slice(0, 8), 16) % (i + 1);
     [d[i], d[j]] = [d[j], d[i]];
@@ -164,7 +166,7 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
     const serverSeed = uuidv4().replace(/-/g, "");
     const serverSeedHash = hashServerSeed(serverSeed);
     const clientSeed = rawClientSeed || uuidv4().replace(/-/g, "").slice(0, 16);
-    const nonce = 1;
+    const nonce = (user.totalBets || 0) + 1;
 
     const shoe = shuffleShoe(serverSeed, clientSeed, nonce, buildShoe());
 
@@ -192,15 +194,13 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
       payout = 0;
     }
 
-    // Store clientSeed and nonce in the serverSeed field (packed) for retrieval
-    // Format: "serverSeed|clientSeed|nonce"
-    const seedPack = `${serverSeed}|${clientSeed}|${nonce}`;
-
     const [hand] = await db.insert(blackjackHandsTable).values({
       userId: user.id,
       gameId: game.id,
       bet: String(amount),
-      serverSeed: seedPack,
+      serverSeed,
+      clientSeed,
+      nonce,
       deckState: JSON.stringify(remainingDeck),
       playerHand: JSON.stringify(playerHand),
       dealerHand: JSON.stringify(dealerHand),
@@ -271,11 +271,21 @@ blackjackRouter.post("/action", requireAuth, async (req, res) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(401).json({ error: "User not found" }); return; }
 
-    // Unpack seed info
-    const seedParts = hand.serverSeed.split("|");
-    const serverSeed = seedParts[0];
-    const clientSeed = seedParts[1] || "default";
-    const nonce = parseInt(seedParts[2] || "1");
+    // Unpack seed info (Legacy support: check if serverSeed contains pipes)
+    let serverSeed: string;
+    let clientSeed: string;
+    let nonce: number;
+
+    if (hand.serverSeed.includes("|")) {
+      const seedParts = hand.serverSeed.split("|");
+      serverSeed = seedParts[0];
+      clientSeed = seedParts[1] || "default";
+      nonce = parseInt(seedParts[2] || "1");
+    } else {
+      serverSeed = hand.serverSeed;
+      clientSeed = hand.clientSeed || "default";
+      nonce = hand.nonce || 1;
+    }
     const serverSeedHash = hashServerSeed(serverSeed);
 
     let deck: Card[] = JSON.parse(hand.deckState);
@@ -789,10 +799,21 @@ blackjackRouter.get("/current", requireAuth, async (req, res) => {
 
     if (!hand) { res.json(null); return; }
 
-    const seedParts = hand.serverSeed.split("|");
-    const serverSeed = seedParts[0];
-    const clientSeed = seedParts[1] || "default";
-    const nonce = parseInt(seedParts[2] || "1");
+    // Legacy support
+    let serverSeed: string;
+    let clientSeed: string;
+    let nonce: number;
+
+    if (hand.serverSeed.includes("|")) {
+      const seedParts = hand.serverSeed.split("|");
+      serverSeed = seedParts[0];
+      clientSeed = seedParts[1] || "default";
+      nonce = parseInt(seedParts[2] || "1");
+    } else {
+      serverSeed = hand.serverSeed;
+      clientSeed = hand.clientSeed || "default";
+      nonce = hand.nonce || 1;
+    }
     const serverSeedHash = hashServerSeed(serverSeed);
 
     let rawPlayerHand: any;
@@ -855,10 +876,21 @@ blackjackRouter.get("/verify/:handId", requireAuth, async (req, res) => {
       return;
     }
 
-    const seedParts = hand.serverSeed.split("|");
-    const serverSeed = seedParts[0];
-    const clientSeed = seedParts[1] || "default";
-    const nonce = parseInt(seedParts[2] || "1");
+    // Legacy support
+    let serverSeed: string;
+    let clientSeed: string;
+    let nonce: number;
+
+    if (hand.serverSeed.includes("|")) {
+      const seedParts = hand.serverSeed.split("|");
+      serverSeed = seedParts[0];
+      clientSeed = seedParts[1] || "default";
+      nonce = parseInt(seedParts[2] || "1");
+    } else {
+      serverSeed = hand.serverSeed;
+      clientSeed = hand.clientSeed || "default";
+      nonce = hand.nonce || 1;
+    }
     const serverSeedHash = hashServerSeed(serverSeed);
 
     res.json({

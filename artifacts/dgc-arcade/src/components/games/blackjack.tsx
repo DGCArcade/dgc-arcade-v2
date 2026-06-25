@@ -10,65 +10,14 @@ import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
 interface Card { suit: string; rank: string }
 type Status = "idle" | "active" | "player_blackjack" | "player_wins" | "dealer_wins" | "push" | "player_bust";
 
-// ─── Cyberpunk Voice Lines ───────────────────────────────────────────────────
+// Voice announcements disabled - using original sounds only
 const VOICE_LINES = {
-  split: [
-    "Splitting the pair — dual execution mode activated",
-    "Neural net says: SPLIT. Two hands, double the gains",
-    "Blockchain confirmed — you're going dual-stack",
-    "Quantum split detected. Playing both timelines",
-    "Hash collision avoided — splitting your way to victory",
-    "Dual-chain strategy engaged",
-    "The algorithm approves — split it up",
-    "Splitting cards — parallel processing initiated",
-    "Two hands are better than one — let's go",
-    "Ledger split confirmed — play on",
-  ],
-  hit: [
-    "Another card incoming — hit confirmed",
-    "Pulling from the deck — let's see what the hash gives us",
-    "One more card — the matrix decides",
-    "Hitting the chain — new card deployed",
-    "Requesting card from the oracle",
-    "Decrypting your next card",
-    "Fetching from the ledger",
-    "Card incoming — neural net activated",
-    "One more hit — let's go",
-  ],
-  stand: [
-    "Standing firm — your hand is locked in",
-    "Committing to the blockchain — no more moves",
-    "Hand frozen — dealer's turn",
-    "Stake finalized — dealer plays",
-    "Your move is complete — let the house try",
-    "Locking in your position",
-    "Standing pat — dealer's move",
-  ],
-  win: [
-    "You crushed it — hash verified victory",
-    "Cryptographic win confirmed",
-    "The blockchain doesn't lie — you won",
-    "Neural net says: VICTORY",
-    "Consensus achieved — you're up",
-    "Ledger updated — profit recorded",
-    "Quantum advantage realized",
-    "Winner winner — crypto dinner",
-  ],
-  lose: [
-    "The house wins this round — better luck next hash",
-    "Blockchain says: dealer wins",
-    "Consensus against you — try again",
-    "The oracle has spoken — dealer prevails",
-    "Ledger updated — loss recorded",
-    "Quantum state collapsed — dealer wins",
-  ],
-  blackjack: [
-    "BLACKJACK — natural 21, cryptographically confirmed",
-    "Perfect hash — BLACKJACK",
-    "The algorithm smiles — BLACKJACK",
-    "Quantum superposition resolved — BLACKJACK",
-    "Ledger spike — BLACKJACK",
-  ],
+  split: [],
+  hit: [],
+  stand: [],
+  win: [],
+  lose: [],
+  blackjack: [],
 };
 
 function getToken() { return localStorage.getItem("dgc_token"); }
@@ -283,18 +232,8 @@ class SoundEngine {
   }
 
   announceVoiceLine(category: keyof typeof VOICE_LINES) {
-    if (this.muted) return;
-    const lines = VOICE_LINES[category];
-    const line = lines[Math.floor(Math.random() * lines.length)];
-    // Use Web Speech API for voice announcement
-    if ("speechSynthesis" in window) {
-      const utterance = new SpeechSynthesisUtterance(line);
-      utterance.rate = 1.1;
-      utterance.pitch = 1;
-      utterance.volume = 0.7;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
-    }
+    // Voice lines disabled - using original sounds only
+    return;
   }
 }
 
@@ -421,6 +360,9 @@ export function Blackjack({ game }: BlackjackProps) {
   const [animatingCards, setAnimatingCards] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [serverSeedHash, setServerSeedHash] = useState<string | null>(null);
+  const [clientSeed, setClientSeed] = useState<string | null>(null);
+  const [nonce, setNonce] = useState<number | null>(null);
 
   const isActive = status === "active";
   const isDone = !["idle", "active"].includes(status);
@@ -430,10 +372,13 @@ export function Blackjack({ game }: BlackjackProps) {
       .then(r => r.json())
       .then(d => {
         if (d?.handId) {
-          setHandId(d.handId); setPlayerHand(d.playerHand); setDealerHand(d.dealerHand);
-          setPlayerTotal(d.playerTotal); setStatus(d.status); setCurrentBet(d.bet ?? 0);
-          setInsuranceEligible(d.insuranceEligible ?? false);
-          setAmount(d.bet ?? minBet); setAmountStr(String(d.bet ?? minBet));
+          setHandId(d.handId);       setPlayerHand(d.playerHand); setDealerHand(d.dealerHand);
+      setPlayerTotal(d.playerTotal); setStatus(d.status); setCurrentBet(d.bet ?? 0);
+      setInsuranceEligible(d.insuranceEligible ?? false);
+      setServerSeedHash(d.serverSeedHash ?? null);
+      setClientSeed(d.clientSeed ?? null);
+      setNonce(d.nonce ?? null);
+      setAmount(d.bet ?? minBet); setAmountStr(String(d.bet ?? minBet));
         }
       }).catch(() => {});
   }, []);
@@ -495,6 +440,9 @@ export function Blackjack({ game }: BlackjackProps) {
           setPlayerTotal(d.playerTotal); setStatus(d.status); setPayout(d.payout ?? 0);
           setCurrentBet(amount); setInsuranceEligible(d.insuranceEligible ?? false);
           setDealerTotal(d.dealerTotal ?? null);
+          setServerSeedHash(d.serverSeedHash ?? null);
+          setClientSeed(d.clientSeed ?? null);
+          setNonce(d.nonce ?? null);
           setAnimatingCards(false);
           queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         }, 1200);
@@ -519,6 +467,9 @@ export function Blackjack({ game }: BlackjackProps) {
       setPlayerHand(d.playerHand); setDealerHand(d.dealerHand);
       setPlayerTotal(d.playerTotal); setDealerTotal(d.dealerTotal ?? null);
       setStatus(d.status as Status); setPayout(d.payout ?? 0);
+      setServerSeedHash(d.serverSeedHash ?? null);
+      setClientSeed(d.clientSeed ?? null);
+      setNonce(d.nonce ?? null);
       if (act === "double" || act === "split") setCurrentBet(prev => prev * 2);
       if (act === "insurance") setInsuranceEligible(false);
       
@@ -542,6 +493,7 @@ export function Blackjack({ game }: BlackjackProps) {
     setHandId(null); setPlayerHand([]); setDealerHand([]);
     setPlayerTotal(0); setDealerTotal(null); setStatus("idle");
     setPayout(0); setCurrentBet(0); setInsuranceEligible(false); setShowResult(false);
+    setServerSeedHash(null); setClientSeed(null); setNonce(null);
   };
 
   const handleAmountChange = (val: string) => {
@@ -754,6 +706,22 @@ export function Blackjack({ game }: BlackjackProps) {
           <span>Min: {formatCurrency(minBet)}</span>
           <span>Max: {formatCurrency(maxBet)}</span>
         </div>
+
+        {/* Provably Fair Info */}
+        {serverSeedHash && clientSeed !== null && nonce !== null && (
+          <div style={{
+            marginTop: 12, padding: 10, background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 8, fontSize: 8, color: "rgba(255,255,255,0.6)", fontFamily: "monospace", wordBreak: "break-all"
+          }}>
+            <div style={{ fontWeight: 900, color: "rgba(255,255,255,0.8)", marginBottom: 4 }}>PROVABLY FAIR</div>
+            <div style={{ marginBottom: 2 }}>Server Hash: {serverSeedHash.slice(0, 16)}...</div>
+            <div style={{ marginBottom: 2 }}>Client Seed: {clientSeed}</div>
+            <div>Nonce: {nonce}</div>
+            <div style={{ marginTop: 6, fontSize: 7, color: "rgba(255,255,255,0.4)" }}>
+              After game completes, verify at /api/blackjack/verify/{handId}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
