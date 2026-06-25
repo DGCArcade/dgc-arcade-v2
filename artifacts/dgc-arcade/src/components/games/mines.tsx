@@ -131,6 +131,9 @@ function MinesGame({ game }: MinesProps) {
   const [loading, setLoading] = useState(false);
   const [payout, setPayout] = useState(0);
   const [lastCell, setLastCell] = useState<number | null>(null);
+  const [serverSeedHash, setServerSeedHash] = useState<string | null>(null);
+  const [clientSeed, setClientSeed] = useState<string | null>(null);
+  const [nonce, setNonce] = useState<number | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -146,6 +149,9 @@ function MinesGame({ game }: MinesProps) {
           setAmount(d.bet || minBet); 
           setAmountStr(String(d.bet || minBet));
           setGridSize(d.gridSize || 24); 
+          setServerSeedHash(d.serverSeedHash);
+          setClientSeed(d.clientSeed);
+          setNonce(d.nonce);
           setStatus("active");
         }
       }).catch(err => console.error("Mines session restore failed:", err));
@@ -180,6 +186,9 @@ function MinesGame({ game }: MinesProps) {
         setSessionId(d.sessionId); setRevealed([]); setMinePositions([]);
         setBustedAt(null); setCurrentMultiplier(1); setNextMultiplier(d.nextMultiplier);
         setPayout(0); setLastCell(null);
+        setServerSeedHash(d.serverSeedHash);
+        setClientSeed(d.clientSeed);
+        setNonce(d.nonce);
         
         // Small delay to ensure state updates don't collide with latency-heavy query invalidations
         setTimeout(() => {
@@ -575,6 +584,42 @@ function MinesGame({ game }: MinesProps) {
             New Game
           </button>
         ) : null}
+
+        {/* Provably Fair Info */}
+        {serverSeedHash && clientSeed !== null && nonce !== null && (
+          <div style={{
+            marginTop: 12, padding: 10, background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 8, fontSize: 8, color: "rgba(255,255,255,0.6)", fontFamily: "monospace", wordBreak: "break-all"
+          }}>
+            <div style={{ fontWeight: 900, color: "rgba(255,255,255,0.8)", marginBottom: 4 }}>PROVABLY FAIR</div>
+            <div style={{ marginBottom: 2 }}>Server Hash: {serverSeedHash.slice(0, 16)}...</div>
+            <div style={{ marginBottom: 2 }}>Client Seed: {clientSeed}</div>
+            <div>Nonce: {nonce}</div>
+            <div style={{ marginTop: 6, fontSize: 7, color: "rgba(255,255,255,0.4)" }}>
+              After game completes, verify at:
+              <a 
+                href={`/api/mines/verify/${sessionId}`} 
+                target="_blank" 
+                rel="noreferrer"
+                style={{ color: accent, marginLeft: 4, textDecoration: "underline" }}
+              >
+                /api/mines/verify/{sessionId}
+              </a>
+            </div>
+            {isDone && (
+              <button
+                onClick={() => window.open(`/api/mines/verify/${sessionId}`, '_blank')}
+                style={{
+                  marginTop: 8, width: "100%", padding: "4px 8px", background: "rgba(255,255,255,0.1)",
+                  border: "1px solid rgba(255,255,255,0.2)", borderRadius: 4, color: "#fff",
+                  fontSize: 8, fontWeight: 900, cursor: "pointer"
+                }}
+              >
+                VERIFY OUTCOME
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

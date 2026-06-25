@@ -318,3 +318,47 @@ minesRouter.get("/current", requireAuth, async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// GET /api/mines/verify/:sessionId
+minesRouter.get("/verify/:sessionId", async (req, res) => {
+  try {
+    const sessionId = parseInt(req.params.sessionId as string);
+    const [session] = await db.select().from(minesSessionsTable)
+      .where(eq(minesSessionsTable.id, sessionId))
+      .limit(1);
+
+    if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+
+    // Only reveal server seed after session is complete
+    if (session.status === "active") {
+      res.status(400).json({ error: "Session still in progress — server seed revealed after completion" });
+      return;
+    }
+
+    const serverSeed = session.serverSeed;
+    const serverSeedHash = createHash("sha256").update(serverSeed).digest("hex");
+
+    res.json({
+      sessionId: session.id,
+      serverSeed,
+      serverSeedHash,
+      clientSeed: session.clientSeed,
+      nonce: session.nonce,
+      status: session.status,
+      bet: session.bet,
+      mineCount: session.mineCount,
+      minePositions: JSON.parse(session.minePositions),
+      revealed: JSON.parse(session.revealed),
+      createdAt: session.createdAt,
+      verificationInstructions: [
+        "1. Combine serverSeed + clientSeed + nonce",
+        "2. Run SHA256(serverSeed:clientSeed:nonce) to derive the game state",
+        "3. Compare the resulting hash to serverSeedHash shown before the game",
+        "4. If they match, the outcome was not manipulated",
+      ],
+    });
+  } catch (err) {
+    req.log.error({ err }, "Mines verify error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});

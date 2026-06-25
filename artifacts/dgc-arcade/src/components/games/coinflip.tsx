@@ -156,6 +156,10 @@ export function Coinflip({ game }: CoinflipProps) {
   const [win, setWin] = useState<boolean | null>(null);
   const [payout, setPayout] = useState(0);
   const [flipCount, setFlipCount] = useState(0);
+  const [betId, setBetId] = useState<number | null>(null);
+  const [serverSeedHash, setServerSeedHash] = useState<string | null>(null);
+  const [clientSeed, setClientSeed] = useState<string | null>(null);
+  const [nonce, setNonce] = useState<number | null>(null);
 
   const handleAmountChange = (val: string) => {
     setAmountStr(val);
@@ -194,6 +198,11 @@ export function Coinflip({ game }: CoinflipProps) {
             const serverResult = data.won ? (choice as "heads" | "tails") : (choice === "heads" ? "tails" : "heads");
             setResult(serverResult);
             
+            setBetId(data.bet.id);
+            setServerSeedHash(data.bet.serverSeedHash);
+            setClientSeed(data.bet.clientSeed);
+            setNonce(data.bet.nonce);
+
             // Wait for the landing animation (1.2s) to finish before showing the win/loss banner
             setTimeout(() => {
               setWin(data.won);
@@ -451,6 +460,42 @@ export function Coinflip({ game }: CoinflipProps) {
         >
           {isFlipping ? "Flipping…" : "Flip Coin"}
         </button>
+
+        {/* Provably Fair Info */}
+        {serverSeedHash && clientSeed !== null && nonce !== null && (
+          <div style={{
+            marginTop: 12, padding: 10, background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 8, fontSize: 8, color: "rgba(255,255,255,0.6)", fontFamily: "monospace", wordBreak: "break-all"
+          }}>
+            <div style={{ fontWeight: 900, color: "rgba(255,255,255,0.8)", marginBottom: 4 }}>PROVABLY FAIR</div>
+            <div style={{ marginBottom: 2 }}>Server Hash: {serverSeedHash.slice(0, 16)}...</div>
+            <div style={{ marginBottom: 2 }}>Client Seed: {clientSeed}</div>
+            <div>Nonce: {nonce}</div>
+            <div style={{ marginTop: 6, fontSize: 7, color: "rgba(255,255,255,0.4)" }}>
+              After game completes, verify at:
+              <a 
+                href={`/api/bets/verify/${betId}`} 
+                target="_blank" 
+                rel="noreferrer"
+                style={{ color: accent, marginLeft: 4, textDecoration: "underline" }}
+              >
+                /api/bets/verify/{betId}
+              </a>
+            </div>
+            {win !== null && (
+              <button
+                onClick={() => window.open(`/api/bets/verify/${betId}`, '_blank')}
+                style={{
+                  marginTop: 8, width: "100%", padding: "4px 8px", background: "rgba(255,255,255,0.1)",
+                  border: "1px solid rgba(255,255,255,0.2)", borderRadius: 4, color: "#fff",
+                  fontSize: 8, fontWeight: 900, cursor: "pointer"
+                }}
+              >
+                VERIFY OUTCOME
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -570,3 +570,56 @@ betsRouter.get("/high-rollers", optionalAuth, async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// GET /api/bets/verify/:betId
+betsRouter.get("/verify/:betId", async (req, res) => {
+  try {
+    const betId = parseInt(req.params.betId as string);
+    const [bet] = await db.select({
+      id: betsTable.id,
+      userId: betsTable.userId,
+      gameId: betsTable.gameId,
+      amount: betsTable.amount,
+      payout: betsTable.payout,
+      won: betsTable.won,
+      multiplier: betsTable.multiplier,
+      serverSeed: betsTable.serverSeed,
+      serverSeedHash: betsTable.serverSeedHash,
+      clientSeed: betsTable.clientSeed,
+      nonce: betsTable.nonce,
+      meta: betsTable.meta,
+      createdAt: betsTable.createdAt,
+      gameSlug: gamesTable.slug,
+      gameName: gamesTable.name
+    }).from(betsTable)
+      .innerJoin(gamesTable, eq(betsTable.gameId, gamesTable.id))
+      .where(eq(betsTable.id, betId))
+      .limit(1);
+
+    if (!bet) { res.status(404).json({ error: "Bet not found" }); return; }
+
+    res.json({
+      betId: bet.id,
+      game: bet.gameName,
+      serverSeed: bet.serverSeed,
+      serverSeedHash: bet.serverSeedHash,
+      clientSeed: bet.clientSeed,
+      nonce: bet.nonce,
+      won: bet.won,
+      amount: bet.amount,
+      payout: bet.payout,
+      multiplier: bet.multiplier,
+      meta: bet.meta,
+      createdAt: bet.createdAt,
+      verificationInstructions: [
+        "1. Combine serverSeed + clientSeed + nonce + gameSlug",
+        "2. Run SHA256(serverSeed:clientSeed:nonce:gameSlug) to derive the outcome",
+        "3. Compare the resulting hash to serverSeedHash shown before the game",
+        "4. If they match, the outcome was not manipulated",
+      ],
+    });
+  } catch (err) {
+    req.log.error({ err }, "Bet verify error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
