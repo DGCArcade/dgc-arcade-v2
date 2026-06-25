@@ -2763,8 +2763,7 @@ adminRouter.patch("/users/:id/account-type", async (req, res) => {
   // Set promo balance (house credits)
   if (typeof promoBalance === "number" && promoBalance >= 0) {
     updates.promoBalance = String(promoBalance);
-    // When giving promo balance, add it to display balance too
-    updates.balance = String(promoBalance);
+    // DO NOT mirror to balance — keep house credits separate from real money
   }
 
   // Promote to admin — auto-generate PIN

@@ -85,11 +85,30 @@ authRouter.post("/register", async (req, res) => {
     if (incomingRef) {
       try {
         const { referralsTable } = await import('@workspace/db');
-        const [referrer] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.referralCode, incomingRef)).limit(1);
+        const [referrer] = await db.select({ 
+          id: usersTable.id, 
+          geoIp: usersTable.geoIp, 
+          deviceFingerprint: usersTable.deviceFingerprint 
+        }).from(usersTable).where(eq(usersTable.referralCode, incomingRef)).limit(1);
+        
         if (referrer && referrer.id !== user.id) {
-          await db.update(usersTable).set({ referredBy: referrer.id }).where(eq(usersTable.id, user.id));
-          await db.insert(referralsTable).values({ referrerId: referrer.id, referredId: user.id, status: 'pending' });
-          logger.info({ referrerId: referrer.id, referredId: user.id }, 'Referral link created on registration');
+          // ANTI-FRAUD: Block same IP or same device referral
+          const clientIp = (req.ip ?? "").replace(/^::ffff:/, "").trim();
+          const isSameIp = referrer.geoIp === clientIp;
+          const isSameDevice = deviceFingerprint && referrer.deviceFingerprint === deviceFingerprint;
+          
+          if (isSameIp || isSameDevice) {
+            logger.warn({ 
+              referrerId: referrer.id, 
+              referredId: user.id, 
+              isSameIp, 
+              isSameDevice 
+            }, 'Self-referral blocked via IP/Fingerprint');
+          } else {
+            await db.update(usersTable).set({ referredBy: referrer.id }).where(eq(usersTable.id, user.id));
+            await db.insert(referralsTable).values({ referrerId: referrer.id, referredId: user.id, status: 'pending' });
+            logger.info({ referrerId: referrer.id, referredId: user.id }, 'Referral link created on registration');
+          }
         }
       } catch (refErr) { logger.warn({ refErr }, 'Referral link creation failed'); }
     }

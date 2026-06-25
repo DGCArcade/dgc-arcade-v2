@@ -53,14 +53,24 @@ export function RegisterForm() {
     },
   });
 
+  // Extract referral code from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref) {
+      localStorage.setItem("dgc_referral", ref);
+    }
+  }, []);
+
   const onSubmit = async (values: z.infer<typeof registerSchema>) => {
     try {
       const fp = getDeviceFingerprint();
+      const referralCode = localStorage.getItem("dgc_referral");
       const apiUrl = (import.meta.env.VITE_API_URL ?? "") + "/api/auth/register";
       const res = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-device-fingerprint": fp },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, referralCode }),
       });
       const result = await res.json();
       if (!res.ok) {

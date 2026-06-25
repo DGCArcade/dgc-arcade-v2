@@ -73,21 +73,20 @@ creatorRouter.get("/dashboard", async (req, res) => {
       .orderBy(desc(creatorBankTxnsTable.createdAt))
       .limit(50);
 
-    let totalBalance = 0;
+    let realWalletBalance = 0;
     try {
       const { getUserBalance } = await import("../lib/balance-service.js");
       const bal = await getUserBalance(user.id);
-      totalBalance = bal.totalBalance;
+      realWalletBalance = bal.totalBalance;
     } catch {
-      // price-service can fail on network issues — fall back to static balance
-      totalBalance = parseFloat(user.promoBalance ?? "0");
+      realWalletBalance = 0;
     }
 
     res.json({
       username: user.username,
       accountType: user.accountType,
-      balance: totalBalance,
-      promoBalance: parseFloat(user.promoBalance ?? "0"),
+      balance: realWalletBalance, // Spendable/Withdrawable money
+      promoBalance: parseFloat(user.promoBalance ?? "0"), // House credits (casino balance)
       vaultBalance: parseFloat(user.vaultBalance ?? "0"),
       referralCode: code,
       referralLink: siteUrl ? `${siteUrl}?ref=${code}` : `/?ref=${code}`,

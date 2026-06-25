@@ -53,14 +53,14 @@ const getRankIcon = (rank: number) => {
 function LeaderboardTable({ entries, loading }: { entries: LeaderboardEntry[]; loading: boolean }) {
   return (
     <Card className="bg-card border-border overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left">
-          <thead className="text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
+      <div className="overflow-x-auto scrollbar-hide">
+        <table className="w-full text-[10px] md:text-sm text-left">
+          <thead className="text-[10px] md:text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
             <tr>
-              <th className="px-6 py-4 font-medium w-24 text-center">Rank</th>
-              <th className="px-6 py-4 font-medium">Player</th>
-              <th className="px-6 py-4 font-medium text-right">Total Bets</th>
-              <th className="px-6 py-4 font-medium text-right text-primary">Total Won</th>
+              <th className="px-2 md:px-6 py-4 font-medium w-12 md:w-24 text-center">Rank</th>
+              <th className="px-2 md:px-6 py-4 font-medium">Player</th>
+              <th className="px-2 md:px-6 py-4 font-medium text-right">Bets</th>
+              <th className="px-2 md:px-6 py-4 font-medium text-right text-primary">Won</th>
             </tr>
           </thead>
           <tbody>
@@ -84,19 +84,19 @@ function LeaderboardTable({ entries, loading }: { entries: LeaderboardEntry[]; l
                   key={entry.userId}
                   className={`border-b border-border/50 transition-colors ${idx < 3 ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-secondary/20"}`}
                 >
-                  <td className="px-6 py-4 text-center">
-                    <div className="flex justify-center">{getRankIcon(entry.rank)}</div>
+                  <td className="px-2 md:px-6 py-4 text-center">
+                    <div className="flex justify-center scale-75 md:scale-100">{getRankIcon(entry.rank)}</div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-secondary border border-border flex items-center justify-center font-bold text-xs text-primary">
+                  <td className="px-2 md:px-6 py-4">
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-secondary border border-border flex items-center justify-center font-bold text-[10px] md:text-xs text-primary">
                         {entry.username.charAt(0).toUpperCase()}
                       </div>
-                      <span className="font-mono font-bold text-foreground">{entry.username}</span>
+                      <span className="font-mono font-bold text-foreground truncate max-w-[60px] md:max-w-none">{entry.username}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-right font-mono text-muted-foreground">{formatNumber(entry.totalBets)}</td>
-                  <td className="px-6 py-4 text-right font-mono font-bold text-primary">{formatCurrency(entry.totalWon)}</td>
+                  <td className="px-2 md:px-6 py-4 text-right font-mono text-muted-foreground">{formatNumber(entry.totalBets)}</td>
+                  <td className="px-2 md:px-6 py-4 text-right font-mono font-bold text-primary">{formatCurrency(entry.totalWon)}</td>
                 </tr>
               ))
             )}
