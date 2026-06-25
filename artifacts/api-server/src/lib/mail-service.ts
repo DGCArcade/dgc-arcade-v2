@@ -19,7 +19,7 @@ const transporter = nodemailer.createTransport({
     user: SMTP_USER,
     password: SMTP_PASS,
   },
-});
+} as any);
 
 export async function sendVerificationEmail(email: string, username: string, code: string) {
   if (!SMTP_HOST || !SMTP_USER) {
