@@ -34,14 +34,13 @@ function getEmailTemplate(content: string, title: string = "DGC Arcade") {
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@700;900&family=Space+Mono:wght@400;700&display=swap');
-        
-        * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
-          font-family: 'Space Grotesk', sans-serif; 
+          font-family: Arial, Helvetica, sans-serif; 
           background-color: #0a0e1a; 
-          color: #f0f0f0;
+          color: #ffffff;
           line-height: 1.6;
+          margin: 0;
+          padding: 0;
         }
         
         .container { 
@@ -58,26 +57,9 @@ function getEmailTemplate(content: string, title: string = "DGC Arcade") {
           box-shadow: 0 0 40px rgba(255, 215, 0, 0.08);
         }
         
-        /* Animated gradient background */
-        @keyframes gradient-shift {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-        
         .header {
-          background: linear-gradient(
-            270deg,
-            #FFD700,
-            #FF8C00,
-            #FF1493,
-            #B44FFF,
-            #00D4FF,
-            #00FF87,
-            #FFD700
-          );
+          background: linear-gradient(90deg, #FFD700, #FF8C00, #FF1493, #B44FFF, #00D4FF, #00FF87, #FFD700);
           background-size: 200% 200%;
-          animation: gradient-shift 8s ease-in-out infinite;
           padding: 2px;
           position: relative;
         }
@@ -88,24 +70,23 @@ function getEmailTemplate(content: string, title: string = "DGC Arcade") {
           text-align: center;
         }
         
-        .logo {
-          font-size: 48px;
+        .logo-box {
+          width: 60px;
+          height: 60px;
+          margin: 0 auto 15px;
+          background: linear-gradient(135deg, #FFD700, #FF8C00);
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+        }
+        
+        .logo-text {
+          font-size: 36px;
           font-weight: 900;
-          font-family: 'Outfit', sans-serif;
-          background: linear-gradient(
-            135deg,
-            #FFD700,
-            #FF8C00,
-            #FF1493,
-            #B44FFF,
-            #00D4FF,
-            #00FF87
-          );
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          margin-bottom: 10px;
-          letter-spacing: -2px;
+          color: #0f1420;
+          line-height: 1;
         }
         
         .logo-subtitle {
@@ -115,40 +96,45 @@ function getEmailTemplate(content: string, title: string = "DGC Arcade") {
           color: #FFD700;
           text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
           font-weight: 700;
+          margin-top: 10px;
         }
         
         .title {
           font-size: 24px;
           font-weight: 900;
-          font-family: 'Outfit', sans-serif;
           text-transform: uppercase;
           letter-spacing: 1px;
-          margin-top: 30px;
-          background: linear-gradient(
-            90deg,
-            #ffffff,
-            #FFD700,
-            #FF8C00
-          );
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
+          margin-top: 20px;
+          color: #FFD700;
+          text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
         }
         
         .content {
           padding: 40px 30px;
-          color: rgba(255, 255, 255, 0.85);
+          color: #ffffff;
           font-size: 15px;
           line-height: 1.8;
         }
         
         .content p {
           margin-bottom: 15px;
+          color: #ffffff;
         }
         
         .content strong {
           color: #FFD700;
-          font-weight: 600;
+          font-weight: 700;
+        }
+        
+        .content ul {
+          margin-left: 20px;
+          margin-bottom: 20px;
+          color: #ffffff;
+        }
+        
+        .content li {
+          margin-bottom: 8px;
+          color: #ffffff;
         }
         
         .info-box {
@@ -157,9 +143,15 @@ function getEmailTemplate(content: string, title: string = "DGC Arcade") {
           padding: 15px;
           margin: 20px 0;
           border-radius: 4px;
-          font-family: 'Space Mono', monospace;
+          font-family: monospace;
           font-size: 13px;
           color: #FFD700;
+        }
+        
+        .info-box strong {
+          color: #FFD700;
+          display: block;
+          margin-bottom: 5px;
         }
         
         .cta-button {
@@ -175,13 +167,12 @@ function getEmailTemplate(content: string, title: string = "DGC Arcade") {
           letter-spacing: 1px;
           margin: 20px 0;
           box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
-          transition: all 0.3s ease;
-          display: inline-block;
+          border: none;
+          cursor: pointer;
         }
         
         .cta-button:hover {
           box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
-          transform: translateY(-2px);
         }
         
         .code-display {
@@ -190,7 +181,7 @@ function getEmailTemplate(content: string, title: string = "DGC Arcade") {
           padding: 15px;
           border-radius: 8px;
           text-align: center;
-          font-family: 'Space Mono', monospace;
+          font-family: monospace;
           font-size: 24px;
           font-weight: 700;
           color: #00FF87;
@@ -206,11 +197,13 @@ function getEmailTemplate(content: string, title: string = "DGC Arcade") {
           border-radius: 8px;
           margin: 20px 0;
           font-size: 13px;
-          color: rgba(255, 255, 255, 0.8);
+          color: #ffffff;
         }
         
         .security-alert strong {
           color: #FF1493;
+          display: block;
+          margin-bottom: 8px;
         }
         
         .button-group {
@@ -244,29 +237,17 @@ function getEmailTemplate(content: string, title: string = "DGC Arcade") {
           text-align: center;
           border-top: 1px solid rgba(255, 215, 0, 0.1);
           font-size: 12px;
-          color: rgba(255, 255, 255, 0.6);
+          color: rgba(255, 255, 255, 0.7);
         }
         
         .tagline {
           font-size: 14px;
           font-weight: 700;
-          font-family: 'Outfit', sans-serif;
           text-transform: uppercase;
           letter-spacing: 2px;
           margin: 20px 0;
-          background: linear-gradient(
-            90deg,
-            #FFD700,
-            #FF8C00,
-            #FF1493,
-            #B44FFF,
-            #00D4FF,
-            #00FF87
-          );
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+          color: #FFD700;
+          text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
         }
         
         .divider {
@@ -280,7 +261,6 @@ function getEmailTemplate(content: string, title: string = "DGC Arcade") {
           .header-content { padding: 30px 20px; }
           .content { padding: 25px 20px; }
           .footer { padding: 20px; }
-          .logo { font-size: 36px; }
           .title { font-size: 18px; }
           .button-group { flex-direction: column; }
         }
@@ -291,7 +271,9 @@ function getEmailTemplate(content: string, title: string = "DGC Arcade") {
         <div class="email-wrapper">
           <div class="header">
             <div class="header-content">
-              <div class="logo">D</div>
+              <div class="logo-box">
+                <div class="logo-text">D</div>
+              </div>
               <div class="logo-subtitle">DGC Arcade</div>
               <div class="title">${title}</div>
             </div>
@@ -304,8 +286,8 @@ function getEmailTemplate(content: string, title: string = "DGC Arcade") {
           <div class="footer">
             <div class="divider"></div>
             <div class="tagline">🎰 The Streets Always Win 🎰</div>
-            <p style="margin-top: 15px;">© ${new Date().getFullYear()} DGC Arcade · Licensed Gaming Platform</p>
-            <p>All games use provably fair algorithms. Play responsibly.</p>
+            <p style="margin-top: 15px; color: rgba(255, 255, 255, 0.7);">© ${new Date().getFullYear()} DGC Arcade · Licensed Gaming Platform</p>
+            <p style="color: rgba(255, 255, 255, 0.7);">All games use provably fair algorithms. Play responsibly.</p>
             <p style="margin-top: 15px; font-size: 10px; color: rgba(255, 255, 255, 0.4);">
               This is an automated message. Please do not reply to this email.
             </p>
@@ -334,12 +316,12 @@ export async function sendWelcomeEmail(email: string, username: string, userType
     <p>You've just joined the most secure and high-stakes crypto arcade on the planet.</p>
     
     <div class="info-box">
-      <strong>Account Type:</strong> ${userType.toUpperCase()}<br>
-      <strong>Features:</strong> ${typeFeatures[userType]}
+      <strong>Account Type: ${userType.toUpperCase()}</strong>
+      ${typeFeatures[userType]}
     </div>
     
     <p>Your account is ready to go. Here's what you can do:</p>
-    <ul style="margin-left: 20px; margin-bottom: 20px;">
+    <ul>
       <li>🎮 Play Blackjack, Mines, Coin Flip, and more</li>
       <li>💰 Deposit and withdraw with crypto instantly</li>
       <li>🔐 Every game is provably fair · SHA-256 verified</li>
@@ -541,12 +523,12 @@ export async function sendEmailVerificationEmail(email: string, username: string
     <p>Hi <strong>${username}</strong>,</p>
     <p>To complete your account setup, please verify your email address. You have two options:</p>
     
-    <p style="margin-top: 25px; text-align: center;"><strong>Option 1: Click the button below</strong></p>
+    <p style="margin-top: 25px;"><strong>Option 1: Click the button below</strong></p>
     <p style="text-align: center;">
       <a href="${verifyLink}" class="cta-button">Verify Email</a>
     </p>
     
-    <p style="margin-top: 25px; text-align: center;"><strong>Option 2: Enter this code</strong></p>
+    <p style="margin-top: 25px;"><strong>Option 2: Enter this code</strong></p>
     <div class="code-display">${code}</div>
     <p style="text-align: center; font-size: 13px; color: rgba(255, 255, 255, 0.6);">Enter this code on the verification screen</p>
     
@@ -640,7 +622,7 @@ export async function sendSuspiciousActivityEmail(
     </div>
     
     <p style="margin-top: 20px;"><strong>What we did:</strong></p>
-    <ul style="margin-left: 20px; margin-bottom: 20px;">
+    <ul>
       <li>✓ Blocked the suspicious login</li>
       <li>✓ Secured your account</li>
       <li>✓ Logged out all active sessions</li>

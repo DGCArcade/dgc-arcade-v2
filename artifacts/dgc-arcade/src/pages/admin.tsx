@@ -1289,19 +1289,21 @@ export default function AdminDashboard() {
                 color: "text-pink-400", 
                 bg: "from-pink-500/10 to-transparent", 
                 tab: "overview" as TabKey, 
-                detail: "Click to send a test email and see real-time SMTP errors from Proton.",
+                detail: "Click to send a test email via Resend and see the result.",
                 onClick: async () => {
                   const email = prompt("Enter email to send test to:");
                   if (!email) return;
+                  const emailType = prompt("Email type (welcome, login-security, deposit, withdrawal, verification, password-reset, suspicious):", "welcome");
+                  if (!emailType) return;
                   try {
                     const res = await adminFetch("/test-email", {
                       method: "POST",
-                      body: JSON.stringify({ email })
+                      body: JSON.stringify({ email, emailType })
                     });
-                    if (res.success) alert("SUCCESS: Proton Mail accepted the email!");
-                    else alert(`FAILED: ${res.error}\n\n${res.details}`);
+                    if (res.success) alert(`✅ SUCCESS: ${res.message}`);
+                    else alert(`❌ FAILED: ${res.error}\n\n${res.details}`);
                   } catch (e: any) {
-                    alert(`Network Error: ${e.message}`);
+                    alert(`⚠️ Network Error: ${e.message}`);
                   }
                 }
               },
