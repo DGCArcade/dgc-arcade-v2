@@ -184,6 +184,80 @@ usersRouter.post("/me/verify/resend", requireAuth, async (req, res) => {
   }
 });
 
+// Verify email with code
+usersRouter.post("/me/verify/code", requireAuth, async (req, res) => {
+  const { code } = req.body as { code?: string };
+  if (!code) { res.status(400).json({ error: "Verification code required" }); return; }
+  
+  try {
+    const [user] = await db.select({
+      id: usersTable.id,
+      emailVerificationCode: usersTable.emailVerificationCode,
+      emailVerificationExpiresAt: usersTable.emailVerificationExpiresAt,
+      emailVerified: usersTable.emailVerified
+    }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+    if (user.emailVerified) { res.status(400).json({ error: "Email already verified" }); return; }
+    if (!user.emailVerificationCode) { res.status(400).json({ error: "No verification code sent" }); return; }
+    
+    if (user.emailVerificationExpiresAt && new Date() > user.emailVerificationExpiresAt) {
+      res.status(400).json({ error: "Verification code expired" });
+      return;
+    }
+    
+    if (user.emailVerificationCode !== code) {
+      res.status(400).json({ error: "Invalid verification code" });
+      return;
+    }
+    
+    await db.update(usersTable).set({
+      emailVerified: true,
+      emailVerificationCode: null,
+      emailVerificationExpiresAt: null
+    }).where(eq(usersTable.id, req.user!.userId));
+    
+    res.json({ success: true, message: "Email verified successfully" });
+  } catch (err: any) {
+    req.log.error({ err }, "Email verification error");
+    res.status(500).json({ error: "Verification failed", details: err.message });
+  }
+});
+
+// Verify email with link (from email)
+usersRouter.get("/verify/:code", async (req, res) => {
+  const { code } = req.params;
+  if (!code) { res.status(400).json({ error: "Verification code required" }); return; }
+  
+  try {
+    const [user] = await db.select({
+      id: usersTable.id,
+      emailVerificationCode: usersTable.emailVerificationCode,
+      emailVerificationExpiresAt: usersTable.emailVerificationExpiresAt,
+      emailVerified: usersTable.emailVerified
+    }).from(usersTable).where(eq(usersTable.emailVerificationCode, code)).limit(1);
+
+    if (!user) { res.status(404).json({ error: "Invalid verification code" }); return; }
+    if (user.emailVerified) { res.status(400).json({ error: "Email already verified" }); return; }
+    
+    if (user.emailVerificationExpiresAt && new Date() > user.emailVerificationExpiresAt) {
+      res.status(400).json({ error: "Verification code expired" });
+      return;
+    }
+    
+    await db.update(usersTable).set({
+      emailVerified: true,
+      emailVerificationCode: null,
+      emailVerificationExpiresAt: null
+    }).where(eq(usersTable.id, user.id));
+    
+    res.json({ success: true, message: "Email verified successfully" });
+  } catch (err: any) {
+    req.log.error({ err }, "Email verification link error");
+    res.status(500).json({ error: "Verification failed", details: err.message });
+  }
+});
+
 usersRouter.patch("/me/password", requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
   if (!currentPassword || !newPassword) { res.status(400).json({ error: "Current and new password required" }); return; }
