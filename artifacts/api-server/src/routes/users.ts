@@ -148,7 +148,7 @@ usersRouter.patch("/me/profile", requireAuth, async (req, res) => {
         // Simple verification code for now
         const code = Math.random().toString(36).substring(2, 15);
         await db.update(usersTable).set({ emailVerificationCode: code }).where(eq(usersTable.id, req.user!.userId));
-        void sendEmailVerificationEmail(email, currentUser.username, code, `${process.env.SITE_URL}/verify?code=${code}`);
+        void sendEmailVerificationEmail(email, currentUser.username, code);
       }
     }
   }
@@ -176,7 +176,7 @@ usersRouter.post("/me/verify/resend", requireAuth, async (req, res) => {
     const code = Math.random().toString(36).substring(2, 15);
     await db.update(usersTable).set({ emailVerificationCode: code }).where(eq(usersTable.id, req.user!.userId));
     
-    await sendEmailVerificationEmail(user.email, user.username, code, `${process.env.SITE_URL}/verify?code=${code}`);
+    await sendEmailVerificationEmail(user.email, user.username, code);
     res.json({ success: true, message: "Verification email sent" });
   } catch (err: any) {
     req.log.error({ err }, "Resend verification error");

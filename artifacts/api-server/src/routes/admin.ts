@@ -332,8 +332,8 @@ adminRouter.post("/test-email", async (req, res) => {
     const {
       sendWelcomeEmail,
       sendLoginSecurityEmail,
-      sendDepositConfirmationEmail,
-      sendWithdrawalConfirmationEmail,
+      sendDepositEmail,
+      sendWithdrawalEmail,
       sendEmailVerificationEmail,
       sendPasswordResetEmail,
       sendSuspiciousActivityEmail
@@ -353,25 +353,22 @@ adminRouter.post("/test-email", async (req, res) => {
           testUsername,
           "192.168.1.1",
           "San Francisco, CA, USA",
-          "Chrome on macOS",
-          testToken
+          "Chrome on macOS"
         );
         break;
       case "deposit":
-        await sendDepositConfirmationEmail(
+        await sendDepositEmail(
           email,
           testUsername,
-          "1.5",
-          "BTC",
+          "1.5 BTC",
           "0x123abc456def789ghi"
         );
         break;
       case "withdrawal":
-        await sendWithdrawalConfirmationEmail(
+        await sendWithdrawalEmail(
           email,
           testUsername,
-          "0.5",
-          "ETH",
+          "0.5 ETH",
           "0xabcdef123456789ghijklmnop"
         );
         break;
@@ -379,8 +376,7 @@ adminRouter.post("/test-email", async (req, res) => {
         await sendEmailVerificationEmail(
           email,
           testUsername,
-          "123456",
-          `${siteUrl}/verify?code=test-verification-code`
+          "ABC12345"
         );
         break;
       case "password-reset":
