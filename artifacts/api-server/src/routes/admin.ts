@@ -394,9 +394,8 @@ adminRouter.post("/test-email", async (req, res) => {
         await sendSuspiciousActivityEmail(
           email,
           testUsername,
-          "203.0.113.42",
-          "Moscow, Russia",
-          "Firefox on Windows"
+          "Multiple failed login attempts from Moscow, Russia (Firefox on Windows)",
+          `${siteUrl}/security`
         );
         break;
       default:
