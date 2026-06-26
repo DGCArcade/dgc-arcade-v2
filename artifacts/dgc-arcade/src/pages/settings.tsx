@@ -250,8 +250,9 @@ export default function Settings() {
                         try {
                           const res = await apiCall("/api/users/me/verify/resend", "POST");
                           if (res.success) {
-                            setVerifyStatus({ type: "success", msg: "✉️ Verification email sent! Check your inbox." });
+                            setVerifyStatus({ type: "success", msg: "✉️ Verification email sent! Enter the code below." });
                             setShowVerifyModal(true);
+                            setVerifyCode("");
                           } else {
                             setVerifyStatus({ type: "error", msg: res.error || "Failed to send email." });
                           }
