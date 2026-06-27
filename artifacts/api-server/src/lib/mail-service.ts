@@ -4,9 +4,9 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const SENDER_EMAIL = process.env.SENDER_EMAIL || "noreply@differentgrindcrew.com";
 const SITE_URL = process.env.SITE_URL || "https://differentgrindcrew.com";
 
-// Generate a clean, readable verification code
+// Generate a clean, readable verification code (6 characters)
 function generateVerificationCode(): string {
-  return Math.random().toString(36).substring(2, 10).toUpperCase();
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
 // Professional email template wrapper with animated glow

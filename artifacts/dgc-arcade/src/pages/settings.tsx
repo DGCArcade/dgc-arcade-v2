@@ -193,13 +193,13 @@ export default function Settings() {
               </button>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">Enter the 8-character code from your email:</p>
+              <p className="text-sm text-muted-foreground">Enter the 6-character code from your email:</p>
               <Input
                 type="text"
-                placeholder="e.g., ABC12345"
+                placeholder="e.g., ABC123"
                 value={verifyCode}
                 onChange={e => setVerifyCode(e.target.value.toUpperCase())}
-                maxLength={8}
+                maxLength={6}
                 className="bg-secondary border-border/60 font-mono text-center text-lg tracking-widest uppercase font-bold"
                 autoFocus
               />

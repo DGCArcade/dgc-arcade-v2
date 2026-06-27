@@ -145,8 +145,8 @@ usersRouter.patch("/me/profile", requireAuth, async (req, res) => {
       // Send verification email
       const [currentUser] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
       if (currentUser) {
-        // Simple verification code for now
-        const code = Math.random().toString(36).substring(2, 15);
+        // Generate 6-character verification code
+        const code = Math.random().toString(36).substring(2, 8).toUpperCase();
         await db.update(usersTable).set({ emailVerificationCode: code }).where(eq(usersTable.id, req.user!.userId));
         void sendEmailVerificationEmail(email, currentUser.username, code);
       }
@@ -173,7 +173,7 @@ usersRouter.post("/me/verify/resend", requireAuth, async (req, res) => {
     if (user.emailVerified) { res.status(400).json({ error: "Email already verified" }); return; }
     if (!user.email) { res.status(400).json({ error: "No email set" }); return; }
 
-    const code = Math.random().toString(36).substring(2, 15);
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
     await db.update(usersTable).set({ emailVerificationCode: code }).where(eq(usersTable.id, req.user!.userId));
     
     await sendEmailVerificationEmail(user.email, user.username, code);
