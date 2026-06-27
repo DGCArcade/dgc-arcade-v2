@@ -228,6 +228,14 @@ function createEmailTemplate(title: string, content: string): string {
       <div class="tagline">THE STREETS ALWAYS WIN</div>
       <div class="footer-text">© 2026 DGC Arcade. All rights reserved.</div>
       <div class="footer-text">Provably Fair • Instant Payouts • No BS</div>
+      <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 215, 0, 0.2);">
+        <div class="footer-text" style="margin-bottom: 10px;">Follow Us</div>
+        <div style="display: flex; justify-content: center; gap: 20px; font-size: 12px;">
+          <a href="https://instagram.com/DGCARCADE" style="color: #FFD700; text-decoration: none;">📸 Instagram</a>
+          <a href="https://x.com/DGCARCADE" style="color: #FFD700; text-decoration: none;">𝕏 X</a>
+          <a href="https://t.me/DGCARCADE" style="color: #FFD700; text-decoration: none;">✈️ Telegram</a>
+        </div>
+      </div>
     </div>
   </div>
 </body>
