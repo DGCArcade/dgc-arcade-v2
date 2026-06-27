@@ -9,8 +9,8 @@ function generateVerificationCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-// Professional email template wrapper with animated glow
-function createEmailTemplate(title: string, content: string): string {
+// Base email wrapper with DGC ARCADE wordmark logo
+function createBaseEmailTemplate(content: string): string {
   return `
 <!DOCTYPE html>
 <html>
@@ -53,33 +53,17 @@ function createEmailTemplate(title: string, content: string): string {
       border-bottom: 2px solid #FFD700; 
     }
     .logo-container {
-      width: 100px;
+      width: 280px;
       height: 100px;
       margin: 0 auto 20px;
       display: flex;
       align-items: center;
       justify-content: center;
       animation: glow-shift 6s ease-in-out infinite;
-      border-radius: 20px;
     }
-    .logo-svg {
-      width: 100%;
-      height: 100%;
-    }
-    .brand { 
-      font-size: 14px; 
-      color: #FFD700; 
-      letter-spacing: 2px; 
-      margin-bottom: 10px; 
-      font-weight: 600; 
-    }
-    h1 { 
-      font-size: 28px; 
-      margin: 0; 
-      color: #ffffff; 
-      font-weight: 700; 
-      letter-spacing: 1px; 
-      animation: text-glow 6s ease-in-out infinite;
+    .logo-img {
+      max-width: 100%;
+      height: auto;
     }
     .content { 
       padding: 40px 30px; 
@@ -162,6 +146,24 @@ function createEmailTemplate(title: string, content: string): string {
       color: #ffb3b3; 
       margin: 20px 0; 
     }
+    .info-box {
+      background: rgba(0, 212, 255, 0.1);
+      border-left: 4px solid #00D4FF;
+      padding: 15px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #b3e5ff;
+      margin: 20px 0;
+    }
+    .success-box {
+      background: rgba(0, 255, 135, 0.1);
+      border-left: 4px solid #00FF87;
+      padding: 15px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #b3ffcc;
+      margin: 20px 0;
+    }
     .footer { 
       padding: 30px 20px; 
       text-align: center; 
@@ -185,6 +187,19 @@ function createEmailTemplate(title: string, content: string): string {
       color: #FFD700; 
       font-weight: 600; 
     }
+    .social-links {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 215, 0, 0.2);
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      font-size: 12px;
+    }
+    .social-link {
+      color: #FFD700;
+      text-decoration: none;
+    }
     ul { 
       margin: 15px 0; 
       padding-left: 20px; 
@@ -193,33 +208,36 @@ function createEmailTemplate(title: string, content: string): string {
       margin: 8px 0; 
       color: #d0d0d0; 
     }
+    h2 {
+      font-size: 20px;
+      color: #FFD700;
+      margin: 20px 0 10px 0;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
       <div class="logo-container">
-        <svg class="logo-svg" width="100" height="100" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="180" height="180" rx="32" fill="#080c18"/>
+        <svg class="logo-img" viewBox="0 0 2560 1440" width="280" height="100" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <radialGradient id="glow" cx="50%" cy="45%" r="55%">
-              <stop offset="0%" stop-color="#FFD700" stop-opacity="0.22"/>
-              <stop offset="100%" stop-color="#FF8800" stop-opacity="0"/>
-            </radialGradient>
-            <radialGradient id="letterGrad" cx="35%" cy="30%" r="70%">
-              <stop offset="0%" stop-color="#FFE55C"/>
-              <stop offset="60%" stop-color="#FFD700"/>
-              <stop offset="100%" stop-color="#CC9900"/>
-            </radialGradient>
+            <linearGradient id="dgcGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" style="stop-color:#FFE55C;stop-opacity:1" />
+              <stop offset="50%" style="stop-color:#FFD700;stop-opacity:1" />
+              <stop offset="100%" style="stop-color:#CC9900;stop-opacity:1" />
+            </linearGradient>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
           </defs>
-          <rect width="180" height="180" rx="32" fill="url(#glow)"/>
-          <text x="89" y="134" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="118" fill="url(#letterGrad)" text-anchor="middle">D</text>
-          <rect x="1" y="1" width="178" height="88" rx="31" fill="white" fill-opacity="0.05"/>
-          <rect x="1" y="1" width="178" height="178" rx="31" stroke="#FFD700" stroke-opacity="0.18" stroke-width="1.5" fill="none"/>
+          <text x="1280" y="520" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="480" fill="url(#dgcGradient)" text-anchor="middle" filter="url(#glow)">DGC</text>
+          <text x="1280" y="1000" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="280" fill="url(#dgcGradient)" text-anchor="middle" filter="url(#glow)">ARCADE</text>
         </svg>
       </div>
-      <div class="brand">DGC ARCADE</div>
-      <h1>${title}</h1>
     </div>
     <div class="content">
       ${content}
@@ -228,13 +246,10 @@ function createEmailTemplate(title: string, content: string): string {
       <div class="tagline">THE STREETS ALWAYS WIN</div>
       <div class="footer-text">© 2026 DGC Arcade. All rights reserved.</div>
       <div class="footer-text">Provably Fair • Instant Payouts • No BS</div>
-      <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 215, 0, 0.2);">
-        <div class="footer-text" style="margin-bottom: 10px;">Follow Us</div>
-        <div style="display: flex; justify-content: center; gap: 20px; font-size: 12px;">
-          <a href="https://instagram.com/DGCARCADE" style="color: #FFD700; text-decoration: none;">📸 Instagram</a>
-          <a href="https://x.com/DGCARCADE" style="color: #FFD700; text-decoration: none;">𝕏 X</a>
-          <a href="https://t.me/DGCARCADE" style="color: #FFD700; text-decoration: none;">✈️ Telegram</a>
-        </div>
+      <div class="social-links">
+        <a href="https://instagram.com/DGCARCADE" class="social-link">📸 Instagram</a>
+        <a href="https://x.com/DGCARCADE" class="social-link">𝕏 X</a>
+        <a href="https://t.me/DGCARCADE" class="social-link">✈️ Telegram</a>
       </div>
     </div>
   </div>
@@ -243,69 +258,81 @@ function createEmailTemplate(title: string, content: string): string {
   `;
 }
 
+// WELCOME EMAIL - Friendly & Welcoming
 export async function sendWelcomeEmail(
   email: string,
   username: string,
   userType: string
 ): Promise<void> {
   const content = `
-    <p class="subtitle">Welcome to the elite, <span class="highlight">${username}</span>!</p>
+    <p class="subtitle">🎮 Yo <span class="highlight">@${username}</span>! Welcome to the Elite</p>
     
-    <p>You're now part of DGC Arcade. Here's what you can do:</p>
+    <p>You just joined DGC Arcade as a <strong>${userType.toUpperCase()}</strong>. Time to get paid or get played.</p>
     
+    <div class="success-box">
+      ✅ Your account is live and ready to roll
+    </div>
+    
+    <h2>What You Can Do Now:</h2>
     <ul>
-      <li><strong>Play Provably Fair Games</strong> - Blackjack, Mines, Coin Flip with instant payouts</li>
-      <li><strong>Real Deposits & Withdrawals</strong> - Crypto payments, lightning fast</li>
-      <li><strong>Track Your Stats</strong> - See your wins, losses, and earnings in real-time</li>
-      <li><strong>Account Security</strong> - Email verification, 2FA, login alerts</li>
+      <li>🎰 Play provably fair games (Blackjack, Mines, Coin Flip)</li>
+      <li>💰 Deposit & withdraw real crypto instantly</li>
+      <li>🔐 Your funds, your keys, your control</li>
+      <li>⚡ No KYC bullshit. Just play.</li>
+      <li>📊 Track your stats in real-time</li>
     </ul>
-    
-    <p>Your account type: <span class="highlight">${userType.toUpperCase()}</span></p>
     
     <div class="divider"></div>
     
-    <p class="subtitle">Get Started Now</p>
-    <p>Verify your email to unlock all features and start playing.</p>
+    <p class="subtitle">Ready to test your luck?</p>
+    <p><a href="${SITE_URL}/dashboard" class="button">Go to Dashboard</a></p>
+    
+    <div class="info-box">
+      💡 Pro tip: Verify your email to unlock all features and enable withdrawals.
+    </div>
   `;
   
-  const html = createEmailTemplate("Welcome to DGC Arcade", content);
+  const html = createBaseEmailTemplate(content);
   
   await resend.emails.send({
     from: SENDER_EMAIL,
     to: email,
-    subject: "Welcome to DGC Arcade - The Streets Always Win",
+    subject: "Welcome to DGC Arcade - The Streets Always Win 🎰",
     html,
   });
 }
 
+// EMAIL VERIFICATION - Clear & Actionable
 export async function sendEmailVerificationEmail(
   email: string,
   username: string,
   code: string
 ): Promise<void> {
   const content = `
-    <p class="subtitle">Verify your email to unlock all features</p>
+    <p class="subtitle">🔐 Verify Your Email</p>
     
-    <p>Hi <span class="highlight">${username}</span>, confirm your email address to get started.</p>
+    <p>Yo <span class="highlight">${username}</span>, confirm your email to unlock all DGC Arcade features.</p>
     
     <div class="code-box">
-      <div class="code-label">Your Verification Code</div>
+      <div class="code-label">Your 6-Character Code</div>
       <div class="code">${code}</div>
       <div class="code-expires">⏱️ Expires in 24 hours</div>
     </div>
     
-    <p><strong>Option 1: Enter the code above</strong></p>
-    <p>Go to your account settings and enter the code above.</p>
+    <h2>Two Ways to Verify:</h2>
     
-    <p><strong>Option 2: Click the verification link</strong></p>
-    <p><a href="${SITE_URL}/verify/${code}" class="button">Verify Email</a></p>
+    <p><strong>Option 1: Enter the code</strong></p>
+    <p>Go to your account settings and paste the code above.</p>
+    
+    <p><strong>Option 2: Click the link</strong></p>
+    <p><a href="${SITE_URL}/verify/${code}" class="button">Verify Email Now</a></p>
     
     <div class="security-note">
-      💡 <strong>Tip:</strong> Never share this code with anyone. DGC Arcade support will never ask for it.
+      🔒 <strong>Security:</strong> Never share this code. We'll never ask for it via email or support.
     </div>
   `;
   
-  const html = createEmailTemplate("Verify Your Email", content);
+  const html = createBaseEmailTemplate(content);
   
   await resend.emails.send({
     from: SENDER_EMAIL,
@@ -315,6 +342,7 @@ export async function sendEmailVerificationEmail(
   });
 }
 
+// LOGIN SECURITY - Alert & Protective
 export async function sendLoginSecurityEmail(
   email: string,
   username: string,
@@ -323,41 +351,42 @@ export async function sendLoginSecurityEmail(
   device: string
 ): Promise<void> {
   const content = `
-    <p class="subtitle">New login detected</p>
+    <p class="subtitle">🚨 New Login Detected</p>
     
-    <p>Hi <span class="highlight">${username}</span>, we detected a new login to your account.</p>
+    <p>Yo <span class="highlight">${username}</span>, we spotted a new login on your account.</p>
     
     <div class="code-box">
       <div style="text-align: left; font-size: 14px; line-height: 1.8;">
-        <div><strong>IP Address:</strong> ${ipAddress}</div>
-        <div><strong>Location:</strong> ${location}</div>
-        <div><strong>Device:</strong> ${device}</div>
-        <div><strong>Time:</strong> ${new Date().toLocaleString()}</div>
+        <div><strong>🌍 Location:</strong> ${location}</div>
+        <div><strong>🔗 IP Address:</strong> ${ipAddress}</div>
+        <div><strong>💻 Device:</strong> ${device}</div>
+        <div><strong>⏰ Time:</strong> ${new Date().toLocaleString()}</div>
       </div>
     </div>
     
-    <p><strong>Was this you?</strong></p>
+    <h2>Was This You?</h2>
     
     <p>
-      <a href="${SITE_URL}/security/confirm" class="button">Yes, This Was Me</a>
-      <a href="${SITE_URL}/security/suspicious" class="button button-secondary">No, This Wasn't Me</a>
+      <a href="${SITE_URL}/security/confirm" class="button">Yes, That Was Me</a>
+      <a href="${SITE_URL}/security/suspicious" class="button button-secondary">No, That Wasn't Me</a>
     </p>
     
     <div class="security-note">
-      🔒 If this wasn't you, click "No" immediately to secure your account. We'll help you reset your password.
+      🔒 If this wasn't you, click "No" immediately. We'll help you secure your account and reset your password.
     </div>
   `;
   
-  const html = createEmailTemplate("Login Security Alert", content);
+  const html = createBaseEmailTemplate(content);
   
   await resend.emails.send({
     from: SENDER_EMAIL,
     to: email,
-    subject: "New Login - DGC Arcade Security Alert",
+    subject: "🚨 New Login Alert - DGC Arcade",
     html,
   });
 }
 
+// DEPOSIT CONFIRMATION - Celebratory & Positive
 export async function sendDepositEmail(
   email: string,
   username: string,
@@ -365,33 +394,42 @@ export async function sendDepositEmail(
   txHash: string
 ): Promise<void> {
   const content = `
-    <p class="subtitle">Deposit confirmed!</p>
+    <p class="subtitle">💰 Deposit Confirmed!</p>
     
-    <p>Hi <span class="highlight">${username}</span>, your deposit has been received and processed.</p>
+    <p>Yo <span class="highlight">${username}</span>, your deposit is locked in and ready to play.</p>
+    
+    <div class="success-box">
+      ✅ <strong>${amount}</strong> has been added to your balance
+    </div>
     
     <div class="code-box">
       <div style="text-align: left; font-size: 14px; line-height: 1.8;">
-        <div><strong>Amount:</strong> <span class="highlight">${amount}</span></div>
-        <div><strong>Transaction:</strong> ${txHash}</div>
-        <div><strong>Status:</strong> <span class="highlight">CONFIRMED</span></div>
+        <div><strong>💵 Amount:</strong> <span class="highlight">${amount}</span></div>
+        <div><strong>🔗 Transaction:</strong> ${txHash}</div>
+        <div><strong>✅ Status:</strong> <span class="highlight">CONFIRMED</span></div>
       </div>
     </div>
     
-    <p>Your balance has been updated. You're ready to play!</p>
+    <p class="subtitle">Time to get paid or get played 🎰</p>
     
-    <p><a href="${SITE_URL}/games" class="button">Start Playing</a></p>
+    <p><a href="${SITE_URL}/games" class="button">Start Playing Now</a></p>
+    
+    <div class="info-box">
+      💡 Your balance is live. Play smart, win big.
+    </div>
   `;
   
-  const html = createEmailTemplate("Deposit Confirmed", content);
+  const html = createBaseEmailTemplate(content);
   
   await resend.emails.send({
     from: SENDER_EMAIL,
     to: email,
-    subject: "Deposit Confirmed - DGC Arcade",
+    subject: "💰 Deposit Confirmed - DGC Arcade",
     html,
   });
 }
 
+// WITHDRAWAL CONFIRMATION - Professional & Reassuring
 export async function sendWithdrawalEmail(
   email: string,
   username: string,
@@ -399,65 +437,75 @@ export async function sendWithdrawalEmail(
   txHash: string
 ): Promise<void> {
   const content = `
-    <p class="subtitle">Withdrawal processed!</p>
+    <p class="subtitle">🚀 Withdrawal Processed!</p>
     
-    <p>Hi <span class="highlight">${username}</span>, your withdrawal has been sent to your wallet.</p>
+    <p>Yo <span class="highlight">${username}</span>, your withdrawal is on the way to your wallet.</p>
+    
+    <div class="success-box">
+      ✅ <strong>${amount}</strong> is being sent to your wallet
+    </div>
     
     <div class="code-box">
       <div style="text-align: left; font-size: 14px; line-height: 1.8;">
-        <div><strong>Amount:</strong> <span class="highlight">${amount}</span></div>
-        <div><strong>Transaction:</strong> ${txHash}</div>
-        <div><strong>Status:</strong> <span class="highlight">PROCESSING</span></div>
+        <div><strong>💵 Amount:</strong> <span class="highlight">${amount}</span></div>
+        <div><strong>🔗 Transaction:</strong> ${txHash}</div>
+        <div><strong>⏳ Status:</strong> <span class="highlight">PROCESSING</span></div>
       </div>
     </div>
     
-    <p>Your funds should arrive in your wallet within a few minutes.</p>
-    
-    <div class="security-note">
-      💡 <strong>Tip:</strong> You can track your transaction on the blockchain using the transaction hash above.
+    <div class="info-box">
+      ⏱️ Your funds should arrive in your wallet within a few minutes. You can track the transaction on the blockchain using the hash above.
     </div>
+    
+    <p class="subtitle">Thanks for playing at DGC Arcade 🎮</p>
   `;
   
-  const html = createEmailTemplate("Withdrawal Processed", content);
+  const html = createBaseEmailTemplate(content);
   
   await resend.emails.send({
     from: SENDER_EMAIL,
     to: email,
-    subject: "Withdrawal Processed - DGC Arcade",
+    subject: "🚀 Withdrawal Processed - DGC Arcade",
     html,
   });
 }
 
+// PASSWORD RESET - Urgent but Helpful
 export async function sendPasswordResetEmail(
   email: string,
   username: string,
   resetLink: string
 ): Promise<void> {
   const content = `
-    <p class="subtitle">Reset your password</p>
+    <p class="subtitle">🔑 Reset Your Password</p>
     
-    <p>Hi <span class="highlight">${username}</span>, we received a request to reset your password.</p>
-    
-    <p><a href="${resetLink}" class="button">Reset Password</a></p>
-    
-    <p>Or copy this link:</p>
-    <p style="word-break: break-all; font-size: 12px; color: #888;">${resetLink}</p>
+    <p>Yo <span class="highlight">${username}</span>, we received a request to reset your password.</p>
     
     <div class="security-note">
-      🔒 This link expires in 1 hour. If you didn't request this, ignore this email.
+      🔒 <strong>This link expires in 1 hour.</strong> If you didn't request this, ignore this email.
+    </div>
+    
+    <p><a href="${resetLink}" class="button">Reset Password Now</a></p>
+    
+    <p><strong>Or copy this link:</strong></p>
+    <p style="word-break: break-all; font-size: 12px; color: #888; background: rgba(255,215,0,0.05); padding: 10px; border-radius: 4px;">${resetLink}</p>
+    
+    <div class="info-box">
+      💡 For security, never share this link with anyone.
     </div>
   `;
   
-  const html = createEmailTemplate("Reset Your Password", content);
+  const html = createBaseEmailTemplate(content);
   
   await resend.emails.send({
     from: SENDER_EMAIL,
     to: email,
-    subject: "Password Reset - DGC Arcade",
+    subject: "🔑 Password Reset - DGC Arcade",
     html,
   });
 }
 
+// SUSPICIOUS ACTIVITY - Urgent & Action-Oriented
 export async function sendSuspiciousActivityEmail(
   email: string,
   username: string,
@@ -465,34 +513,37 @@ export async function sendSuspiciousActivityEmail(
   secureLink: string
 ): Promise<void> {
   const content = `
-    <p class="subtitle">Suspicious activity detected</p>
+    <p class="subtitle">🚨 Suspicious Activity Detected</p>
     
-    <p>Hi <span class="highlight">${username}</span>, we detected suspicious activity on your account.</p>
+    <p>Yo <span class="highlight">${username}</span>, we detected suspicious activity on your account.</p>
     
     <div class="code-box">
       <div style="text-align: left; font-size: 14px; line-height: 1.8;">
-        <div><strong>Activity:</strong> ${activity}</div>
-        <div><strong>Time:</strong> ${new Date().toLocaleString()}</div>
+        <div><strong>⚠️ Activity:</strong> ${activity}</div>
+        <div><strong>⏰ Time:</strong> ${new Date().toLocaleString()}</div>
       </div>
     </div>
     
-    <p><a href="${secureLink}" class="button">Secure Your Account</a></p>
+    <p class="subtitle">Act Now to Secure Your Account</p>
+    
+    <p><a href="${secureLink}" class="button">Secure My Account</a></p>
     
     <div class="security-note">
-      🚨 <strong>URGENT:</strong> If this wasn't you, click the button above immediately. We'll help you reset your password and secure your account.
+      🚨 <strong>URGENT:</strong> If this wasn't you, click the button above immediately. We'll help you reset your password and lock down your account.
     </div>
   `;
   
-  const html = createEmailTemplate("Security Alert", content);
+  const html = createBaseEmailTemplate(content);
   
   await resend.emails.send({
     from: SENDER_EMAIL,
     to: email,
-    subject: "Security Alert - DGC Arcade",
+    subject: "🚨 Security Alert - DGC Arcade",
     html,
   });
 }
 
+// TEST EMAIL - For admin testing
 export async function sendTestEmail(
   email: string,
   emailType: string,
@@ -506,7 +557,7 @@ export async function sendTestEmail(
       await sendWelcomeEmail(email, testUsername, "player");
       break;
     case "verification":
-      await sendEmailVerificationEmail(email, testUsername, "ABC12345");
+      await sendEmailVerificationEmail(email, testUsername, "ABC123");
       break;
     case "login-security":
       await sendLoginSecurityEmail(
