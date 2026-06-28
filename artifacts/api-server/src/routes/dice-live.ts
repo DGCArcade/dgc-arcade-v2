@@ -13,6 +13,7 @@ export const diceLiveRouter = Router();
  * - Time remaining in betting window
  * - Current bets from all players
  * - Roll result (if rolled)
+ * - SHA-256 server seed hash for provably fair verification
  */
 diceLiveRouter.get("/round", optionalAuth, (req, res) => {
   try {
@@ -35,6 +36,7 @@ diceLiveRouter.get("/round", optionalAuth, (req, res) => {
         roll: round.roll,
         betCount: round.bets.length,
         totalBetAmount: round.bets.reduce((sum, b) => sum + b.amount, 0),
+        serverSeedHash: round.serverSeedHash, // SHA-256 hash for provably fair
       },
       bets: round.bets.map(b => ({
         username: b.username,
@@ -52,10 +54,48 @@ diceLiveRouter.get("/round", optionalAuth, (req, res) => {
 });
 
 /**
+ * GET /api/dice/live/next-round
+ * Returns the next round's details so players can place bets in advance
+ */
+diceLiveRouter.get("/next-round", optionalAuth, (req, res) => {
+  try {
+    const nextRound = diceRoundManager.getNextRound();
+    if (!nextRound) {
+      res.json({ nextRound: null });
+      return;
+    }
+
+    const now = Date.now();
+    const timeUntilStart = Math.max(0, nextRound.startedAt - now);
+
+    res.json({
+      nextRound: {
+        roundId: nextRound.roundId,
+        state: nextRound.state,
+        startedAt: nextRound.startedAt,
+        bettingEndsAt: nextRound.bettingEndsAt,
+        timeUntilStart,
+        betCount: nextRound.bets.length,
+        totalBetAmount: nextRound.bets.reduce((sum, b) => sum + b.amount, 0),
+        serverSeedHash: nextRound.serverSeedHash, // SHA-256 hash for provably fair
+      },
+      bets: nextRound.bets.map(b => ({
+        username: b.username,
+        amount: b.amount,
+        target: b.target,
+        mode: b.mode,
+      })),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Get next round error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
  * POST /api/dice/live/bet
- * Place a bet in the current live round.
- * This is called AFTER the standard bet is placed and resolved.
- * We just add the bet to the live round feed.
+ * Place a bet in the current or next round.
+ * Query param: roundId (optional, defaults to current round)
  */
 diceLiveRouter.post("/bet", optionalAuth, async (req, res) => {
   if (!req.user) {
@@ -64,6 +104,7 @@ diceLiveRouter.post("/bet", optionalAuth, async (req, res) => {
   }
 
   const { amount, target, mode } = req.body;
+  const roundId = req.query.roundId as string | undefined;
 
   try {
     const [user] = await db
@@ -77,14 +118,8 @@ diceLiveRouter.post("/bet", optionalAuth, async (req, res) => {
       return;
     }
 
-    const round = diceRoundManager.getCurrentRound();
-    if (!round || round.state !== "betting") {
-      res.status(400).json({ error: "Betting window is closed" });
-      return;
-    }
-
     const bet: DiceRoundBet = {
-      betId: 0, // Placeholder, not used for live display
+      betId: 0, // Placeholder
       userId: req.user.userId,
       username: user.username,
       amount: parseFloat(String(amount)),
@@ -92,12 +127,12 @@ diceLiveRouter.post("/bet", optionalAuth, async (req, res) => {
       mode: mode as "over" | "under",
     };
 
-    diceRoundManager.addBetToRound(bet);
+    diceRoundManager.addBetToRound(bet, roundId);
 
-    res.json({ success: true, message: "Bet added to live round" });
-  } catch (err) {
+    res.json({ success: true, message: "Bet added to round", roundId: roundId || "current" });
+  } catch (err: any) {
     req.log.error({ err }, "Add live bet error");
-    res.status(500).json({ error: "Internal server error" });
+    res.status(400).json({ error: err.message || "Internal server error" });
   }
 });
 
@@ -118,6 +153,7 @@ diceLiveRouter.get("/history", optionalAuth, (req, res) => {
         roll: r.roll,
         betCount: r.bets.length,
         totalBetAmount: r.bets.reduce((sum, b) => sum + b.amount, 0),
+        serverSeedHash: r.serverSeedHash, // SHA-256 hash
         bets: r.bets.map(b => ({
           username: b.username,
           amount: b.amount,

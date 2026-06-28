@@ -32,6 +32,7 @@ export interface LiveDiceRound {
   roll?: number;
   betCount: number;
   totalBetAmount: number;
+  serverSeedHash?: string;
 }
 
 export interface LiveDiceBet {
@@ -72,5 +73,18 @@ export function useDiceLiveHistory(limit: number = 10) {
       return manualFetch<{ rounds: any[] }>(`/api/dice/live/history?limit=${limit}`);
     },
     refetchInterval: 5000,
+  });
+}
+
+/**
+ * Hook to get the next round info (for placing bets in advance)
+ */
+export function useDiceLiveNextRound() {
+  return useQuery({
+    queryKey: ["dice-live-next-round"],
+    queryFn: async () => {
+      return manualFetch<{ nextRound: any }>("/api/dice/live/next-round");
+    },
+    refetchInterval: 1000,
   });
 }

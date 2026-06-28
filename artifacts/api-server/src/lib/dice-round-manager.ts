@@ -10,6 +10,7 @@ export interface DiceRound {
   bettingEndsAt: number;
   rolledAt?: number;
   serverSeed: string;
+  serverSeedHash: string; // SHA-256 hash of serverSeed
   clientSeed: string;
   roll?: number;
   bets: DiceRoundBet[];
@@ -28,6 +29,7 @@ export interface DiceRoundBet {
 
 class DiceRoundManager {
   private currentRound: DiceRound | null = null;
+  private nextRound: DiceRound | null = null; // Bets can be placed on the next round
   private roundHistory: Map<string, DiceRound> = new Map();
   private readonly BETTING_WINDOW_MS = 5000; // 5 seconds
   private roundCheckInterval: any = null;
@@ -50,15 +52,25 @@ class DiceRoundManager {
 
     if (!this.currentRound) {
       // Start a new round
+      const serverSeed = uuidv4().replace(/-/g, "");
+      const serverSeedHash = createHash("sha256").update(serverSeed).digest("hex");
+      
       this.currentRound = {
         roundId: uuidv4(),
         state: "betting",
         startedAt: now,
         bettingEndsAt: now + this.BETTING_WINDOW_MS,
-        serverSeed: uuidv4().replace(/-/g, ""),
+        serverSeed,
+        serverSeedHash,
         clientSeed: uuidv4().replace(/-/g, ""),
         bets: [],
       };
+
+      // If there's a next round with bets, promote it to current
+      if (this.nextRound && this.nextRound.bets.length > 0) {
+        this.currentRound.bets = this.nextRound.bets;
+        this.nextRound = null;
+      }
       return;
     }
 
@@ -76,8 +88,8 @@ class DiceRoundManager {
       this.resolveBets();
     }
 
-    // Transition from results to new betting round (after 2 seconds)
-    if (this.currentRound.state === "results" && now >= (this.currentRound.rolledAt ?? 0) + 3000) {
+    // Transition from results to new betting round (after 5 seconds total, allowing 4 more seconds for next-round betting)
+    if (this.currentRound.state === "results" && now >= (this.currentRound.rolledAt ?? 0) + 5000) {
       this.roundHistory.set(this.currentRound.roundId, { ...this.currentRound });
       this.currentRound = null;
     }
@@ -119,9 +131,39 @@ class DiceRoundManager {
     return this.currentRound;
   }
 
-  public addBetToRound(bet: DiceRoundBet) {
+  public getNextRound(): DiceRound | null {
+    // Create a next round if it doesn't exist
+    if (!this.nextRound) {
+      const serverSeed = uuidv4().replace(/-/g, "");
+      const serverSeedHash = createHash("sha256").update(serverSeed).digest("hex");
+      
+      this.nextRound = {
+        roundId: uuidv4(),
+        state: "betting",
+        startedAt: Date.now() + this.BETTING_WINDOW_MS + 6000, // Estimated start time
+        bettingEndsAt: Date.now() + this.BETTING_WINDOW_MS + 11000,
+        serverSeed,
+        serverSeedHash,
+        clientSeed: uuidv4().replace(/-/g, ""),
+        bets: [],
+      };
+    }
+    return this.nextRound;
+  }
+
+  public addBetToRound(bet: DiceRoundBet, roundId?: string) {
+    // If roundId is specified, add to that round (for next-round betting)
+    if (roundId) {
+      if (this.nextRound?.roundId === roundId) {
+        this.nextRound.bets.push(bet);
+        return;
+      }
+      throw new Error("Round not found");
+    }
+
+    // Otherwise add to current round
     if (!this.currentRound || this.currentRound.state !== "betting") {
-      throw new Error("Betting window closed");
+      throw new Error("Betting window closed for current round");
     }
     this.currentRound.bets.push(bet);
   }
@@ -129,6 +171,9 @@ class DiceRoundManager {
   public getBetsForRound(roundId: string): DiceRoundBet[] {
     if (this.currentRound?.roundId === roundId) {
       return this.currentRound.bets;
+    }
+    if (this.nextRound?.roundId === roundId) {
+      return this.nextRound.bets;
     }
     return this.roundHistory.get(roundId)?.bets ?? [];
   }

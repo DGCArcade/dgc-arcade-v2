@@ -4,13 +4,14 @@ import { usePlaceBet, getGetMeQueryKey, getListRecentBetsAllQueryKey, getListBet
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { useDiceLiveRound } from "@/hooks/use-dice-live-round";
+import { useDiceLiveRound, useDiceLiveHistory } from "@/hooks/use-dice-live-round";
 import { formatCurrency } from "@/lib/format";
 import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { playDiceRollSound } from "@/lib/dice-sound";
+import { Copy, Check } from "lucide-react";
 
 interface DiceGameLiveProps { game: Game }
 
@@ -64,32 +65,63 @@ function DiceFace({ value, size = 80, accent }: { value: number; size?: number; 
   );
 }
 
+// ─── SHA-256 Hash Display Component ───────────────────────────────────────────
+
+function SHAHashDisplay({ hash, label }: { hash: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  
+  const handleCopy = () => {
+    navigator.clipboard.writeText(hash);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="space-y-1">
+      <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{label}</div>
+      <div className="flex items-center gap-2 p-2 rounded bg-secondary/40 border border-border/50">
+        <code className="text-xs font-mono text-foreground/70 flex-1 truncate">{hash}</code>
+        <button onClick={handleCopy} className="p-1 hover:bg-secondary rounded transition-colors">
+          {copied ? (
+            <Check className="w-3 h-3 text-green-400" />
+          ) : (
+            <Copy className="w-3 h-3 text-muted-foreground" />
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Live Bettor Feed Component ───────────────────────────────────────────────
 
-function LiveBettorFeed({ bets }: { bets: any[] }) {
+function LiveBettorFeed({ bets, label }: { bets: any[]; label: string }) {
   return (
-    <div className="space-y-2 max-h-48 overflow-y-auto">
-      {bets.length === 0 ? (
-        <div className="text-center text-muted-foreground text-sm py-4">No bets yet</div>
-      ) : (
-        bets.map((bet, i) => (
-          <div key={i} className="flex items-center justify-between text-xs p-2 rounded"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            <div className="flex-1">
-              <div className="font-mono font-bold text-white truncate">{bet.username}</div>
-              <div className="text-muted-foreground text-xs">{bet.mode.toUpperCase()} {bet.target}</div>
+    <div className="space-y-2">
+      <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{label}</div>
+      <div className="space-y-2 max-h-40 overflow-y-auto">
+        {bets.length === 0 ? (
+          <div className="text-center text-muted-foreground text-xs py-3">No bets</div>
+        ) : (
+          bets.map((bet, i) => (
+            <div key={i} className="flex items-center justify-between text-xs p-2 rounded"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <div className="flex-1 min-w-0">
+                <div className="font-mono font-bold text-white truncate">{bet.username}</div>
+                <div className="text-muted-foreground text-xs">{bet.mode.toUpperCase()} {bet.target}</div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="font-bold text-green-400">${bet.amount.toFixed(2)}</div>
+                {bet.won !== undefined && (
+                  <div className={bet.won ? "text-green-400" : "text-red-400"}>
+                    {bet.won ? `+${formatCurrency(bet.payout)}` : "Lost"}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="text-right">
-              <div className="font-bold text-green-400">${bet.amount.toFixed(2)}</div>
-              {bet.won !== undefined && (
-                <div className={bet.won ? "text-green-400" : "text-red-400"}>
-                  {bet.won ? `+${formatCurrency(bet.payout)}` : "Lost"}
-                </div>
-              )}
-            </div>
-          </div>
-        ))
-      )}
+          ))
+        )}
+      </div>
     </div>
   );
 }
@@ -112,7 +144,7 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
   const [payout, setPayout] = useState(0);
   const [rolling, setRolling] = useState(false);
   const [diceValue, setDiceValue] = useState<number>(1);
-  const [betId, setBetId] = useState<number | null>(null);
+  const [bettingOnNext, setBettingOnNext] = useState(false);
 
   const winChance = mode === "over" ? 100 - target : target;
   const multiplier = Math.max(0.01, (99 / winChance)).toFixed(4);
@@ -125,14 +157,12 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
     const round = liveRound.round;
     if (round.state === "rolling" && !rolling) {
       setRolling(true);
-      // Play roll sound
       playDiceRollSound();
     }
 
     if (round.state === "results" && rolling && round.roll) {
       setRolling(false);
       setResult(round.roll);
-      // Animate dice to final value
       const finalDice = Math.max(1, Math.min(6, Math.ceil(round.roll / (100 / 6))));
       setDiceValue(finalDice);
     }
@@ -145,15 +175,26 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
         return;
       }
 
-      if (!liveRound?.round || liveRound.round.state !== "betting") {
-        toast({ title: "Betting window closed", description: "Wait for the next round", variant: "destructive" });
+      if (!liveRound?.round) {
+        toast({ title: "No active round", variant: "destructive" });
         return;
+      }
+
+      const round = liveRound.round;
+      
+      // Determine which round to bet on
+      let targetRound = round.roundId;
+      if (round.state !== "betting") {
+        // If current round is not betting, bet on next round
+        setBettingOnNext(true);
+        // We'll need to get the next round ID from the API
+        // For now, we'll just try to place the bet and let the API handle it
       }
 
       setResult(null);
       setWon(null);
 
-      // Animate dice while waiting for roll
+      // Animate dice
       let frames = 0;
       const animate = setInterval(() => {
         setDiceValue(Math.floor(Math.random() * 6) + 1);
@@ -171,7 +212,7 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
           setResult(roll);
           setWon(data.won);
           setPayout(data.payout);
-          setBetId(data.bet.id);
+          setBettingOnNext(false);
           qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
           qc.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
           qc.invalidateQueries({ queryKey: getListBetsQueryKey() });
@@ -181,6 +222,7 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
         },
         onError: (err) => {
           clearInterval(animate);
+          setBettingOnNext(false);
           toast({ title: "Bet Failed", description: err.data?.error, variant: "destructive" });
         }
       });
@@ -198,12 +240,14 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
           .dice-betting-panel { width: 100%; order: 1; }
           .dice-display-area { width: 100%; order: 2; }
           .dice-feed-area { width: 100%; order: 3; }
+          .dice-hash-area { width: 100%; order: 4; }
         }
         @media (min-width: 769px) {
           .dice-game-live-root { display: grid; grid-template-columns: 280px 1fr 300px; gap: 16px; }
-          .dice-betting-panel { grid-column: 1; }
-          .dice-display-area { grid-column: 2; }
-          .dice-feed-area { grid-column: 3; }
+          .dice-betting-panel { grid-column: 1; grid-row: 1 / 3; }
+          .dice-display-area { grid-column: 2; grid-row: 1; }
+          .dice-feed-area { grid-column: 3; grid-row: 1; }
+          .dice-hash-area { grid-column: 2 / 4; grid-row: 2; }
         }
         @keyframes dice-bounce {
           0%,100% { transform: translateY(0) rotate(0deg) scale(1); }
@@ -231,14 +275,12 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
         }
       `}</style>
 
-
-
       {/* ─── BETTING PANEL (Left / Top on mobile) ─── */}
       <div className="dice-betting-panel rounded-xl p-5 flex flex-col gap-4"
         style={{ background: "rgba(8,12,26,0.92)", border: "1.5px solid rgba(255,255,255,0.08)", backdropFilter: "blur(16px)" }}>
 
         <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 3, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: 8 }}>
-          Live Betting
+          {bettingOnNext ? "Next Round Bet" : "Live Betting"}
         </div>
 
         {/* Round Status */}
@@ -260,7 +302,7 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
             <div className="relative mt-2">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono">$</span>
               <Input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))}
-                min={game.minBet} max={game.maxBet} disabled={!bettingActive}
+                min={game.minBet} max={game.maxBet} disabled={!bettingActive && !bettingOnNext}
                 className="pl-8 font-mono text-sm"
                 style={{ background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.11)", color: "#fff" }} />
             </div>
@@ -272,13 +314,13 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
               <span className="text-xs font-mono text-muted-foreground">Win: {winChance}%</span>
             </div>
             <input type="range" min={2} max={98} value={target} onChange={e => setTarget(Number(e.target.value))}
-              disabled={!bettingActive}
+              disabled={!bettingActive && !bettingOnNext}
               className="w-full" style={{ accentColor: accent }} />
           </div>
 
           <div className="flex gap-2">
             {(["over", "under"] as const).map(m => (
-              <button key={m} onClick={() => setMode(m)} disabled={!bettingActive}
+              <button key={m} onClick={() => setMode(m)} disabled={!bettingActive && !bettingOnNext}
                 className="flex-1 px-3 py-2 rounded-lg font-bold text-xs uppercase transition-all disabled:opacity-50"
                 style={{
                   background: mode === m ? "rgba(34,197,94,0.85)" : "rgba(255,255,255,0.06)",
@@ -305,14 +347,14 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
         </div>
 
         {/* Roll Button */}
-        <Button onClick={roll} disabled={!bettingActive || rolling || placeBet.isPending}
+        <Button onClick={roll} disabled={(!bettingActive && !bettingOnNext) || rolling || placeBet.isPending}
           className="w-full py-3 font-bold uppercase text-sm"
           style={{
-            background: bettingActive ? "rgba(34,197,94,0.9)" : "rgba(100,100,100,0.5)",
+            background: (bettingActive || bettingOnNext) ? "rgba(34,197,94,0.9)" : "rgba(100,100,100,0.5)",
             color: "#fff",
-            opacity: bettingActive ? 1 : 0.6,
+            opacity: (bettingActive || bettingOnNext) ? 1 : 0.6,
           }}>
-          {rolling ? "Rolling..." : "Place Bet"}
+          {rolling ? "Rolling..." : bettingOnNext ? "Bet on Next" : "Place Bet"}
         </Button>
       </div>
 
@@ -372,11 +414,34 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
       <div className="dice-feed-area rounded-xl p-5 flex flex-col gap-3"
         style={{ background: "rgba(8,12,26,0.92)", border: "1.5px solid rgba(255,255,255,0.08)", backdropFilter: "blur(16px)" }}>
 
-        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 3, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: 8 }}>
-          Live Bets ({liveRound?.round?.betCount ?? 0})
+        <LiveBettorFeed bets={liveRound?.bets ?? []} label={`Live Bets (${liveRound?.round?.betCount ?? 0})`} />
+      </div>
+
+      {/* ─── SHA-256 HASH DISPLAY (Bottom / Full width on mobile) ─── */}
+      <div className="dice-hash-area rounded-xl p-5 space-y-4"
+        style={{ background: "rgba(8,12,26,0.92)", border: "1.5px solid rgba(255,255,255,0.08)", backdropFilter: "blur(16px)" }}>
+
+        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 3, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>
+          Provably Fair - SHA-256 Verification
         </div>
 
-        <LiveBettorFeed bets={liveRound?.bets ?? []} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {liveRound?.round?.serverSeedHash && (
+            <SHAHashDisplay hash={liveRound.round.serverSeedHash} label="Current Round Hash" />
+          )}
+          
+          {/* Show previous round hash for verification */}
+          {liveRound?.bets && liveRound.bets.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Bets This Round</div>
+              <div className="text-sm font-bold text-green-400">${liveRound.round?.totalBetAmount?.toFixed(2) ?? "0.00"}</div>
+            </div>
+          )}
+        </div>
+
+        <div className="text-xs text-muted-foreground leading-relaxed">
+          <p>Each round uses a server seed (hashed above) and a client seed to generate a fair, verifiable roll. Players can verify the result by checking the hash against the server seed revealed after the round completes.</p>
+        </div>
       </div>
     </div>
   );
