@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ export function VerificationModal({ open, onClose }: VerificationModalProps) {
   const [status, setStatus] = useState<{ type: "success" | "error" | null; msg: string }>({ type: null, msg: "" });
   const [resendLoading, setResendLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const hasSentInitial = useRef(false);
 
   useEffect(() => {
     if (resendCooldown > 0) {
@@ -25,6 +26,19 @@ export function VerificationModal({ open, onClose }: VerificationModalProps) {
     }
     return undefined;
   }, [resendCooldown]);
+
+  // Auto-send email when modal opens
+  useEffect(() => {
+    if (open && !hasSentInitial.current) {
+      handleResend(true);
+      hasSentInitial.current = true;
+    }
+    if (!open) {
+      hasSentInitial.current = false;
+      setStatus({ type: null, msg: "" });
+      setCode("");
+    }
+  }, [open]);
 
   const handleVerify = async () => {
     if (!code || code.length < 6) {
@@ -64,9 +78,9 @@ export function VerificationModal({ open, onClose }: VerificationModalProps) {
     }
   };
 
-  const handleResend = async () => {
-    setResendLoading(true);
-    setStatus({ type: null, msg: "" });
+  const handleResend = async (isInitial = false) => {
+    if (!isInitial) setResendLoading(true);
+    else setStatus({ type: "success", msg: "✉️ Sending verification email..." });
 
     try {
       const token = typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
@@ -82,12 +96,12 @@ export function VerificationModal({ open, onClose }: VerificationModalProps) {
         setResendCooldown(60);
         setCode("");
       } else {
-        setStatus({ type: "error", msg: data.error || "Failed to resend email" });
+        setStatus({ type: "error", msg: data.error || "Failed to send email" });
       }
     } catch (err) {
       setStatus({ type: "error", msg: "Network error. Please try again." });
     } finally {
-      setResendLoading(false);
+      if (!isInitial) setResendLoading(false);
     }
   };
 
@@ -151,7 +165,7 @@ export function VerificationModal({ open, onClose }: VerificationModalProps) {
           <div className="text-center">
             <p className="text-xs text-muted-foreground mb-2">Didn't get the code?</p>
             <button
-              onClick={handleResend}
+              onClick={() => handleResend(false)}
               disabled={resendLoading || resendCooldown > 0}
               className="text-xs text-primary hover:text-primary/80 font-bold uppercase disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >

@@ -179,15 +179,10 @@ export default function Settings() {
                   </Badge>
                   {!meData.emailVerified && (
                     <button
-                      onClick={async () => {
-                        try {
-                          await apiCall("/api/users/me/verify/resend", "POST");
-                          // Open the global verification modal
-                          const event = new CustomEvent('openVerificationModal');
-                          window.dispatchEvent(event);
-                        } catch {
-                          alert("Failed to send verification email");
-                        }
+                      onClick={() => {
+                        // Open the global verification modal (it handles auto-sending)
+                        const event = new CustomEvent('openVerificationModal');
+                        window.dispatchEvent(event);
                       }}
                       className="text-[10px] uppercase font-black text-primary hover:underline"
                     >
