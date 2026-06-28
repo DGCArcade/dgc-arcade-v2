@@ -10,9 +10,11 @@ const SLOT_SLUGS = new Set([
   // legacy
   "slots", "lucky-slots", "dragon-realm",
   // active slot themes
-  "dragons-fortune", "neon-cyber", "pharaohs-riches", "street-gold",
-  "ocean-depths", "wolf-pack", "cosmic-cash", "fire-and-ice",
-  "diamond-vault", "lucky-sevens",
+  "dragons-fortune", "neon-cyber", "pharaohs-riches", "pharaohs-fortune",
+  "street-gold", "ocean-depths", "wolf-pack", "cosmic-cash",
+  "fire-and-ice", "diamond-vault", "lucky-sevens",
+  // classic themes (slots only)
+  "classic-vegas", "olympus-gates",
 ]);
 
 export default function Games() {
