@@ -324,9 +324,12 @@ usersRouter.post("/me/rakeback/claim", requireAuth, async (req, res) => {
     const claimed = parseFloat(user.rakebackClaimed ?? "0");
     const available = Math.max(0, totalRakeback - claimed);
     if (available < 0.01) { res.status(400).json({ error: "No rakeback available to claim" }); return; }
-    const newClaimed = claimed + available;
-    await db.update(usersTable).set({ balance: sql`balance + ${available}`, rakebackClaimed: newClaimed }).where(eq(usersTable.id, req.user!.userId));
-    res.json({ success: true, claimedAmount: available, newBalance: user, tier: tier.id });
+    const newClaimed = (claimed + available).toFixed(8);
+    await db.update(usersTable).set({ 
+      balance: sql`balance + ${available.toFixed(8)}`, 
+      rakebackClaimed: newClaimed 
+    }).where(eq(usersTable.id, req.user!.userId));
+    res.json({ success: true, claimedAmount: available, tier: tier.id });
   } catch (err) { req.log.error({ err }, "Rakeback claim error"); res.status(500).json({ error: "Internal server error" }); }
 });
 
