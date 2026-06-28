@@ -95,7 +95,7 @@ function SHAHashDisplay({ hash, label }: { hash: string; label: string }) {
 
 // ─── Live Bettor Feed Component ───────────────────────────────────────────────
 
-function LiveBettorFeed({ bets, label }: { bets: any[]; label: string }) {
+function LiveBettorFeed({ bets, label, showResults }: { bets: any[]; label: string; showResults: boolean }) {
   return (
     <div className="space-y-2">
       <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{label}</div>
@@ -112,7 +112,7 @@ function LiveBettorFeed({ bets, label }: { bets: any[]; label: string }) {
               </div>
               <div className="text-right flex-shrink-0">
                 <div className="font-bold text-green-400">${bet.amount.toFixed(2)}</div>
-                {bet.won !== undefined && (
+                {showResults && bet.won !== undefined && (
                   <div className={bet.won ? "text-green-400" : "text-red-400"}>
                     {bet.won ? `+${formatCurrency(bet.payout)}` : "Lost"}
                   </div>
@@ -145,6 +145,7 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
   const [rolling, setRolling] = useState(false);
   const [diceValue, setDiceValue] = useState<number>(1);
   const [bettingOnNext, setBettingOnNext] = useState(false);
+  const [showLiveResults, setShowLiveResults] = useState(false);
 
   const winChance = mode === "over" ? 100 - target : target;
   const multiplier = Math.max(0.01, (99 / winChance)).toFixed(4);
@@ -157,6 +158,7 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
     const round = liveRound.round;
     if (round.state === "rolling" && !rolling) {
       setRolling(true);
+      setShowLiveResults(false); // Don't show results until animation is done
       playDiceRollSound();
     }
 
@@ -165,6 +167,11 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
       setResult(round.roll);
       const finalDice = Math.max(1, Math.min(6, Math.ceil(round.roll / (100 / 6))));
       setDiceValue(finalDice);
+      
+      // Delay showing live results until animation completes
+      setTimeout(() => {
+        setShowLiveResults(true);
+      }, 1500);
     }
   }, [liveRound?.round?.state, liveRound?.round?.roll]);
 
@@ -187,12 +194,11 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
       if (round.state !== "betting") {
         // If current round is not betting, bet on next round
         setBettingOnNext(true);
-        // We'll need to get the next round ID from the API
-        // For now, we'll just try to place the bet and let the API handle it
       }
 
       setResult(null);
       setWon(null);
+      setShowLiveResults(false);
 
       // Animate dice
       let frames = 0;
@@ -236,11 +242,11 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
     <div className="dice-game-live-root w-full min-h-screen bg-gradient-to-br from-slate-950 to-slate-900 p-2 md:p-4">
       <style>{`
         @media (max-width: 768px) {
-          .dice-game-live-root { display: flex; flex-direction: column; }
-          .dice-betting-panel { width: 100%; order: 1; }
-          .dice-display-area { width: 100%; order: 2; }
-          .dice-feed-area { width: 100%; order: 3; }
-          .dice-hash-area { width: 100%; order: 4; }
+          .dice-game-live-root { display: flex; flex-direction: column; gap: 12px; }
+          .dice-betting-panel { width: 100%; }
+          .dice-display-area { width: 100%; }
+          .dice-feed-area { width: 100%; }
+          .dice-hash-area { width: 100%; }
         }
         @media (min-width: 769px) {
           .dice-game-live-root { display: grid; grid-template-columns: 280px 1fr 300px; gap: 16px; }
@@ -272,6 +278,41 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
           font-weight: bold;
           font-size: 14px;
           font-family: monospace;
+        }
+        /* Improved slider styling */
+        input[type="range"] {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 100%;
+          height: 6px;
+          border-radius: 3px;
+          background: linear-gradient(to right, rgba(239,68,68,0.6) 0%, rgba(239,68,68,0.6) var(--value), rgba(34,197,94,0.6) var(--value), rgba(34,197,94,0.6) 100%);
+          outline: none;
+          cursor: pointer;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7));
+          cursor: pointer;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 2px rgba(255,255,255,0.3);
+          border: 2px solid rgba(0,0,0,0.2);
+        }
+        input[type="range"]::-moz-range-thumb {
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7));
+          cursor: pointer;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 2px rgba(255,255,255,0.3);
+          border: 2px solid rgba(0,0,0,0.2);
+        }
+        input[type="range"]::-moz-range-track {
+          background: transparent;
+          border: none;
         }
       `}</style>
 
@@ -309,13 +350,29 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Target: {target}</Label>
+            <div className="flex items-center justify-between mb-3">
+              <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Target: <span style={{ color: accent, fontSize: 14, fontWeight: 900 }}>{target}</span></Label>
               <span className="text-xs font-mono text-muted-foreground">Win: {winChance}%</span>
             </div>
-            <input type="range" min={2} max={98} value={target} onChange={e => setTarget(Number(e.target.value))}
-              disabled={!bettingActive && !bettingOnNext}
-              className="w-full" style={{ accentColor: accent }} />
+            <div className="space-y-2">
+              <input 
+                type="range" 
+                min={2} 
+                max={98} 
+                value={target} 
+                onChange={e => setTarget(Number(e.target.value))}
+                disabled={!bettingActive && !bettingOnNext}
+                style={{ 
+                  "--value": `${target}%` 
+                } as React.CSSProperties}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs font-mono text-muted-foreground">
+                <span>0</span>
+                <span className="font-bold" style={{ color: accent }}>Drag to adjust</span>
+                <span>100</span>
+              </div>
+            </div>
           </div>
 
           <div className="flex gap-2">
@@ -414,7 +471,7 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
       <div className="dice-feed-area rounded-xl p-5 flex flex-col gap-3"
         style={{ background: "rgba(8,12,26,0.92)", border: "1.5px solid rgba(255,255,255,0.08)", backdropFilter: "blur(16px)" }}>
 
-        <LiveBettorFeed bets={liveRound?.bets ?? []} label={`Live Bets (${liveRound?.round?.betCount ?? 0})`} />
+        <LiveBettorFeed bets={liveRound?.bets ?? []} label={`Live Bets (${liveRound?.round?.betCount ?? 0})`} showResults={showLiveResults} />
       </div>
 
       {/* ─── SHA-256 HASH DISPLAY (Bottom / Full width on mobile) ─── */}
