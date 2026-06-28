@@ -19,12 +19,127 @@ interface Game {
 
 function CoverCoinflip() {
   return (
-    <img
-      src="/coinflip-cover.jpg"
-      alt="Coin Flip"
-      className="w-full h-full object-cover"
-      style={{ display: "block" }}
-    />
+    <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+      <defs>
+        {/* Cosmic background gradient */}
+        <radialGradient id="cf-cosmic" cx="50%" cy="40%" r="80%">
+          <stop offset="0%" stopColor="#2a1a3d" />
+          <stop offset="50%" stopColor="#1a0a2d" />
+          <stop offset="100%" stopColor="#0a0015" />
+        </radialGradient>
+        {/* Coin metallic gradient */}
+        <radialGradient id="cf-coin-metal" cx="35%" cy="30%" r="65%">
+          <stop offset="0%" stopColor="#FFE566" />
+          <stop offset="25%" stopColor="#FFD700" />
+          <stop offset="60%" stopColor="#FFA500" />
+          <stop offset="100%" stopColor="#CC8800" />
+        </radialGradient>
+        {/* Glow filter */}
+        <filter id="cf-glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+          <feMerge>
+            <feMergeNode in="coloredBlur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      {/* Background */}
+      <rect width="320" height="200" fill="url(#cf-cosmic)" />
+
+      {/* Cosmic nebula glow effect */}
+      <ellipse cx="160" cy="80" rx="140" ry="100" fill="#E91E63" opacity="0.08" filter="url(#cf-glow)" />
+      <ellipse cx="160" cy="90" rx="120" ry="80" fill="#FF1493" opacity="0.05" />
+
+      {/* Star particles */}
+      {[
+        [30, 20, 0.6],
+        [290, 30, 0.8],
+        [50, 160, 0.5],
+        [280, 150, 0.7],
+        [160, 10, 0.4],
+        [20, 100, 0.5],
+        [300, 80, 0.6],
+      ].map(([x, y, op], i) => (
+        <circle key={i} cx={x} cy={y} r="1.5" fill="white" opacity={op} />
+      ))}
+
+      {/* Coin shadow/glow behind */}
+      <ellipse cx="160" cy="105" rx="95" ry="95" fill="#E91E63" opacity="0.12" filter="url(#cf-glow)" />
+      <ellipse cx="160" cy="100" rx="92" ry="92" fill="#FF69B4" opacity="0.08" />
+
+      {/* Main coin */}
+      <circle cx="160" cy="100" r="85" fill="url(#cf-coin-metal)" stroke="#FFE566" strokeWidth="2.5" filter="url(#cf-glow)" />
+
+      {/* Coin rim detail */}
+      <circle cx="160" cy="100" r="85" fill="none" stroke="#FFB800" strokeWidth="1.5" opacity="0.6" />
+      <circle cx="160" cy="100" r="78" fill="none" stroke="#FFE566" strokeWidth="0.8" opacity="0.4" />
+
+      {/* Inner coin detail circle */}
+      <circle cx="160" cy="100" r="70" fill="none" stroke="#FFD700" strokeWidth="1" opacity="0.3" />
+
+      {/* DGC text on coin */}
+      <text
+        x="160"
+        y="108"
+        textAnchor="middle"
+        fontFamily="'Outfit', Arial, sans-serif"
+        fontSize="48"
+        fontWeight="900"
+        fill="#8B6914"
+        opacity="0.9"
+        letterSpacing="2"
+      >
+        DGC
+      </text>
+
+      {/* Arcade text */}
+      <text
+        x="160"
+        y="128"
+        textAnchor="middle"
+        fontFamily="'Outfit', Arial, sans-serif"
+        fontSize="10"
+        fontWeight="700"
+        fill="#8B6914"
+        opacity="0.7"
+        letterSpacing="1.5"
+      >
+        ARCADE
+      </text>
+
+      {/* Coin shine highlight */}
+      <ellipse cx="140" cy="85" rx="18" ry="22" fill="white" opacity="0.25" />
+      <ellipse cx="145" cy="82" rx="8" ry="12" fill="white" opacity="0.4" />
+
+      {/* Title text */}
+      <text
+        x="160"
+        y="175"
+        textAnchor="middle"
+        fontFamily="'Outfit', Arial, sans-serif"
+        fontSize="16"
+        fontWeight="900"
+        fill="white"
+        letterSpacing="2"
+      >
+        COIN FLIP
+      </text>
+
+      {/* Subtitle */}
+      <text
+        x="160"
+        y="192"
+        textAnchor="middle"
+        fontFamily="monospace"
+        fontSize="8"
+        fill="#FFD700"
+        opacity="0.85"
+        letterSpacing="1"
+      >
+        50/50 · PAYS 2 TO 1
+      </text>
+    </svg>
   );
 }
 
