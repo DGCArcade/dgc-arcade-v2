@@ -62,7 +62,7 @@ export async function getUserBalance(userId: number): Promise<UserBalance> {
  * If a txn is already provided by the caller, the locks are acquired within that
  * transaction. Otherwise a new transaction is created.
  */
-export async function deductBalance(userId: number, amount: number, txn?: any): Promise<number> {
+export async function deductBalance(userId: number, amount: number, txn?: any, preferredCurrency?: string): Promise<number> {
   const doDeduct = async (database: any) => {
     // Acquire row-level locks before reading. Concurrent callers block here until
     // this transaction commits or rolls back.
@@ -103,33 +103,61 @@ export async function deductBalance(userId: number, amount: number, txn?: any): 
     if (totalBalance < amount) throw new Error("Insufficient balance");
 
     let remainingToDeduct = amount;
-    const sortedCrypto = [...balancesWithPrices].sort((a, b) => b.usdValue - a.usdValue);
 
-    for (const crypto of sortedCrypto) {
-      if (remainingToDeduct <= 0) break;
-      const deductUsd = Math.min(remainingToDeduct, crypto.usdValue);
-      const deductCryptoAmount = deductUsd / crypto.price;
-
+    // If a preferred currency is specified (e.g., for withdrawal), we MUST deduct from it first.
+    if (preferredCurrency && preferredCurrency !== "USD") {
+      const crypto = balancesWithPrices.find(b => b.currency === preferredCurrency);
+      if (crypto) {
+        const deductUsd = Math.min(remainingToDeduct, crypto.usdValue);
+        const deductCryptoAmount = deductUsd / crypto.price;
+        
+        await database
+          .update(userBalancesTable)
+          .set({ amount: sql`amount - ${deductCryptoAmount.toFixed(18)}` })
+          .where(and(eq(userBalancesTable.userId, userId), eq(userBalancesTable.currency, crypto.currency)));
+        
+        remainingToDeduct -= deductUsd;
+      }
+    } else if (preferredCurrency === "USD") {
+      const deductUsd = Math.min(remainingToDeduct, staticBalance);
       await database
-        .update(userBalancesTable)
-        .set({ amount: sql`amount - ${deductCryptoAmount.toFixed(18)}` })
-        .where(and(eq(userBalancesTable.userId, userId), eq(userBalancesTable.currency, crypto.currency)));
-
+        .update(usersTable)
+        .set({ balance: sql`balance - ${deductUsd.toFixed(8)}` })
+        .where(eq(usersTable.id, userId));
       remainingToDeduct -= deductUsd;
     }
 
+    // If there's still amount remaining (or no preferred currency was set, e.g., for games),
+    // we fallback to the default "crypto-first, highest-value-first" strategy.
     if (remainingToDeduct > 0) {
-      await database
-        .update(usersTable)
-        .set({ balance: sql`balance - ${remainingToDeduct}` })
-        .where(eq(usersTable.id, userId));
+      const sortedCrypto = [...balancesWithPrices]
+        .filter(b => b.currency !== preferredCurrency) // Don't re-deduct from the same coin
+        .sort((a, b) => b.usdValue - a.usdValue);
+
+      for (const crypto of sortedCrypto) {
+        if (remainingToDeduct <= 0) break;
+        const deductUsd = Math.min(remainingToDeduct, crypto.usdValue);
+        const deductCryptoAmount = deductUsd / crypto.price;
+
+        await database
+          .update(userBalancesTable)
+          .set({ amount: sql`amount - ${deductCryptoAmount.toFixed(18)}` })
+          .where(and(eq(userBalancesTable.userId, userId), eq(userBalancesTable.currency, crypto.currency)));
+
+        remainingToDeduct -= deductUsd;
+      }
+
+      if (remainingToDeduct > 0 && preferredCurrency !== "USD") {
+        await database
+          .update(usersTable)
+          .set({ balance: sql`balance - ${remainingToDeduct.toFixed(8)}` })
+          .where(eq(usersTable.id, userId));
+      }
     }
 
     return totalBalance - amount;
   };
 
-  // If caller already opened a transaction, run within it (locks compose).
-  // Otherwise open our own transaction so the lock scope is exactly this deduction.
   if (txn) {
     return doDeduct(txn);
   } else {

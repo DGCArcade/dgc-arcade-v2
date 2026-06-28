@@ -265,11 +265,12 @@ function resolveBet(
       // Player sets a target (2-98) and chooses over/under
       const roll = Math.floor(seed * 100) + 1; // 1-100
       const target = Number(meta?.target ?? 50);
-      const over = meta?.over !== false; // default over
+      // Support both 'over' boolean and 'mode' string ("over"/"under")
+      const over = meta?.mode === "under" ? false : (meta?.over !== false);
       const won = over ? roll > target : roll < target;
       const winChance = over ? (100 - target) / 100 : (target - 1) / 100;
       const multiplier = won ? Math.max(1.01, (1 - houseEdge) / Math.max(0.01, winChance)) : 0;
-      return { won, multiplier, payout: won ? amount * multiplier : 0, resultMeta: { roll, target, over } };
+      return { won, multiplier, payout: won ? amount * multiplier : 0, resultMeta: { roll, target, mode: over ? "over" : "under" } };
     }
 
     case "mines": {

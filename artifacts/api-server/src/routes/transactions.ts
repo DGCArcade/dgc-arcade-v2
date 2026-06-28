@@ -788,18 +788,20 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     const { totalBalance, cryptoBalances } = await getUserBalance(user.id);
     if (totalBalance < amount) { res.status(400).json({ error: "Insufficient balance" }); return; }
 
-    // ── Coin-lock enforcement ──────────────────────────────────────────────────
-    // If the user has deposited crypto (non-zero user_balances rows), they may
-    // only withdraw in a currency they actually hold. This prevents the house
-    // paying out in a currency it never received (e.g. ETH payout for a DOGE
-    // deposit). Legacy users with only a static USD balance skip this check.
-    const hasCryptoHoldings = cryptoBalances.some(cb => cb.amount > 0);
-    if (hasCryptoHoldings) {
-      const holdsCurrency = cryptoBalances.some(cb => cb.currency === currency && cb.amount > 0);
-      if (!holdsCurrency) {
-        const available = cryptoBalances.filter(cb => cb.amount > 0).map(cb => cb.currency).join(", ");
+    // ── Strict Coin-Specific Withdrawal Rules ──────────────────────────────────
+    // Users can ONLY withdraw the specific coin they have a balance in.
+    // We check the live USD value of that specific coin balance.
+    const coinBalance = cryptoBalances.find(cb => cb.currency === currency);
+    const coinUsdValue = coinBalance ? coinBalance.usdValue : 0;
+    
+    // If user has crypto holdings but not in this coin, or amount exceeds this coin's value
+    if (amount > coinUsdValue) {
+      // Exception: If they have NO crypto holdings at all, they can withdraw from static USD balance
+      const hasAnyCrypto = cryptoBalances.some(cb => cb.amount > 0);
+      if (hasAnyCrypto || currency !== "USD") {
         res.status(400).json({
-          error: `Coin-locked: you can only withdraw in the currency you deposited. Your holdings: ${available || "none"}`
+          error: `Insufficient ${currency} balance. You can only withdraw up to $${coinUsdValue.toFixed(2)} worth of ${currency}.`,
+          availableUsd: coinUsdValue
         });
         return;
       }
@@ -821,8 +823,8 @@ transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
     }).returning();
 
     // Deduct balance immediately — funds are held while the payout is processed.
-    // If the payout fails, the balance is refunded (see admin reconcile flow).
-    await deductBalance(user.id, amount);
+    // We pass the currency to ensure the deduction happens from the CORRECT coin.
+    await deductBalance(user.id, amount, undefined, currency);
 
     await recordLedger(db, {
       userId: user.id,
