@@ -9,6 +9,7 @@ import { recordTournamentWager } from "../lib/tournament-tracker.js";
 import { contributeToJackpot, tryJackpotWin } from "./jackpot.js";
 import { recordLedgerStandalone } from "../services/ledger.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
+import { diceRoundManager } from "../lib/dice-round-manager.js";
 
 export const betsRouter = Router();
 
@@ -352,6 +353,24 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       game.slug, amount, houseEdge, seedValue, serverSeed, clientSeedStr,
       (meta as Record<string, unknown>) ?? null
     );
+
+    // If this is a dice game, add it to the live round feed
+    if (game.slug === "dice") {
+      try {
+        diceRoundManager.addBetToRound({
+          betId: 0, // Placeholder
+          userId: user.id,
+          username: user.username,
+          amount,
+          target: Number((meta as any)?.target ?? 50),
+          mode: (meta as any)?.mode === "under" ? "under" : "over",
+          won,
+          payout,
+        });
+      } catch (err) {
+        // Silently fail if betting window is closed, it just won't show in live feed
+      }
+    }
     
     // Standardized balance credit and stat updates
     const finalBalance = await creditBalance(user.id, payout);

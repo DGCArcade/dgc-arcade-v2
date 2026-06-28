@@ -18,6 +18,7 @@ import { tournamentsRouter } from "./tournaments.js";
 import { ownerAiRouter } from "./owner-ai.js";
 import { visitorLogsRouter } from "./visitor-logs.js";
 import { jackpotRouter } from "./jackpot.js";
+import { diceLiveRouter } from "./dice-live.js";
 
 const router: IRouter = Router();
 
@@ -40,5 +41,6 @@ router.use("/tournaments", tournamentsRouter);
 router.use("/admin", ownerAiRouter);
 router.use("/admin/visitor-logs", visitorLogsRouter);
 router.use("/jackpot", jackpotRouter);
+router.use("/dice/live", diceLiveRouter);
 
 export default router;

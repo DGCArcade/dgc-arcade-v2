@@ -9,7 +9,7 @@ import { Mines } from "@/components/games/mines";
 import { Plinko } from "@/components/games/plinko";
 import { HiLo } from "@/components/games/hilo";
 import { Keno } from "@/components/games/keno";
-import { DiceGame } from "@/components/games/dice-game";
+import { DiceGameLive as DiceGame } from "@/components/games/dice-game-live";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { formatCurrency } from "@/lib/format";
 import { Card } from "@/components/ui/card";

@@ -3,6 +3,7 @@ import { eq, and, lt, gte, ne, sql, count } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { recordLedger } from "../services/ledger.js";
 import { creditCryptoBalance } from "./balance-service.js";
+import { diceRoundManager } from "./dice-round-manager.js";
 
 const WAGER_MULTIPLIER = 1.0;
 
@@ -358,6 +359,9 @@ export async function syncPlisioDeposits() {
  * Call this once when the server starts.
  */
 export function startBackgroundTasks() {
+  // Initialize Dice round manager (starts its own internal cycle)
+  diceRoundManager.getCurrentRound();
+
   const cleanupInterval = setInterval(() => {
     cleanupExpiredDeposits().catch((err) => {
       logger.error({ err }, "Unhandled error in cleanup interval");
@@ -373,11 +377,13 @@ export function startBackgroundTasks() {
   process.on("SIGTERM", () => {
     clearInterval(cleanupInterval);
     clearInterval(syncInterval);
+    diceRoundManager.destroy();
   });
 
   process.on("SIGINT", () => {
     clearInterval(cleanupInterval);
     clearInterval(syncInterval);
+    diceRoundManager.destroy();
   });
 
   logger.info("Background tasks started: cleanup (30m) and Plisio sync (1m)");
