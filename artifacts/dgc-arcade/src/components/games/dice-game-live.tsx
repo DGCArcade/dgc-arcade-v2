@@ -129,19 +129,19 @@ function LiveBettorFeed({ bets, label, showResults }: { bets: any[]; label: stri
   return (
     <div className="space-y-2 h-full flex flex-col">
       <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{label}</div>
-      <div className="space-y-1 overflow-y-auto flex-1">
+      <div className="space-y-2 overflow-y-auto flex-1">
         {bets.length === 0 ? (
-          <div className="text-center text-muted-foreground text-xs py-2">No bets</div>
+          <div className="text-center text-muted-foreground text-xs py-4">No bets</div>
         ) : (
           bets.map((bet, i) => (
-            <div key={i} className="flex items-center justify-between text-xs p-1.5 rounded"
+            <div key={i} className="flex items-center justify-between text-xs p-2 rounded"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
               <div className="flex-1 min-w-0">
-                <div className="font-mono font-bold text-white truncate text-xs">{bet.username}</div>
+                <div className="font-mono font-bold text-white truncate">{bet.username}</div>
                 <div className="text-muted-foreground text-xs">{bet.mode.toUpperCase()} {bet.target}</div>
               </div>
-              <div className="text-right flex-shrink-0 ml-2">
-                <div className="font-bold text-green-400 text-xs">${bet.amount.toFixed(2)}</div>
+              <div className="text-right flex-shrink-0">
+                <div className="font-bold text-green-400">${bet.amount.toFixed(2)}</div>
                 {showResults && bet.won !== undefined && (
                   <div className={`text-xs font-bold ${bet.won ? "text-green-400" : "text-red-400"}`}>
                     {bet.won ? `+${formatCurrency(bet.payout)}` : "Lost"}
@@ -268,7 +268,48 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-slate-950 to-slate-900 p-2 md:p-4">
       <style>{`
-        @media (max-width: 768px) {
+        /* DESKTOP LAYOUT (3-column spacious) */
+        @media (min-width: 1024px) {
+          .dice-container {
+            display: grid;
+            grid-template-columns: 280px 1fr 300px;
+            grid-template-rows: auto auto;
+            gap: 16px;
+          }
+          .betting-panel { grid-column: 1; grid-row: 1 / 3; }
+          .dice-display { grid-column: 2; grid-row: 1; }
+          .live-feed { grid-column: 3; grid-row: 1; }
+          .sha-display { grid-column: 2 / 4; grid-row: 2; }
+          .betting-panel { padding: 20px; }
+          .dice-display { padding: 24px; }
+          .live-feed { padding: 20px; }
+          .sha-display { padding: 20px; }
+          .dice-size { width: 120px; height: 120px; }
+          .result-text { font-size: 60px; }
+        }
+
+        /* TABLET/SMALL DESKTOP (2-column) */
+        @media (min-width: 768px) and (max-width: 1023px) {
+          .dice-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 12px;
+          }
+          .betting-panel { grid-column: 1; grid-row: 1 / 3; }
+          .dice-display { grid-column: 2; grid-row: 1; }
+          .live-feed { grid-column: 2; grid-row: 2; }
+          .sha-display { grid-column: 1 / 3; grid-row: 3; }
+          .betting-panel { padding: 16px; }
+          .dice-display { padding: 16px; }
+          .live-feed { padding: 16px; }
+          .sha-display { padding: 16px; }
+          .dice-size { width: 100px; height: 100px; }
+          .result-text { font-size: 48px; }
+        }
+
+        /* MOBILE LAYOUT (compact 2-column) */
+        @media (max-width: 767px) {
           .dice-container {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -280,19 +321,16 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
           .dice-display { grid-column: 2; grid-row: 1; }
           .live-feed { grid-column: 2; grid-row: 2; }
           .sha-display { grid-column: 1 / 3; grid-row: 3; }
+          .betting-panel { padding: 12px; }
+          .dice-display { padding: 12px; }
+          .live-feed { padding: 12px; }
+          .sha-display { padding: 12px; }
+          .dice-size { width: 80px; height: 80px; }
+          .result-text { font-size: 40px; }
+          .label-text { font-size: 10px; }
+          .button-text { font-size: 11px; }
         }
-        @media (min-width: 769px) {
-          .dice-container {
-            display: grid;
-            grid-template-columns: 280px 1fr 300px;
-            grid-template-rows: auto auto;
-            gap: 16px;
-          }
-          .betting-panel { grid-column: 1; grid-row: 1 / 3; }
-          .dice-display { grid-column: 2; grid-row: 1; }
-          .live-feed { grid-column: 3; grid-row: 1; }
-          .sha-display { grid-column: 2 / 4; grid-row: 2; }
-        }
+
         @keyframes dice-bounce {
           0%, 100% { transform: translateY(0) scale(1); }
           50% { transform: translateY(-12px) scale(1.05); }
@@ -304,6 +342,7 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
         }
         .dice-roll-anim { animation: dice-bounce 0.4s ease-in-out infinite; }
         .bet-placed-anim { animation: bet-pulse 0.3s ease-in-out; }
+        
         input[type="range"] {
           -webkit-appearance: none;
           appearance: none;
@@ -338,46 +377,46 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
 
       <div className="dice-container">
         {/* ─── BETTING PANEL ─── */}
-        <div className="betting-panel rounded-lg p-4 flex flex-col gap-3"
+        <div className="betting-panel rounded-xl flex flex-col gap-4"
           style={{ background: "rgba(8,12,26,0.92)", border: "1.5px solid rgba(255,255,255,0.08)" }}>
 
-          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 2, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>
-            {bettingOnNext ? "Next" : "Live"}
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 3, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: 8 }}>
+            {bettingOnNext ? "Next Round Bet" : "Live Betting"}
           </div>
 
           <div className="text-center">
-            <div className="text-xs text-muted-foreground mb-1">Status</div>
+            <div className="text-xs text-muted-foreground mb-1">Round Status</div>
             <div style={{
               display: "inline-block",
-              padding: "4px 8px",
-              borderRadius: "6px",
+              padding: "6px 12px",
+              borderRadius: "8px",
               fontWeight: "bold",
-              fontSize: "12px",
+              fontSize: "14px",
               fontFamily: "monospace",
               background: bettingActive ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)",
               color: bettingActive ? "#22c55e" : "#ef4444",
               border: `1px solid ${bettingActive ? "rgba(34,197,94,0.5)" : "rgba(239,68,68,0.5)"}`,
             }}>
-              {liveRound?.round?.state === "betting" ? `${Math.ceil(timeRemaining / 1000)}s` : liveRound?.round?.state === "rolling" ? "Rolling" : "Results"}
+              {liveRound?.round?.state === "betting" ? `${Math.ceil(timeRemaining / 1000)}s` : liveRound?.round?.state === "rolling" ? "Rolling..." : "Results"}
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div>
-              <Label className="text-muted-foreground uppercase text-xs font-bold">Bet</Label>
-              <div className="relative mt-1">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs">$</span>
+              <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Bet Amount</Label>
+              <div className="relative mt-2">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono">$</span>
                 <Input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))}
                   min={game.minBet} max={game.maxBet} disabled={!bettingActive && !bettingOnNext}
-                  className="pl-6 font-mono text-xs py-1 h-8"
-                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.11)", color: "#fff" }} />
+                  className="pl-8 font-mono text-sm"
+                  style={{ background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.11)", color: "#fff" }} />
               </div>
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label className="text-muted-foreground uppercase text-xs font-bold">Target</Label>
-                <span className="text-xs font-bold" style={{ color: accent }}>{target}</span>
+              <div className="flex items-center justify-between mb-3">
+                <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Target: <span style={{ color: accent, fontSize: 14, fontWeight: 900 }}>{target}</span></Label>
+                <span className="text-xs font-mono text-muted-foreground">Win: {winChance}%</span>
               </div>
               <input 
                 type="range" 
@@ -387,14 +426,19 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
                 onChange={e => setTarget(Number(e.target.value))}
                 disabled={!bettingActive && !bettingOnNext}
                 style={{ "--value": `${target}%` } as React.CSSProperties}
-                className="w-full h-1"
+                className="w-full"
               />
+              <div className="flex justify-between text-xs font-mono text-muted-foreground mt-2">
+                <span>0</span>
+                <span className="font-bold" style={{ color: accent }}>Drag to adjust</span>
+                <span>100</span>
+              </div>
             </div>
 
-            <div className="flex gap-1">
+            <div className="flex gap-2">
               {(["over", "under"] as const).map(m => (
                 <button key={m} onClick={() => setMode(m)} disabled={!bettingActive && !bettingOnNext}
-                  className="flex-1 px-2 py-1 rounded font-bold text-xs uppercase transition-all disabled:opacity-50"
+                  className="flex-1 px-3 py-2 rounded-lg font-bold text-xs uppercase transition-all disabled:opacity-50"
                   style={{
                     background: mode === m ? "rgba(34,197,94,0.85)" : "rgba(255,255,255,0.06)",
                     color: mode === m ? "#fff" : "rgba(255,255,255,0.5)",
@@ -404,72 +448,112 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
                 </button>
               ))}
             </div>
+          </div>
 
-            <div className="rounded p-2 text-xs font-mono" style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${accent}33` }}>
-              <div className="flex justify-between mb-1">
-                <span className="text-muted-foreground">Mult</span>
-                <span className="font-bold" style={{ color: accent }}>{multiplier}x</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Pot</span>
-                <span className="font-bold text-green-400">${potentialPayout}</span>
-              </div>
+          <div className="rounded-lg p-3 border space-y-1 text-xs font-mono"
+            style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${accent}33` }}>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Multiplier</span>
+              <span className="font-bold" style={{ color: accent }}>{multiplier}x</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Potential</span>
+              <span className="font-bold text-green-400">${potentialPayout}</span>
             </div>
           </div>
 
           <Button onClick={roll} disabled={(!bettingActive && !bettingOnNext) || rolling || placeBet.isPending}
-            className={`w-full py-2 font-bold uppercase text-xs ${betPlaced ? "bet-placed-anim" : ""}`}
+            className={`w-full py-3 font-bold uppercase text-sm ${betPlaced ? "bet-placed-anim" : ""}`}
             style={{
               background: (bettingActive || bettingOnNext) ? "rgba(34,197,94,0.9)" : "rgba(100,100,100,0.5)",
               color: "#fff",
               opacity: (bettingActive || bettingOnNext) ? 1 : 0.6,
             }}>
-            {rolling ? "Rolling..." : bettingOnNext ? "Next" : "Place"}
+            {rolling ? "Rolling..." : bettingOnNext ? "Bet on Next" : "Place Bet"}
           </Button>
         </div>
 
         {/* ─── DICE DISPLAY ─── */}
-        <div className="dice-display rounded-lg p-4 flex flex-col items-center justify-center gap-3"
-          style={{ background: "rgba(8,12,26,0.85)", border: "1.5px solid rgba(255,255,255,0.08)" }}>
+        <div className="dice-display rounded-xl flex flex-col items-center justify-center gap-6"
+          style={{ background: "rgba(8,12,26,0.85)", border: "1.5px solid rgba(255,255,255,0.08)", minHeight: "300px" }}>
 
           <div className={rolling ? "dice-roll-anim" : ""}>
-            <RollingDice value={diceValue} size={80} accent={accent} isRolling={rolling} />
+            <RollingDice value={diceValue} size={120} accent={accent} isRolling={rolling} />
           </div>
 
-          <div className={`text-4xl md:text-5xl font-mono font-black transition-all duration-500 ${
+          <div className={`result-text font-mono font-black transition-all duration-500 ${
             rolling ? "opacity-30 scale-95 animate-pulse" :
             won === true ? "text-green-400 scale-110" :
             won === false ? "text-red-400" : "text-muted-foreground/40"
           }`}
             style={{ color: rolling ? undefined : won === true ? "#22c55e" : won === false ? "#ef4444" : `${accent}44` }}>
-            {rolling ? "?" : result !== null ? result.toFixed(0) : "0"}
+            {rolling ? "??" : result !== null ? result.toFixed(0) : "00"}
           </div>
 
           {won !== null && !rolling && (
-            <div className={`text-lg font-display font-black uppercase tracking-wider`}
-              style={{ color: won ? "#22c55e" : "#ef4444" }}>
-              {won ? "Win!" : "Loss"}
+            <div className={`text-xl md:text-2xl font-display font-black uppercase tracking-widest`}
+              style={{ color: won ? "#22c55e" : "#ef4444", textShadow: won ? "0 0 20px rgba(34,197,94,0.5)" : "0 0 20px rgba(239,68,68,0.5)" }}>
+              {won ? `Win! +${formatCurrency(payout)}` : `Lose`}
             </div>
           )}
+
+          <div className="w-full max-w-xs space-y-2">
+            <div className="relative h-8 rounded-full overflow-hidden">
+              {mode === "over" ? (
+                <>
+                  <div className="absolute inset-y-0 left-0 rounded-l-full" style={{ width: `${target}%`, background: "rgba(239,68,68,0.65)" }} />
+                  <div className="absolute inset-y-0 rounded-r-full" style={{ left: `${target}%`, right: 0, background: "rgba(34,197,94,0.65)" }} />
+                </>
+              ) : (
+                <>
+                  <div className="absolute inset-y-0 left-0 rounded-l-full" style={{ width: `${target}%`, background: "rgba(34,197,94,0.65)" }} />
+                  <div className="absolute inset-y-0 rounded-r-full" style={{ left: `${target}%`, right: 0, background: "rgba(239,68,68,0.65)" }} />
+                </>
+              )}
+              {result !== null && !rolling && (
+                <div className="absolute top-0 bottom-0 w-1 rounded-full transition-all duration-500 shadow-lg"
+                  style={{ left: `${result}%`, background: accent }} />
+              )}
+              <div className="absolute top-0 bottom-0 w-0.5" style={{ left: `${target}%`, background: "rgba(255,255,255,0.7)" }} />
+            </div>
+            <div className="flex justify-between text-xs font-mono text-muted-foreground">
+              <span>0</span>
+              <span className="font-bold" style={{ color: accent }}>{target}</span>
+              <span>100</span>
+            </div>
+          </div>
         </div>
 
         {/* ─── LIVE FEED ─── */}
-        <div className="live-feed rounded-lg p-4"
+        <div className="live-feed rounded-xl flex flex-col gap-3"
           style={{ background: "rgba(8,12,26,0.92)", border: "1.5px solid rgba(255,255,255,0.08)" }}>
-          <LiveBettorFeed bets={liveRound?.bets ?? []} label={`Bets (${liveRound?.round?.betCount ?? 0})`} showResults={showLiveResults} />
+          <LiveBettorFeed bets={liveRound?.bets ?? []} label={`Live Bets (${liveRound?.round?.betCount ?? 0})`} showResults={showLiveResults} />
         </div>
 
         {/* ─── SHA HASH ─── */}
-        <div className="sha-display rounded-lg p-4 space-y-2"
+        <div className="sha-display rounded-xl space-y-4"
           style={{ background: "rgba(8,12,26,0.92)", border: "1.5px solid rgba(255,255,255,0.08)" }}>
 
-          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 2, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>
-            SHA-256
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 3, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>
+            Provably Fair - SHA-256 Verification
           </div>
 
-          {liveRound?.round?.serverSeedHash && (
-            <SHAHashDisplay hash={liveRound.round.serverSeedHash} label="Hash" />
-          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {liveRound?.round?.serverSeedHash && (
+              <SHAHashDisplay hash={liveRound.round.serverSeedHash} label="Current Round Hash" />
+            )}
+            
+            {liveRound?.bets && liveRound.bets.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Bets This Round</div>
+                <div className="text-sm font-bold text-green-400">${liveRound.round?.totalBetAmount?.toFixed(2) ?? "0.00"}</div>
+              </div>
+            )}
+          </div>
+
+          <div className="text-xs text-muted-foreground leading-relaxed">
+            <p>Each round uses a server seed (hashed above) and a client seed to generate a fair, verifiable roll. Players can verify the result by checking the hash against the server seed revealed after the round completes.</p>
+          </div>
         </div>
       </div>
     </div>
