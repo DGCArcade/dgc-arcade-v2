@@ -19,23 +19,12 @@ interface Game {
 
 function CoverCoinflip() {
   return (
-    <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-      <defs>
-        <radialGradient id="cf-bg" cx="50%" cy="50%" r="70%"><stop offset="0%" stopColor="#3d2a00"/><stop offset="100%" stopColor="#1a1000"/></radialGradient>
-        <radialGradient id="cf-coin" cx="38%" cy="32%" r="60%"><stop offset="0%" stopColor="#FFE566"/><stop offset="50%" stopColor="#FFB800"/><stop offset="100%" stopColor="#CC8800"/></radialGradient>
-      </defs>
-      <rect width="320" height="200" fill="url(#cf-bg)"/>
-      <circle cx="160" cy="100" r="90" fill="#FFB800" opacity="0.08"/>
-      <ellipse cx="160" cy="100" rx="75" ry="75" fill="url(#cf-coin)" stroke="#FFE566" strokeWidth="3"/>
-      <ellipse cx="160" cy="100" rx="62" ry="62" fill="none" stroke="#FFE566" strokeWidth="1.5" strokeDasharray="8 4"/>
-      <text x="160" y="120" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="60" fill="#7A4800">H</text>
-      {[[50,40],[270,60],[80,165],[240,145],[295,90]].map(([x,y],i)=>(
-        <g key={i} transform={`translate(${x},${y})`}>
-          <line x1="-7" y1="0" x2="7" y2="0" stroke="#FFD700" strokeWidth="2"/>
-          <line x1="0" y1="-7" x2="0" y2="7" stroke="#FFD700" strokeWidth="2"/>
-        </g>
-      ))}
-    </svg>
+    <img
+      src="/coinflip-cover.jpg"
+      alt="Coin Flip"
+      className="w-full h-full object-cover"
+      style={{ display: "block" }}
+    />
   );
 }
 

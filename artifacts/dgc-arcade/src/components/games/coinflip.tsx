@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
 import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
 
-// ─── Theme hooks ────────────────────────────────────────────────────────────
+// ─── Theme hook ──────────────────────────────────────────────────────────────
 
 function useAccent() {
   const [id, setId] = useState<ThemeId>(getTheme());
@@ -19,45 +19,30 @@ function useAccent() {
   return THEMES.find(t => t.id === id)?.accent ?? "#FFD700";
 }
 
-// Table felt colors that change with theme (like Blackjack)
-const TABLE_MAP: Record<ThemeId, { bg: string; rim: string; glow: string; textColor: string }> = {
-  dgc:        { bg: "radial-gradient(ellipse at 50% 40%, #1a2a0a 0%, #0d1a06 60%, #060e03 100%)", rim: "#2a4a0a", glow: "rgba(255,215,0,0.18)",   textColor: "rgba(255,215,0,0.22)" },
-  cyber:      { bg: "radial-gradient(ellipse at 50% 40%, #001a0d 0%, #000f07 60%, #000804 100%)", rim: "#003d1a", glow: "rgba(0,255,65,0.15)",    textColor: "rgba(0,255,65,0.20)" },
-  futuristic: { bg: "radial-gradient(ellipse at 50% 40%, #12062a 0%, #0a0318 60%, #060110 100%)", rim: "#2a0a5a", glow: "rgba(180,79,255,0.16)",  textColor: "rgba(180,79,255,0.22)" },
-  blood:      { bg: "radial-gradient(ellipse at 50% 40%, #1a0505 0%, #0f0202 60%, #080101 100%)", rim: "#3d0a0a", glow: "rgba(255,30,30,0.15)",   textColor: "rgba(255,30,30,0.20)" },
-  ocean:      { bg: "radial-gradient(ellipse at 50% 40%, #011a22 0%, #010f15 60%, #000a0f 100%)", rim: "#023a4a", glow: "rgba(0,210,220,0.15)",   textColor: "rgba(0,210,220,0.20)" },
-  neon:       { bg: "radial-gradient(ellipse at 50% 40%, #1a0018 0%, #0f000f 60%, #080008 100%)", rim: "#3d0038", glow: "rgba(255,46,247,0.15)",  textColor: "rgba(255,46,247,0.20)" },
-  volcanic:   { bg: "radial-gradient(ellipse at 50% 40%, #1a0800 0%, #0f0400 60%, #080200 100%)", rim: "#3d1200", glow: "rgba(255,85,0,0.15)",    textColor: "rgba(255,85,0,0.20)" },
-  arctic:     { bg: "radial-gradient(ellipse at 50% 40%, #061520 0%, #030c15 60%, #020810 100%)", rim: "#0a2a40", glow: "rgba(168,223,255,0.15)", textColor: "rgba(168,223,255,0.20)" },
-  midnight:   { bg: "radial-gradient(ellipse at 50% 40%, #0a0a0a 0%, #060606 60%, #030303 100%)", rim: "#1a1a1a", glow: "rgba(192,192,192,0.12)", textColor: "rgba(192,192,192,0.18)" },
-};
-
-function useTable() {
-  const [id, setId] = useState<ThemeId>(getTheme());
-  useEffect(() => {
-    const h = (e: Event) => setId((e as CustomEvent<ThemeId>).detail);
-    window.addEventListener("dgc-theme-change", h);
-    return () => window.removeEventListener("dgc-theme-change", h);
-  }, []);
-  return TABLE_MAP[id] ?? TABLE_MAP.dgc;
-}
-
 // ─── Coin component ──────────────────────────────────────────────────────────
 
-function DGCCoin({ accent, isFlipping, result }: { accent: string; isFlipping: boolean; result: "heads" | "tails" | null }) {
+function DGCCoin({
+  accent,
+  isFlipping,
+  result,
+  size = 220,
+}: {
+  accent: string;
+  isFlipping: boolean;
+  result: "heads" | "tails" | null;
+  size?: number;
+}) {
   const spinRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!spinRef.current) return;
     if (isFlipping) {
-      // While flipping, we don't know the result yet, so we just spin fast
       spinRef.current.style.animation = "none";
-      void spinRef.current.offsetWidth; // reflow
-      spinRef.current.style.animation = "dgc-coin-spin-heads 3s linear infinite"; 
+      void spinRef.current.offsetWidth;
+      spinRef.current.style.animation = "dgc-coin-spin-heads 3s linear infinite";
     } else if (result) {
-      // When we get the result, we trigger the final landing animation
       spinRef.current.style.animation = "none";
-      void spinRef.current.offsetWidth; // reflow
+      void spinRef.current.offsetWidth;
       const animName = result === "heads" ? "dgc-coin-spin-heads" : "dgc-coin-spin-tails";
       spinRef.current.style.animation = `${animName} 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards`;
     } else {
@@ -67,11 +52,21 @@ function DGCCoin({ accent, isFlipping, result }: { accent: string; isFlipping: b
   }, [isFlipping, result]);
 
   return (
-    <div style={{ position: "relative", width: 220, height: 220, perspective: "1200px", margin: "0 auto" }}>
-      {/* Coin shadow on table */}
+    <div style={{ position: "relative", width: size, height: size, perspective: "1200px", margin: "0 auto" }}>
+      {/* Glow ring behind coin */}
       <div style={{
-        position: "absolute", bottom: -16, left: "50%", transform: "translateX(-50%)",
-        width: 180, height: 24, borderRadius: "50%",
+        position: "absolute",
+        inset: -18,
+        borderRadius: "50%",
+        background: `radial-gradient(ellipse at 50% 50%, ${accent}22 0%, transparent 70%)`,
+        filter: "blur(12px)",
+        pointerEvents: "none",
+      }} />
+
+      {/* Coin shadow */}
+      <div style={{
+        position: "absolute", bottom: -14, left: "50%", transform: "translateX(-50%)",
+        width: size * 0.82, height: 20, borderRadius: "50%",
         background: "radial-gradient(ellipse, rgba(0,0,0,0.55) 0%, transparent 70%)",
         filter: "blur(6px)",
       }} />
@@ -88,19 +83,17 @@ function DGCCoin({ accent, isFlipping, result }: { accent: string; isFlipping: b
           border: `6px solid ${accent}99`,
           backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden",
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          boxShadow: `0 0 50px ${accent}55, inset 0 4px 12px rgba(255,255,255,0.35), inset 0 -4px 12px rgba(0,0,0,0.25)`,
+          boxShadow: `0 0 60px ${accent}55, inset 0 4px 12px rgba(255,255,255,0.35), inset 0 -4px 12px rgba(0,0,0,0.25)`,
         }}>
-          {/* Coin rim detail */}
           <div style={{ position: "absolute", inset: 10, borderRadius: "50%", border: `2px solid ${accent}55` }} />
           <div style={{ position: "absolute", inset: 16, borderRadius: "50%", border: `1px solid ${accent}33` }} />
-          {/* DGC text */}
-          <div style={{ fontSize: 52, fontWeight: 900, color: "rgba(0,0,0,0.75)", letterSpacing: 2, fontFamily: "'Outfit', sans-serif", lineHeight: 1, textShadow: `0 2px 4px rgba(0,0,0,0.3), 0 -1px 0 rgba(255,255,255,0.4)` }}>
+          <div style={{ fontSize: Math.round(size * 0.236), fontWeight: 900, color: "rgba(0,0,0,0.75)", letterSpacing: 2, fontFamily: "'Outfit', sans-serif", lineHeight: 1, textShadow: "0 2px 4px rgba(0,0,0,0.3), 0 -1px 0 rgba(255,255,255,0.4)" }}>
             DGC
           </div>
-          <div style={{ fontSize: 11, fontWeight: 800, color: "rgba(0,0,0,0.55)", letterSpacing: 3, textTransform: "uppercase", marginTop: 4 }}>
+          <div style={{ fontSize: Math.round(size * 0.05), fontWeight: 800, color: "rgba(0,0,0,0.55)", letterSpacing: 3, textTransform: "uppercase", marginTop: 4 }}>
             ARCADE
           </div>
-          <div style={{ position: "absolute", bottom: 22, fontSize: 9, fontWeight: 700, color: "rgba(0,0,0,0.40)", letterSpacing: 2.5, textTransform: "uppercase" }}>
+          <div style={{ position: "absolute", bottom: Math.round(size * 0.1), fontSize: Math.round(size * 0.04), fontWeight: 700, color: "rgba(0,0,0,0.40)", letterSpacing: 2.5, textTransform: "uppercase" }}>
             HEADS
           </div>
         </div>
@@ -117,14 +110,13 @@ function DGCCoin({ accent, isFlipping, result }: { accent: string; isFlipping: b
         }}>
           <div style={{ position: "absolute", inset: 10, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.12)" }} />
           <div style={{ position: "absolute", inset: 16, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.06)" }} />
-          {/* Spade symbol */}
-          <div style={{ fontSize: 56, color: "rgba(255,255,255,0.88)", lineHeight: 1, textShadow: "0 2px 8px rgba(0,0,0,0.6), 0 -1px 0 rgba(255,255,255,0.15)" }}>
+          <div style={{ fontSize: Math.round(size * 0.255), color: "rgba(255,255,255,0.88)", lineHeight: 1, textShadow: "0 2px 8px rgba(0,0,0,0.6), 0 -1px 0 rgba(255,255,255,0.15)" }}>
             ♠
           </div>
-          <div style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.50)", letterSpacing: 3, textTransform: "uppercase", marginTop: 4 }}>
+          <div style={{ fontSize: Math.round(size * 0.05), fontWeight: 800, color: "rgba(255,255,255,0.50)", letterSpacing: 3, textTransform: "uppercase", marginTop: 4 }}>
             ARCADE
           </div>
-          <div style={{ position: "absolute", bottom: 22, fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.32)", letterSpacing: 2.5, textTransform: "uppercase" }}>
+          <div style={{ position: "absolute", bottom: Math.round(size * 0.1), fontSize: Math.round(size * 0.04), fontWeight: 700, color: "rgba(255,255,255,0.32)", letterSpacing: 2.5, textTransform: "uppercase" }}>
             TAILS
           </div>
         </div>
@@ -143,7 +135,6 @@ export function Coinflip({ game }: CoinflipProps) {
   const queryClient = useQueryClient();
   const placeBet = usePlaceBet();
   const accent = useAccent();
-  const table = useTable();
 
   const minBet = parseFloat(String(game.minBet ?? 0.01));
   const maxBet = parseFloat(String(game.maxBet ?? 1_000_000));
@@ -160,6 +151,7 @@ export function Coinflip({ game }: CoinflipProps) {
   const [serverSeedHash, setServerSeedHash] = useState<string | null>(null);
   const [clientSeed, setClientSeed] = useState<string | null>(null);
   const [nonce, setNonce] = useState<number | null>(null);
+  const [showPF, setShowPF] = useState(false);
 
   const handleAmountChange = (val: string) => {
     setAmountStr(val);
@@ -193,17 +185,15 @@ export function Coinflip({ game }: CoinflipProps) {
         { data: { gameId: game.id, amount, meta: { choice } } },
         {
           onSuccess: (data) => {
-            // Immediately stop the generic fast spin and trigger the landing animation
             setIsFlipping(false);
             const serverResult = data.won ? (choice as "heads" | "tails") : (choice === "heads" ? "tails" : "heads");
             setResult(serverResult);
-            
+
             setBetId(data.bet.id);
             setServerSeedHash(data.bet.serverSeedHash ?? null);
             setClientSeed(data.bet.clientSeed ?? null);
             setNonce(data.bet.nonce ?? null);
 
-            // Wait for the landing animation (1.2s) to finish before showing the win/loss banner
             setTimeout(() => {
               setWin(data.won);
               setPayout(data.payout);
@@ -226,86 +216,105 @@ export function Coinflip({ game }: CoinflipProps) {
     });
   };
 
-  const tableGlow = win === true
-    ? `0 0 0 3px rgba(34,197,94,0.40), 0 0 80px rgba(34,197,94,0.20), 0 20px 50px rgba(0,0,0,0.75)`
+  // Win/lose glow on the coin area
+  const coinAreaGlow = win === true
+    ? `0 0 0 2px rgba(34,197,94,0.35), 0 0 80px rgba(34,197,94,0.18)`
     : win === false
-    ? `0 0 0 3px rgba(239,68,68,0.35), 0 0 60px rgba(239,68,68,0.15), 0 20px 50px rgba(0,0,0,0.75)`
-    : `0 0 0 2px rgba(255,255,255,0.06), 0 20px 50px rgba(0,0,0,0.70)`;
+    ? `0 0 0 2px rgba(239,68,68,0.30), 0 0 60px rgba(239,68,68,0.14)`
+    : "none";
 
   return (
-    <div className="cf-game-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start", boxSizing: "border-box" }}>
+    <div className="cf-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start", boxSizing: "border-box" }}>
 
       <style>{`
+        /* ── Responsive layout ── */
         @media (max-width: 1024px) {
-          .cf-game-root { flex-direction: column-reverse !important; padding: 8px !important; gap: 12px !important; }
-          .cf-table-area { min-height: 320px !important; padding-top: 24px !important; padding-bottom: 24px !important; order: 2; width: 100% !important; }
-          .cf-bet-panel { width: 100% !important; position: static !important; order: 1; }
-          .cf-coin-wrap { width: clamp(120px, 35vw, 200px) !important; height: clamp(120px, 35vw, 200px) !important; }
+          .cf-root { flex-direction: column-reverse !important; padding: 8px !important; gap: 10px !important; }
+          .cf-coin-area { order: 2; width: 100% !important; min-height: 280px !important; padding: 24px 16px !important; }
+          .cf-bet-panel { order: 1; width: 100% !important; position: static !important; }
+          .cf-coin-wrap { --coin-size: clamp(140px, 38vw, 200px) !important; }
+          /* Stats row visible below coin on mobile */
+          .cf-stats-mobile { display: flex !important; }
+          /* Stats row in bet panel hidden on mobile (avoid duplication) */
+          .cf-stats-panel { display: none !important; }
         }
+        @media (min-width: 1025px) {
+          .cf-stats-mobile { display: none !important; }
+          .cf-stats-panel  { display: flex !important; }
+        }
+
+        /* ── Coin spin animations ── */
         @keyframes dgc-coin-spin-heads {
           0%   { transform: rotateY(0deg); }
-          100% { transform: rotateY(1800deg); } /* Lands on Heads (0/360/etc) */
+          100% { transform: rotateY(1800deg); }
         }
         @keyframes dgc-coin-spin-tails {
           0%   { transform: rotateY(0deg); }
-          100% { transform: rotateY(1980deg); } /* Lands on Tails (180/540/etc) */
+          100% { transform: rotateY(1980deg); }
         }
+
+        /* ── Result pop ── */
         @keyframes cf-result-pop {
           0%   { transform: scale(0.5) translateY(-20px); opacity: 0; }
           65%  { transform: scale(1.1); opacity: 1; }
           100% { transform: scale(1); opacity: 1; }
         }
+
+        /* ── Win / lose pulse on coin area ── */
         @keyframes cf-win-pulse {
-          0%,100% { box-shadow: 0 0 0 3px rgba(34,197,94,0.35), 0 0 50px rgba(34,197,94,0.15); }
-          50%      { box-shadow: 0 0 0 3px rgba(34,197,94,0.70), 0 0 80px rgba(34,197,94,0.35); }
+          0%,100% { box-shadow: 0 0 0 2px rgba(34,197,94,0.30), 0 0 50px rgba(34,197,94,0.12); }
+          50%      { box-shadow: 0 0 0 2px rgba(34,197,94,0.65), 0 0 90px rgba(34,197,94,0.30); }
         }
         @keyframes cf-lose-pulse {
-          0%,100% { box-shadow: 0 0 0 3px rgba(239,68,68,0.30), 0 0 40px rgba(239,68,68,0.10); }
-          50%      { box-shadow: 0 0 0 3px rgba(239,68,68,0.60), 0 0 60px rgba(239,68,68,0.25); }
+          0%,100% { box-shadow: 0 0 0 2px rgba(239,68,68,0.25), 0 0 40px rgba(239,68,68,0.10); }
+          50%      { box-shadow: 0 0 0 2px rgba(239,68,68,0.55), 0 0 70px rgba(239,68,68,0.22); }
         }
+
+        /* ── Button hover states ── */
         .cf-choice-btn:hover:not(:disabled) { filter: brightness(1.12); transform: scale(1.02); }
         .cf-choice-btn:active:not(:disabled) { transform: scale(0.97); }
         .cf-mult:hover:not(:disabled) { background: rgba(255,255,255,0.12) !important; color: #fff !important; }
         .cf-flip-btn:hover:not(:disabled) { filter: brightness(1.12); transform: scale(1.02); }
         .cf-flip-btn:active:not(:disabled) { transform: scale(0.97); }
+        .cf-pf-toggle:hover { opacity: 0.85; }
       `}</style>
 
-      {/* ── TABLE ── */}
-      <div className="cf-table-area" style={{
-        flex: 1, minWidth: 0,
-        position: "relative",
-        borderRadius: "24px 24px 50% 50% / 24px 24px 38% 38%",
-        overflow: "hidden",
-        background: table.bg,
-        boxShadow: tableGlow,
-        transition: "box-shadow 0.5s ease, background 0.5s ease",
-        minHeight: 480,
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        gap: 20, paddingTop: 32, paddingBottom: 32,
-        animation: win === true ? "cf-win-pulse 2.2s ease-in-out infinite" : win === false ? "cf-lose-pulse 2.2s ease-in-out infinite" : "none",
-      }}>
-        {/* Table rim */}
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 25, borderRadius: "24px 24px 50% 50% / 24px 24px 38% 38%", border: `3px solid ${table.rim}`, boxShadow: "inset 0 0 35px rgba(0,0,0,0.5)" }} />
-        <div style={{ position: "absolute", inset: 5, pointerEvents: "none", zIndex: 24, borderRadius: "20px 20px 50% 50% / 20px 20px 38% 38%", border: `1.5px solid ${table.rim}66` }} />
-
-        {/* Felt texture */}
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1, backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Ccircle cx='1' cy='1' r='0.4' fill='rgba(255,255,255,0.012)'/%3E%3C/svg%3E\")" }} />
-
-        {/* Table text */}
-        <div style={{ position: "absolute", bottom: "18%", left: "50%", transform: "translateX(-50%)", zIndex: 4, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, pointerEvents: "none", whiteSpace: "nowrap" }}>
-          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 3.5, color: table.textColor, textTransform: "uppercase" }}>COIN FLIP · 50/50 ODDS</span>
-          <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: 5, color: table.textColor, textTransform: "uppercase" }}>DGC ARCADE</span>
-          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 3.5, color: table.textColor, textTransform: "uppercase" }}>PAYS 2 TO 1</span>
-        </div>
+      {/* ══════════════════════════════════════════════════════════════════════
+          COIN AREA  (left / full-width on mobile)
+      ══════════════════════════════════════════════════════════════════════ */}
+      <div
+        className="cf-coin-area"
+        style={{
+          flex: 1, minWidth: 0,
+          borderRadius: 20,
+          background: "radial-gradient(ellipse at 50% 38%, rgba(255,255,255,0.04) 0%, rgba(0,0,0,0) 70%)",
+          border: "1.5px solid rgba(255,255,255,0.07)",
+          backdropFilter: "blur(6px)",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          gap: 20,
+          padding: "40px 24px",
+          position: "relative",
+          overflow: "hidden",
+          transition: "box-shadow 0.5s ease",
+          boxShadow: coinAreaGlow,
+          animation: win === true ? "cf-win-pulse 2.2s ease-in-out infinite" : win === false ? "cf-lose-pulse 2.2s ease-in-out infinite" : "none",
+        }}
+      >
+        {/* Subtle star-field dots (decorative) */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0,
+          backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px)",
+          backgroundSize: "40px 40px",
+          opacity: 0.4,
+        }} />
 
         {/* Coin */}
-        <div style={{ position: "relative", zIndex: 10 }}>
-          <DGCCoin accent={accent} isFlipping={isFlipping} result={result} key={flipCount} />
+        <div className="cf-coin-wrap" style={{ position: "relative", zIndex: 2 }}>
+          <DGCCoin accent={accent} isFlipping={isFlipping} result={result} key={flipCount} size={220} />
         </div>
 
         {/* Result banner */}
         {win !== null && !isFlipping && (
-          <div style={{ position: "relative", zIndex: 15, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, animation: "cf-result-pop 0.6s cubic-bezier(0.34,1.56,0.64,1) both" }}>
+          <div style={{ position: "relative", zIndex: 5, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, animation: "cf-result-pop 0.6s cubic-bezier(0.34,1.56,0.64,1) both" }}>
             <div style={{
               fontSize: 30, fontWeight: 900, textTransform: "uppercase", letterSpacing: 4,
               color: win ? "#22c55e" : "#ef4444",
@@ -325,15 +334,53 @@ export function Coinflip({ game }: CoinflipProps) {
           </div>
         )}
 
-        {/* Idle state hint */}
+        {/* Idle hint */}
         {win === null && !isFlipping && (
-          <div style={{ position: "relative", zIndex: 10, fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.25)", letterSpacing: 2, textTransform: "uppercase" }}>
+          <div style={{ position: "relative", zIndex: 5, fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.28)", letterSpacing: 2.5, textTransform: "uppercase" }}>
             Choose a side and flip!
           </div>
         )}
+
+        {/* ── Game info text (always visible below coin) ── */}
+        <div style={{ position: "relative", zIndex: 5, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, marginTop: 4 }}>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 3.5, color: "rgba(255,255,255,0.22)", textTransform: "uppercase" }}>COIN FLIP · 50/50 ODDS</span>
+          <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: 5, color: "rgba(255,255,255,0.18)", textTransform: "uppercase" }}>DGC ARCADE</span>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 3.5, color: "rgba(255,255,255,0.22)", textTransform: "uppercase" }}>PAYS 2 TO 1</span>
+        </div>
+
+        {/* ── Stats row — shown BELOW coin on mobile only ── */}
+        <div
+          className="cf-stats-mobile"
+          style={{
+            position: "relative", zIndex: 5,
+            width: "100%", maxWidth: 380,
+            background: "rgba(255,255,255,0.04)",
+            border: `1px solid ${accent}33`,
+            borderRadius: 12,
+            padding: "12px 16px",
+            justifyContent: "space-around",
+            textAlign: "center",
+            fontSize: 9,
+            fontFamily: "monospace",
+            marginTop: 4,
+          }}
+        >
+          {[
+            { label: "Payout", value: "2.0×", color: accent },
+            { label: "Odds", value: "50/50", color: accent },
+            { label: "House Edge", value: "~1%", color: "rgba(255,255,255,0.45)" },
+          ].map(({ label, value, color }) => (
+            <div key={label}>
+              <div style={{ color: "rgba(255,255,255,0.40)" }}>{label}</div>
+              <div style={{ color, fontWeight: 900, marginTop: 3, fontSize: 13 }}>{value}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* ── BET PANEL ── */}
+      {/* ══════════════════════════════════════════════════════════════════════
+          BET PANEL  (right / full-width on mobile)
+      ══════════════════════════════════════════════════════════════════════ */}
       <div className="cf-bet-panel" style={{
         width: 280, flexShrink: 0,
         background: "rgba(8,12,26,0.88)",
@@ -349,7 +396,7 @@ export function Coinflip({ game }: CoinflipProps) {
           Place Your Bet
         </div>
 
-        {/* Bet amount input */}
+        {/* Bet amount */}
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>Bet Amount</label>
           <div style={{ position: "relative" }}>
@@ -414,13 +461,16 @@ export function Coinflip({ game }: CoinflipProps) {
           </div>
         </div>
 
-        {/* Stats */}
-        <div style={{
-          background: "rgba(255,255,255,0.04)", border: `1px solid ${accent}33`,
-          borderRadius: 10, padding: "10px",
-          display: "flex", justifyContent: "space-around", textAlign: "center",
-          fontSize: 9, fontFamily: "monospace",
-        }}>
+        {/* Stats — desktop only (hidden on mobile, shown in coin area instead) */}
+        <div
+          className="cf-stats-panel"
+          style={{
+            background: "rgba(255,255,255,0.04)", border: `1px solid ${accent}33`,
+            borderRadius: 10, padding: "10px",
+            justifyContent: "space-around", textAlign: "center",
+            fontSize: 9, fontFamily: "monospace",
+          }}
+        >
           {[
             { label: "Payout", value: "2.0×", color: accent },
             { label: "Odds", value: "50/50", color: accent },
@@ -433,7 +483,7 @@ export function Coinflip({ game }: CoinflipProps) {
           ))}
         </div>
 
-        {/* Potential payout preview */}
+        {/* Potential win */}
         <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "8px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.35)", letterSpacing: 1.5, textTransform: "uppercase" }}>Potential Win</span>
           <span style={{ fontSize: 13, fontWeight: 900, color: "#22c55e", fontFamily: "monospace" }}>
@@ -461,41 +511,91 @@ export function Coinflip({ game }: CoinflipProps) {
           {isFlipping ? "Flipping…" : "Flip Coin"}
         </button>
 
-        {/* Provably Fair Info */}
-        {serverSeedHash && clientSeed !== null && nonce !== null && (
-          <div style={{
-            marginTop: 12, padding: 10, background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 8, fontSize: 8, color: "rgba(255,255,255,0.6)", fontFamily: "monospace", wordBreak: "break-all"
-          }}>
-            <div style={{ fontWeight: 900, color: "rgba(255,255,255,0.8)", marginBottom: 4 }}>PROVABLY FAIR</div>
-            <div style={{ marginBottom: 2 }}>Server Hash: {serverSeedHash.slice(0, 16)}...</div>
-            <div style={{ marginBottom: 2 }}>Client Seed: {clientSeed}</div>
-            <div>Nonce: {nonce}</div>
-            <div style={{ marginTop: 6, fontSize: 7, color: "rgba(255,255,255,0.4)" }}>
-              After game completes, verify at:
-              <a 
-                href={`/api/bets/verify/${betId}`} 
-                target="_blank" 
-                rel="noreferrer"
-                style={{ color: accent, marginLeft: 4, textDecoration: "underline" }}
-              >
-                /api/bets/verify/{betId}
-              </a>
+        {/* ── Provably Fair section ── */}
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 10 }}>
+          {/* Toggle header */}
+          <button
+            className="cf-pf-toggle"
+            onClick={() => setShowPF(v => !v)}
+            style={{
+              width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+              background: "none", border: "none", cursor: "pointer", padding: 0,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {/* Shield icon */}
+              <svg width="13" height="14" viewBox="0 0 13 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6.5 1L1 3.5V7C1 9.76 3.48 12.35 6.5 13C9.52 12.35 12 9.76 12 7V3.5L6.5 1Z" stroke={accent} strokeWidth="1.4" fill="none"/>
+                <path d="M4 7l1.8 1.8L9 5" stroke={accent} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 2.5, color: accent, textTransform: "uppercase" }}>
+                Provably Fair
+              </span>
             </div>
-            {win !== null && (
-              <button
-                onClick={() => window.open(`/api/bets/verify/${betId}`, '_blank')}
-                style={{
-                  marginTop: 8, width: "100%", padding: "4px 8px", background: "rgba(255,255,255,0.1)",
-                  border: "1px solid rgba(255,255,255,0.2)", borderRadius: 4, color: "#fff",
-                  fontSize: 8, fontWeight: 900, cursor: "pointer"
-                }}
-              >
-                VERIFY OUTCOME
-              </button>
-            )}
-          </div>
-        )}
+            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", transform: showPF ? "rotate(180deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>▼</span>
+          </button>
+
+          {/* Expanded details */}
+          {showPF && (
+            <div style={{
+              marginTop: 8, padding: 10,
+              background: "rgba(0,0,0,0.55)",
+              border: "1px solid rgba(255,255,255,0.09)",
+              borderRadius: 8,
+              fontSize: 8, color: "rgba(255,255,255,0.55)", fontFamily: "monospace",
+              wordBreak: "break-all",
+            }}>
+              {serverSeedHash ? (
+                <>
+                  <div style={{ marginBottom: 6 }}>
+                    <span style={{ color: "rgba(255,255,255,0.35)", display: "block", marginBottom: 2, letterSpacing: 1.5, textTransform: "uppercase" }}>Server Seed Hash (SHA-256)</span>
+                    <span style={{ color: "rgba(255,255,255,0.80)", fontSize: 7.5 }}>{serverSeedHash}</span>
+                  </div>
+                  {clientSeed && (
+                    <div style={{ marginBottom: 6 }}>
+                      <span style={{ color: "rgba(255,255,255,0.35)", display: "block", marginBottom: 2, letterSpacing: 1.5, textTransform: "uppercase" }}>Client Seed</span>
+                      <span style={{ color: "rgba(255,255,255,0.80)" }}>{clientSeed}</span>
+                    </div>
+                  )}
+                  {nonce !== null && (
+                    <div style={{ marginBottom: 6 }}>
+                      <span style={{ color: "rgba(255,255,255,0.35)", display: "block", marginBottom: 2, letterSpacing: 1.5, textTransform: "uppercase" }}>Nonce</span>
+                      <span style={{ color: "rgba(255,255,255,0.80)" }}>{nonce}</span>
+                    </div>
+                  )}
+                  {betId !== null && (
+                    <a
+                      href={`/api/bets/verify/${betId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        display: "block", marginTop: 8, padding: "5px 8px",
+                        background: `${accent}18`,
+                        border: `1px solid ${accent}44`,
+                        borderRadius: 5,
+                        color: accent, textAlign: "center",
+                        fontSize: 8, fontWeight: 900, letterSpacing: 1.5, textTransform: "uppercase",
+                        textDecoration: "none",
+                      }}
+                    >
+                      Verify Outcome →
+                    </a>
+                  )}
+                </>
+              ) : (
+                <div style={{ color: "rgba(255,255,255,0.35)", textAlign: "center", padding: "6px 0", letterSpacing: 1.5, textTransform: "uppercase" }}>
+                  Place a bet to see seed info
+                </div>
+              )}
+
+              {/* How it works */}
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.07)", fontSize: 7, color: "rgba(255,255,255,0.30)", lineHeight: 1.6 }}>
+                Before each flip the server generates a secret seed and commits its SHA-256 hash. After the flip the full seed is revealed so you can verify the result was not manipulated.
+              </div>
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );
