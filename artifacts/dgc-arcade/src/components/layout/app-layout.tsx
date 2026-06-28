@@ -1,10 +1,11 @@
-import { ReactNode } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { AlertTriangle } from "lucide-react";
 import { Navbar } from "./navbar";
 import { BottomNav } from "./bottom-nav";
 import { AuthModal } from "@/components/auth/auth-modal";
+import { VerificationModal } from "@/components/ui/verification-modal";
 import GalaxyBackground from "@/components/GalaxyBackground";
 import { LocationGate } from "@/components/ui/location-gate";
 
@@ -14,7 +15,18 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const { user, isAuthenticated } = useAuth();
+  const [verificationModalOpen, setVerificationModalOpen] = useState(false);
   const showEmailNotice = isAuthenticated && (user as any)?.email && !(user as any)?.emailVerified;
+
+  // Listen for verification modal open events
+  useEffect(() => {
+    const handleOpenVerificationModal = () => {
+      setVerificationModalOpen(true);
+    };
+
+    window.addEventListener("openVerificationModal", handleOpenVerificationModal);
+    return () => window.removeEventListener("openVerificationModal", handleOpenVerificationModal);
+  }, []);
 
   return (
     <LocationGate>
@@ -26,18 +38,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               <AlertTriangle className="w-3 h-3 md:w-4 md:h-4 text-amber-400" />
               Your email is unverified. 
               <button 
-                onClick={async () => {
-                  try {
-                    const res = await fetch(`${window.location.origin}/api/users/me/verify/resend`, {
-                      method: "POST",
-                      headers: { "Authorization": `Bearer ${localStorage.getItem("dgc_token")}` }
-                    });
-                    if (res.ok) alert("Verification email sent!");
-                    else window.location.href = "/settings";
-                  } catch {
-                    window.location.href = "/settings";
-                  }
-                }}
+                onClick={() => setVerificationModalOpen(true)}
                 className="underline hover:text-amber-200 transition-colors ml-1"
               >
                 Verify Now
@@ -120,6 +121,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </footer>
           <AuthModal />
+          <VerificationModal open={verificationModalOpen} onClose={() => setVerificationModalOpen(false)} />
           <BottomNav />
         </div>
       </div>

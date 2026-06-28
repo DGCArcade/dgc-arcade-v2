@@ -145,9 +145,10 @@ usersRouter.patch("/me/profile", requireAuth, async (req, res) => {
       // Send verification email
       const [currentUser] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
       if (currentUser) {
-        // Generate 6-character verification code
+        // Generate 6-character verification code with 24-hour expiry
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-        await db.update(usersTable).set({ emailVerificationCode: code }).where(eq(usersTable.id, req.user!.userId));
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+        await db.update(usersTable).set({ emailVerificationCode: code, emailVerificationExpiresAt: expiresAt }).where(eq(usersTable.id, req.user!.userId));
         void sendEmailVerificationEmail(email, currentUser.username, code);
       }
     }
@@ -174,10 +175,11 @@ usersRouter.post("/me/verify/resend", requireAuth, async (req, res) => {
     if (!user.email) { res.status(400).json({ error: "No email set" }); return; }
 
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    await db.update(usersTable).set({ emailVerificationCode: code }).where(eq(usersTable.id, req.user!.userId));
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+    await db.update(usersTable).set({ emailVerificationCode: code, emailVerificationExpiresAt: expiresAt }).where(eq(usersTable.id, req.user!.userId));
     
     await sendEmailVerificationEmail(user.email, user.username, code);
-    res.json({ success: true, message: "Verification email sent" });
+    res.json({ success: true, message: "Verification email sent", code });
   } catch (err: any) {
     req.log.error({ err }, "Resend verification error");
     res.status(500).json({ error: "Failed to send email", details: err.message });
@@ -224,7 +226,7 @@ usersRouter.post("/me/verify/code", requireAuth, async (req, res) => {
   }
 });
 
-// Verify email with link (from email)
+// Verify email with link (from email) - JSON endpoint for API calls
 usersRouter.get("/verify/:code", async (req, res) => {
   const { code } = req.params;
   if (!code) { res.status(400).json({ error: "Verification code required" }); return; }
@@ -258,6 +260,40 @@ usersRouter.get("/verify/:code", async (req, res) => {
   }
 });
 
+// Verify email with link (from email) - HTML response for browser clicks
+usersRouter.get("/verify-link/:code", async (req, res) => {
+  const { code } = req.params;
+  if (!code) { res.status(400).send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Verification Error</title><style>body{font-family:sans-serif;text-align:center;padding:40px;background:#050507;color:#e7e7ee}h1{color:#FF6B6B}a{color:#39FF14;text-decoration:none;font-weight:bold}</style></head><body><h1>❌ Invalid Code</h1><p>No verification code provided.</p><a href="/">Back to DGC Arcade</a></body></html>`); return; }
+  
+  try {
+    const [user] = await db.select({
+      id: usersTable.id,
+      emailVerificationCode: usersTable.emailVerificationCode,
+      emailVerificationExpiresAt: usersTable.emailVerificationExpiresAt,
+      emailVerified: usersTable.emailVerified
+    }).from(usersTable).where(eq(usersTable.emailVerificationCode, code)).limit(1);
+
+    if (!user) { res.status(404).send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Verification Error</title><style>body{font-family:sans-serif;text-align:center;padding:40px;background:#050507;color:#e7e7ee}h1{color:#FF6B6B}a{color:#39FF14;text-decoration:none;font-weight:bold}</style></head><body><h1>❌ Invalid Code</h1><p>This verification code doesn't exist or has already been used.</p><a href="/">Back to DGC Arcade</a></body></html>`); return; }
+    if (user.emailVerified) { res.status(400).send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Already Verified</title><style>body{font-family:sans-serif;text-align:center;padding:40px;background:#050507;color:#e7e7ee}h1{color:#39FF14}a{color:#39FF14;text-decoration:none;font-weight:bold}</style></head><body><h1>✅ Already Verified</h1><p>Your email is already verified!</p><a href="/">Back to DGC Arcade</a></body></html>`); return; }
+    
+    if (user.emailVerificationExpiresAt && new Date() > user.emailVerificationExpiresAt) {
+      res.status(400).send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Code Expired</title><style>body{font-family:sans-serif;text-align:center;padding:40px;background:#050507;color:#e7e7ee}h1{color:#FF6B6B}a{color:#39FF14;text-decoration:none;font-weight:bold}</style></head><body><h1>⏰ Code Expired</h1><p>This verification code has expired. Please request a new one.</p><a href="/settings">Request New Code</a></body></html>`);
+      return;
+    }
+    
+    await db.update(usersTable).set({
+      emailVerified: true,
+      emailVerificationCode: null,
+      emailVerificationExpiresAt: null
+    }).where(eq(usersTable.id, user.id));
+    
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Email Verified</title><style>body{font-family:sans-serif;text-align:center;padding:40px;background:#050507;color:#e7e7ee}h1{color:#39FF14}.success{margin:20px 0;font-size:18px}a{display:inline-block;margin-top:20px;padding:12px 24px;background:#39FF14;color:#06120a;text-decoration:none;border-radius:8px;font-weight:bold}</style></head><body><h1>✅ Email Verified!</h1><p class="success">Your email has been successfully verified. You can now access all DGC Arcade features including withdrawals.</p><a href="/">Return to DGC Arcade</a></body></html>`);
+  } catch (err: any) {
+    req.log.error({ err }, "Email verification link error");
+    res.status(500).send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Verification Error</title><style>body{font-family:sans-serif;text-align:center;padding:40px;background:#050507;color:#e7e7ee}h1{color:#FF6B6B}a{color:#39FF14;text-decoration:none;font-weight:bold}</style></head><body><h1>❌ Verification Failed</h1><p>An error occurred during verification. Please try again.</p><a href="/settings">Back to Settings</a></body></html>`);
+  }
+});
+
 usersRouter.patch("/me/password", requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
   if (!currentPassword || !newPassword) { res.status(400).json({ error: "Current and new password required" }); return; }
@@ -282,178 +318,45 @@ usersRouter.post("/me/rakeback/claim", requireAuth, async (req, res) => {
     const [user] = await db.select({ totalWageredAmount: usersTable.totalWageredAmount, rakebackClaimed: usersTable.rakebackClaimed }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
     const wagered = parseFloat(user.totalWageredAmount ?? "0");
-    const claimed = parseFloat(user.rakebackClaimed ?? "0");
     const tier = getVipTier(wagered);
-    const claimable = Math.max(0, wagered * (tier.rakebackPct / 100) - claimed);
-    if (claimable < 0.01) { res.status(400).json({ error: "Nothing to claim yet" }); return; }
-    const [updated] = await db.update(usersTable).set({ balance: sql`balance + ${claimable}`, rakebackClaimed: sql`coalesce(rakeback_claimed, 0) + ${claimable}` }).where(eq(usersTable.id, req.user!.userId)).returning({ balance: usersTable.balance, rakebackClaimed: usersTable.rakebackClaimed });
-    res.json({ success: true, claimed: claimable, balance: parseFloat(updated.balance), rakebackClaimed: parseFloat(updated.rakebackClaimed ?? "0") });
+    const rakebackRate = tier.rakebackPct / 100;
+    const totalRakeback = wagered * rakebackRate;
+    const claimed = parseFloat(user.rakebackClaimed ?? "0");
+    const available = Math.max(0, totalRakeback - claimed);
+    if (available < 0.01) { res.status(400).json({ error: "No rakeback available to claim" }); return; }
+    const newClaimed = claimed + available;
+    await db.update(usersTable).set({ balance: sql`balance + ${available}`, rakebackClaimed: newClaimed }).where(eq(usersTable.id, req.user!.userId));
+    res.json({ success: true, claimedAmount: available, newBalance: user, tier: tier.id });
   } catch (err) { req.log.error({ err }, "Rakeback claim error"); res.status(500).json({ error: "Internal server error" }); }
-});
-
-usersRouter.post("/me/request-deletion", requireAuth, async (req, res) => {
-  try {
-    const [user] = await db.select({ username: usersTable.username, deletionRequestedAt: usersTable.deletionRequestedAt }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-    if (!user) { res.status(404).json({ error: "User not found" }); return; }
-    if (user.username === "fanodgc") { res.status(403).json({ error: "Owner account cannot be deleted" }); return; }
-    if (user.deletionRequestedAt) { res.status(400).json({ error: "Deletion already requested." }); return; }
-    await db.update(usersTable).set({ deletionRequestedAt: new Date(), isBanned: true }).where(eq(usersTable.id, req.user!.userId));
-    res.json({ success: true, message: "Account deletion requested." });
-  } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
 usersRouter.get("/me", requireAuth, async (req, res) => {
   try {
-    const [user] = await db.select({ 
-      id: usersTable.id, 
-      username: usersTable.username, 
-      email: usersTable.email,
-      emailVerified: usersTable.emailVerified,
-      balance: usersTable.balance, 
-      role: usersTable.role, 
-      totalBets: usersTable.totalBets, 
-      totalWon: usersTable.totalWon, 
-      totalWageredAmount: usersTable.totalWageredAmount, 
-      createdAt: usersTable.createdAt, 
-      usernameChangedAt: usersTable.usernameChangedAt, 
-      deletionRequestedAt: usersTable.deletionRequestedAt, 
-      lastLoginAt: usersTable.lastLoginAt, 
-      telegramUsername: usersTable.telegramUsername, 
-      rakebackClaimed: usersTable.rakebackClaimed 
-    }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
-    const now = Date.now();
-    const canChangeUsername = !user.usernameChangedAt || (now - new Date(user.usernameChangedAt).getTime()) >= 90*24*60*60*1000;
-    const daysUntilChange = user.usernameChangedAt ? Math.max(0, Math.ceil(90 - (now - new Date(user.usernameChangedAt).getTime())/(1000*60*60*24))) : 0;
-    const wagered = parseFloat(user.totalWageredAmount ?? "0");
-    const rakebackClaimed = parseFloat(user.rakebackClaimed ?? "0");
-    const tier = getVipTier(wagered);
-    const claimableRakeback = Math.max(0, wagered * (tier.rakebackPct / 100) - rakebackClaimed);
-
-    // Live Crypto-Native Balances (centralized logic)
-    const { totalBalance: finalBalance, cryptoBalances: balancesWithPrices } = await getUserBalance(req.user!.userId);
-
-    res.json({ 
-      id: user.id, 
-      username: user.username, 
-      email: user.email ?? null,
+    const { totalBalance, cryptoBalances } = await getUserBalance(user.id);
+    res.json({
+      id: user.id,
+      username: user.username,
+      email: user.email,
       emailVerified: user.emailVerified,
-      balance: finalBalance, 
-      cryptoBalances: balancesWithPrices,
-      role: user.role, 
-      totalBets: user.totalBets, 
-      totalWon: parseFloat(user.totalWon), 
-      totalWageredAmount: wagered, 
-      createdAt: user.createdAt.toISOString(), 
-      lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null, 
-      telegramUsername: user.telegramUsername ?? null, 
-      rakebackClaimed, 
-      claimableRakeback, 
-      canChangeUsername, 
-      daysUntilChange, 
-      deletionRequested: !!user.deletionRequestedAt 
+      balance: totalBalance,
+      cryptoBalances,
+      avatarUrl: user.avatarUrl,
+      totalBets: user.totalBets,
+      totalWon: user.totalWon,
+      role: user.role,
+      isBanned: user.isBanned,
+      createdAt: user.createdAt,
+      accountType: user.accountType,
+      withdrawalsEnabled: user.withdrawalsEnabled,
+      referralCode: user.referralCode,
+      totalWageredAmount: user.totalWageredAmount,
+      lastLoginAt: user.lastLoginAt,
+      telegramUsername: user.telegramUsername,
+      rakebackClaimed: user.rakebackClaimed,
+      signupBonus: user.signupBonus,
+      bonusWagered: user.bonusWagered,
     });
-  } catch { res.status(500).json({ error: "Internal server error" }); }
-});
-
-usersRouter.get("/:userId", async (req, res) => {
-  const userId = parseInt(req.params.userId, 10);
-  if (isNaN(userId)) { res.status(400).json({ error: "Invalid user ID" }); return; }
-  try {
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-    if (!user) { res.status(404).json({ error: "User not found" }); return; }
-    res.json({ id: user.id, username: user.username, balance: parseFloat(user.balance), avatarUrl: user.avatarUrl, totalBets: user.totalBets, totalWon: parseFloat(user.totalWon), createdAt: user.createdAt.toISOString() });
-  } catch (err) { req.log.error({ err }, "Get user error"); res.status(500).json({ error: "Internal server error" }); }
-});
-
-usersRouter.post("/me/vault/deposit", requireAuth, async (req, res) => {
-  const { amount } = req.body as { amount?: number };
-  if (!amount || amount <= 0) { res.status(400).json({ error: "Amount must be positive" }); return; }
-  try {
-    const result = await db.update(usersTable).set({ balance: sql`balance - ${amount}`, vaultBalance: sql`coalesce(vault_balance, 0) + ${amount}` }).where(eq(usersTable.id, req.user!.userId)).returning({ balance: usersTable.balance, vaultBalance: usersTable.vaultBalance });
-    if (!result[0]) { res.status(404).json({ error: "User not found" }); return; }
-    if (parseFloat(result[0].balance) < 0) {
-      await db.update(usersTable).set({ balance: sql`balance + ${amount}`, vaultBalance: sql`coalesce(vault_balance, 0) - ${amount}` }).where(eq(usersTable.id, req.user!.userId));
-      res.status(400).json({ error: "Insufficient balance" }); return;
-    }
-    res.json({ success: true, balance: parseFloat(result[0].balance), vaultBalance: parseFloat(result[0].vaultBalance ?? "0") });
-  } catch (err) { req.log.error({ err }, "Vault deposit error"); res.status(500).json({ error: "Internal server error" }); }
-});
-
-usersRouter.post("/me/vault/withdraw", requireAuth, async (req, res) => {
-  const { amount, password } = req.body as { amount?: number; password?: string };
-  if (!amount || amount <= 0) { res.status(400).json({ error: "Amount must be positive" }); return; }
-  if (!password) { res.status(400).json({ error: "Password required" }); return; }
-  try {
-    const bcrypt = await import("bcryptjs");
-    const [user] = await db.select({ passwordHash: usersTable.passwordHash, vaultBalance: usersTable.vaultBalance }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-    if (!user) { res.status(404).json({ error: "User not found" }); return; }
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) { res.status(401).json({ error: "Incorrect password" }); return; }
-    const vaultAmt = parseFloat(user.vaultBalance ?? "0");
-    if (amount > vaultAmt) { res.status(400).json({ error: "Amount exceeds vault balance" }); return; }
-    const [updated] = await db.update(usersTable).set({ balance: sql`balance + ${amount}`, vaultBalance: sql`vault_balance - ${amount}` }).where(eq(usersTable.id, req.user!.userId)).returning({ balance: usersTable.balance, vaultBalance: usersTable.vaultBalance });
-    res.json({ success: true, balance: parseFloat(updated.balance), vaultBalance: parseFloat(updated.vaultBalance ?? "0") });
-  } catch (err) { req.log.error({ err }, "Vault withdraw error"); res.status(500).json({ error: "Internal server error" }); }
-});
-
-usersRouter.get("/me/vault", requireAuth, async (req, res) => {
-  try {
-    const [user] = await db.select({ vaultBalance: usersTable.vaultBalance }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-    if (!user) { res.status(404).json({ error: "User not found" }); return; }
-    res.json({ vaultBalance: user.vaultBalance ?? "0" });
-  } catch { res.status(500).json({ error: "Internal server error" }); }
-});
-
-// GET /api/users/me/device-history
-usersRouter.get("/me/device-history", requireAuth, async (req, res) => {
-  try {
-    const { deviceHistoryTable } = await import("@workspace/db");
-    const { desc } = await import("drizzle-orm");
-    const sessions = await db.select().from(deviceHistoryTable)
-      .where(eq(deviceHistoryTable.userId, req.user!.userId))
-      .orderBy(desc(deviceHistoryTable.lastSeen))
-      .limit(20);
-    res.json({ sessions });
-  } catch (err) {
-    req.log.error({ err }, "Device history error");
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// POST /api/users/me/logout-all-devices
-usersRouter.post("/me/logout-all-devices", requireAuth, async (req, res) => {
-  try {
-    const { deviceHistoryTable } = await import("@workspace/db");
-    const { eq: deq } = await import("drizzle-orm");
-    await db.delete(deviceHistoryTable).where(deq(deviceHistoryTable.userId, req.user!.userId));
-    res.json({ success: true });
-  } catch (err) {
-    req.log.error({ err }, "Logout all devices error");
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-usersRouter.get("/tournaments/active", async (req, res) => {
-  try {
-    const { tournamentsTable, tournamentEntriesTable } = await import("@workspace/db");
-    const { and, eq: deq, lte, gte } = await import("drizzle-orm");
-    const now = new Date();
-    const [tournament] = await db.select().from(tournamentsTable).where(and(deq(tournamentsTable.status, "active"), lte(tournamentsTable.startAt, now), gte(tournamentsTable.endAt, now))).limit(1);
-    if (!tournament) { res.json(null); return; }
-    const entries = await db.select({ userId: tournamentEntriesTable.userId, score: tournamentEntriesTable.score }).from(tournamentEntriesTable).where(deq(tournamentEntriesTable.tournamentId, tournament.id));
-    const totalPlayers = entries.length;
-    let callerId: number | null = null;
-    try {
-      const auth = req.headers.authorization;
-      if (auth?.startsWith("Bearer ")) { const { verifyToken } = await import("../middlewares/auth.js"); const payload = verifyToken(auth.slice(7)); if (payload?.userId) callerId = payload.userId; }
-    } catch {}
-    let rank: number | null = null; let userScore: string | null = null;
-    if (callerId) {
-      const sorted = [...entries].sort((a, b) => parseFloat(b.score) - parseFloat(a.score));
-      const idx = sorted.findIndex(e => e.userId === callerId);
-      if (idx !== -1) { rank = idx + 1; userScore = sorted[idx].score; }
-    }
-    res.json({ tournament: { id: tournament.id, name: tournament.name, description: tournament.description, prize: tournament.prize, endAt: tournament.endAt }, rank, totalPlayers, userScore });
-  } catch { res.status(500).json({ error: "Internal server error" }); }
+  } catch (err) { req.log.error({ err }, "Get me error"); res.status(500).json({ error: "Internal server error" }); }
 });

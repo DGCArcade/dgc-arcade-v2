@@ -335,7 +335,7 @@ const verifyVariants: Array<
       ${codeBox("Your 6-Character Code", code, "⏱️ Expires in 24 hours", accent)}
       ${h("Two ways to verify", accent)}
       ${p(`<strong>Option 1:</strong> Drop the code above into your account settings.<br><strong>Option 2:</strong> Tap the button below.`)}
-      ${btn(`${SITE_URL}/verify/${code}`, "Verify Email Now", accent)}
+      ${btn(`${SITE_URL}/api/users/verify-link/${code}`, "Verify Email Now", accent)}
       ${infoBox("🔒 Security: never share this code. We'll never ask for it by email or support.", "#FF6B6B")}
     `;
     return {
@@ -350,7 +350,7 @@ const verifyVariants: Array<
       ${h(`One tap from the full floor, ${username}`, accent)}
       ${p(`You're almost in. Verify your email and DGC Arcade opens all the way up — withdrawals, bonuses, the works.`)}
       ${codeBox("Verification Code", code, "⏱️ Good for the next 24 hours", accent)}
-      ${btn(`${SITE_URL}/verify/${code}`, "Confirm My Email", accent)}
+      ${btn(`${SITE_URL}/api/users/verify-link/${code}`, "Confirm My Email", accent)}
       ${infoBox("💡 Didn't sign up for DGC Arcade? You can safely ignore this email.", accent.glow)}
     `;
     return {
@@ -366,7 +366,7 @@ const verifyVariants: Array<
       ${p(`Access request received for ${hl(username, accent)}. Enter the key below to complete activation.`)}
       ${codeBox(">> ACCESS KEY", code, "EXPIRES: 24:00:00", accent)}
       ${p("Paste it in your settings, or hit the button to verify instantly.")}
-      ${btn(`${SITE_URL}/verify/${code}`, "Activate Account", accent)}
+      ${btn(`${SITE_URL}/api/users/verify-link/${code}`, "Activate Account", accent)}
       ${infoBox("🛡️ This key is single-use. Never share it — DGC staff will never request it.", "#FF6B6B")}
     `;
     return {

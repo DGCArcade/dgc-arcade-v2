@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { User, Shield, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Clock, X } from "lucide-react";
+import { User, Shield, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
 
 function getToken() { return localStorage.getItem("dgc_token") ?? ""; }
 
@@ -40,11 +40,6 @@ export default function Settings() {
   const [deleteStatus, setDeleteStatus] = useState<{ type: "success"|"error"|""; msg: string }>({ type: "", msg: "" });
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  const [showVerifyModal, setShowVerifyModal] = useState(false);
-  const [verifyCode, setVerifyCode] = useState("");
-  const [verifyStatus, setVerifyStatus] = useState<{ type: "success"|"error"|""; msg: string }>({ type: "", msg: "" });
-  const [verifyLoading, setVerifyLoading] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) setLocation("/");
@@ -117,27 +112,6 @@ export default function Settings() {
     }
   }
 
-  async function handleVerifyEmail() {
-    if (!verifyCode.trim()) return;
-    setVerifyLoading(true);
-    setVerifyStatus({ type: "", msg: "" });
-    try {
-      const res = await apiCall("/api/users/me/verify/code", "POST", { code: verifyCode.trim() });
-      if (res.success) {
-        setVerifyStatus({ type: "success", msg: "✅ Email verified successfully!" });
-        setVerifyCode("");
-        setMeData((d: any) => ({ ...d, emailVerified: true }));
-        setTimeout(() => setShowVerifyModal(false), 2000);
-      } else {
-        setVerifyStatus({ type: "error", msg: res.error ?? "Failed to verify email" });
-      }
-    } catch {
-      setVerifyStatus({ type: "error", msg: "Network error. Try again." });
-    } finally {
-      setVerifyLoading(false);
-    }
-  }
-
   async function handleDeleteAccount() {
     if (deleteConfirm !== user?.username) {
       setDeleteStatus({ type: "error", msg: "Username doesn't match. Type your exact username to confirm." });
@@ -182,47 +156,6 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Email Verification Modal */}
-      {showVerifyModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <Card className="bg-card border-border/40 w-full max-w-md shadow-2xl">
-            <CardHeader className="pb-3 flex items-center justify-between">
-              <CardTitle className="text-lg font-bold uppercase tracking-wider">Verify Your Email</CardTitle>
-              <button onClick={() => setShowVerifyModal(false)} className="text-muted-foreground hover:text-foreground">
-                <X className="w-5 h-5" />
-              </button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">Enter the 6-character code from your email:</p>
-              <Input
-                type="text"
-                placeholder="e.g., ABC123"
-                value={verifyCode}
-                onChange={e => setVerifyCode(e.target.value.toUpperCase())}
-                maxLength={6}
-                className="bg-secondary border-border/60 font-mono text-center text-lg tracking-widest uppercase font-bold"
-                autoFocus
-              />
-              {verifyStatus.msg && (
-                <div className={`rounded-lg p-3 flex items-center gap-2 text-xs ${verifyStatus.type === "success" ? "bg-green-500/10 border border-green-500/30 text-green-300" : "bg-red-500/10 border border-red-500/30 text-red-300"}`}>
-                  {verifyStatus.type === "success" ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
-                  {verifyStatus.msg}
-                </div>
-              )}
-              <div className="flex gap-2">
-                <Button onClick={handleVerifyEmail} disabled={verifyLoading || !verifyCode.trim()} className="flex-1 font-bold uppercase tracking-wider">
-                  {verifyLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Verify"}
-                </Button>
-                <Button onClick={() => setShowVerifyModal(false)} variant="outline" className="flex-1 font-bold uppercase tracking-wider">
-                  Cancel
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground text-center">Didn't get the code? Check your spam folder or request a new one.</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
       {/* Account Info */}
       <Card className="bg-card border-border/40">
         <CardHeader className="pb-3">
@@ -248,16 +181,12 @@ export default function Settings() {
                     <button
                       onClick={async () => {
                         try {
-                          const res = await apiCall("/api/users/me/verify/resend", "POST");
-                          if (res.success) {
-                            setVerifyStatus({ type: "success", msg: "✉️ Verification email sent! Enter the code below." });
-                            setShowVerifyModal(true);
-                            setVerifyCode("");
-                          } else {
-                            setVerifyStatus({ type: "error", msg: res.error || "Failed to send email." });
-                          }
+                          await apiCall("/api/users/me/verify/resend", "POST");
+                          // Open the global verification modal
+                          const event = new CustomEvent('openVerificationModal');
+                          window.dispatchEvent(event);
                         } catch {
-                          setVerifyStatus({ type: "error", msg: "Network error." });
+                          alert("Failed to send verification email");
                         }
                       }}
                       className="text-[10px] uppercase font-black text-primary hover:underline"
@@ -330,23 +259,21 @@ export default function Settings() {
         <CardContent className="space-y-4">
           <Input
             type="password"
-            placeholder="Current Password"
+            placeholder="Current password"
             value={currentPassword}
             onChange={e => setCurrentPassword(e.target.value)}
-            className="bg-secondary border-border/60"
+            className="bg-secondary border-border/60 font-mono"
           />
-          <div className="flex gap-2">
-            <Input
-              type="password"
-              placeholder="New Password"
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
-              className="bg-secondary border-border/60"
-            />
-            <Button onClick={handlePasswordChange} disabled={passwordLoading || !currentPassword || !newPassword} className="font-bold uppercase tracking-wider shrink-0">
-              {passwordLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Update"}
-            </Button>
-          </div>
+          <Input
+            type="password"
+            placeholder="New password"
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+            className="bg-secondary border-border/60 font-mono"
+          />
+          <Button onClick={handlePasswordChange} disabled={passwordLoading} className="w-full font-bold uppercase tracking-wider">
+            {passwordLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Update Password"}
+          </Button>
           {passwordStatus.msg && (
             <div className={`rounded-lg p-3 flex items-center gap-2 text-xs ${passwordStatus.type === "success" ? "bg-green-500/10 border border-green-500/30 text-green-300" : "bg-red-500/10 border border-red-500/30 text-red-300"}`}>
               {passwordStatus.type === "success" ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
@@ -356,76 +283,33 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {/* Change Username */}
-      <Card className="bg-card border-border/40">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-            Change Username
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            You can change your username once every <strong className="text-foreground">90 days</strong>.
-            Usernames must be 3-20 characters and can only contain letters, numbers, and underscores.
-          </p>
-          {meData?.canChangeUsername === false ? (
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-400 flex-shrink-0" />
-              <p className="text-xs text-amber-300">
-                Next username change available in <strong>{meData?.daysUntilChange} days</strong>.
-              </p>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <Input
-                placeholder="New username"
-                value={newUsername}
-                onChange={e => setNewUsername(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleUsernameChange()}
-                className="bg-secondary border-border/60 font-mono"
-                maxLength={20}
-              />
-              <Button onClick={handleUsernameChange} disabled={usernameLoading || !newUsername.trim()} className="font-bold uppercase tracking-wider shrink-0">
-                {usernameLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Save"}
-              </Button>
-            </div>
-          )}
-          {usernameStatus.msg && (
-            <div className={`rounded-lg p-3 flex items-center gap-2 text-xs ${usernameStatus.type === "success" ? "bg-green-500/10 border border-green-500/30 text-green-300" : "bg-red-500/10 border border-red-500/30 text-red-300"}`}>
-              {usernameStatus.type === "success" ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
-              {usernameStatus.msg}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Delete Account */}
-      <Card className="bg-card border-border/40 border-destructive/30">
+      <Card className="bg-card border-border/40 border-red-500/20">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-bold uppercase tracking-wider text-destructive">
+          <CardTitle className="text-sm font-bold uppercase tracking-wider text-red-400">
             Danger Zone
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {!showDeleteConfirm ? (
             <Button onClick={() => setShowDeleteConfirm(true)} variant="destructive" className="w-full font-bold uppercase tracking-wider">
-              <Trash2 className="w-4 h-4 mr-2" /> Request Account Deletion
+              <Trash2 className="w-4 h-4 mr-2" /> Delete Account
             </Button>
           ) : (
-            <div className="space-y-4">
+            <>
               <p className="text-xs text-muted-foreground">
-                Type your username to confirm deletion. <strong>This cannot be undone.</strong>
+                This action is permanent. Type your username <strong>@{user.username}</strong> to confirm:
               </p>
               <Input
                 type="text"
-                placeholder="Enter your username to confirm"
+                placeholder={`@${user.username}`}
                 value={deleteConfirm}
                 onChange={e => setDeleteConfirm(e.target.value)}
                 className="bg-secondary border-border/60 font-mono"
               />
               <div className="flex gap-2">
-                <Button onClick={handleDeleteAccount} disabled={deleteLoading} variant="destructive" className="flex-1 font-bold uppercase tracking-wider">
-                  {deleteLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Confirm Deletion"}
+                <Button onClick={handleDeleteAccount} disabled={deleteLoading || deleteConfirm !== user?.username} variant="destructive" className="flex-1 font-bold uppercase tracking-wider">
+                  {deleteLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Confirm Delete"}
                 </Button>
                 <Button onClick={() => setShowDeleteConfirm(false)} variant="outline" className="flex-1 font-bold uppercase tracking-wider">
                   Cancel
@@ -437,7 +321,7 @@ export default function Settings() {
                   {deleteStatus.msg}
                 </div>
               )}
-            </div>
+            </>
           )}
         </CardContent>
       </Card>
