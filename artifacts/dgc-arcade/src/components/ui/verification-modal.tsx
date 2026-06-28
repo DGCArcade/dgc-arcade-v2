@@ -23,6 +23,7 @@ export function VerificationModal({ open, onClose }: VerificationModalProps) {
       const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [resendCooldown]);
 
   const handleVerify = async () => {
