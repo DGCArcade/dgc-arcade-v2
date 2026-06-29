@@ -1284,38 +1284,89 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   MOBILE GAME SHELL — fullscreen play area, no scroll
+   MOBILE GAME OVERLAY — fixed fullscreen popup
 ═══════════════════════════════════════════════════════════════ */
+.mobile-game-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background: hsl(var(--background));
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mobile-game-overlay-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(12px);
+  flex-shrink: 0;
+}
+
+.mobile-game-overlay-back,
+.mobile-game-overlay-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mobile-game-overlay-close {
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mobile-game-overlay-title {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.mobile-game-overlay-title h1 {
+  font-family: var(--font-display, inherit);
+  font-size: 14px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-game-overlay-title p {
+  font-size: 10px;
+  font-family: monospace;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 2px;
+}
+
+.mobile-game-overlay-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 215, 0, 0.04) 0%, transparent 60%);
+}
+
 @media (max-width: 767px) {
-  .game-mobile-shell {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-    background: transparent;
-  }
-
-  .game-mobile-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(8px);
-    flex-shrink: 0;
-  }
-
-  .game-mobile-viewport {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-    padding: 0 4px;
-  }
-
   .game-mobile-bets-toggle {
     display: flex;
     align-items: center;
@@ -1515,62 +1566,63 @@ body {
 
 /* Mobile game compact overrides */
 @media (max-width: 767px) {
-  .game-mobile-viewport .bj-game-root,
-  .game-mobile-viewport .cf-root,
-  .game-mobile-viewport .mines-game-root,
-  .game-mobile-viewport .crash-game-root,
-  .game-mobile-viewport .roulette-game-root,
-  .game-mobile-viewport .keno-game-root,
-  .game-mobile-viewport .hilo-game-root,
-  .game-mobile-viewport .plinko-root,
-  .game-mobile-viewport .dice-container {
+  .mobile-game-overlay-body .bj-game-root,
+  .mobile-game-overlay-body .cf-root,
+  .mobile-game-overlay-body .mines-game-root,
+  .mobile-game-overlay-body .crash-game-root,
+  .mobile-game-overlay-body .roulette-game-root,
+  .mobile-game-overlay-body .keno-game-root,
+  .mobile-game-overlay-body .hilo-game-root,
+  .mobile-game-overlay-body .plinko-root,
+  .mobile-game-overlay-body .dice-container,
+  .mobile-game-overlay-body .chicken-road-game-root {
     padding: 4px !important;
     gap: 8px !important;
   }
 
-  .game-mobile-viewport .cf-coin-area {
+  .mobile-game-overlay-body .cf-coin-area {
     min-height: 180px !important;
     padding: 16px 12px !important;
   }
 
-  .game-mobile-viewport .crash-chart-area {
+  .mobile-game-overlay-body .crash-chart-area {
     min-height: 160px !important;
     padding: 12px !important;
   }
 
-  .game-mobile-viewport .crash-chart-area .font-mono {
+  .mobile-game-overlay-body .crash-chart-area .font-mono {
     font-size: 3rem !important;
   }
 
-  .game-mobile-viewport .roulette-wheel-area {
+  .mobile-game-overlay-body .roulette-wheel-area {
     min-height: 200px !important;
     padding: 8px !important;
   }
 
-  .game-mobile-viewport .bj-bet-panel,
-  .game-mobile-viewport .cf-bet-panel,
-  .game-mobile-viewport .mines-bet-panel,
-  .game-mobile-viewport .crash-bet-panel,
-  .game-mobile-viewport .roulette-bet-panel,
-  .game-mobile-viewport .keno-bet-panel,
-  .game-mobile-viewport .hilo-bet-panel,
-  .game-mobile-viewport .plinko-bet-panel,
-  .game-mobile-viewport .dice-bet-panel {
+  .mobile-game-overlay-body .bj-bet-panel,
+  .mobile-game-overlay-body .cf-bet-panel,
+  .mobile-game-overlay-body .mines-bet-panel,
+  .mobile-game-overlay-body .crash-bet-panel,
+  .mobile-game-overlay-body .roulette-bet-panel,
+  .mobile-game-overlay-body .keno-bet-panel,
+  .mobile-game-overlay-body .hilo-bet-panel,
+  .mobile-game-overlay-body .plinko-bet-panel,
+  .mobile-game-overlay-body .dice-bet-panel {
     padding: 10px !important;
     gap: 8px !important;
   }
 
-  .game-mobile-viewport .dice-container {
+  .mobile-game-overlay-body .dice-container {
     height: auto !important;
     min-height: 0 !important;
   }
 
-  .game-mobile-viewport .dice-size {
+  .mobile-game-overlay-body .dice-size {
     width: 60px !important;
     height: 60px !important;
   }
 
-  .game-mobile-viewport .result-text {
+  .mobile-game-overlay-body .result-text {
     font-size: 32px !important;
   }
 }

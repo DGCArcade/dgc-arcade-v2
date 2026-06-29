@@ -9,6 +9,7 @@ import { AuthModal } from "@/components/auth/auth-modal";
 import { VerificationModal } from "@/components/ui/verification-modal";
 import GalaxyBackground from "@/components/GalaxyBackground";
 import { LocationGate } from "@/components/ui/location-gate";
+import { useMobileGame } from "@/hooks/use-mobile-game";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -17,12 +18,13 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const isMobile = useIsMobile();
+  const mobileGame = useMobileGame();
   const { user, isAuthenticated } = useAuth();
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
   const [verificationRequired, setVerificationRequired] = useState(false);
   const showEmailNotice = isAuthenticated && (user as any)?.email && !(user as any)?.emailVerified && !verificationModalOpen;
   const isGamePlayPage = /^\/games\/\d+/.test(location) || /^\/slots\/[^/]+/.test(location);
-  const mobileGameMode = isMobile && isGamePlayPage;
+  const mobileGameMode = isMobile && (isGamePlayPage || mobileGame?.isOpen);
 
   // Listen for verification modal open events (optional or required)
   useEffect(() => {
@@ -40,7 +42,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <div className="min-h-[100dvh] flex flex-col bg-transparent text-foreground selection:bg-primary/30 relative">
         <GalaxyBackground />
         <div className="relative z-10 flex flex-col min-h-[100dvh]">
-          {showEmailNotice && (
+          {showEmailNotice && !mobileGameMode && (
             <div className="bg-amber-500/10 border-b border-amber-500/20 py-2 px-4 flex items-center justify-center gap-2 text-[10px] md:text-xs text-amber-300 font-bold uppercase tracking-wider animate-in fade-in slide-in-from-top-4">
               <AlertTriangle className="w-3 h-3 md:w-4 md:h-4 text-amber-400" />
               Your email is unverified. 
@@ -52,7 +54,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               </button>
             </div>
           )}
-          <Navbar />
+          {!mobileGameMode && <Navbar />}
           <main className={`flex-1 w-full mx-auto flex flex-col overflow-x-hidden min-h-0 ${
             mobileGameMode
               ? "max-w-full px-0 py-0 pb-0 overflow-hidden"
