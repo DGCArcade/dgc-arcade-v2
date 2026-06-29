@@ -28,6 +28,7 @@ const Maintenance = lazy(() => import("@/pages/maintenance"));
 const ProvablyFairPage = lazy(() => import("./pages/provably-fair"));
 const InstantPayoutsPage = lazy(() => import("./pages/instant-payouts"));
 const CryptoNativePage = lazy(() => import("./pages/crypto-native"));
+const ResetPasswordPage = lazy(() => import("./pages/reset-password"));
 
 // Gate: if user is logged in but email not verified, block game access and force verification
 function EmailVerifiedGate({ children }: { children: ReactNode }) {
@@ -181,6 +182,9 @@ function Router() {
           <Route path="/instant-payouts" component={InstantPayoutsPage} />
           <Route path="/crypto-native" component={CryptoNativePage} />
           
+          {/* Password Reset — public, no auth needed */}
+          <Route path="/reset-password" component={ResetPasswordPage} />
+
           {/* Catch-all 404 */}
           <Route component={NotFound} />
         </Switch>

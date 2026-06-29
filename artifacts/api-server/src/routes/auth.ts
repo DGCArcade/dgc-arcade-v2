@@ -11,6 +11,10 @@ import crypto from "crypto";
 
 export const authRouter = Router();
 
+// In-memory store for password reset tokens — no schema change needed
+// token → { userId, expiresAt }
+const passwordResetTokens = new Map<string, { userId: number; expiresAt: Date }>();
+
 async function formatUser(user: typeof usersTable.$inferSelect) {
   const { totalBalance, cryptoBalances } = await getUserBalance(user.id);
 
@@ -227,6 +231,64 @@ authRouter.post("/login", async (req, res) => {
     const token = signToken({ userId: user.id, username: user.username, role: user.role });
     res.json({ user: responseUser, token });
   } catch (err) { req.log.error({ err }, "Login error"); res.status(500).json({ error: "Internal server error" }); }
+});
+
+// POST /api/auth/forgot-password
+authRouter.post("/forgot-password", async (req, res) => {
+  const { identifier } = req.body as { identifier?: string };
+  if (!identifier?.trim()) { res.status(400).json({ error: "Username or email required" }); return; }
+
+  try {
+    const [user] = await db.select({ id: usersTable.id, username: usersTable.username, email: usersTable.email })
+      .from(usersTable)
+      .where(or(ilike(usersTable.username, identifier.trim()), ilike(usersTable.email, identifier.trim())))
+      .limit(1);
+
+    // Always return success to prevent user enumeration
+    if (!user || !user.email) {
+      res.json({ success: true, message: "If that account exists, a reset email has been sent." });
+      return;
+    }
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    passwordResetTokens.set(token, { userId: user.id, expiresAt });
+
+    const siteUrl = process.env.SITE_URL || "https://differentgrindcrew.com";
+    const resetLink = `${siteUrl}/reset-password?token=${token}`;
+    const { sendPasswordResetEmail } = await import("../lib/mail-service.js");
+    void sendPasswordResetEmail(user.email, user.username, resetLink);
+
+    res.json({ success: true, message: "If that account exists, a reset email has been sent." });
+  } catch (err: any) {
+    req.log.error({ err }, "Forgot password error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/auth/reset-password
+authRouter.post("/reset-password", async (req, res) => {
+  const { token, newPassword } = req.body as { token?: string; newPassword?: string };
+  if (!token || !newPassword) { res.status(400).json({ error: "Token and new password are required" }); return; }
+  if (newPassword.length < 6) { res.status(400).json({ error: "Password must be at least 6 characters" }); return; }
+
+  const record = passwordResetTokens.get(token);
+  if (!record) { res.status(400).json({ error: "Invalid or expired reset link. Please request a new one." }); return; }
+  if (new Date() > record.expiresAt) {
+    passwordResetTokens.delete(token);
+    res.status(400).json({ error: "Reset link has expired. Please request a new one." });
+    return;
+  }
+
+  try {
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, record.userId));
+    passwordResetTokens.delete(token);
+    res.json({ success: true, message: "Password reset successfully. You can now log in." });
+  } catch (err: any) {
+    req.log.error({ err }, "Reset password error");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 // POST /api/auth/logout
