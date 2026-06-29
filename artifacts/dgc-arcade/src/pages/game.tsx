@@ -1,5 +1,5 @@
 import { useParams, Link } from "wouter";
-import { useGetGame, getGetGameQueryKey, useListBets, getListBetsQueryKey } from "@workspace/api-client-react";
+import { useGetGame, getGetGameQueryKey, useListBets, getListBetsQueryKey, type BetRecord } from "@workspace/api-client-react";
 import { Coinflip } from "@/components/games/coinflip";
 import { Slots } from "@/components/games/slots";
 import { Crash } from "@/components/games/crash";
@@ -105,7 +105,7 @@ function TournamentBanner({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function RecentBetsTable({ gameBets }: { gameBets: Array<{ id: number; createdAt: string; amount: string; multiplier: number | null; won: boolean; payout: string }> }) {
+function RecentBetsTable({ gameBets }: { gameBets: BetRecord[] }) {
   return (
     <Card className="bg-card border-border overflow-hidden">
       <div className="overflow-x-auto">
