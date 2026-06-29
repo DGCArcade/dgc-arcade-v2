@@ -127,6 +127,21 @@ authRouter.post("/register", async (req, res) => {
     }
 
     const token = signToken({ userId: user.id, username: user.username, role: user.role });
+
+    // Send verification email via Resend
+    if (user.email) {
+      try {
+        const { sendEmailVerificationEmail } = await import("../lib/mail-service");
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await db.update(usersTable).set({ 
+          emailVerificationCode: verificationCode, 
+          emailVerificationExpiresAt: expiresAt 
+        }).where(eq(usersTable.id, user.id));
+        void sendEmailVerificationEmail(user.email, user.username, verificationCode);
+      } catch (mailErr) { logger.warn({ mailErr }, 'Verification email sending failed on registration'); }
+    }
+
     res.status(201).json({ user: await formatUser(user), token });
   } catch (err) { req.log.error({ err }, "Register error"); res.status(500).json({ error: "Internal server error" }); }
 });

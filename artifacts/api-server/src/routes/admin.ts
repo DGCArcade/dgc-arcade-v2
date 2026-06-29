@@ -658,6 +658,20 @@ adminRouter.post("/create-specialty-creator", async (req, res) => {
       })
       .returning();
 
+    // Send verification email via Resend
+    if (created.email) {
+      try {
+        const { sendEmailVerificationEmail } = await import("../lib/mail-service");
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await db.update(usersTable).set({ 
+          emailVerificationCode: verificationCode, 
+          emailVerificationExpiresAt: expiresAt 
+        }).where(eq(usersTable.id, created.id));
+        void sendEmailVerificationEmail(created.email, created.username, verificationCode);
+      } catch (mailErr) { req.log.warn({ mailErr }, 'Verification email sending failed on admin creator creation'); }
+    }
+
     res.json({
       id: created.id,
       username: created.username,
