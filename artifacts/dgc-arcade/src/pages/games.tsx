@@ -55,9 +55,9 @@ export default function Games() {
 
 
       {isLoading ? (
-        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
-          {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} className="aspect-[3/4] bg-secondary animate-pulse rounded-lg border border-border" />
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+            <div key={i} className="aspect-[3/4.2] md:aspect-[3/4] bg-secondary animate-pulse rounded-lg border border-border" />
           ))}
         </div>
       ) : filteredGames.length === 0 ? (
@@ -65,9 +65,11 @@ export default function Games() {
           <p className="text-muted-foreground font-mono">No games found matching "{search}"</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
           {filteredGames.map(game => (
-            <GameCard key={game.id} game={game} />
+            <div key={game.id} className="h-full">
+              <GameCard game={game} />
+            </div>
           ))}
         </div>
       )}

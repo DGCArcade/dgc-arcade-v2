@@ -49,10 +49,14 @@ export function Roulette({ game }: RouletteProps) {
           const sectorDeg = 360 / 37;
           const targetAngle = idx * sectorDeg;
           const spins = 5 + Math.random() * 3;
-          // Correct rotation logic: calculate shortest path to target angle
+          // Calculate the specific angle for the pocket. 
+          // 0 is at top (-90deg in SVG). ORDER[0] is 0.
+          // The wheel rotates clockwise. To bring ORDER[idx] to the top (pointer),
+          // we need to rotate the wheel by (360 - targetAngle).
           const currentActualRotation = rotation % 360;
-          const extraRotation = (360 - targetAngle - currentActualRotation + 360) % 360;
-          const newRot = rotation + (5 + Math.random() * 2) * 360 + extraRotation;
+          const targetFinalAngle = (360 - targetAngle) % 360;
+          const extraRotation = (targetFinalAngle - currentActualRotation + 360) % 360;
+          const newRot = rotation + 1800 + extraRotation; // Exactly 5 full spins + the needed offset
           setRotation(newRot);
 
           setTimeout(() => {

@@ -513,13 +513,13 @@ export function GameCard({ game }: { game: Game }) {
   const Cover = COVER_MAP[game.slug] ?? CoverDefault;
   return (
     <Link href={`/games/${game.id}`}>
-      <Card className="group relative overflow-hidden bg-card border-border/50 hover:border-primary/60 transition-all duration-300 cursor-pointer flex flex-col card-hover-glow aspect-[3/4.2] md:aspect-auto">
-        <div className="aspect-[16/9] relative overflow-hidden bg-secondary">
+      <Card className="group relative overflow-hidden bg-card border-border/50 hover:border-primary/60 transition-all duration-300 cursor-pointer flex flex-col card-hover-glow h-full min-h-[160px] md:min-h-0">
+        <div className="aspect-[16/9] relative overflow-hidden bg-secondary shrink-0">
           <Cover slug={game.slug} />
-          <div className="absolute inset-0 bg-gradient-to-t from-card/80 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-card/90 via-transparent to-transparent" />
           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 bg-black/30">
-            <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center shadow-[0_0_24px_var(--theme-glow-strong)] scale-75 group-hover:scale-100 transition-transform duration-200">
-              <Play className="w-6 h-6 ml-0.5 text-primary-foreground" fill="currentColor" />
+            <div className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-primary flex items-center justify-center shadow-[0_0_24px_var(--theme-glow-strong)] scale-75 group-hover:scale-100 transition-transform duration-200">
+              <Play className="w-4 h-4 md:w-6 md:h-6 ml-0.5 text-primary-foreground" fill="currentColor" />
             </div>
           </div>
           <div className="absolute top-1 left-1 md:top-2 md:left-2">
@@ -535,10 +535,10 @@ export function GameCard({ game }: { game: Game }) {
             </div>
           )}
         </div>
-        <div className="p-2 md:p-4 flex flex-col gap-1 md:gap-2">
-          <h3 className="font-display font-bold text-sm md:text-lg text-foreground group-hover:text-primary transition-colors uppercase tracking-wide line-clamp-1">{game.name}</h3>
-          <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-1">{game.description}</p>
-          <div className="flex items-center justify-between text-[9px] md:text-xs font-mono text-muted-foreground pt-1.5 md:pt-2 border-t border-border/40">
+        <div className="p-2 md:p-4 flex flex-col gap-1 md:gap-2 flex-1 min-h-0">
+          <h3 className="font-display font-bold text-sm md:text-lg text-foreground group-hover:text-primary transition-colors uppercase tracking-wide line-clamp-1 shrink-0">{game.name}</h3>
+          <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-1 md:line-clamp-1 shrink-0">{game.description}</p>
+          <div className="flex items-center justify-between text-[9px] md:text-xs font-mono text-muted-foreground pt-1.5 md:pt-2 border-t border-border/40 mt-auto shrink-0">
             <span className="flex flex-col md:flex-row md:gap-1">
               <span className="opacity-50 md:opacity-100">Min</span>
               <span className="text-foreground font-bold">{formatCurrency(game.minBet)}</span>
