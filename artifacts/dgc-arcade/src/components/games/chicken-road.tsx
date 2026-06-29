@@ -120,37 +120,38 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
     setRevealedMatrix(null);
   }, []);
 
-  const startGame = async () => {
-    if (!requireAuth()) return;
-    if (amount < minBet || amount > maxBet) {
-      toast({ title: "Invalid bet", description: `Bet must be between $${minBet} and $${maxBet}`, variant: "destructive" });
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch("/api/chicken-road/initialize", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ gameId: game.id, amount, tier, clientSeed }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to start game");
+  const startGame = () => {
+    requireAuth(async () => {
+      if (amount < minBet || amount > maxBet) {
+        toast({ title: "Invalid bet", description: `Bet must be between $${minBet} and $${maxBet}`, variant: "destructive" });
+        return;
+      }
+      setLoading(true);
+      try {
+        const res = await fetch("/api/chicken-road/initialize", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ gameId: game.id, amount, tier, clientSeed }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to start game");
 
-      setSessionId(data.sessionId);
-      setServerSeedHash(data.serverSeedHash);
-      setServerSeed("");
-      setCurrentLane(0);
-      setMultiplier(1);
-      setPayout(0);
-      setStatus("active");
-      resetGrid();
-      playSound("start");
-      qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+        setSessionId(data.sessionId);
+        setServerSeedHash(data.serverSeedHash);
+        setServerSeed("");
+        setCurrentLane(0);
+        setMultiplier(1);
+        setPayout(0);
+        setStatus("active");
+        resetGrid();
+        playSound("start");
+        qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
+      } catch (err: any) {
+        toast({ title: "Error", description: err.message, variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+    });
   };
 
   const pickTile = async (laneIndex: number, tileIndex: number) => {
