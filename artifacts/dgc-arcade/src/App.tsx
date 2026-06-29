@@ -46,7 +46,13 @@ function EmailVerifiedGate({ children }: { children: ReactNode }) {
     }
   }, [user, isLoading]);
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-primary" />
+      </div>
+    );
+  }
   if (user && !(user as any).emailVerified) {
     return (
       <div className="flex flex-col items-center justify-center py-32 text-center gap-4">

@@ -243,9 +243,9 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
   const isIdle = status === "idle" || status === "won" || status === "lost";
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6">
+    <div className="chicken-road-game-root flex flex-col lg:flex-row gap-4 md:gap-6">
       {/* Controls Panel */}
-      <div className="lg:w-72 shrink-0 space-y-4 bg-card border border-border rounded-xl p-4">
+      <div className="chicken-road-bet-panel lg:w-72 shrink-0 space-y-4 bg-card border border-border rounded-xl p-4">
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Bet Amount</label>
           <Input
