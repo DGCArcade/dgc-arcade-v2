@@ -10,11 +10,17 @@ import { isJurisdictionAllowed } from "../lib/geo-policy.js";
 import { lookupGeoByIp } from "../lib/geo-lookup.js";
 import { sendEmailVerificationEmail } from "../lib/mail-service.js";
 import { recordLedgerStandalone } from "../services/ledger.js";
+import { logFinancialActivity, logActivity, linkVisitorToUser } from "../services/activity-log.js";
+import { getRequestContext } from "../lib/request-context.js";
 export const usersRouter = Router();
 
 const verifyResendAttempts = new Map<number, number[]>();
 const VERIFY_RESEND_WINDOW_MS = 60_000;
 const VERIFY_RESEND_MAX = 3;
+
+const verifyCodeAttempts = new Map<number, number[]>();
+const VERIFY_CODE_WINDOW_MS = 15 * 60 * 1000;
+const VERIFY_CODE_MAX = 10;
 
 const VIP_TIERS = [
   { id: 0, min: 0,         rakebackPct: 5  },
@@ -125,6 +131,15 @@ usersRouter.post("/geo", requireAuth, async (req, res) => {
     if (Object.values(updates).some((v) => v !== undefined)) {
       await db.update(usersTable).set(updates).where(eq(usersTable.id, req.user!.userId));
     }
+
+    logActivity({
+      userId: req.user!.userId,
+      username: req.user!.username,
+      action: locationVerified ? "geo_verified" : "geo_denied",
+      ctx: getRequestContext(req),
+      metadata: { countryCode: cc, region: serverGeo.region, city: serverGeo.city },
+    });
+
     res.json({ success: true, locationVerified });
   } catch (err) { req.log.error({ err }, "Save geo error"); res.status(500).json({ error: "Internal server error" }); }
 });
@@ -233,6 +248,13 @@ usersRouter.post("/me/verify/code", requireAuth, async (req, res) => {
   if (!code) { res.status(400).json({ error: "Verification code required" }); return; }
   
   try {
+    const now = Date.now();
+    const attempts = (verifyCodeAttempts.get(req.user!.userId) ?? []).filter((t) => now - t < VERIFY_CODE_WINDOW_MS);
+    if (attempts.length >= VERIFY_CODE_MAX) {
+      res.status(429).json({ error: "Too many verification attempts. Try again later." });
+      return;
+    }
+
     const [user] = await db.select({
       id: usersTable.id,
       emailVerificationCode: usersTable.emailVerificationCode,
@@ -250,9 +272,12 @@ usersRouter.post("/me/verify/code", requireAuth, async (req, res) => {
     }
     
     if (user.emailVerificationCode !== code) {
+      attempts.push(now);
+      verifyCodeAttempts.set(req.user!.userId, attempts);
       res.status(400).json({ error: "Invalid verification code" });
       return;
     }
+    verifyCodeAttempts.delete(req.user!.userId);
     
     await db.update(usersTable).set({
       emailVerified: true,
@@ -445,6 +470,24 @@ usersRouter.post("/tip", requireAuth, requireLocationVerified, async (req, res) 
       reason: "tip_received",
       note: `Tip from @${req.user!.username}`,
     }).catch(() => {});
+
+    logFinancialActivity({
+      userId: senderId,
+      username: req.user!.username,
+      action: "tip_sent",
+      ctx: getRequestContext(req),
+      amount,
+      referenceType: "transaction",
+      metadata: { toUsername: recipient.username },
+    });
+    logFinancialActivity({
+      userId: recipient.id,
+      username: recipient.username,
+      action: "tip_received",
+      ctx: getRequestContext(req),
+      amount,
+      metadata: { fromUsername: req.user!.username },
+    });
 
     res.json({ success: true, newBalance: senderBalanceAfter });
   } catch (err) {

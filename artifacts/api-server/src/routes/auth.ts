@@ -8,6 +8,8 @@ import { logger } from "../lib/logger.js";
 import { getUserBalance } from "../lib/balance-service.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
 import crypto from "crypto";
+import { logActivity, linkVisitorToUser } from "../services/activity-log.js";
+import { getRequestContext } from "../lib/request-context.js";
 
 export const authRouter = Router();
 
@@ -133,12 +135,21 @@ authRouter.post("/register", async (req, res) => {
     }
 
     const token = signToken({ userId: user.id, username: user.username, role: user.role });
+    const ctx = getRequestContext(req);
+    linkVisitorToUser(ctx, user.id, user.username).catch(() => {});
+    logActivity({
+      userId: user.id,
+      username: user.username,
+      action: "register",
+      ctx,
+      metadata: { accountType: user.accountType },
+    });
 
     // Send verification email via Resend
     if (user.email) {
       try {
         const { sendEmailVerificationEmail } = await import("../lib/mail-service");
-        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const verificationCode = String(crypto.randomInt(100000, 1000000));
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
         await db.update(usersTable).set({ 
           emailVerificationCode: verificationCode, 
@@ -225,6 +236,15 @@ authRouter.post("/login", async (req, res) => {
     } catch {}
 
     const token = signToken({ userId: user.id, username: user.username, role: user.role });
+    const ctx = getRequestContext(req);
+    linkVisitorToUser(ctx, user.id, user.username).catch(() => {});
+    logActivity({
+      userId: user.id,
+      username: user.username,
+      action: "login",
+      ctx,
+      metadata: { role: user.role },
+    });
     res.json({ user: responseUser, token });
   } catch (err) { req.log.error({ err }, "Login error"); res.status(500).json({ error: "Internal server error" }); }
 });

@@ -67,6 +67,10 @@ app.use((_req, res, next) => {
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-site");
   // Compression hint for proxies
   res.setHeader("Vary", "Accept-Encoding");
   next();
@@ -159,6 +163,36 @@ const withdrawLimiter = rateLimit({
   skip: (req) => isOwnerRequest(req),
 });
 
+// Deposit initiate: 20 per 15 minutes per IP
+const depositLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many deposit attempts, please wait." },
+  skip: (req) => isOwnerRequest(req),
+});
+
+// Tips: 30 per 15 minutes per IP
+const tipLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many tip attempts, please slow down." },
+  skip: (req) => isOwnerRequest(req),
+});
+
+// Geo verification: 10 per 15 minutes per IP
+const geoLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many location checks, please wait." },
+  skip: (req) => isOwnerRequest(req),
+});
+
 // Body parser with size limits for performance
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
@@ -189,6 +223,9 @@ app.use("/api/auth/me", meLimiter);
 app.use("/api/auth", authLimiter);
 app.use("/api/admin", adminLimiter);
 app.use("/api/transactions/withdraw", withdrawLimiter);
+app.use("/api/transactions/deposit/initiate", depositLimiter);
+app.use("/api/users/tip", tipLimiter);
+app.use("/api/users/geo", geoLimiter);
 app.use("/api/blackjack", betLimiter);
 app.use("/api/mines", betLimiter);
 app.use("/api/chicken-road", betLimiter);
@@ -245,6 +282,38 @@ ensureCoreGamesSeeded()
     logger.info("Mines migration: grid_size column ensured");
   } catch (err) {
     logger.error({ err }, "Mines migration: failed to add grid_size column");
+  }
+})();
+
+// ── Activity logs table migration (idempotent) ────────────────────────────────
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS activity_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        username TEXT,
+        visitor_id INTEGER REFERENCES visitors(id) ON DELETE SET NULL,
+        actor_type TEXT NOT NULL DEFAULT 'player',
+        action TEXT NOT NULL,
+        ip TEXT,
+        user_agent TEXT,
+        fingerprint TEXT,
+        amount NUMERIC(18, 8),
+        currency TEXT,
+        reference_type TEXT,
+        reference_id INTEGER,
+        metadata JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_activity_logs_user_created ON activity_logs(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activity_logs_action_created ON activity_logs(action, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activity_logs_username ON activity_logs(username);
+      ALTER TABLE visitors ADD COLUMN IF NOT EXISTS username TEXT;
+    `);
+    logger.info("Activity logs migration: table ensured");
+  } catch (err) {
+    logger.error({ err }, "Activity logs migration failed");
   }
 })();
 
