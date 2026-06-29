@@ -193,30 +193,6 @@ function resolveBet(
       return { won, multiplier, payout: won ? amount * multiplier : 0, resultMeta: { pocket, betType, betValue } };
     }
 
-    case "plinko": {
-      const rows = Math.min(16, Math.max(8, Number(meta?.rows ?? 12)));
-      const risk = (meta?.risk as string) ?? "medium";
-      // Simulate ball falling through rows
-      let position = 0;
-      for (let i = 0; i < rows; i++) {
-        position += getOutcomeN(serverSeed, clientSeedStr, "plinko", i) < 0.5 ? 0 : 1;
-      }
-      // Multiplier table based on risk and position (center = low, edges = high)
-      const mid = rows / 2;
-      const dist = Math.abs(position - mid) / mid; // 0-1, 1 = edge
-      let multiplier: number;
-      if (risk === "low") {
-        multiplier = 0.2 + dist * 3.8; // 0.2x - 4x
-      } else if (risk === "high") {
-        multiplier = dist < 0.3 ? 0 : dist * 12; // 0 or up to 12x
-      } else {
-        multiplier = dist < 0.1 ? 0.3 : dist * 7; // 0.3x - 7x
-      }
-      multiplier *= (1 - houseEdge);
-      const won = multiplier > 1;
-      return { won, multiplier, payout: amount * multiplier, resultMeta: { position, rows, risk, dist } };
-    }
-
     case "hilo": {
       // A card is drawn (1-13), player guesses higher/lower than a threshold
       const card = Math.floor(seed * 13) + 1;

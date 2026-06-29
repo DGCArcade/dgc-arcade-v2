@@ -6,7 +6,6 @@ import { Crash } from "@/components/games/crash";
 import { Blackjack } from "@/components/games/blackjack";
 import { Roulette } from "@/components/games/roulette";
 import { Mines } from "@/components/games/mines";
-import { Plinko } from "@/components/games/plinko";
 import { HiLo } from "@/components/games/hilo";
 import { Keno } from "@/components/games/keno";
 import { DiceGameLive as DiceGame } from "@/components/games/dice-game-live";
@@ -136,7 +135,6 @@ export default function GamePage() {
       case "blackjack": return <Blackjack game={game} />;
       case "roulette":  return <Roulette game={game} />;
       case "mines":     return <Mines game={game} />;
-      case "plinko":    return <Plinko game={game} />;
       case "hilo":      return <HiLo game={game} />;
       case "keno":      return <Keno game={game} />;
       case "dice":      return <DiceGame game={game} />;

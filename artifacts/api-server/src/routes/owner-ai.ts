@@ -1313,7 +1313,7 @@ You are exclusively available to the platform owner (fanodgc) and are NOT a gene
 **Platform Context:**
 - Name: DGC Arcade — a crypto-powered gaming platform
 - Owner: fanodgc
-- Games: coin-flip, dice, crash, slots, roulette, mines, blackjack, plinko, hilo, keno
+- Games: coin-flip, dice, crash, slots, roulette, mines, blackjack, chicken-road, hilo, keno
 - Database: Neon PostgreSQL (live production)
 - Backend: Express.js on Render
 - Frontend: React/Vite on Render

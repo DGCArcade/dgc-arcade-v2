@@ -273,22 +273,95 @@ function CoverBlackjack() {
   );
 }
 
-function CoverPlinko() {
-  const COLORS = ["#FF2244","#FF6622","#FFB800","#FFE566","#FFFFFF","#FFE566","#FFB800","#FF6622","#FF2244"];
-  const MULTS  = ["10x","3x","2x","1.5x","1x","1.5x","2x","3x","10x"];
-  const pegs: {x:number;y:number}[] = [];
-  for (let r=0;r<7;r++){const n=9-r,sx=160-(n-1)*18;for(let c=0;c<n;c++)pegs.push({x:sx+c*36,y:24+r*24});}
+function CoverChickenRoad() {
+  const laneColors = ["#0a1a0a","#0d1f0d","#0a1a0a","#0d1f0d","#0a1a0a","#0d1f0d","#0a1a0a","#0d1f0d","#0a1a0a","#0d1f0d"];
+  const carPositions = [{lane:1,tile:2},{lane:3,tile:0},{lane:5,tile:3},{lane:7,tile:1},{lane:9,tile:4}];
+  const LANE_H = 16;
+  const TILE_W = 28;
   return (
     <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-      <defs><linearGradient id="pk-bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#1a0a00"/><stop offset="100%" stopColor="#0d0500"/></linearGradient></defs>
-      <rect width="320" height="200" fill="url(#pk-bg)"/>
-      {pegs.map((p,i)=><circle key={i} cx={p.x} cy={p.y} r="4.5" fill="#FF8C00" opacity="0.85"/>)}
-      <circle cx="194" cy="78" r="8" fill="white" stroke="#FFD700" strokeWidth="2"/>
-      {COLORS.map((c,i)=>(
-        <g key={i}>
-          <rect x={14+i*33} y="166" width="28" height="24" rx="4" fill={c} opacity="0.9"/>
-          <text x={14+i*33+14} y="182" textAnchor="middle" fontSize="7.5" fontWeight="900" fill="#000">{MULTS[i]}</text>
-        </g>
+      <defs>
+        <linearGradient id="cr2-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#050f05"/>
+          <stop offset="100%" stopColor="#010801"/>
+        </linearGradient>
+        <radialGradient id="cr2-glow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#00FF44" stopOpacity="0.18"/>
+          <stop offset="100%" stopColor="#00FF44" stopOpacity="0"/>
+        </radialGradient>
+        <filter id="cr2-blur">
+          <feGaussianBlur stdDeviation="2.5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <rect width="320" height="200" fill="url(#cr2-bg)"/>
+      <ellipse cx="160" cy="100" rx="160" ry="100" fill="url(#cr2-glow)"/>
+
+      {/* Road grid — 10 lanes × 5 tiles */}
+      {laneColors.map((fill, lane) => {
+        const y = 12 + lane * (LANE_H + 2);
+        return (
+          <g key={lane}>
+            <rect x="30" y={y} width={5 * TILE_W + 4} height={LANE_H} rx="3" fill={fill} stroke="#1a3a1a" strokeWidth="0.8"/>
+            {[0,1,2,3,4].map(tile => (
+              <rect key={tile} x={32 + tile * (TILE_W + 1)} y={y+1} width={TILE_W-2} height={LANE_H-2} rx="2"
+                fill="none" stroke="#1f3f1f" strokeWidth="0.5"/>
+            ))}
+          </g>
+        );
+      })}
+
+      {/* Cars (hazards) */}
+      {carPositions.map((pos, i) => {
+        const y = 12 + pos.lane * (LANE_H + 2) + 2;
+        const x = 32 + pos.tile * (TILE_W + 1);
+        return (
+          <g key={i} filter="url(#cr2-blur)">
+            <rect x={x+1} y={y+1} width={TILE_W-4} height={LANE_H-5} rx="3" fill="#FF2222" opacity="0.95"/>
+            <rect x={x+4} y={y+2} width={TILE_W-10} height={4} rx="1" fill="#FF6666" opacity="0.7"/>
+            <circle cx={x+4} cy={y+LANE_H-6} r="2" fill="#333"/>
+            <circle cx={x+TILE_W-7} cy={y+LANE_H-6} r="2" fill="#333"/>
+          </g>
+        );
+      })}
+
+      {/* Chicken — in lane 4, tile 1 (safe spot) */}
+      {(() => {
+        const cx2 = 32 + 1 * (TILE_W + 1) + (TILE_W-2)/2;
+        const cy2 = 12 + 4 * (LANE_H + 2) + LANE_H/2;
+        return (
+          <g filter="url(#cr2-blur)">
+            <ellipse cx={cx2} cy={cy2+1} rx="6" ry="5" fill="#FFD700"/>
+            <circle cx={cx2} cy={cy2-3} r="4" fill="#FFD700"/>
+            <polygon points={`${cx2+4},${cy2-4} ${cx2+8},${cy2-5} ${cx2+7},${cy2-2}`} fill="#FF8800"/>
+            <circle cx={cx2+1} cy={cy2-4} r="1" fill="#1a1a1a"/>
+            <text x={cx2} y={cy2+14} textAnchor="middle" fontSize="7" fill="#00FF44" fontWeight="900" letterSpacing="0.5">SAFE</text>
+          </g>
+        );
+      })()}
+
+      {/* Safe zone marker */}
+      <rect x="175" y="12" width="28" height={10*(LANE_H+2)-2} rx="3" fill="#00FF44" opacity="0.06" stroke="#00FF44" strokeWidth="0.8" strokeDasharray="3 3"/>
+      <text x="189" y="9" textAnchor="middle" fontSize="6" fill="#00FF44" opacity="0.7" letterSpacing="1">GOAL</text>
+
+      {/* Multiplier labels on right */}
+      {["1.2x","1.6x","2.1x","2.8x","3.8x","5.2x","7x","10x","14x","20x"].map((m, i) => (
+        <text key={i} x="215" y={12 + i*(LANE_H+2) + LANE_H/2 + 4}
+          fontSize="8" fontWeight="900" fill={i < 3 ? "#00CC44" : i < 6 ? "#FFB800" : "#FF4444"}
+          fontFamily="monospace">{m}</text>
+      ))}
+
+      {/* Title */}
+      <text x="264" y="90" textAnchor="middle" fontSize="11" fontWeight="900" fill="white" letterSpacing="1"
+        transform="rotate(-90 264 90)">CHICKEN ROAD</text>
+
+      {/* Difficulty tags */}
+      {[["EASY","#00CC44"],["MED","#FFB800"],["HARD","#FF6622"],["XTREME","#FF2222"]].map(([label,color],i)=>(
+        <rect key={i} x={30+i*37} y="186" width="32" height="10" rx="3" fill={color as string} opacity="0.85"/>
+      ))}
+      {[["EASY","#00CC44"],["MED","#FFB800"],["HARD","#FF6622"],["XTREME","#FF2222"]].map(([label,color],i)=>(
+        <text key={i} x={30+i*37+16} y="194" textAnchor="middle" fontSize="6.5" fontWeight="900" fill="#000">{label}</text>
       ))}
     </svg>
   );
@@ -426,7 +499,7 @@ const COVER_MAP: Record<string, React.ComponentType<{ slug: string }>> = {
   "roulette":    () => <CoverRoulette />,
   "mines":       () => <CoverMines />,
   "blackjack":   () => <CoverBlackjack />,
-  "plinko":      () => <CoverPlinko />,
+  "chicken-road": () => <CoverChickenRoad />,
   "hilo":        () => <CoverHiLo />,
   "hi-lo":       () => <CoverHiLo />,
   "keno":        () => <CoverKeno />,
