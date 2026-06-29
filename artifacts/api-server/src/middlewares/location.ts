@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { isOwnerUser } from "./auth.js";
 
-/** Blocks betting/withdrawals unless the user passed location verification. */
+/** Blocks betting/withdrawals unless the user passed server-verified location. */
 export async function requireLocationVerified(req: Request, res: Response, next: NextFunction) {
   if (!req.user) {
     res.status(401).json({ error: "Authentication required" });

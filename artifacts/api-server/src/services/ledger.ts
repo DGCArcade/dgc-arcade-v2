@@ -11,7 +11,9 @@ export type LedgerReason =
   | "admin_deposit_manual"
   | "daily_bonus"
   | "tournament_prize"
-  | "promo_credit";
+  | "promo_credit"
+  | "tip_sent"
+  | "tip_received";
 
 export interface LedgerEntry {
   userId: number;

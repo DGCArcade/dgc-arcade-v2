@@ -220,7 +220,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const handleTip = async () => {
     if (!tipUsername || tipAmount <= 0) return;
     const token = localStorage.getItem("dgc_token");
-    const res = await fetch("/api/admin/tip", {
+    const res = await fetch("/api/users/tip", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ toUsername: tipUsername, amount: tipAmount }),

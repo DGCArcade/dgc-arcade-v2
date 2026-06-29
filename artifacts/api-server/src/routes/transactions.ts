@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth.js";
 import { requireLocationVerified } from "../middlewares/location.js";
+import { isOwnerUser } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
 import { sendPlisioPayout } from "../lib/plisio-payout.js";
 import { v4 as uuidv4 } from "uuid";
@@ -284,23 +285,26 @@ transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type:
       received_amount_usd, source_amount_usd
     } = callbackBody;
 
-    // HMAC-SHA1 — hard gate
-    if (PLISIO_SECRET_KEY) {
-      if (!verify_hash) {
-        req.log.warn({ txn_id }, "Plisio IPN rejected: missing verify_hash");
-        res.status(400).json({ error: "Invalid signature" });
-        return;
-      }
-      const crypto = await import("crypto");
-      const serialized = plisioSerialize(callbackBody);
-      const expectedHash = crypto.createHmac("sha1", PLISIO_SECRET_KEY).update(serialized).digest("hex");
-      const want = Buffer.from(expectedHash, "utf8");
-      const got  = Buffer.from(String(verify_hash), "utf8");
-      if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) {
-        req.log.warn({ txn_id }, "Plisio IPN rejected: hash mismatch");
-        res.status(400).json({ error: "Invalid signature" });
-        return;
-      }
+    // HMAC-SHA1 — always required; reject unsigned callbacks
+    if (!PLISIO_SECRET_KEY) {
+      req.log.error({ txn_id }, "Plisio IPN rejected: PLISIO_SECRET_KEY not configured");
+      res.status(503).json({ error: "Payment verification not configured" });
+      return;
+    }
+    if (!verify_hash) {
+      req.log.warn({ txn_id }, "Plisio IPN rejected: missing verify_hash");
+      res.status(400).json({ error: "Invalid signature" });
+      return;
+    }
+    const crypto = await import("crypto");
+    const serialized = plisioSerialize(callbackBody);
+    const expectedHash = crypto.createHmac("sha1", PLISIO_SECRET_KEY).update(serialized).digest("hex");
+    const want = Buffer.from(expectedHash, "utf8");
+    const got  = Buffer.from(String(verify_hash), "utf8");
+    if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) {
+      req.log.warn({ txn_id }, "Plisio IPN rejected: hash mismatch");
+      res.status(400).json({ error: "Invalid signature" });
+      return;
     }
 
     if (!txn_id || !status) {
@@ -764,6 +768,11 @@ transactionsRouter.post("/withdraw", requireAuth, requireLocationVerified, async
   try {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+    if (!user.withdrawalsEnabled && req.user && !isOwnerUser(req.user)) {
+      res.status(403).json({ error: "Withdrawals are disabled for this account.", code: "WITHDRAWALS_DISABLED" });
+      return;
+    }
 
     // ── 100% Wagering Requirement Check ──────────────────────────────────────────
     // Users must wager at least 100% of their sign-up bonus before withdrawing.
