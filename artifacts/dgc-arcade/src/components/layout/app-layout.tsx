@@ -1,6 +1,5 @@
 import { ReactNode, useState, useEffect } from "react";
-import { Link, useLocation } from "wouter";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { AlertTriangle } from "lucide-react";
 import { Navbar } from "./navbar";
@@ -9,22 +8,16 @@ import { AuthModal } from "@/components/auth/auth-modal";
 import { VerificationModal } from "@/components/ui/verification-modal";
 import GalaxyBackground from "@/components/GalaxyBackground";
 import { LocationGate } from "@/components/ui/location-gate";
-import { useMobileGame } from "@/hooks/use-mobile-game";
 
 interface AppLayoutProps {
   children: ReactNode;
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const [location] = useLocation();
-  const isMobile = useIsMobile();
-  const mobileGame = useMobileGame();
   const { user, isAuthenticated } = useAuth();
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
   const [verificationRequired, setVerificationRequired] = useState(false);
   const showEmailNotice = isAuthenticated && (user as any)?.email && !(user as any)?.emailVerified && !verificationModalOpen;
-  const isGamePlayPage = /^\/games\/\d+/.test(location) || /^\/slots\/[^/]+/.test(location);
-  const mobileGameMode = isMobile && (isGamePlayPage || mobileGame?.isOpen);
 
   // Listen for verification modal open events (optional or required)
   useEffect(() => {
@@ -42,7 +35,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <div className="min-h-[100dvh] flex flex-col bg-transparent text-foreground selection:bg-primary/30 relative">
         <GalaxyBackground />
         <div className="relative z-10 flex flex-col min-h-[100dvh]">
-          {showEmailNotice && !mobileGameMode && (
+          {showEmailNotice && (
             <div className="bg-amber-500/10 border-b border-amber-500/20 py-2 px-4 flex items-center justify-center gap-2 text-[10px] md:text-xs text-amber-300 font-bold uppercase tracking-wider animate-in fade-in slide-in-from-top-4">
               <AlertTriangle className="w-3 h-3 md:w-4 md:h-4 text-amber-400" />
               Your email is unverified. 
@@ -54,16 +47,11 @@ export function AppLayout({ children }: AppLayoutProps) {
               </button>
             </div>
           )}
-          {!mobileGameMode && <Navbar />}
-          <main className={`flex-1 w-full mx-auto flex flex-col overflow-x-hidden min-h-0 ${
-            mobileGameMode
-              ? "max-w-full px-0 py-0 pb-0 overflow-hidden"
-              : "max-w-7xl px-2 sm:px-4 md:px-6 lg:px-8 py-3 md:py-8 pb-20 md:pb-8"
-          }`}>
+          <Navbar />
+          <main className="flex-1 w-full mx-auto flex flex-col overflow-x-hidden min-h-0 max-w-7xl px-2 sm:px-4 md:px-6 lg:px-8 py-3 md:py-8 pb-20 md:pb-8">
             {children}
           </main>
 
-          {!mobileGameMode && (
           <footer className="border-t border-border/30 mt-auto bg-black/60 backdrop-blur-md">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
@@ -134,14 +122,13 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div>
             </div>
           </footer>
-          )}
           <AuthModal />
           <VerificationModal
             open={verificationModalOpen}
             required={verificationRequired}
             onClose={() => { setVerificationModalOpen(false); setVerificationRequired(false); }}
           />
-          {!mobileGameMode && <BottomNav />}
+          <BottomNav />
         </div>
       </div>
     </LocationGate>
