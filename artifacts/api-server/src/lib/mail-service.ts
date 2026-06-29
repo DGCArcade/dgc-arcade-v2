@@ -18,7 +18,7 @@ import { Resend } from "resend";
 // Public function signatures are UNCHANGED so existing callers keep working.
 // ──────────────────────────────────────────────────────────────────────────────
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const SENDER_EMAIL = process.env.SENDER_EMAIL || "noreply@differentgrindcrew.com";
 const SITE_URL = process.env.SITE_URL || "https://differentgrindcrew.com";
 
@@ -316,7 +316,7 @@ export async function sendWelcomeEmail(
   userType: string
 ): Promise<void> {
   const { subject, html } = welcomeVariants[pick(welcomeVariants.length)](username, userType);
-  await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
+  if (resend) await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
 }
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
@@ -382,7 +382,7 @@ export async function sendEmailVerificationEmail(
   code: string
 ): Promise<void> {
   const { subject, html } = verifyVariants[pick(verifyVariants.length)](username, code);
-  await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
+  if (resend) await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
 }
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
@@ -454,7 +454,7 @@ export async function sendLoginSecurityEmail(
   device: string
 ): Promise<void> {
   const { subject, html } = loginVariants[pick(loginVariants.length)](username, ipAddress, location, device);
-  await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
+  if (resend) await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
 }
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
@@ -520,7 +520,7 @@ export async function sendDepositEmail(
   txHash: string
 ): Promise<void> {
   const { subject, html } = depositVariants[pick(depositVariants.length)](username, amount, txHash);
-  await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
+  if (resend) await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
 }
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
@@ -585,7 +585,7 @@ export async function sendWithdrawalEmail(
   txHash: string
 ): Promise<void> {
   const { subject, html } = withdrawalVariants[pick(withdrawalVariants.length)](username, amount, txHash);
-  await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
+  if (resend) await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
 }
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
@@ -654,7 +654,7 @@ export async function sendPasswordResetEmail(
   resetLink: string
 ): Promise<void> {
   const { subject, html } = passwordResetVariants[pick(passwordResetVariants.length)](username, resetLink);
-  await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
+  if (resend) await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
 }
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
@@ -719,7 +719,7 @@ export async function sendSuspiciousActivityEmail(
   secureLink: string
 ): Promise<void> {
   const { subject, html } = suspiciousVariants[pick(suspiciousVariants.length)](username, activity, secureLink);
-  await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
+  if (resend) await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
 }
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
