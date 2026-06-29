@@ -440,7 +440,7 @@ function SpecialtyHub({
                   {[
                     { icon: "⚡", title: "Monthly Payouts", desc: "Commission paid out on the 1st of every month to your registered wallet." },
                     { icon: "📈", title: "Lifetime Commission", desc: "Keep earning as long as your referred players stay active on DGC Arcade." },
-                    { icon: "🎰", title: "Industry-Favourite Games", desc: "Slots, crash, dice, plinko, hilo, and more — players love to come back." },
+                    { icon: "🎲", title: "Industry-Favourite Games", desc: "Crash, dice, roulette, blackjack, mines, and more — players love to come back." },
                     { icon: "%", title: "Custom Commission Rate", desc: "Specialty creators can negotiate rates up to 30%+ based on their reach.", style: "font-bold text-primary text-base" },
                     { icon: "💎", title: "VIP Rakeback", desc: "Your referred players earn rakeback as they climb the VIP ladder — keeping them engaged." },
                     { icon: "🛎", title: "Dedicated Support", desc: "Priority support for all creator-level partners — we're here 24/7." },
