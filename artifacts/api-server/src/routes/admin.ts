@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable, creatorMessagesTable, creatorMessageReadsTable, fraudReviewsTable, referralsTable, userBalancesTable, creatorBankTxnsTable, slotThemesTable, adminAuditLogsTable, deviceHistoryTable } from "@workspace/db";
+import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable, creatorMessagesTable, creatorMessageReadsTable, fraudReviewsTable, referralsTable, userBalancesTable, creatorBankTxnsTable, slotThemesTable, adminAuditLogsTable, deviceHistoryTable, activityLogsTable } from "@workspace/db";
 import { eq, desc, ilike, and, sql, count, or, gt, ne } from "drizzle-orm";
 // Using native fetch available in Node.js 18+
 import { requireAdmin } from "../middlewares/auth.js";
@@ -132,6 +132,60 @@ function getSiteUrl(): string {
   }
   return "";
 }
+
+// GET /api/admin/activity-logs — full platform audit trail (bets, deposits, withdrawals, logins, visitors)
+adminRouter.get("/activity-logs", async (req, res) => {
+  const limit = Math.min(parseInt(String(req.query.limit ?? "100"), 10), 500);
+  const offset = parseInt(String(req.query.offset ?? "0"), 10);
+  const action = typeof req.query.action === "string" ? req.query.action : undefined;
+  const username = typeof req.query.username === "string" ? req.query.username : undefined;
+  const actorType = typeof req.query.actorType === "string" ? req.query.actorType : undefined;
+
+  try {
+    const conditions = [];
+    if (action) conditions.push(eq(activityLogsTable.action, action));
+    if (username) conditions.push(ilike(activityLogsTable.username, `%${username}%`));
+    if (actorType) conditions.push(eq(activityLogsTable.actorType, actorType));
+
+    const rows = await db
+      .select()
+      .from(activityLogsTable)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(activityLogsTable.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(activityLogsTable)
+      .where(conditions.length ? and(...conditions) : undefined);
+
+    res.json({
+      logs: rows.map((r) => ({
+        id: r.id,
+        userId: r.userId,
+        username: r.username,
+        visitorId: r.visitorId,
+        actorType: r.actorType,
+        action: r.action,
+        ip: r.ip,
+        fingerprint: r.fingerprint,
+        amount: r.amount != null ? parseFloat(String(r.amount)) : null,
+        currency: r.currency,
+        referenceType: r.referenceType,
+        referenceId: r.referenceId,
+        metadata: r.metadata,
+        createdAt: r.createdAt.toISOString(),
+      })),
+      total: Number(total),
+      limit,
+      offset,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Activity logs error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // GET /api/admin/users
 adminRouter.get("/users", async (req, res) => {

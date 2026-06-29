@@ -4,6 +4,8 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 import { requireLocationVerified } from "../middlewares/location.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
+import { logBetActivity } from "../services/activity-log.js";
+import { getRequestContext } from "../lib/request-context.js";
 import { createHash, randomBytes } from "crypto";
 
 export const raceRouter = Router();
@@ -95,14 +97,26 @@ raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) =
     })
     .where(eq(usersTable.id, userId));
 
-  await db.insert(betsTable).values({
+  const [betRow] = await db.insert(betsTable).values({
     userId,
     gameId: game.id,
     amount: String(betAmount),
     payout: String(payout),
     multiplier: String(multiplier),
     won,
-    meta: { racerId, winnerRacerId, finishOrder, playerPlace },
+    meta: { racerId, winnerRacerId, finishOrder, playerPlace, username: user.username },
+  }).returning({ id: betsTable.id });
+
+  logBetActivity({
+    userId,
+    username: user.username,
+    ctx: getRequestContext(req),
+    betId: betRow.id,
+    gameSlug: "race",
+    amount: betAmount,
+    payout,
+    won,
+    multiplier,
   });
 
   return res.json({

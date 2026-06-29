@@ -2,6 +2,7 @@ import { Router, type Request } from "express";
 import { db, usersTable, betsTable, visitorsTable } from "@workspace/db";
 import { count, eq, sum, sql } from "drizzle-orm";
 import { optionalAuth } from "../middlewares/auth.js";
+import { logActivity } from "../services/activity-log.js";
 
 export const statsRouter = Router();
 
@@ -16,6 +17,10 @@ const GEO_CACHE_TTL_MS = 30 * 60 * 1000;
 
 const onlinePresence = new Map<string, number>();
 const heartbeatDbFlushes = new Map<string, number>();
+const playerOnlineLogAt = new Map<number, number>();
+const visitorOnlineLogAt = new Map<string, number>();
+const PLAYER_ONLINE_LOG_MS = 5 * 60 * 1000;
+const VISITOR_ONLINE_LOG_MS = 15 * 60 * 1000;
 
 let platformStatsCache:
   | { expiresAt: number; value: { totalPlayers: number; totalBets: number; totalWagered: number; biggestWin: number } }
@@ -174,8 +179,15 @@ async function persistHeartbeat(args: {
   connectionType?: string;
   timeOnSite?: number;
   userId?: number;
+  username?: string;
 }) {
-  const { fingerprint, ip, userAgent, lastPage, referrer, screenResolution, language, connectionType, timeOnSite, userId } = args;
+  const { fingerprint, ip, userAgent, lastPage, referrer, screenResolution, language, connectionType, timeOnSite, userId, username } = args;
+
+  let resolvedUsername = username;
+  if (userId && !resolvedUsername) {
+    const [u] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    resolvedUsername = u?.username;
+  }
 
   // Enrich with geo data from IP (always, regardless of browser location permission)
   const geo = await fetchGeoData(ip);
@@ -215,6 +227,7 @@ async function persistHeartbeat(args: {
         totalTimeOnSite: timeOnSite ? sql`${visitorsTable.totalTimeOnSite} + ${timeOnSite}` : visitorsTable.totalTimeOnSite,
         isBot: botDetected,
         userId: userId ?? null,
+        username: resolvedUsername ?? null,
         // Geo data (always update from IP)
         country: geo.country ?? null,
         countryCode: geo.countryCode ?? null,
@@ -249,6 +262,7 @@ async function persistHeartbeat(args: {
       totalTimeOnSite: timeOnSite ?? 0,
       isBot: botDetected,
       userId: userId ?? null,
+      username: resolvedUsername ?? null,
       // Geo data
       country: geo.country ?? null,
       countryCode: geo.countryCode ?? null,
@@ -312,6 +326,7 @@ statsRouter.post("/heartbeat", optionalAuth, async (req, res) => {
     const timeOnSite = typeof body.timeOnSite === "number" ? Math.min(body.timeOnSite, 86400) : undefined;
     // Never trust client-supplied userId — only use JWT-authenticated identity
     const userId = req.user?.userId;
+    const username = req.user?.username;
 
     const presenceKey = fingerprint || ip;
     const now = Date.now();
@@ -321,8 +336,33 @@ statsRouter.post("/heartbeat", optionalAuth, async (req, res) => {
     const lastFlush = heartbeatDbFlushes.get(presenceKey) ?? 0;
     if (now - lastFlush > HEARTBEAT_DB_FLUSH_MS) {
       heartbeatDbFlushes.set(presenceKey, now);
-      persistHeartbeat({ fingerprint, ip, userAgent, lastPage, referrer, screenResolution, language, connectionType, timeOnSite, userId })
+      persistHeartbeat({ fingerprint, ip, userAgent, lastPage, referrer, screenResolution, language, connectionType, timeOnSite, userId, username })
         .catch((err) => req.log.warn({ err }, "Visitor heartbeat persistence failed"));
+    }
+
+    if (userId && username) {
+      const lastLog = playerOnlineLogAt.get(userId) ?? 0;
+      if (now - lastLog > PLAYER_ONLINE_LOG_MS) {
+        playerOnlineLogAt.set(userId, now);
+        logActivity({
+          userId,
+          username,
+          action: "player_online",
+          ctx: { ip, userAgent, fingerprint },
+          metadata: { path: lastPage },
+        });
+      }
+    } else {
+      const lastVisitorLog = visitorOnlineLogAt.get(presenceKey) ?? 0;
+      if (now - lastVisitorLog > VISITOR_ONLINE_LOG_MS) {
+        visitorOnlineLogAt.set(presenceKey, now);
+        logActivity({
+          actorType: "visitor",
+          action: "visitor_online",
+          ctx: { ip, userAgent, fingerprint },
+          metadata: { path: lastPage },
+        });
+      }
     }
 
     res.setHeader("Cache-Control", "no-store");

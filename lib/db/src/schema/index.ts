@@ -21,3 +21,4 @@ export * from "./visitors";
 export * from "./slot-themes";
 export * from "./jackpot-pool";
 export * from "./chicken-road";
+export * from "./activity-logs";

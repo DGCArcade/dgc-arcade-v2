@@ -11,6 +11,8 @@ import { contributeToJackpot, tryJackpotWin } from "./jackpot.js";
 import { recordLedgerStandalone } from "../services/ledger.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 import { diceRoundManager } from "../lib/dice-round-manager.js";
+import { logBetActivity } from "../services/activity-log.js";
+import { getRequestContext } from "../lib/request-context.js";
 
 export const betsRouter = Router();
 
@@ -363,9 +365,21 @@ betsRouter.post("/", requireAuth, requireLocationVerified, async (req, res) => {
       serverSeedHash,
       clientSeed: clientSeedStr,
       nonce,
-      meta: { ...resultMeta, userMeta: meta },
+      meta: { ...resultMeta, userMeta: meta, username: user.username },
     }).returning();
     clearLiveFeedCaches();
+
+    logBetActivity({
+      userId: user.id,
+      username: user.username,
+      ctx: getRequestContext(req),
+      betId: bet.id,
+      gameSlug: game.slug,
+      amount,
+      payout,
+      won,
+      multiplier,
+    });
 
     const newBalance = finalBalance;
 

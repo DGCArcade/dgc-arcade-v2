@@ -16,6 +16,8 @@ import { recordLedger } from "../services/ledger.js";
 import { evaluateWithdrawal } from "../services/fraud.js";
 import { getCryptoPrice } from "../lib/price-service.js";
 import { getUserBalance, deductBalance, creditBalance, creditCryptoBalance } from "../lib/balance-service.js";
+import { logFinancialActivity } from "../services/activity-log.js";
+import { getRequestContext } from "../lib/request-context.js";
 
 export const transactionsRouter = Router();
 
@@ -111,7 +113,7 @@ transactionsRouter.get("/coin-balances", requireAuth, async (req, res) => {
 });
 
 // POST /api/transactions/deposit/initiate
-transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
+transactionsRouter.post("/deposit/initiate", requireAuth, requireLocationVerified, async (req, res) => {
   const parsed = InitiateDepositBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input" });
@@ -170,7 +172,8 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
       txn_id: data.data.txn_id,
     }, "Plisio invoice created");
 
-    await db.insert(transactionsTable).values({
+    const ctx = getRequestContext(req);
+    const [txRow] = await db.insert(transactionsTable).values({
       userId: req.user!.userId,
       type: "deposit",
       amount: String(amount),
@@ -183,8 +186,24 @@ transactionsRouter.post("/deposit/initiate", requireAuth, async (req, res) => {
         source_amount: String(amount),
         source_currency: "USD",
         expected_crypto: data.data.invoice_total_sum,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        username: req.user!.username,
+        ip: ctx.ip,
+        userAgent: ctx.userAgent,
+        fingerprint: ctx.fingerprint,
       })
+    }).returning({ id: transactionsTable.id });
+
+    logFinancialActivity({
+      userId: req.user!.userId,
+      username: req.user!.username,
+      action: "deposit_initiated",
+      ctx,
+      amount,
+      currency,
+      referenceType: "transaction",
+      referenceId: txRow.id,
+      metadata: { plisioTrackId: data.data.txn_id, orderId },
     });
     res.json({
       paymentUrl: data.data.invoice_url,
@@ -670,6 +689,22 @@ transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type:
       } catch (commErr) { req.log.warn({ commErr }, "Referral commission failed"); }
     });
 
+    const [depositorUser] = await db
+      .select({ username: usersTable.username })
+      .from(usersTable)
+      .where(eq(usersTable.id, tx.userId))
+      .limit(1);
+    logFinancialActivity({
+      userId: tx.userId,
+      username: depositorUser?.username ?? `user_${tx.userId}`,
+      action: "deposit_completed",
+      amount: creditAmountUsd,
+      currency: cryptoCurrency,
+      referenceType: "transaction",
+      referenceId: tx.id,
+      metadata: { txn_id, plisioStatus: pStatus, creditCalcMethod },
+    });
+
     sendNtfy(process.env.NTFY_TOPIC, {
       title: "DGC Arcade — New Deposit",
       priority: "high",
@@ -823,6 +858,7 @@ transactionsRouter.post("/withdraw", requireAuth, requireLocationVerified, async
     // ── Fraud evaluation ──────────────────────────────────────────────────────
     // Insert the transaction row first (pending) so the fraud evaluator can
     // reference it by withdrawalId if needed.
+    const ctx = getRequestContext(req);
     const [tx] = await db.insert(transactionsTable).values({
       userId: user.id,
       type: "withdrawal",
@@ -830,7 +866,25 @@ transactionsRouter.post("/withdraw", requireAuth, requireLocationVerified, async
       currency,
       address,
       status: "pending",
+      metadata: JSON.stringify({
+        username: user.username,
+        ip: ctx.ip,
+        userAgent: ctx.userAgent,
+        fingerprint: ctx.fingerprint,
+      }),
     }).returning();
+
+    logFinancialActivity({
+      userId: user.id,
+      username: user.username,
+      action: "withdrawal_requested",
+      ctx,
+      amount,
+      currency,
+      referenceType: "transaction",
+      referenceId: tx.id,
+      metadata: { address, fraudPending: true },
+    });
 
     // Deduct balance immediately — funds are held while the payout is processed.
     // We pass the currency to ensure the deduction happens from the CORRECT coin.
