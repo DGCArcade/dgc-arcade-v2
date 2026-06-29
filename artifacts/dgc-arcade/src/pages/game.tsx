@@ -166,12 +166,14 @@ export default function GamePage() {
   });
 
   if (isLoading) {
-    return (
+    return isMobile ? (
       <div className="game-mobile-shell">
         <div className="flex items-center justify-center flex-1">
           <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-primary" />
         </div>
       </div>
+    ) : (
+      <div className="animate-pulse bg-secondary h-96 rounded-xl border border-border" />
     );
   }
 
@@ -232,7 +234,7 @@ export default function GamePage() {
           <TournamentBanner compact />
         </div>
 
-        <div className="game-mobile-viewport">
+        <div className={`game-mobile-viewport mobile-game-play-area mobile-game--${game.slug}`}>
           <ErrorBoundary key={game.slug}>
             {renderGame()}
           </ErrorBoundary>

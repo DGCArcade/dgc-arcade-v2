@@ -1473,10 +1473,20 @@ body {
   .game-mobile-viewport {
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: hidden;
     -webkit-overflow-scrolling: touch;
     padding: 0 4px;
+  }
+
+  /* Viewport inherits mobile-game-play-area sizing inside the shell */
+  .game-mobile-viewport.mobile-game-play-area {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    flex: 1;
+    border: none;
+    border-radius: 0;
+    background: transparent;
   }
 
   .game-mobile-bets-toggle {
