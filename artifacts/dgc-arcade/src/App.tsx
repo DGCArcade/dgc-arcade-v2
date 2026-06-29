@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout/app-layout";
-import { useEffect, Suspense, lazy, useMemo } from "react";
+import { useEffect, Suspense, lazy, useMemo, useRef, type ReactNode } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { usePlatformSettings } from "@/hooks/use-platform-settings";
 
@@ -28,6 +28,38 @@ const Maintenance = lazy(() => import("@/pages/maintenance"));
 const ProvablyFairPage = lazy(() => import("./pages/provably-fair"));
 const InstantPayoutsPage = lazy(() => import("./pages/instant-payouts"));
 const CryptoNativePage = lazy(() => import("./pages/crypto-native"));
+
+// Gate: if user is logged in but email not verified, block game access and force verification
+function EmailVerifiedGate({ children }: { children: ReactNode }) {
+  const { user, isLoading } = useAuth();
+  const fired = useRef(false);
+
+  useEffect(() => {
+    if (isLoading) return;
+    const unverified = user && !(user as any).emailVerified;
+    if (unverified && !fired.current) {
+      fired.current = true;
+      window.dispatchEvent(new CustomEvent("openVerificationModal", { detail: { required: true } }));
+    }
+    if (!unverified) {
+      fired.current = false;
+    }
+  }, [user, isLoading]);
+
+  if (isLoading) return null;
+  if (user && !(user as any).emailVerified) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 text-center gap-4">
+        <div className="text-5xl">📧</div>
+        <h2 className="font-display font-black text-2xl uppercase tracking-widest">Verify Your Email</h2>
+        <p className="text-muted-foreground max-w-sm text-sm">
+          You need to verify your email before you can play. Check your inbox for the 6-digit code.
+        </p>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
 
 // Loading fallback component
 function PageLoader() {
@@ -108,25 +140,25 @@ function Router() {
         <Switch>
           <Route path="/" component={Home} />
           
-          {/* Feature Gated Routes */}
+          {/* Feature Gated Routes — also require email verification */}
           <Route path="/games">
-            {settings.gamesEnabled ? <Games /> : <NotFound />}
+            {settings.gamesEnabled ? <EmailVerifiedGate><Games /></EmailVerifiedGate> : <NotFound />}
           </Route>
           
           <Route path="/slots">
-            {settings.slotsEnabled ? <SlotsPage /> : <NotFound />}
+            {settings.slotsEnabled ? <EmailVerifiedGate><SlotsPage /></EmailVerifiedGate> : <NotFound />}
           </Route>
           
           <Route path="/slots/:slug">
-            {settings.slotsEnabled ? <SlotGamePage /> : <NotFound />}
+            {settings.slotsEnabled ? <EmailVerifiedGate><SlotGamePage /></EmailVerifiedGate> : <NotFound />}
           </Route>
           
           <Route path="/games/:gameId">
-            {settings.gamesEnabled ? <GamePage /> : <NotFound />}
+            {settings.gamesEnabled ? <EmailVerifiedGate><GamePage /></EmailVerifiedGate> : <NotFound />}
           </Route>
           
           <Route path="/race">
-            {settings.raceEnabled ? <RacePage /> : <NotFound />}
+            {settings.raceEnabled ? <EmailVerifiedGate><RacePage /></EmailVerifiedGate> : <NotFound />}
           </Route>
           
           <Route path="/leaderboard">

@@ -8,9 +8,11 @@ import { AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 interface VerificationModalProps {
   open: boolean;
   onClose: () => void;
+  /** When true, the modal cannot be dismissed — user must verify to continue */
+  required?: boolean;
 }
 
-export function VerificationModal({ open, onClose }: VerificationModalProps) {
+export function VerificationModal({ open, onClose, required = false }: VerificationModalProps) {
   const queryClient = useQueryClient();
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -106,13 +108,19 @@ export function VerificationModal({ open, onClose }: VerificationModalProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={required ? undefined : onClose}>
       <DialogContent className="bg-card border-border/40 w-full max-w-md shadow-2xl">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold uppercase tracking-wider">Verify Your Email</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
+          {required && (
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-xs text-amber-300 font-bold uppercase tracking-wider flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              Email verification required to play
+            </div>
+          )}
           <p className="text-sm text-muted-foreground">
             Enter the 6-character code from your email to unlock all DGC Arcade features including withdrawals.
           </p>
@@ -156,9 +164,11 @@ export function VerificationModal({ open, onClose }: VerificationModalProps) {
             >
               {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Verify"}
             </Button>
-            <Button onClick={onClose} variant="outline" className="flex-1 font-bold uppercase tracking-wider">
-              Cancel
-            </Button>
+            {!required && (
+              <Button onClick={onClose} variant="outline" className="flex-1 font-bold uppercase tracking-wider">
+                Cancel
+              </Button>
+            )}
           </div>
 
           {/* Resend Link */}

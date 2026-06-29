@@ -16,14 +16,16 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const { user, isAuthenticated } = useAuth();
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
-  const showEmailNotice = isAuthenticated && (user as any)?.email && !(user as any)?.emailVerified;
+  const [verificationRequired, setVerificationRequired] = useState(false);
+  const showEmailNotice = isAuthenticated && (user as any)?.email && !(user as any)?.emailVerified && !verificationModalOpen;
 
-  // Listen for verification modal open events
+  // Listen for verification modal open events (optional or required)
   useEffect(() => {
-    const handleOpenVerificationModal = () => {
+    const handleOpenVerificationModal = (e: Event) => {
+      const required = (e as CustomEvent).detail?.required === true;
+      setVerificationRequired(required);
       setVerificationModalOpen(true);
     };
-
     window.addEventListener("openVerificationModal", handleOpenVerificationModal);
     return () => window.removeEventListener("openVerificationModal", handleOpenVerificationModal);
   }, []);
@@ -121,7 +123,11 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </footer>
           <AuthModal />
-          <VerificationModal open={verificationModalOpen} onClose={() => setVerificationModalOpen(false)} />
+          <VerificationModal
+            open={verificationModalOpen}
+            required={verificationRequired}
+            onClose={() => { setVerificationModalOpen(false); setVerificationRequired(false); }}
+          />
           <BottomNav />
         </div>
       </div>

@@ -89,8 +89,11 @@ export function RegisterForm() {
       setAuthToken(result.token);
       queryClient.setQueryData(getGetMeQueryKey(), result.user);
       void flushPendingGeo();
-      toast({ title: "Account created", description: "Welcome to DGC Arcade." });
       authModal.close();
+      // Auto-open email verification modal immediately after signup
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("openVerificationModal"));
+      }, 150);
     } catch {
       toast({ title: "Registration failed", description: "Network error. Please try again.", variant: "destructive" });
     }
