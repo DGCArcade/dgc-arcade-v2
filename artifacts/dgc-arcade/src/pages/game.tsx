@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { ChevronLeft, Trophy, Timer, ChevronDown, ChevronUp, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuth } from "@/hooks/use-auth";
 import { createPortal } from "react-dom";
 
 interface TournamentInfo {
@@ -192,6 +193,7 @@ export default function GamePage() {
   const params = useParams();
   const gameId = Number(params.gameId);
   const isMobile = useIsMobile();
+  const { isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const [showBets, setShowBets] = useState(false);
 
@@ -206,6 +208,7 @@ export default function GamePage() {
     query: {
       queryKey: getListBetsQueryKey({ limit: 10 }),
       refetchInterval: 5000,
+      enabled: isAuthenticated,
     },
   });
 
