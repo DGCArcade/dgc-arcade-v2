@@ -271,12 +271,13 @@ export default function AdminDashboard() {
   const [confirmDelete, setConfirmDelete] = useState<AdminUser | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [createUserOpen, setCreateUserOpen] = useState(false);
-  const [newUser, setNewUser] = useState({ username: "", password: "", role: "player", balance: "0" });
+  const [newUser, setNewUser] = useState({ username: "", password: "", email: "", role: "player", balance: "0" });
   const [creatingUser, setCreatingUser] = useState(false);
   const [createCreatorOpen, setCreateCreatorOpen] = useState(false);
   const [newCreator, setNewCreator] = useState({
     username: "",
     password: "",
+    email: "",
     displayName: "",
     platform: "",
     platformHandle: "",
