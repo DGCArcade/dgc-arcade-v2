@@ -1,21 +1,12 @@
-import { useParams, Link } from "wouter";
-import { useGetGame, getGetGameQueryKey, useListBets, getListBetsQueryKey, type BetRecord } from "@workspace/api-client-react";
-import { Coinflip } from "@/components/games/coinflip";
-import { Slots } from "@/components/games/slots";
-import { Crash } from "@/components/games/crash";
-import { Blackjack } from "@/components/games/blackjack";
-import { Roulette } from "@/components/games/roulette";
-import { Mines } from "@/components/games/mines";
-import { HiLo } from "@/components/games/hilo";
-import { Keno } from "@/components/games/keno";
-import { DiceGameLive as DiceGame } from "@/components/games/dice-game-live";
-import { ChickenRoad } from "@/components/games/chicken-road";
-import { ErrorBoundary } from "@/components/error-boundary";
+import { useParams, Link, useLocation } from "wouter";
+import { useGetGame, getGetGameQueryKey, useListBets, getListBetsQueryKey, type BetRecord, type Game } from "@workspace/api-client-react";
+import { GameRenderer } from "@/components/games/game-renderer";
 import { formatCurrency } from "@/lib/format";
 import { Card } from "@/components/ui/card";
-import { ChevronLeft, Trophy, Timer, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronLeft, Trophy, Timer, ChevronDown, ChevronUp, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { createPortal } from "react-dom";
 
 interface TournamentInfo {
   tournament: { id: number; name: string; description: string | null; prize: string; endAt: string };
@@ -142,10 +133,66 @@ function RecentBetsTable({ gameBets }: { gameBets: BetRecord[] }) {
   );
 }
 
+function MobileGamePageOverlay({
+  game,
+  onClose,
+  showBets,
+  setShowBets,
+  gameBets,
+}: {
+  game: Game;
+  onClose: () => void;
+  showBets: boolean;
+  setShowBets: (v: boolean | ((prev: boolean) => boolean)) => void;
+  gameBets: BetRecord[];
+}) {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  return createPortal(
+    <div className="mobile-game-overlay" role="dialog" aria-modal="true" aria-label={game.name}>
+      <div className="mobile-game-overlay-header">
+        <button type="button" onClick={onClose} className="mobile-game-overlay-back">
+          <ChevronLeft className="w-5 h-5" />
+          <span>Back</span>
+        </button>
+        <div className="mobile-game-overlay-title">
+          <h1>{game.name}</h1>
+          <p>{formatCurrency(game.minBet)} – {formatCurrency(game.maxBet)}</p>
+        </div>
+        <button type="button" onClick={onClose} className="mobile-game-overlay-close" aria-label="Close game">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      <div className="mobile-game-overlay-body">
+        <GameRenderer game={game} />
+      </div>
+      <button
+        type="button"
+        onClick={() => setShowBets(v => !v)}
+        className="game-mobile-bets-toggle"
+      >
+        {showBets ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+        Recent Bets ({gameBets.length})
+      </button>
+      {showBets && (
+        <div className="game-mobile-bets-panel px-2 pb-2">
+          <RecentBetsTable gameBets={gameBets} />
+        </div>
+      )}
+    </div>,
+    document.body,
+  );
+}
+
 export default function GamePage() {
   const params = useParams();
   const gameId = Number(params.gameId);
   const isMobile = useIsMobile();
+  const [, setLocation] = useLocation();
   const [showBets, setShowBets] = useState(false);
 
   const { data: game, isLoading } = useGetGame(gameId, {
@@ -163,12 +210,8 @@ export default function GamePage() {
   });
 
   if (isLoading) {
-    return (
-      <div className="game-mobile-shell">
-        <div className="flex items-center justify-center flex-1">
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-primary" />
-        </div>
-      </div>
+    return isMobile ? null : (
+      <div className="animate-pulse bg-secondary h-96 rounded-xl border border-border" />
     );
   }
 
@@ -183,73 +226,15 @@ export default function GamePage() {
 
   const gameBets = Array.isArray(bets) ? bets.filter(b => b.gameId === game.id) : [];
 
-  function renderGame() {
-    if (!game) return null;
-    switch (game.slug) {
-      case "coinflip":  return <Coinflip game={game} />;
-      case "slots":     return <Slots game={game} />;
-      case "crash":     return <Crash game={game} />;
-      case "blackjack": return <Blackjack game={game} />;
-      case "roulette":  return <Roulette game={game} />;
-      case "mines":     return <Mines game={game} />;
-      case "hilo":      return <HiLo game={game} />;
-      case "keno":      return <Keno game={game} />;
-      case "dice":      return <DiceGame game={game} />;
-      case "chicken-road": return <ChickenRoad game={game} />;
-      default:
-        return (
-          <div className="flex flex-col items-center justify-center py-20 text-center gap-4 border border-border/50 rounded-xl bg-secondary/30">
-            <div className="text-6xl font-display font-black text-primary/20">{game.slug.charAt(0).toUpperCase()}</div>
-            <p className="text-muted-foreground">Game coming soon</p>
-          </div>
-        );
-    }
-  }
-
   if (isMobile) {
     return (
-      <div className="game-mobile-shell">
-        <div className="game-mobile-header">
-          <Link href="/games" className="inline-flex items-center text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors shrink-0">
-            <ChevronLeft className="w-4 h-4" /> Back
-          </Link>
-          <div className="min-w-0 flex-1 text-center px-2">
-            <h1 className="font-display font-black text-sm uppercase tracking-widest truncate">{game.name}</h1>
-            <div className="flex items-center justify-center gap-2 text-[10px] text-muted-foreground font-mono">
-              <span>{formatCurrency(game.minBet)}–{formatCurrency(game.maxBet)}</span>
-              <span className="flex items-center gap-0.5 text-green-400 font-bold">
-                <span className="live-dot w-1 h-1 rounded-full bg-green-400" />Live
-              </span>
-            </div>
-          </div>
-          <div className="w-12 shrink-0" />
-        </div>
-
-        <div className="px-2 pb-1">
-          <TournamentBanner compact />
-        </div>
-
-        <div className="game-mobile-viewport">
-          <ErrorBoundary key={game.slug}>
-            {renderGame()}
-          </ErrorBoundary>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setShowBets(v => !v)}
-          className="game-mobile-bets-toggle"
-        >
-          {showBets ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
-          Recent Bets ({gameBets.length})
-        </button>
-
-        {showBets && (
-          <div className="game-mobile-bets-panel px-2 pb-2">
-            <RecentBetsTable gameBets={gameBets} />
-          </div>
-        )}
-      </div>
+      <MobileGamePageOverlay
+        game={game}
+        onClose={() => setLocation("/games")}
+        showBets={showBets}
+        setShowBets={setShowBets}
+        gameBets={gameBets}
+      />
     );
   }
 
@@ -284,9 +269,7 @@ export default function GamePage() {
         </div>
       </div>
 
-      <ErrorBoundary key={game.slug}>
-        {renderGame()}
-      </ErrorBoundary>
+      <GameRenderer game={game} />
 
       <section className="pt-4">
         <h3 className="font-display font-bold text-2xl uppercase tracking-widest mb-6">Your Recent Bets</h3>

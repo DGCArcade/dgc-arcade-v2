@@ -2,6 +2,10 @@ import { Link } from "wouter";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
 import { Play } from "lucide-react";
+import type { MouseEvent } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useMobileGame } from "@/hooks/use-mobile-game";
+import { useAuth } from "@/hooks/use-auth";
 
 interface Game {
   id: number;
@@ -511,9 +515,24 @@ const COVER_MAP: Record<string, React.ComponentType<{ slug: string }>> = {
 
 export function GameCard({ game }: { game: Game }) {
   const Cover = COVER_MAP[game.slug] ?? CoverDefault;
-  return (
-    <Link href={`/games/${game.id}`}>
-      <Card className="group relative overflow-hidden bg-card border-border/50 hover:border-primary/60 transition-all duration-300 cursor-pointer flex flex-col card-hover-glow h-full min-h-[160px] md:min-h-0">
+  const isMobile = useIsMobile();
+  const mobileGame = useMobileGame();
+  const { requireAuth } = useAuth();
+
+  const handleMobilePlay = (e: MouseEvent) => {
+    if (!isMobile || !mobileGame) return;
+    e.preventDefault();
+    e.stopPropagation();
+    requireAuth(() => {
+      mobileGame.openGame(game as import("@workspace/api-client-react").Game);
+    });
+  };
+
+  const card = (
+    <Card
+      className="group relative overflow-hidden bg-card border-border/50 hover:border-primary/60 transition-all duration-300 cursor-pointer flex flex-col card-hover-glow h-full min-h-[160px] md:min-h-0"
+      onClick={isMobile ? handleMobilePlay : undefined}
+    >
         <div className="aspect-[16/9] relative overflow-hidden bg-secondary shrink-0">
           <Cover slug={game.slug} />
           <div className="absolute inset-0 bg-gradient-to-t from-card/90 via-transparent to-transparent" />
@@ -550,6 +569,11 @@ export function GameCard({ game }: { game: Game }) {
           </div>
         </div>
       </Card>
-    </Link>
   );
+
+  if (isMobile) {
+    return card;
+  }
+
+  return <Link href={`/games/${game.id}`}>{card}</Link>;
 }
