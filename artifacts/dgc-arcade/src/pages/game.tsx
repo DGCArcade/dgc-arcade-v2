@@ -1,13 +1,12 @@
-import { useParams, Link, useLocation } from "wouter";
+import { useParams, Link } from "wouter";
 import { useGetGame, getGetGameQueryKey, useListBets, getListBetsQueryKey, type BetRecord, type Game } from "@workspace/api-client-react";
 import { GameRenderer } from "@/components/games/game-renderer";
 import { formatCurrency } from "@/lib/format";
 import { Card } from "@/components/ui/card";
-import { ChevronLeft, Trophy, Timer, ChevronDown, ChevronUp, X } from "lucide-react";
+import { ChevronLeft, Trophy, Timer } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/use-auth";
-import { createPortal } from "react-dom";
 
 interface TournamentInfo {
   tournament: { id: number; name: string; description: string | null; prize: string; endAt: string };
@@ -97,31 +96,37 @@ function TournamentBanner({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function RecentBetsTable({ gameBets }: { gameBets: BetRecord[] }) {
+function RecentBetsTable({ gameBets, compact = false }: { gameBets: BetRecord[]; compact?: boolean }) {
   return (
     <Card className="bg-card border-border overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-muted-foreground uppercase bg-secondary/30">
             <tr>
-              <th className="px-6 py-3 font-medium">Time</th>
-              <th className="px-6 py-3 font-medium text-right">Bet Amount</th>
-              <th className="px-6 py-3 font-medium text-right">Multiplier</th>
-              <th className="px-6 py-3 font-medium text-right">Result</th>
+              <th className={`${compact ? "px-3 py-2" : "px-6 py-3"} font-medium`}>Time</th>
+              <th className={`${compact ? "px-3 py-2" : "px-6 py-3"} font-medium text-right`}>Bet</th>
+              <th className={`${compact ? "px-3 py-2" : "px-6 py-3"} font-medium text-right`}>Mult</th>
+              <th className={`${compact ? "px-3 py-2" : "px-6 py-3"} font-medium text-right`}>Result</th>
             </tr>
           </thead>
           <tbody>
             {!gameBets.length ? (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-muted-foreground font-mono">No recent bets on this game.</td>
+                <td colSpan={4} className={`${compact ? "px-3 py-6" : "px-6 py-8"} text-center text-muted-foreground font-mono text-xs`}>
+                  No recent bets on this game.
+                </td>
               </tr>
             ) : (
               gameBets.map(bet => (
                 <tr key={bet.id} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
-                  <td className="px-6 py-4 text-muted-foreground font-mono text-xs">{new Date(bet.createdAt).toLocaleString()}</td>
-                  <td className="px-6 py-4 text-right font-mono">{formatCurrency(bet.amount)}</td>
-                  <td className="px-6 py-4 text-right font-mono">{bet.multiplier ? `${bet.multiplier.toFixed(2)}x` : "-"}</td>
-                  <td className={`px-6 py-4 text-right font-mono font-bold ${bet.won ? "text-green-400" : "text-muted-foreground"}`}>
+                  <td className={`${compact ? "px-3 py-2" : "px-6 py-4"} text-muted-foreground font-mono text-xs`}>
+                    {compact
+                      ? new Date(bet.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                      : new Date(bet.createdAt).toLocaleString()}
+                  </td>
+                  <td className={`${compact ? "px-3 py-2" : "px-6 py-4"} text-right font-mono text-xs`}>{formatCurrency(bet.amount)}</td>
+                  <td className={`${compact ? "px-3 py-2" : "px-6 py-4"} text-right font-mono text-xs`}>{bet.multiplier ? `${bet.multiplier.toFixed(2)}x` : "-"}</td>
+                  <td className={`${compact ? "px-3 py-2" : "px-6 py-4"} text-right font-mono font-bold text-xs ${bet.won ? "text-green-400" : "text-muted-foreground"}`}>
                     {bet.won ? `+${formatCurrency(bet.payout)}` : formatCurrency(0)}
                   </td>
                 </tr>
@@ -134,58 +139,56 @@ function RecentBetsTable({ gameBets }: { gameBets: BetRecord[] }) {
   );
 }
 
-function MobileGamePageOverlay({
-  game,
-  onClose,
-  showBets,
-  setShowBets,
-  gameBets,
-}: {
-  game: Game;
-  onClose: () => void;
-  showBets: boolean;
-  setShowBets: (v: boolean | ((prev: boolean) => boolean)) => void;
-  gameBets: BetRecord[];
-}) {
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, []);
+function GameHeader({ game, compact = false }: { game: Game; compact?: boolean }) {
+  if (compact) {
+    return (
+      <div className="flex justify-between items-center border-b border-border/50 pb-2 gap-2">
+        <div className="min-w-0 flex-1">
+          <h1 className="font-display font-black text-lg uppercase tracking-widest truncate text-glow-shift">
+            {game.name}
+          </h1>
+          <div className="flex gap-2 items-center flex-wrap mt-0.5">
+            {game.houseEdge != null && (
+              <span className="text-[10px] font-mono bg-secondary px-1.5 py-0.5 rounded text-muted-foreground border border-border">
+                Edge: {game.houseEdge}%
+              </span>
+            )}
+            <span className="flex items-center gap-1 text-[10px] font-bold text-green-400">
+              <span className="live-dot w-1.5 h-1.5 rounded-full bg-green-400" />Live
+            </span>
+          </div>
+        </div>
+        <div className="text-right text-[10px] text-muted-foreground font-mono space-y-0.5 shrink-0">
+          <div>Min <span className="text-foreground">{formatCurrency(game.minBet)}</span></div>
+          <div>Max <span className="text-foreground">{formatCurrency(game.maxBet)}</span></div>
+        </div>
+      </div>
+    );
+  }
 
-  return createPortal(
-    <div className="mobile-game-overlay" role="dialog" aria-modal="true" aria-label={game.name}>
-      <div className="mobile-game-overlay-header">
-        <button type="button" onClick={onClose} className="mobile-game-overlay-back">
-          <ChevronLeft className="w-5 h-5" />
-          <span>Back</span>
-        </button>
-        <div className="mobile-game-overlay-title">
-          <h1>{game.name}</h1>
-          <p>{formatCurrency(game.minBet)} – {formatCurrency(game.maxBet)}</p>
+  return (
+    <div className="flex justify-between items-start md:items-end border-b border-border/50 pb-3 md:pb-6 gap-2">
+      <div className="min-w-0 flex-1">
+        <h1 className="font-display font-black text-2xl md:text-4xl uppercase tracking-widest mb-1 md:mb-2 text-glow-shift truncate">
+          {game.name}
+        </h1>
+        <div className="flex gap-2 md:gap-3 items-center flex-wrap">
+          <p className="text-muted-foreground text-sm hidden md:block">{game.description}</p>
+          {game.houseEdge != null && (
+            <span className="text-xs font-mono bg-secondary px-2 py-0.5 rounded text-muted-foreground border border-border">
+              Edge: {game.houseEdge}%
+            </span>
+          )}
+          <span className="flex items-center gap-1 text-xs font-bold text-green-400">
+            <span className="live-dot w-1.5 h-1.5 rounded-full bg-green-400" />Live
+          </span>
         </div>
-        <button type="button" onClick={onClose} className="mobile-game-overlay-close" aria-label="Close game">
-          <X className="w-5 h-5" />
-        </button>
       </div>
-      <div className="mobile-game-overlay-body">
-        <GameRenderer game={game} />
+      <div className="text-right text-xs text-muted-foreground font-mono space-y-0.5 shrink-0">
+        <div>Min <span className="text-foreground">{formatCurrency(game.minBet)}</span></div>
+        <div>Max <span className="text-foreground">{formatCurrency(game.maxBet)}</span></div>
       </div>
-      <button
-        type="button"
-        onClick={() => setShowBets(v => !v)}
-        className="game-mobile-bets-toggle"
-      >
-        {showBets ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
-        Recent Bets ({gameBets.length})
-      </button>
-      {showBets && (
-        <div className="game-mobile-bets-panel px-2 pb-2">
-          <RecentBetsTable gameBets={gameBets} />
-        </div>
-      )}
-    </div>,
-    document.body,
+    </div>
   );
 }
 
@@ -194,8 +197,6 @@ export default function GamePage() {
   const gameId = Number(params.gameId);
   const isMobile = useIsMobile();
   const { isAuthenticated } = useAuth();
-  const [, setLocation] = useLocation();
-  const [showBets, setShowBets] = useState(false);
 
   const { data: game, isLoading } = useGetGame(gameId, {
     query: {
@@ -213,8 +214,8 @@ export default function GamePage() {
   });
 
   if (isLoading) {
-    return isMobile ? null : (
-      <div className="animate-pulse bg-secondary h-96 rounded-xl border border-border" />
+    return (
+      <div className="animate-pulse bg-secondary h-48 md:h-96 rounded-xl border border-border" />
     );
   }
 
@@ -229,54 +230,25 @@ export default function GamePage() {
 
   const gameBets = Array.isArray(bets) ? bets.filter(b => b.gameId === game.id) : [];
 
-  if (isMobile) {
-    return (
-      <MobileGamePageOverlay
-        game={game}
-        onClose={() => setLocation("/games")}
-        showBets={showBets}
-        setShowBets={setShowBets}
-        gameBets={gameBets}
-      />
-    );
-  }
-
   return (
     <div className="space-y-3 md:space-y-6">
-      <Link href="/games" className="inline-flex items-center text-sm font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
+      <Link href="/games" className="inline-flex items-center text-xs md:text-sm font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
         <ChevronLeft className="w-4 h-4 mr-1" />Back to Games
       </Link>
 
-      <TournamentBanner />
+      {!isMobile && <TournamentBanner />}
 
-      <div className="flex justify-between items-start md:items-end border-b border-border/50 pb-3 md:pb-6 gap-2">
-        <div className="min-w-0 flex-1">
-          <h1 className="font-display font-black text-2xl md:text-4xl uppercase tracking-widest mb-1 md:mb-2 text-glow-shift truncate">
-            {game.name}
-          </h1>
-          <div className="flex gap-2 md:gap-3 items-center flex-wrap">
-            <p className="text-muted-foreground text-sm hidden md:block">{game.description}</p>
-            {game.houseEdge != null && (
-              <span className="text-xs font-mono bg-secondary px-2 py-0.5 rounded text-muted-foreground border border-border">
-                Edge: {game.houseEdge}%
-              </span>
-            )}
-            <span className="flex items-center gap-1 text-xs font-bold text-green-400">
-              <span className="live-dot w-1.5 h-1.5 rounded-full bg-green-400" />Live
-            </span>
-          </div>
-        </div>
-        <div className="text-right text-xs text-muted-foreground font-mono space-y-0.5 shrink-0">
-          <div>Min <span className="text-foreground">{formatCurrency(game.minBet)}</span></div>
-          <div>Max <span className="text-foreground">{formatCurrency(game.maxBet)}</span></div>
-        </div>
+      <GameHeader game={game} compact={isMobile} />
+
+      <div className={isMobile ? "mobile-game-play-area" : undefined}>
+        <GameRenderer game={game} />
       </div>
 
-      <GameRenderer game={game} />
-
-      <section className="pt-4">
-        <h3 className="font-display font-bold text-2xl uppercase tracking-widest mb-6">Your Recent Bets</h3>
-        <RecentBetsTable gameBets={gameBets} />
+      <section className="pt-2 md:pt-4">
+        <h3 className="font-display font-bold text-base md:text-2xl uppercase tracking-widest mb-3 md:mb-6">
+          Your Recent Bets
+        </h3>
+        <RecentBetsTable gameBets={gameBets} compact={isMobile} />
       </section>
     </div>
   );

@@ -2,9 +2,6 @@ import { Link } from "wouter";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
 import { Play } from "lucide-react";
-import type { Game as ApiGame } from "@workspace/api-client-react";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { useMobileGame } from "@/hooks/use-mobile-game";
 
 interface Game {
   id: number;
@@ -514,14 +511,6 @@ const COVER_MAP: Record<string, React.ComponentType<{ slug: string }>> = {
 
 export function GameCard({ game }: { game: Game }) {
   const Cover = COVER_MAP[game.slug] ?? CoverDefault;
-  const isMobile = useIsMobile();
-  const mobileGame = useMobileGame();
-
-  const openGame = () => {
-    if (mobileGame) {
-      mobileGame.openGame(game as ApiGame);
-    }
-  };
 
   const cardContent = (
     <Card className="group relative overflow-hidden bg-card border-border/50 hover:border-primary/60 transition-all duration-300 cursor-pointer flex flex-col card-hover-glow">
@@ -556,19 +545,6 @@ export function GameCard({ game }: { game: Game }) {
         </div>
       </Card>
   );
-
-  if (isMobile) {
-    return (
-      <button
-        type="button"
-        className="game-card-btn w-full h-full text-left"
-        onClick={openGame}
-        aria-label={`Play ${game.name}`}
-      >
-        {cardContent}
-      </button>
-    );
-  }
 
   return <Link href={`/games/${game.id}`}>{cardContent}</Link>;
 }
