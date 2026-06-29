@@ -187,6 +187,7 @@ app.use("/api/admin", adminLimiter);
 app.use("/api/transactions/withdraw", withdrawLimiter);
 app.use("/api/blackjack", betLimiter);
 app.use("/api/mines", betLimiter);
+app.use("/api/chicken-road", betLimiter);
 app.use("/api/bets", betLimiter);
 app.use("/api", router);
 
@@ -195,6 +196,32 @@ startBackgroundTasks();
 
 // Ensure slot theme games are seeded in the games table (idempotent)
 ensureSlotGamesSeeded().catch(err => console.error("Slot game seeding error:", err));
+
+// ── Chicken Road session table migration (idempotent) ───────────────────────────
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chicken_road_sessions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        game_id INTEGER NOT NULL REFERENCES games(id),
+        bet NUMERIC(18, 8) NOT NULL,
+        server_seed TEXT NOT NULL,
+        client_seed TEXT,
+        nonce INTEGER NOT NULL DEFAULT 1,
+        tier TEXT NOT NULL DEFAULT 'medium',
+        matrix TEXT NOT NULL,
+        revealed TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'active',
+        current_multiplier NUMERIC(10, 4) NOT NULL DEFAULT 1,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    logger.info("Chicken Road migration: chicken_road_sessions table ensured");
+  } catch (err) {
+    logger.error({ err }, "Chicken Road migration: failed to create table");
+  }
+})();
 
 // ── Mines grid_size migration (idempotent) ────────────────────────────────────
 // The mines_sessions table was originally built with a fixed 25-tile board.

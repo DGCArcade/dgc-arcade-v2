@@ -20,3 +20,4 @@ export * from "./user-balances";
 export * from "./visitors";
 export * from "./slot-themes";
 export * from "./jackpot-pool";
+export * from "./chicken-road";

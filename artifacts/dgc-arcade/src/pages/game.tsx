@@ -10,6 +10,7 @@ import { Plinko } from "@/components/games/plinko";
 import { HiLo } from "@/components/games/hilo";
 import { Keno } from "@/components/games/keno";
 import { DiceGameLive as DiceGame } from "@/components/games/dice-game-live";
+import { ChickenRoad } from "@/components/games/chicken-road";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { formatCurrency } from "@/lib/format";
 import { Card } from "@/components/ui/card";
@@ -139,6 +140,7 @@ export default function GamePage() {
       case "hilo":      return <HiLo game={game} />;
       case "keno":      return <Keno game={game} />;
       case "dice":      return <DiceGame game={game} />;
+      case "chicken-road": return <ChickenRoad game={game} />;
       default:
         return (
           <div className="flex flex-col items-center justify-center py-20 text-center gap-4 border border-border/50 rounded-xl bg-secondary/30">
