@@ -111,7 +111,12 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many attempts, please try again later." },
-  skip: (req) => isOwnerRequest(req),
+  // The /api/auth/me session check is polled every few seconds by the client.
+  // Because app.use("/api/auth", ...) also matches "/api/auth/me", those polls
+  // would otherwise burn this strict login/register budget and lock real users
+  // out after ~10 polls. Exempt /me here — it has its own generous meLimiter.
+  skip: (req) =>
+    isOwnerRequest(req) || req.originalUrl.split("?")[0] === "/api/auth/me",
 });
 
 // /api/auth/me polling: generous — 600 per 15 minutes (~1 per 1.5 s sustained)
