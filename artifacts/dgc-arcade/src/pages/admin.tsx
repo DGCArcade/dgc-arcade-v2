@@ -226,7 +226,7 @@ interface UserDetail {
   transactions: { id: number; type: string; amount: number; currency: string; status: string; address: string | null; createdAt: string }[];
 }
 
-type TabKey = "overview" | "users" | "transactions" | "bank" | "bank-dashboard" | "visitor-logs" | "tournaments" | "chat" | "ai" | "creators" | "slot-themes" | "audit-logs";
+type TabKey = "overview" | "owner" | "users" | "transactions" | "bank" | "bank-dashboard" | "visitor-logs" | "tournaments" | "chat" | "ai" | "creators" | "slot-themes" | "audit-logs";
 
 export default function AdminDashboard() {
   const { user, isLoading } = useAuth();
@@ -235,7 +235,7 @@ export default function AdminDashboard() {
   const { toast } = useToast();
 
   // Derive active tab from URL — /admin/:tab preserves on reload
-  const validTabs: TabKey[] = ["overview", "users", "transactions", "bank", "bank-dashboard", "visitor-logs", "tournaments", "chat", "ai", "creators", "slot-themes", "audit-logs"];
+  const validTabs: TabKey[] = ["overview", "owner", "users", "transactions", "bank", "bank-dashboard", "visitor-logs", "tournaments", "chat", "ai", "creators", "slot-themes", "audit-logs"];
   const urlTab = routeParams.tab && validTabs.includes(routeParams.tab as TabKey) ? (routeParams.tab as TabKey) : "overview";
   const [activeTab, setActiveTab] = useState<TabKey>(urlTab);
 
@@ -1197,6 +1197,7 @@ export default function AdminDashboard() {
   const TABS: { key: TabKey; label: string; icon: React.ElementType; badge?: number }[] = isOwner
     ? [
         { key: "overview", label: "Overview", icon: Activity },
+        { key: "owner", label: "Owner Settings", icon: Shield },
         { key: "users", label: "Users", icon: Users },
         { key: "bank", label: "DGC Bank", icon: DollarSign },
         { key: "bank-dashboard", label: "Live Feed", icon: Activity },
@@ -2625,203 +2626,218 @@ export default function AdminDashboard() {
               </div>
               )}
 
-              {/* ── fanodgc-only Settings Panel ── */}
-              {user?.username === "fanodgc" && (
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
-                    <Shield className="w-3.5 h-3.5 text-primary" /> Owner Settings
-                    <span className="text-xs bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded">fanodgc only</span>
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Payment Gateway */}
-                    <Card className="border-border/60 bg-card/60">
-                      <CardHeader className="pb-2 pt-4 px-4">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <Wallet className="w-4 h-4 text-primary" /> Payment Gateway
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="px-4 pb-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Plisio</span>
-                          <span className="flex items-center gap-1.5 text-xs text-green-400 font-bold">
-                            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block" />Connected
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Mode</span>
-                          <span className="text-xs font-bold">Deposits + Payouts</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground uppercase tracking-wider">API Key</span>
-                          <span className="font-mono text-xs text-muted-foreground">••••••••••••••••</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Webhook</span>
-                          <Badge variant="outline" className="text-xs text-green-400 border-green-400/30">Active</Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
 
-	                    {/* Feature Management */}
-	                    <Card className="border-border/60 bg-card/60">
-	                      <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
-	                        <CardTitle className="text-sm flex items-center gap-2">
-	                          <Layers className="w-4 h-4 text-primary" /> Feature Management
-	                        </CardTitle>
-	                        {settingsSaving && <span className="text-xs text-muted-foreground">Saving…</span>}
-	                        {settingsSaved && <span className="text-xs text-green-400">Saved ✓</span>}
-	                      </CardHeader>
-	                      <CardContent className="px-4 pb-4 space-y-4">
-	                        <div className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 border border-border/20">
-	                          <div className="flex flex-col gap-0.5">
-	                            <span className="text-xs font-bold uppercase tracking-wider text-white">Maintenance Mode</span>
-	                            <p className="text-[10px] text-muted-foreground">Put the entire site behind a maintenance screen.</p>
-	                          </div>
-	                          <button 
-	                            onClick={() => saveBankSettings({ maintenanceMode: !bankSettings.maintenanceMode })}
-	                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${bankSettings.maintenanceMode ? "bg-red-500" : "bg-secondary"}`}
-	                          >
-	                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${bankSettings.maintenanceMode ? "translate-x-6" : "translate-x-1"}`} />
-	                          </button>
-	                        </div>
-
-	                        <div className="space-y-2">
-	                          {[
-	                            { id: "gamesEnabled", label: "Games Lobby", icon: "🎮" },
-	                            { id: "slotsEnabled", label: "Slots Section", icon: "🎰" },
-	                            { id: "raceEnabled", label: "Race Game", icon: "🏇" },
-	                            { id: "leaderboardEnabled", label: "Leaderboard", icon: "🏆" },
-	                          ].map((feat) => (
-	                            <div key={feat.id} className="flex items-center justify-between">
-	                              <div className="flex items-center gap-2">
-	                                <span className="text-sm">{feat.icon}</span>
-	                                <span className="text-xs text-muted-foreground uppercase tracking-wider">{feat.label}</span>
-	                              </div>
-	                              <button 
-	                                onClick={() => saveBankSettings({ [feat.id]: !bankSettings[feat.id as keyof typeof bankSettings] })}
-	                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${bankSettings[feat.id as keyof typeof bankSettings] ? "bg-primary" : "bg-secondary"}`}
-	                              >
-	                                <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${bankSettings[feat.id as keyof typeof bankSettings] ? "translate-x-5" : "translate-x-1"}`} />
-	                              </button>
-	                            </div>
-	                          ))}
-	                        </div>
-	                        <p className="text-[10px] text-muted-foreground italic border-t border-border/30 pt-2">
-	                          Disabling a feature hides it from navigation and serves a 404 browser error to anyone trying to access the URL directly.
-	                        </p>
-	                      </CardContent>
-	                    </Card>
-
-	                    {/* AI Fraud Settings */}
-	                    <Card className="border-border/60 bg-card/60">
-                      <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <Shield className="w-4 h-4 text-red-400" /> AI Fraud Settings
-                        </CardTitle>
-                        {settingsSaving && <span className="text-xs text-muted-foreground">Saving…</span>}
-                        {settingsSaved && <span className="text-xs text-green-400">Saved ✓</span>}
-                      </CardHeader>
-                      <CardContent className="px-4 pb-4 space-y-3">
-                        <div>
-                          <div className="flex justify-between mb-1">
-                            <span className="text-xs text-muted-foreground uppercase tracking-wider">AI Sensitivity</span>
-                            <span className="text-xs font-mono font-bold text-primary">{bankSettings.aiSensitivity}%</span>
-                          </div>
-                          <input type="range" min={0} max={100} value={bankSettings.aiSensitivity}
-                            onChange={e => setBankSettings(p => ({ ...p, aiSensitivity: +e.target.value }))}
-                            onMouseUp={e => saveBankSettings({ aiSensitivity: +(e.target as HTMLInputElement).value })}
-                            onTouchEnd={e => saveBankSettings({ aiSensitivity: +(e.target as HTMLInputElement).value })}
-                            className="w-full accent-primary h-1.5 rounded" />
-                          <p className="text-xs text-muted-foreground mt-1">Higher = more flags, lower = fewer flags. Multiplies every risk score by 0.5x–1.5x.</p>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Auto-approve under</span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-muted-foreground">$</span>
-                            <input
-                              type="number" min={0}
-                              defaultValue={bankSettings.autoApproveUnder}
-                              onBlur={e => {
-                                const val = +e.target.value;
-                                if (!isNaN(val) && val !== bankSettings.autoApproveUnder) saveBankSettings({ autoApproveUnder: val });
-                              }}
-                              className="w-20 bg-secondary/60 border border-border/40 rounded px-2 py-1 text-xs font-mono font-bold text-right"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Manual review over</span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-muted-foreground">$</span>
-                            <input
-                              type="number" min={0}
-                              defaultValue={bankSettings.requireManualOver}
-                              onBlur={e => {
-                                const val = +e.target.value;
-                                if (!isNaN(val) && val !== bankSettings.requireManualOver) saveBankSettings({ requireManualOver: val });
-                              }}
-                              className="w-20 bg-secondary/60 border border-border/40 rounded px-2 py-1 text-xs font-mono font-bold text-right"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/30">
-                          <div>
-                            <span className="text-xs text-muted-foreground uppercase tracking-wider">Signup Bonus</span>
-                            <p className="text-xs text-muted-foreground/60 mt-0.5">Amount credited to new accounts on registration. Set to 0 to disable.</p>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-muted-foreground">$</span>
-                            <input
-                              type="number" min={0} step={0.01}
-                              defaultValue={bankSettings.signupBonus}
-                              key={bankSettings.signupBonus}
-                              onBlur={e => {
-                                const val = parseFloat(e.target.value);
-                                if (!isNaN(val) && val >= 0 && val !== bankSettings.signupBonus) saveBankSettings({ signupBonus: val });
-                              }}
-                              className="w-24 bg-secondary/60 border border-border/40 rounded px-2 py-1 text-xs font-mono font-bold text-right"
-                            />
-                          </div>
-                        </div>
-                        <p className="text-xs text-muted-foreground/70 pt-1 border-t border-border/30">
-                          Withdrawals at or under "auto-approve" with low risk skip the fraud feed entirely.
-                          Withdrawals over "manual review" are always flagged for owner approval.
-                        </p>
-                      </CardContent>
-                    </Card>
-
-                    {/* Platform Stats */}
-                    <Card className="border-border/60 bg-card/60 md:col-span-2">
-                      <CardHeader className="pb-2 pt-4 px-4">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <TrendingUp className="w-4 h-4 text-primary" /> Platform Overview
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="px-4 pb-4">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          {[
-                            { label: "Total Users", value: stats?.totalUsers ?? "—" },
-                            { label: "Active Today", value: stats?.activeToday ?? "—" },
-                            { label: "New Today", value: stats?.newUsersToday ?? "—" },
-                            { label: "Pending W/D", value: stats?.pendingWithdrawals ?? "—" },
-                            { label: "Pending Amount", value: stats ? formatCurrency(stats.pendingWithdrawalAmount) : "—" },
-                            { label: "Total Deposited", value: stats ? formatCurrency(stats.totalDeposited) : "—" },
-                            { label: "Total Withdrawn", value: stats ? formatCurrency(stats.totalWithdrawn) : "—" },
-                            { label: "Banned Users", value: stats?.bannedUsers ?? "—" },
-                          ].map(s => (
-                            <div key={s.label} className="bg-secondary/40 rounded-lg p-3">
-                              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{s.label}</p>
-                              <p className="font-mono font-bold text-lg">{String(s.value)}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                </div>
-              )}
             </div>
           )}
+
+      {/* ── Owner Settings Tab ── */}
+      {activeTab === "owner" && isOwner && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-display font-black uppercase tracking-widest text-xl text-white flex items-center gap-2">
+                <Shield className="w-5 h-5 text-primary" /> Owner Settings
+              </h2>
+              <p className="text-muted-foreground text-sm mt-0.5">Manage platform features, maintenance mode, and global parameters</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Feature Management */}
+            <Card className="border-border/60 bg-card/60 shadow-xl shadow-primary/5">
+              <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between border-b border-border/40 mb-4">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-primary" /> Feature Management
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  {settingsSaving && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground" />}
+                  {settingsSaved && <span className="text-[10px] text-green-400 font-bold uppercase tracking-tighter">Saved ✓</span>}
+                </div>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-5">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-red-500/5 border border-red-500/20 shadow-inner">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-red-400">Maintenance Mode</span>
+                    <p className="text-[10px] text-muted-foreground">Lock the entire site for everyone except you.</p>
+                  </div>
+                  <button 
+                    onClick={() => saveBankSettings({ maintenanceMode: !bankSettings.maintenanceMode })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 focus:outline-none shadow-lg ${bankSettings.maintenanceMode ? "bg-red-500 shadow-red-500/40" : "bg-secondary"}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${bankSettings.maintenanceMode ? "translate-x-6" : "translate-x-1"}`} />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {[
+                    { id: "gamesEnabled", label: "Games Lobby", icon: "🎮", desc: "Toggle visibility of the main games collection" },
+                    { id: "slotsEnabled", label: "Slots Section", icon: "🎰", desc: "Toggle all slot games and the slots landing page" },
+                    { id: "raceEnabled", label: "Race Game", icon: "🏇", desc: "Toggle the horse racing game visibility" },
+                    { id: "leaderboardEnabled", label: "Leaderboard", icon: "🏆", desc: "Toggle the global player leaderboard" },
+                  ].map((feat) => (
+                    <div key={feat.id} className="flex items-center justify-between p-3 rounded-xl bg-secondary/20 border border-border/10 hover:bg-secondary/30 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">{feat.icon}</span>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold uppercase tracking-wider text-white">{feat.label}</span>
+                          <p className="text-[9px] text-muted-foreground">{feat.desc}</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => saveBankSettings({ [feat.id]: !bankSettings[feat.id as keyof typeof bankSettings] })}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-all duration-300 focus:outline-none shadow-md ${bankSettings[feat.id as keyof typeof bankSettings] ? "bg-primary shadow-primary/30" : "bg-secondary"}`}
+                      >
+                        <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-300 ${bankSettings[feat.id as keyof typeof bankSettings] ? "translate-x-5" : "translate-x-1"}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                  <p className="text-[10px] text-amber-200/70 leading-relaxed">
+                    <strong>Note:</strong> Disabling a feature hides it from all navigation menus. Any user attempting to visit the URL directly will see a realistic browser "404 Not Found" error.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* AI Fraud & Platform Parameters */}
+            <Card className="border-border/60 bg-card/60 shadow-xl shadow-red-500/5">
+              <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between border-b border-border/40 mb-4">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-red-400" /> AI & Platform Settings
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  {settingsSaving && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground" />}
+                  {settingsSaved && <span className="text-[10px] text-green-400 font-bold uppercase tracking-tighter">Saved ✓</span>}
+                </div>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-6">
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">AI Fraud Sensitivity</span>
+                    <Badge variant="outline" className="text-primary border-primary/30 font-mono">{bankSettings.aiSensitivity}%</Badge>
+                  </div>
+                  <input type="range" min={0} max={100} value={bankSettings.aiSensitivity}
+                    onChange={e => setBankSettings(p => ({ ...p, aiSensitivity: +e.target.value }))}
+                    onMouseUp={e => saveBankSettings({ aiSensitivity: +(e.target as HTMLInputElement).value })}
+                    onTouchEnd={e => saveBankSettings({ aiSensitivity: +(e.target as HTMLInputElement).value })}
+                    className="w-full accent-primary h-2 rounded-full cursor-pointer bg-secondary" />
+                  <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">Adjusts how aggressively the AI flags suspicious behavior. Higher values increase the number of flagged transactions for review.</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/20 border border-border/10">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Auto-approve Payouts Under</span>
+                      <p className="text-[9px] text-muted-foreground">Instant approval for low-risk withdrawals.</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-primary font-bold">$</span>
+                      <input
+                        type="number" min={0}
+                        defaultValue={bankSettings.autoApproveUnder}
+                        onBlur={e => {
+                          const val = +e.target.value;
+                          if (!isNaN(val) && val !== bankSettings.autoApproveUnder) saveBankSettings({ autoApproveUnder: val });
+                        }}
+                        className="w-24 bg-background border border-border/40 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-right focus:border-primary outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/20 border border-border/10">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Manual Review Required Over</span>
+                      <p className="text-[9px] text-muted-foreground">Always flag withdrawals exceeding this amount.</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-primary font-bold">$</span>
+                      <input
+                        type="number" min={0}
+                        defaultValue={bankSettings.requireManualOver}
+                        onBlur={e => {
+                          const val = +e.target.value;
+                          if (!isNaN(val) && val !== bankSettings.requireManualOver) saveBankSettings({ requireManualOver: val });
+                        }}
+                        className="w-24 bg-background border border-border/40 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-right focus:border-primary outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/20">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-primary uppercase tracking-wider">New User Signup Bonus</span>
+                      <p className="text-[9px] text-muted-foreground">Credits given to every new account on registration.</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-primary font-bold">$</span>
+                      <input
+                        type="number" min={0} step={0.01}
+                        defaultValue={bankSettings.signupBonus}
+                        key={bankSettings.signupBonus}
+                        onBlur={e => {
+                          const val = parseFloat(e.target.value);
+                          if (!isNaN(val) && val >= 0 && val !== bankSettings.signupBonus) saveBankSettings({ signupBonus: val });
+                        }}
+                        className="w-24 bg-background border border-primary/30 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-right focus:border-primary outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Platform Stats & Gateway */}
+            <Card className="border-border/60 bg-card/60 md:col-span-2">
+              <CardHeader className="pb-2 pt-4 px-4 border-b border-border/40 mb-4">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-primary" /> Platform Health & Gateway
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                  {[
+                    { label: "Total Users", value: stats?.totalUsers ?? "—", icon: Users },
+                    { label: "Active Today", value: stats?.activeToday ?? "—", icon: Activity },
+                    { label: "New Today", value: stats?.newUsersToday ?? "—", icon: Plus },
+                    { label: "Pending W/D", value: stats?.pendingWithdrawals ?? "—", icon: Clock },
+                    { label: "Pending Amount", value: stats ? formatCurrency(stats.pendingWithdrawalAmount) : "—", icon: DollarSign },
+                    { label: "Total Deposited", value: stats ? formatCurrency(stats.totalDeposited) : "—", icon: Wallet },
+                    { label: "Total Withdrawn", value: stats ? formatCurrency(stats.totalWithdrawn) : "—", icon: ExternalLink },
+                    { label: "Banned Users", value: stats?.bannedUsers ?? "—", icon: Ban },
+                  ].map(s => (
+                    <div key={s.label} className="bg-secondary/20 rounded-xl p-4 border border-border/10 hover:border-primary/20 transition-colors">
+                      <div className="flex items-center gap-2 mb-2">
+                        <s.icon className="w-3 h-3 text-muted-foreground" />
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest">{s.label}</p>
+                      </div>
+                      <p className="font-mono font-bold text-xl text-white">{String(s.value)}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-4 rounded-xl bg-secondary/30 border border-border/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center">
+                      <Wallet className="w-6 h-6 text-green-400" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white uppercase tracking-wider">Plisio Payment Gateway</h4>
+                      <p className="text-xs text-muted-foreground">Connected · Mode: Deposits + Payouts</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/30 px-3 py-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse mr-2" />
+                      Gateway Active
+                    </Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
 
       {/* ── Tournaments Tab ── */}
       {activeTab === "tournaments" && isOwner && (

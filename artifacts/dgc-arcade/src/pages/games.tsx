@@ -16,6 +16,8 @@ const SLOT_SLUGS = new Set([
   "fire-and-ice", "diamond-vault", "lucky-sevens",
   // classic themes (slots only)
   "classic-vegas", "olympus-gates",
+  // Specific requested removals
+  "dragon-fortune", "crypto-riches", "space-adventure", "jungle-king"
 ]);
 
 export default function Games() {

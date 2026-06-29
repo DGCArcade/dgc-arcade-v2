@@ -100,11 +100,7 @@ export function Navbar() {
         </Link>
       )}
 
-      {settings.slotsEnabled && (
-        <Link href="/slots" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/slots" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
-          🎰 Slots
-        </Link>
-      )}
+
 
       {settings.raceEnabled && (
         <Link href="/race" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/race" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>

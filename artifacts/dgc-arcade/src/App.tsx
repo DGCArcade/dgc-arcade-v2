@@ -92,7 +92,14 @@ function Router() {
   const isOwner = user ? (user.username ?? "").toLowerCase() === "fanodgc" : false;
 
   if (settingsLoading) return <PageLoader />;
-  if (settings.maintenanceMode && !isOwner) return <Maintenance />;
+  // Global Maintenance Mode lockout
+  if (settings.maintenanceMode && !isOwner) {
+    return (
+      <AppLayout>
+        <Maintenance />
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -101,6 +108,7 @@ function Router() {
         <Switch>
           <Route path="/" component={Home} />
           
+          {/* Feature Gated Routes */}
           <Route path="/games">
             {settings.gamesEnabled ? <Games /> : <NotFound />}
           </Route>
@@ -125,19 +133,23 @@ function Router() {
             {settings.leaderboardEnabled ? <Leaderboard /> : <NotFound />}
           </Route>
 
+          {/* Core App Routes */}
           <Route path="/profile" component={Profile} />
-          {/* Admin with optional tab sub-route so reloads preserve the active tab */}
           <Route path="/admin/:tab" component={Admin} />
           <Route path="/admin" component={Admin} />
+          <Route path="/settings" component={Settings} />
+          <Route path="/creator" component={CreatorPage} />
+          
+          {/* Info Pages - also gated by maintenance but usually always available */}
           <Route path="/terms" component={TermsPage} />
           <Route path="/privacy" component={PrivacyPage} />
           <Route path="/responsible-gambling" component={ResponsibleGamblingPage} />
           <Route path="/aml" component={AmlPage} />
-          <Route path="/settings" component={Settings} />
-          <Route path="/creator" component={CreatorPage} />
           <Route path="/provably-fair" component={ProvablyFairPage} />
           <Route path="/instant-payouts" component={InstantPayoutsPage} />
           <Route path="/crypto-native" component={CryptoNativePage} />
+          
+          {/* Catch-all 404 */}
           <Route component={NotFound} />
         </Switch>
       </Suspense>

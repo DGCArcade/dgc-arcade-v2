@@ -33,21 +33,7 @@ export function BottomNav() {
           </Link>
         )}
 
-        {/* Slots — centre, hero button */}
-        {settings.slotsEnabled && (
-          <Link href="/slots" className="flex flex-col items-center justify-center">
-            <div
-              className={`flex flex-col items-center justify-center w-14 h-14 rounded-full border-2 -mt-5 shadow-lg transition-all duration-200 ${
-                location === "/slots"
-                  ? "bg-primary border-primary text-primary-foreground shadow-[0_0_20px_var(--theme-glow-strong)]"
-                  : "bg-secondary border-primary/40 text-primary"
-              }`}
-            >
-              <span className="text-xl leading-none">🎰</span>
-              <span className="text-[9px] font-bold uppercase tracking-wide mt-0.5">Slots</span>
-            </div>
-          </Link>
-        )}
+
 
         {/* Race */}
         {settings.raceEnabled && (
