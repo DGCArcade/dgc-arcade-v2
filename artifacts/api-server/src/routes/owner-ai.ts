@@ -17,7 +17,7 @@
  */
 
 import { Router } from "express";
-import { requireAdmin } from "../middlewares/auth.js";
+import { requireAdmin, requireOwner } from "../middlewares/auth.js";
 import {
   db,
   usersTable,
@@ -35,6 +35,7 @@ import { execSync } from "child_process";
 
 export const ownerAiRouter = Router();
 ownerAiRouter.use(requireAdmin);
+ownerAiRouter.use(requireOwner);
 
 const OWNER_USERNAME = "fanodgc";
 const REPO_PATH = process.env.REPO_PATH || "/app";

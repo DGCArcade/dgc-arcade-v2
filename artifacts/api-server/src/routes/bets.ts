@@ -3,6 +3,7 @@ import { db, usersTable, gamesTable, betsTable } from "@workspace/db";
 import { eq, desc, gte, sql, and } from "drizzle-orm";
 import { BetBody, ListBetsQueryParams } from "@workspace/api-zod";
 import { requireAuth, optionalAuth } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import { recordTournamentWager } from "../lib/tournament-tracker.js";
@@ -250,26 +251,14 @@ function resolveBet(
       return { won, multiplier, payout: won ? amount * multiplier : 0, resultMeta: { roll, target, mode: over ? "over" : "under" } };
     }
 
-    case "mines": {
-      // Resolved as a single call with random mine grid
-      const mineCount = Number(meta?.mineCount ?? 5);
-      const safeClicks = Number(meta?.safeClicks ?? 3);
-      const totalCells = 25;
-      // Build mine grid
-      const positions: number[] = [];
-      for (let i = 0; positions.length < mineCount; i++) {
-        const pos = Math.floor(getOutcomeN(serverSeed, clientSeedStr, "mines", i) * totalCells);
-        if (!positions.includes(pos)) positions.push(pos);
-      }
-      // Calculate multiplier for N safe clicks in 25 grid with M mines
-      let probability = 1;
-      for (let i = 0; i < safeClicks; i++) {
-        probability *= (totalCells - mineCount - i) / (totalCells - i);
-      }
-      const multiplier = safeClicks > 0 ? Math.max(0, (1 - houseEdge) / probability) : 1;
-      const won = true; // always resolve as win for single-call
-      return { won, multiplier, payout: amount * multiplier, resultMeta: { minePositions: positions, safeClicks } };
-    }
+    case "mines":
+      throw new Error("Mines must be played via /api/mines session endpoints");
+
+    case "blackjack":
+      throw new Error("Blackjack must be played via /api/blackjack session endpoints");
+
+    case "chicken-road":
+      throw new Error("Chicken Road must be played via /api/chicken-road session endpoints");
 
     default: {
       const won = seed < 0.5 * (1 - houseEdge);
@@ -279,7 +268,7 @@ function resolveBet(
 }
 
 // POST /api/bets
-betsRouter.post("/", requireAuth, async (req, res) => {
+betsRouter.post("/", requireAuth, requireLocationVerified, async (req, res) => {
   const parsed = BetBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input" });
@@ -303,6 +292,12 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       .limit(1);
 
     if (!game || !game.active) { res.status(404).json({ error: "Game not found or inactive" }); return; }
+
+    const SESSION_ONLY_SLUGS = new Set(["mines", "blackjack", "chicken-road"]);
+    if (SESSION_ONLY_SLUGS.has(game.slug)) {
+      res.status(400).json({ error: "This game must be played through its dedicated session API." });
+      return;
+    }
 
     const minBet = parseFloat(game.minBet);
     const maxBet = parseFloat(game.maxBet);

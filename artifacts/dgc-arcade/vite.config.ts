@@ -71,18 +71,6 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:3000",
         changeOrigin: true,
-        rewrite: (path) => path,
-        // Dev-only: the API's CORS allowlist contains production domains, so a
-        // local browser Origin (localhost) would be rejected. The frontend
-        // reaches the API through this same-origin proxy, so we drop the Origin
-        // header and let the backend treat it as a trusted same-host request.
-        // This proxy runs only under `vite` dev — it has no effect on the
-        // production build/preview and does not alter the API's CORS rules.
-        configure: (proxy) => {
-          proxy.on("proxyReq", (proxyReq) => {
-            proxyReq.removeHeader("origin");
-          });
-        },
       },
     },
     // Performance optimizations for dev server

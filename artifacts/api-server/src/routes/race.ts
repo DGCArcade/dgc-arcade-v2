@@ -2,8 +2,9 @@ import { Router } from "express";
 import { db, usersTable, gamesTable, betsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
 
 export const raceRouter = Router();
 
@@ -40,7 +41,7 @@ raceRouter.get("/racers", (_req, res) => {
   res.json(RACERS);
 });
 
-raceRouter.post("/run", requireAuth, async (req, res) => {
+raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) => {
   const userId = req.user!.userId;
   const { betAmount, racerId } = req.body as {
     betAmount: number;
@@ -74,7 +75,7 @@ raceRouter.post("/run", requireAuth, async (req, res) => {
     return res.status(400).json({ error: err.message || "Insufficient balance" });
   }
 
-  const seed = `${userId}:${Date.now()}:${Math.random()}`;
+  const seed = `${userId}:${Date.now()}:${randomBytes(16).toString("hex")}`;
   const finishOrder = generateRacePositions(seed);
   const winnerRacerId = finishOrder[0];
   const playerPlace = finishOrder.indexOf(racerId) + 1;

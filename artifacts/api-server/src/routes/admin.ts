@@ -48,11 +48,11 @@ adminRouter.use(requireAdmin);
 const OWNER_USERNAME = "fanodgc";
 async function callerIsOwner(req: { user?: { userId: number } }): Promise<boolean> {
   const [caller] = await db
-    .select({ username: usersTable.username })
+    .select({ username: usersTable.username, role: usersTable.role })
     .from(usersTable)
     .where(eq(usersTable.id, req.user!.userId))
     .limit(1);
-  return (caller?.username ?? "").toLowerCase() === OWNER_USERNAME;
+  return (caller?.username ?? "").toLowerCase() === OWNER_USERNAME || caller?.role === "owner";
 }
 
 // True if the target row is the protected platform owner. Matches by case-insensitive
@@ -437,6 +437,9 @@ adminRouter.get("/users/:id", async (req, res) => {
       return;
     }
 
+    const callerIsOwnerUser = await callerIsOwner(req);
+    const targetIsOwner = isOwnerAccount(user);
+
     const { totalBalance, cryptoBalances } = await getUserBalance(userId);
 
     const bets = await db
@@ -476,29 +479,29 @@ adminRouter.get("/users/:id", async (req, res) => {
         promoBalance: parseFloat(user.promoBalance ?? "0"),
         totalDeposited: parseFloat(user.totalDeposited ?? "0"),
         totalWageredAmount: parseFloat(user.totalWageredAmount ?? "0"),
-        // ── Location / geo ──
-        locationVerified: user.locationVerified,
-        geoIp: user.geoIp,
-        geoCountry: user.geoCountry,
-        geoCountryCode: user.geoCountryCode,
-        geoRegion: user.geoRegion,
-        geoCity: user.geoCity,
-        geoHostname: user.geoHostname,
-        geoAsn: user.geoAsn,
-        geoIsp: user.geoIsp,
-        geoLat: user.geoLat,
-        geoLon: user.geoLon,
-        geoTimezone: user.geoTimezone,
-        vpnDetected: user.vpnDetected,
-        vpnProvider: user.vpnProvider,
-        // ── Device ──
-        deviceFingerprint: user.deviceFingerprint,
-        deviceName: user.deviceName,
-        deviceOs: user.deviceOs,
-        deviceBrowser: user.deviceBrowser,
-        deviceType: user.deviceType,
+        // ── Location / geo (redacted for owner account unless caller is owner) ──
+        locationVerified: targetIsOwner && !callerIsOwnerUser ? undefined : user.locationVerified,
+        geoIp: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoIp,
+        geoCountry: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoCountry,
+        geoCountryCode: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoCountryCode,
+        geoRegion: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoRegion,
+        geoCity: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoCity,
+        geoHostname: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoHostname,
+        geoAsn: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoAsn,
+        geoIsp: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoIsp,
+        geoLat: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoLat,
+        geoLon: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoLon,
+        geoTimezone: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoTimezone,
+        vpnDetected: targetIsOwner && !callerIsOwnerUser ? undefined : user.vpnDetected,
+        vpnProvider: targetIsOwner && !callerIsOwnerUser ? undefined : user.vpnProvider,
+        // ── Device (redacted for owner account unless caller is owner) ──
+        deviceFingerprint: targetIsOwner && !callerIsOwnerUser ? undefined : user.deviceFingerprint,
+        deviceName: targetIsOwner && !callerIsOwnerUser ? undefined : user.deviceName,
+        deviceOs: targetIsOwner && !callerIsOwnerUser ? undefined : user.deviceOs,
+        deviceBrowser: targetIsOwner && !callerIsOwnerUser ? undefined : user.deviceBrowser,
+        deviceType: targetIsOwner && !callerIsOwnerUser ? undefined : user.deviceType,
       },
-      deviceHistory: deviceHistory.map((d) => ({
+      deviceHistory: targetIsOwner && !callerIsOwnerUser ? [] : deviceHistory.map((d) => ({
         id: d.id,
         fingerprint: d.fingerprint,
         deviceName: d.deviceName,
@@ -563,6 +566,11 @@ adminRouter.post("/create-user", async (req, res) => {
   // Only the owner may create admin accounts (and therefore see a new admin's PIN).
   if (role === "admin" && !(await callerIsOwner(req))) {
     res.status(403).json({ error: "Only the owner can create admin accounts." });
+    return;
+  }
+  // Only the owner may seed accounts with a non-zero balance.
+  if (typeof balance === "number" && balance > 0 && !(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Only the owner can create users with a starting balance." });
     return;
   }
 
@@ -719,6 +727,11 @@ adminRouter.patch("/users/:id", async (req, res) => {
   // Only the owner can change a user's role (promote/demote admin status).
   if (role !== undefined && role !== target?.role && !(await callerIsOwner(req))) {
     res.status(403).json({ error: "Only the owner can change a user's role." });
+    return;
+  }
+  // Only the owner can directly set balances — prevents admin balance inflation.
+  if (balance !== undefined && !(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Only the owner can set user balances directly." });
     return;
   }
 
@@ -2539,56 +2552,9 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
 });
 
 
-// POST /api/admin/tip — any logged-in user can tip another user
-adminRouter.post("/tip", async (req, res) => {
-  const { toUsername, amount } = req.body as { toUsername?: string; amount?: number };
-  if (!toUsername || !amount || amount <= 0) {
-    res.status(400).json({ error: "Username and a positive amount are required" });
-    return;
-  }
-  if (amount > 10000) {
-    res.status(400).json({ error: "Tip amount too large" });
-    return;
-  }
-  try {
-    // Get sender
-    const [sender] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-    if (!sender) { res.status(401).json({ error: "Sender not found" }); return; }
-    if (parseFloat(sender.balance) < amount) {
-      res.status(400).json({ error: "Insufficient balance" });
-      return;
-    }
-    // Get recipient
-    const [recipient] = await db.select().from(usersTable).where(ilike(usersTable.username, toUsername)).limit(1);
-    if (!recipient) { res.status(404).json({ error: "User not found: " + toUsername }); return; }
-    if (recipient.id === sender.id) { res.status(400).json({ error: "Cannot tip yourself" }); return; }
-    // The platform owner account is never externally mutable — block tips into it.
-    if (isOwnerAccount(recipient)) { res.status(400).json({ error: "Cannot tip the house account" }); return; }
-
-    // Deduct from sender, add to recipient
-    const newSenderBalance = parseFloat(sender.balance) - amount;
-    const newRecipientBalance = parseFloat(recipient.balance) + amount;
-
-    await db.update(usersTable).set({ balance: String(newSenderBalance) }).where(eq(usersTable.id, sender.id));
-    await db.update(usersTable).set({ balance: String(newRecipientBalance) }).where(eq(usersTable.id, recipient.id));
-
-    // Log as transactions for both users
-    await db.insert(transactionsTable).values({
-      userId: sender.id, type: "tip_sent", amount: String(amount),
-      currency: "USD", status: "completed",
-      metadata: JSON.stringify({ toUsername: recipient.username }),
-    });
-    await db.insert(transactionsTable).values({
-      userId: recipient.id, type: "tip_received", amount: String(amount),
-      currency: "USD", status: "completed",
-      metadata: JSON.stringify({ fromUsername: sender.username }),
-    });
-
-    res.json({ success: true, newBalance: newSenderBalance });
-  } catch (err) {
-    req.log.error({ err }, "Tip error");
-    res.status(500).json({ error: "Internal server error" });
-  }
+// POST /api/admin/tip — removed; tips use POST /api/users/tip (requireAuth, not admin)
+adminRouter.post("/tip", (_req, res) => {
+  res.status(410).json({ error: "Tips moved to POST /api/users/tip" });
 });
 
 // POST /api/admin/payout-callback — Plisio payout IPN
@@ -3081,6 +3047,10 @@ adminRouter.post("/users/:id/regenerate-pin", requireAdmin, async (req, res) => 
   res.json({ success: true, pin: newPin, username: target.username });
 });
 
+const bankPinAttempts = new Map<number, number[]>();
+const BANK_PIN_WINDOW_MS = 15 * 60 * 1000;
+const BANK_PIN_MAX_ATTEMPTS = 5;
+
 // POST /api/admin/verify-bank-pin
 // Admin verifies their DGC Bank PIN to access the bank section
 adminRouter.post("/verify-bank-pin", async (req, res) => {
@@ -3099,11 +3069,21 @@ adminRouter.post("/verify-bank-pin", async (req, res) => {
   if (!user) { res.status(401).json({ error: "User not found" }); return; }
   if (!user.dgcBankPin) { res.status(403).json({ error: "No DGC Bank PIN set for your account" }); return; }
 
+  const now = Date.now();
+  const attempts = (bankPinAttempts.get(user.id) ?? []).filter((t) => now - t < BANK_PIN_WINDOW_MS);
+  if (attempts.length >= BANK_PIN_MAX_ATTEMPTS) {
+    res.status(429).json({ error: "Too many PIN attempts. Try again in 15 minutes." });
+    return;
+  }
+
   // Verify PIN — direct plain text comparison
   if (pin !== user.dgcBankPin) {
+    attempts.push(now);
+    bankPinAttempts.set(user.id, attempts);
     res.status(401).json({ error: "Incorrect PIN" });
     return;
   }
+  bankPinAttempts.delete(user.id);
 
   // Issue a short-lived bank session token (valid 70 minutes — 1h10m)
   const sessionToken = crypto.randomBytes(32).toString("hex");

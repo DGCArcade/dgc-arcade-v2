@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, usersTable, gamesTable, betsTable, blackjackHandsTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash, createHmac } from "crypto";
@@ -118,7 +119,7 @@ function calcPayout(status: string, bet: number): number {
 }
 
 // ─── POST /api/blackjack/deal ─────────────────────────────────────────────────
-blackjackRouter.post("/deal", requireAuth, async (req, res) => {
+blackjackRouter.post("/deal", requireAuth, requireLocationVerified, async (req, res) => {
   const { gameId, amount, clientSeed: rawClientSeed } = req.body;
   if (!gameId || !amount || amount <= 0) {
     res.status(400).json({ error: "gameId and amount required" });
@@ -246,7 +247,7 @@ blackjackRouter.post("/deal", requireAuth, async (req, res) => {
 });
 
 // ─── POST /api/blackjack/action ───────────────────────────────────────────────
-blackjackRouter.post("/action", requireAuth, async (req, res) => {
+blackjackRouter.post("/action", requireAuth, requireLocationVerified, async (req, res) => {
   const { handId, action } = req.body;
   if (!handId || !action) {
     res.status(400).json({ error: "handId and action required" });

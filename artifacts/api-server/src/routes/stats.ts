@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 import { db, usersTable, betsTable, visitorsTable } from "@workspace/db";
 import { count, eq, sum, sql } from "drizzle-orm";
+import { optionalAuth } from "../middlewares/auth.js";
 
 export const statsRouter = Router();
 
@@ -295,7 +296,7 @@ statsRouter.get("/live", async (req, res) => {
 // The frontend pings this often, so /stats/live reflects real users instead of
 // waiting for server-rendered page requests that never hit the API on a static site.
 // Collects full visitor data from IP (geo, device, browser) regardless of browser permissions.
-statsRouter.post("/heartbeat", async (req, res) => {
+statsRouter.post("/heartbeat", optionalAuth, async (req, res) => {
   try {
     const body = typeof req.body === "object" && req.body !== null ? req.body as Record<string, unknown> : {};
     const fingerprint = typeof body.visitorId === "string" && body.visitorId.trim()
@@ -309,7 +310,8 @@ statsRouter.post("/heartbeat", async (req, res) => {
     const language = typeof body.language === "string" ? body.language : undefined;
     const connectionType = typeof body.connectionType === "string" ? body.connectionType : undefined;
     const timeOnSite = typeof body.timeOnSite === "number" ? Math.min(body.timeOnSite, 86400) : undefined;
-    const userId = typeof body.userId === "number" ? body.userId : undefined;
+    // Never trust client-supplied userId — only use JWT-authenticated identity
+    const userId = req.user?.userId;
 
     const presenceKey = fingerprint || ip;
     const now = Date.now();

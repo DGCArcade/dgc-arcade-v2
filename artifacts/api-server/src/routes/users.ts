@@ -1,11 +1,20 @@
 import { Router } from "express";
-import { db, usersTable, userBalancesTable } from "@workspace/db";
+import crypto from "crypto";
+import { db, usersTable, userBalancesTable, transactionsTable } from "@workspace/db";
 import { eq, ilike, sql } from "drizzle-orm";
 import { getCryptoPrice } from "../lib/price-service.js";
-import { getUserBalance } from "../lib/balance-service.js";
-import { requireAuth } from "../middlewares/auth.js";
+import { deductBalance, creditBalance, getUserBalance } from "../lib/balance-service.js";
+import { requireAuth, isOwnerUser, isProtectedAccount } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
+import { isJurisdictionAllowed } from "../lib/geo-policy.js";
+import { lookupGeoByIp } from "../lib/geo-lookup.js";
 import { sendEmailVerificationEmail } from "../lib/mail-service.js";
+import { recordLedgerStandalone } from "../services/ledger.js";
 export const usersRouter = Router();
+
+const verifyResendAttempts = new Map<number, number[]>();
+const VERIFY_RESEND_WINDOW_MS = 60_000;
+const VERIFY_RESEND_MAX = 3;
 
 const VIP_TIERS = [
   { id: 0, min: 0,         rakebackPct: 5  },
@@ -22,8 +31,7 @@ function getVipTier(wagered: number) {
 }
 
 usersRouter.get("/owner/plisio-balance", requireAuth, async (req, res) => {
-  const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  if (!user || user.username !== "fanodgc") { res.status(403).json({ error: "Forbidden" }); return; }
+  if (!req.user || !isOwnerUser(req.user)) { res.status(403).json({ error: "Owner access required" }); return; }
   try {
     const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY ?? "";
     if (!PLISIO_SECRET_KEY) { res.status(500).json({ error: "Plisio API key not configured (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)" }); return; }
@@ -80,19 +88,43 @@ usersRouter.get("/owner/plisio-balance", requireAuth, async (req, res) => {
   } catch { res.status(500).json({ error: "Failed to fetch Plisio balances" }); }
 });
 
-const BLOCKED_COUNTRIES = ["GB","FR","NL","AU","BE","DK","DE","IT","RO","ES","SE","CH","CZ"];
-const ALLOWED_US_STATES = ["Indiana","Florida"];
-
 usersRouter.post("/geo", requireAuth, async (req, res) => {
-  const { country, countryCode, region, city, ip, hostname, asn, isp, lat, lon, timezone, deviceName, deviceOs, deviceBrowser, deviceType, vpnDetected, vpnProvider, fingerprint } = req.body;
+  const { deviceName, deviceOs, deviceBrowser, deviceType, vpnDetected, vpnProvider, fingerprint } = req.body;
   try {
     const str = (v: unknown) => (typeof v === "string" && v.trim().length > 0 ? v : undefined);
-    const cc = typeof countryCode === "string" ? countryCode.toUpperCase() : "";
-    const hasValidIp = typeof ip === "string" && ip.trim().length > 0;
-    const jurisdictionAllowed = cc.length > 0 && !BLOCKED_COUNTRIES.includes(cc) && !(cc === "US" && typeof region === "string" && region.length > 0 && !ALLOWED_US_STATES.includes(region));
-    const locationVerified = hasValidIp && jurisdictionAllowed;
-    const updates = { geoCountry: str(country), geoCountryCode: str(countryCode), geoRegion: str(region), geoCity: str(city), geoIp: str(ip), geoHostname: str(hostname), geoAsn: str(asn), geoIsp: str(isp), geoLat: str(lat), geoLon: str(lon), geoTimezone: str(timezone), deviceName: str(deviceName), deviceOs: str(deviceOs), deviceBrowser: str(deviceBrowser), deviceType: str(deviceType), vpnProvider: str(vpnProvider), deviceFingerprint: str(fingerprint), vpnDetected: typeof vpnDetected === "boolean" ? vpnDetected : undefined, locationVerified: hasValidIp ? locationVerified : undefined };
-    if (Object.values(updates).some((v) => v !== undefined)) await db.update(usersTable).set(updates).where(eq(usersTable.id, req.user!.userId));
+    const serverGeo = await lookupGeoByIp(req.ip ?? "");
+    if (!serverGeo?.country_code) {
+      res.status(400).json({ error: "Unable to verify location from server IP", locationVerified: false });
+      return;
+    }
+
+    const cc = serverGeo.country_code.toUpperCase();
+    const jurisdictionAllowed = isJurisdictionAllowed(cc, serverGeo.region);
+    const locationVerified = jurisdictionAllowed;
+
+    const updates = {
+      geoCountry: serverGeo.country_name,
+      geoCountryCode: cc,
+      geoRegion: serverGeo.region,
+      geoCity: serverGeo.city,
+      geoIp: serverGeo.ip,
+      geoAsn: serverGeo.asn,
+      geoIsp: serverGeo.org,
+      geoLat: serverGeo.latitude != null ? String(serverGeo.latitude) : undefined,
+      geoLon: serverGeo.longitude != null ? String(serverGeo.longitude) : undefined,
+      geoTimezone: serverGeo.timezone,
+      deviceName: str(deviceName),
+      deviceOs: str(deviceOs),
+      deviceBrowser: str(deviceBrowser),
+      deviceType: str(deviceType),
+      vpnProvider: str(vpnProvider),
+      deviceFingerprint: str(fingerprint),
+      vpnDetected: typeof vpnDetected === "boolean" ? vpnDetected : undefined,
+      locationVerified,
+    };
+    if (Object.values(updates).some((v) => v !== undefined)) {
+      await db.update(usersTable).set(updates).where(eq(usersTable.id, req.user!.userId));
+    }
     res.json({ success: true, locationVerified });
   } catch (err) { req.log.error({ err }, "Save geo error"); res.status(500).json({ error: "Internal server error" }); }
 });
@@ -174,12 +206,21 @@ usersRouter.post("/me/verify/resend", requireAuth, async (req, res) => {
     if (user.emailVerified) { res.status(400).json({ error: "Email already verified" }); return; }
     if (!user.email) { res.status(400).json({ error: "No email set" }); return; }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const now = Date.now();
+    const attempts = (verifyResendAttempts.get(req.user!.userId) ?? []).filter((t) => now - t < VERIFY_RESEND_WINDOW_MS);
+    if (attempts.length >= VERIFY_RESEND_MAX) {
+      res.status(429).json({ error: "Too many verification emails. Try again in a minute." });
+      return;
+    }
+    attempts.push(now);
+    verifyResendAttempts.set(req.user!.userId, attempts);
+
+    const code = String(crypto.randomInt(100000, 1000000));
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
     await db.update(usersTable).set({ emailVerificationCode: code, emailVerificationExpiresAt: expiresAt }).where(eq(usersTable.id, req.user!.userId));
     
     await sendEmailVerificationEmail(user.email, user.username, code);
-    res.json({ success: true, message: "Verification email sent", code });
+    res.json({ success: true, message: "Verification email sent" });
   } catch (err: any) {
     req.log.error({ err }, "Resend verification error");
     res.status(500).json({ error: "Failed to send email", details: err.message });
@@ -331,6 +372,85 @@ usersRouter.post("/me/rakeback/claim", requireAuth, async (req, res) => {
     }).where(eq(usersTable.id, req.user!.userId));
     res.json({ success: true, claimedAmount: available, tier: tier.id });
   } catch (err) { req.log.error({ err }, "Rakeback claim error"); res.status(500).json({ error: "Internal server error" }); }
+});
+
+// POST /api/users/tip — authenticated players send real-money tips (not admin-only)
+usersRouter.post("/tip", requireAuth, requireLocationVerified, async (req, res) => {
+  const { toUsername, amount } = req.body as { toUsername?: string; amount?: number };
+  if (!toUsername?.trim() || !amount || amount <= 0) {
+    res.status(400).json({ error: "Username and a positive amount are required" });
+    return;
+  }
+  if (amount > 10_000) {
+    res.status(400).json({ error: "Tip amount too large" });
+    return;
+  }
+
+  try {
+    const senderId = req.user!.userId;
+    const [recipient] = await db
+      .select({ id: usersTable.id, username: usersTable.username, role: usersTable.role })
+      .from(usersTable)
+      .where(ilike(usersTable.username, toUsername.trim()))
+      .limit(1);
+
+    if (!recipient) { res.status(404).json({ error: "User not found" }); return; }
+    if (recipient.id === senderId) { res.status(400).json({ error: "Cannot tip yourself" }); return; }
+    if (isProtectedAccount(recipient)) { res.status(400).json({ error: "Cannot tip the house account" }); return; }
+
+    const balanceBefore = (await getUserBalance(senderId)).totalBalance;
+    let senderBalanceAfter: number;
+    try {
+      senderBalanceAfter = await deductBalance(senderId, amount);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Insufficient balance";
+      res.status(400).json({ error: msg });
+      return;
+    }
+
+    const recipientBalanceAfter = await creditBalance(recipient.id, amount);
+
+    await db.insert(transactionsTable).values([
+      {
+        userId: senderId,
+        type: "tip_sent",
+        amount: String(amount),
+        currency: "USD",
+        status: "completed",
+        metadata: JSON.stringify({ toUsername: recipient.username }),
+      },
+      {
+        userId: recipient.id,
+        type: "tip_received",
+        amount: String(amount),
+        currency: "USD",
+        status: "completed",
+        metadata: JSON.stringify({ fromUsername: req.user!.username }),
+      },
+    ]);
+
+    recordLedgerStandalone({
+      userId: senderId,
+      amount: -amount,
+      balanceBefore,
+      balanceAfter: senderBalanceAfter,
+      reason: "tip_sent",
+      note: `Tip to @${recipient.username}`,
+    }).catch(() => {});
+    recordLedgerStandalone({
+      userId: recipient.id,
+      amount,
+      balanceBefore: recipientBalanceAfter - amount,
+      balanceAfter: recipientBalanceAfter,
+      reason: "tip_received",
+      note: `Tip from @${req.user!.username}`,
+    }).catch(() => {});
+
+    res.json({ success: true, newBalance: senderBalanceAfter });
+  } catch (err) {
+    req.log.error({ err }, "User tip error");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 usersRouter.get("/me", requireAuth, async (req, res) => {

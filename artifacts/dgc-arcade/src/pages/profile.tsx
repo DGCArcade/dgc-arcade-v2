@@ -144,7 +144,7 @@ export default function Profile() {
     setTipLoading(true);
     try {
       const token = localStorage.getItem("dgc_token");
-      await fetch("/api/admin/tip", {
+      await fetch("/api/users/tip", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ toUsername: tipUsername.trim(), amount: tipAmount }),

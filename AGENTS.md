@@ -23,7 +23,8 @@ working in the Cursor Cloud environment.
 - **Rate limiter is in-memory.** If you hit `429 Too many attempts`, restarting the API clears it.
 - **Games catalog auto-seeds when empty.** `ensureCoreGamesSeeded()` (in `routes/games.ts`, called from `app.ts`) inserts the core table games only when the `games` table has zero rows — it never overwrites/resurrects admin-managed games.
 - **Slots are hidden publicly by default.** `slotsEnabled` defaults to `false` (`lib/platform-settings.ts` + `use-platform-settings.ts`); the slot engine/themes/admin management stay in the backend and an owner can re-enable via the admin "Slots Section" toggle.
-- **Geolocation gate.** `components/ui/location-gate.tsx` allows the entire US and denies the listed blocked countries; there is intentionally **no dev/location bypass**. The decision is cached in `sessionStorage` (`dgc_geo_session_v2`) — if a browser session is stuck on a blocked screen, clear that key to re-test.
+- **Geolocation gate.** `components/ui/location-gate.tsx` allows the entire US and denies the listed blocked countries; there is intentionally **no dev/location bypass** — if the IP lookup fails you must retry (accept is disabled). Betting and withdrawals are also blocked server-side until `locationVerified` is true on the user record. The decision is cached in `sessionStorage` (`dgc_geo_session_v2`) — if a browser session is stuck on a blocked screen, clear that key to re-test.
+- **Local dev CORS.** `localhost:5000` / `127.0.0.1:5000` are explicitly allowlisted on the API when `NODE_ENV !== production` — the Vite proxy no longer strips the `Origin` header.
 - **Email verification has no SMTP locally.** The code is written to `users.email_verification_code`; read it from the DB when testing verify flows.
 
 ### Lint / typecheck / test

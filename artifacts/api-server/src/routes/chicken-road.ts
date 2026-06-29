@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, usersTable, gamesTable, betsTable, chickenRoadSessionsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import { recordTournamentWager } from "../lib/tournament-tracker.js";
@@ -18,7 +19,7 @@ import {
 export const chickenRoadRouter = Router();
 
 // POST /api/chicken-road/initialize
-chickenRoadRouter.post("/initialize", requireAuth, async (req, res) => {
+chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, async (req, res) => {
   const { gameId, amount, tier = "medium", clientSeed: rawClientSeed } = req.body;
 
   if (!gameId || !amount || amount <= 0) {
@@ -99,7 +100,7 @@ chickenRoadRouter.post("/initialize", requireAuth, async (req, res) => {
 });
 
 // POST /api/chicken-road/progress
-chickenRoadRouter.post("/progress", requireAuth, async (req, res) => {
+chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async (req, res) => {
   const { sessionId, laneIndex, tileIndex } = req.body;
 
   if (!sessionId || laneIndex === undefined || tileIndex === undefined) {
@@ -245,7 +246,7 @@ chickenRoadRouter.post("/progress", requireAuth, async (req, res) => {
 });
 
 // POST /api/chicken-road/settle
-chickenRoadRouter.post("/settle", requireAuth, async (req, res) => {
+chickenRoadRouter.post("/settle", requireAuth, requireLocationVerified, async (req, res) => {
   const { sessionId } = req.body;
 
   if (!sessionId) {
