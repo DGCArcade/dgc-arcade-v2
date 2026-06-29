@@ -1284,6 +1284,64 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   MOBILE GAME SHELL — fullscreen play area, no scroll
+═══════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  .game-mobile-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  .game-mobile-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    flex-shrink: 0;
+  }
+
+  .game-mobile-viewport {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 4px;
+  }
+
+  .game-mobile-bets-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    padding: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.5);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .game-mobile-bets-panel {
+    max-height: 30vh;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    GAME MOBILE RESPONSIVE OVERRIDES
 ═══════════════════════════════════════════════════════════════ */
 
@@ -1291,13 +1349,17 @@ body {
 .slot-game,
 .bj-game-root,
 .cf-game-root,
+.cf-root,
 .mines-game-root,
 .dice-game-root,
+.dice-container,
 .crash-game-root,
 .plinko-game-root,
+.plinko-root,
 .roulette-game-root,
 .keno-game-root,
-.hilo-game-root {
+.hilo-game-root,
+.chicken-road-game-root {
   max-width: 100%;
   box-sizing: border-box;
   overflow-x: hidden;
@@ -1379,16 +1441,20 @@ body {
   /* Global Game Stacking */
   .bj-game-root,
   .cf-game-root,
+  .cf-root,
   .mines-game-root,
   .dice-game-root,
+  .dice-container,
   .crash-game-root,
   .plinko-game-root,
+  .plinko-root,
   .roulette-game-root,
   .keno-game-root,
-  .hilo-game-root {
+  .hilo-game-root,
+  .chicken-road-game-root {
     flex-direction: column-reverse !important;
     align-items: stretch !important;
-    gap: 16px !important;
+    gap: 10px !important;
   }
 
   /* Game Panels */
@@ -1409,6 +1475,7 @@ body {
   /* Table Areas */
   .bj-table-area,
   .cf-table-area,
+  .cf-coin-area,
   .mines-grid-container,
   .dice-display-area,
   .crash-chart-area,
@@ -1428,9 +1495,9 @@ body {
   }
 
   .bj-table-area {
-    padding: 40px 10px !important;
-    gap: 30px !important;
-    min-height: 400px !important;
+    padding: 20px 8px !important;
+    gap: 16px !important;
+    min-height: auto !important;
   }
 
   /* Roulette number grid on mobile */
@@ -1446,9 +1513,71 @@ body {
   }
 }
 
+/* Mobile game compact overrides */
+@media (max-width: 767px) {
+  .game-mobile-viewport .bj-game-root,
+  .game-mobile-viewport .cf-root,
+  .game-mobile-viewport .mines-game-root,
+  .game-mobile-viewport .crash-game-root,
+  .game-mobile-viewport .roulette-game-root,
+  .game-mobile-viewport .keno-game-root,
+  .game-mobile-viewport .hilo-game-root,
+  .game-mobile-viewport .plinko-root,
+  .game-mobile-viewport .dice-container {
+    padding: 4px !important;
+    gap: 8px !important;
+  }
+
+  .game-mobile-viewport .cf-coin-area {
+    min-height: 180px !important;
+    padding: 16px 12px !important;
+  }
+
+  .game-mobile-viewport .crash-chart-area {
+    min-height: 160px !important;
+    padding: 12px !important;
+  }
+
+  .game-mobile-viewport .crash-chart-area .font-mono {
+    font-size: 3rem !important;
+  }
+
+  .game-mobile-viewport .roulette-wheel-area {
+    min-height: 200px !important;
+    padding: 8px !important;
+  }
+
+  .game-mobile-viewport .bj-bet-panel,
+  .game-mobile-viewport .cf-bet-panel,
+  .game-mobile-viewport .mines-bet-panel,
+  .game-mobile-viewport .crash-bet-panel,
+  .game-mobile-viewport .roulette-bet-panel,
+  .game-mobile-viewport .keno-bet-panel,
+  .game-mobile-viewport .hilo-bet-panel,
+  .game-mobile-viewport .plinko-bet-panel,
+  .game-mobile-viewport .dice-bet-panel {
+    padding: 10px !important;
+    gap: 8px !important;
+  }
+
+  .game-mobile-viewport .dice-container {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .game-mobile-viewport .dice-size {
+    width: 60px !important;
+    height: 60px !important;
+  }
+
+  .game-mobile-viewport .result-text {
+    font-size: 32px !important;
+  }
+}
+
 /* Crash game mobile — reduce chart height */
 @media (max-width: 767px) {
   .crash-chart-area {
-    min-height: 280px !important;
+    min-height: 200px !important;
   }
 }

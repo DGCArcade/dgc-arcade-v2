@@ -517,7 +517,7 @@ export function GameCard({ game }: { game: Game }) {
         <div className="aspect-[16/9] relative overflow-hidden bg-secondary shrink-0">
           <Cover slug={game.slug} />
           <div className="absolute inset-0 bg-gradient-to-t from-card/90 via-transparent to-transparent" />
-          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 bg-black/30">
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 bg-black/30 pointer-events-none">
             <div className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-primary flex items-center justify-center shadow-[0_0_24px_var(--theme-glow-strong)] scale-75 group-hover:scale-100 transition-transform duration-200">
               <Play className="w-4 h-4 md:w-6 md:h-6 ml-0.5 text-primary-foreground" fill="currentColor" />
             </div>
