@@ -19,9 +19,11 @@ import { DailyBonusModal } from "@/components/ui/daily-bonus-modal";
 import { VipModal, getVipProgress } from "@/components/vip/vip-modal";
 import { useState, useEffect } from "react";
 import { rotateTheme } from "@/lib/theme";
+import { usePlatformSettings } from "@/hooks/use-platform-settings";
 
 export function Navbar() {
   const { user, isAuthenticated, logout, cryptoBalances } = useAuth();
+  const { settings } = usePlatformSettings();
   const authModal = useAuthModal();
   const [location, setLocation] = useLocation();
 
@@ -91,18 +93,29 @@ export function Navbar() {
 
   const NavLinks = () => (
     <>
-      <Link href="/games" className={`text-sm font-medium uppercase tracking-wider transition-colors ${location === "/games" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
-        Games
-      </Link>
-      <Link href="/slots" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/slots" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
-        🎰 Slots
-      </Link>
-      <Link href="/race" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/race" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
-        🏇 Race
-      </Link>
-      <Link href="/leaderboard" className={`text-sm font-medium uppercase tracking-wider transition-colors ${location === "/leaderboard" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
-        Leaderboard
-      </Link>
+      {settings.gamesEnabled && (
+        <Link href="/games" className={`text-sm font-medium uppercase tracking-wider transition-colors ${location === "/games" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+          Games
+        </Link>
+      )}
+
+      {settings.slotsEnabled && (
+        <Link href="/slots" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/slots" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+          🎰 Slots
+        </Link>
+      )}
+
+      {settings.raceEnabled && (
+        <Link href="/race" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/race" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+          🏇 Race
+        </Link>
+      )}
+
+      {settings.leaderboardEnabled && (
+        <Link href="/leaderboard" className={`text-sm font-medium uppercase tracking-wider transition-colors ${location === "/leaderboard" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+          Leaderboard
+        </Link>
+      )}
       {isAdmin && (
         <Link href="/admin" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/admin" ? "text-primary" : "text-amber-500/80 hover:text-amber-400"}`}>
           <Shield className="w-3.5 h-3.5" />Admin
@@ -225,15 +238,21 @@ export function Navbar() {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/profile")}><User className="mr-2 h-4 w-4" /><span>Profile</span></DropdownMenuItem>
                     <DropdownMenuItem className="cursor-pointer" onClick={() => setWalletOpen(true)}><Wallet className="mr-2 h-4 w-4" /><span>Wallet</span></DropdownMenuItem>
-                    <DropdownMenuItem className="cursor-pointer" onClick={handleCreatorHubClick}>
-                      <Star className="mr-2 h-4 w-4" />
-                      <span>Creator Hub</span>
-                      {isCreator && creatorUnread > 0 && (
-                        <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center px-1 animate-pulse">
-                          {creatorUnread > 9 ? "9+" : creatorUnread}
-                        </span>
-                      )}
-                    </DropdownMenuItem>
+	                    <DropdownMenuItem className="cursor-pointer group/creator" onClick={handleCreatorHubClick}>
+	                      <div className="flex items-center w-full">
+	                        <div className="relative mr-2">
+	                          <Star className="h-4 w-4 text-purple-400 fill-purple-400" />
+	                          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary animate-ping" />
+	                        </div>
+	                        <span className="font-bold text-purple-400">Creator Hub</span>
+	                        <Badge variant="outline" className="ml-2 bg-purple-500/10 text-purple-400 border-purple-500/30 text-[9px] px-1 h-4 uppercase tracking-tighter">Creator</Badge>
+	                        {isCreator && creatorUnread > 0 && (
+	                          <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center px-1 animate-pulse">
+	                            {creatorUnread > 9 ? "9+" : creatorUnread}
+	                          </span>
+	                        )}
+	                      </div>
+	                    </DropdownMenuItem>
                     <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/settings")}><Settings className="mr-2 h-4 w-4" /><span>Settings</span></DropdownMenuItem>
                     {isAdmin && (<><DropdownMenuSeparator /><DropdownMenuItem className="cursor-pointer text-amber-400 focus:text-amber-300" onClick={() => setLocation("/admin")}><Shield className="mr-2 h-4 w-4" /><span>Admin Panel</span></DropdownMenuItem></>)}
                     {hasAltProfile && (

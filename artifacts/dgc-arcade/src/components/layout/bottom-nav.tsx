@@ -3,10 +3,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAuthModal } from "@/hooks/use-auth-modal";
 import { Home, Gamepad2, Trophy, User } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
+import { usePlatformSettings } from "@/hooks/use-platform-settings";
 
 export function BottomNav() {
   const [location] = useLocation();
   const { user, isAuthenticated } = useAuth();
+  const { settings } = usePlatformSettings();
   const authModal = useAuthModal();
 
   const active = (path: string) =>
@@ -23,31 +25,37 @@ export function BottomNav() {
           <span>Home</span>
         </Link>
 
-        {/* Games */}
-        <Link href="/games" className={`flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${active("/games")}`}>
-          <Gamepad2 className="w-5 h-5" />
-          <span>Games</span>
-        </Link>
+                {/* Games */}
+        {settings.gamesEnabled && (
+          <Link href="/games" className={`flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${active("/games")}`}>
+            <Gamepad2 className="w-5 h-5" />
+            <span>Games</span>
+          </Link>
+        )}
 
         {/* Slots — centre, hero button */}
-        <Link href="/slots" className="flex flex-col items-center justify-center">
-          <div
-            className={`flex flex-col items-center justify-center w-14 h-14 rounded-full border-2 -mt-5 shadow-lg transition-all duration-200 ${
-              location === "/slots"
-                ? "bg-primary border-primary text-primary-foreground shadow-[0_0_20px_var(--theme-glow-strong)]"
-                : "bg-secondary border-primary/40 text-primary"
-            }`}
-          >
-            <span className="text-xl leading-none">🎰</span>
-            <span className="text-[9px] font-bold uppercase tracking-wide mt-0.5">Slots</span>
-          </div>
-        </Link>
+        {settings.slotsEnabled && (
+          <Link href="/slots" className="flex flex-col items-center justify-center">
+            <div
+              className={`flex flex-col items-center justify-center w-14 h-14 rounded-full border-2 -mt-5 shadow-lg transition-all duration-200 ${
+                location === "/slots"
+                  ? "bg-primary border-primary text-primary-foreground shadow-[0_0_20px_var(--theme-glow-strong)]"
+                  : "bg-secondary border-primary/40 text-primary"
+              }`}
+            >
+              <span className="text-xl leading-none">🎰</span>
+              <span className="text-[9px] font-bold uppercase tracking-wide mt-0.5">Slots</span>
+            </div>
+          </Link>
+        )}
 
         {/* Race */}
-        <Link href="/race" className={`flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${active("/race")}`}>
-          <Trophy className="w-5 h-5" />
-          <span>Race</span>
-        </Link>
+        {settings.raceEnabled && (
+          <Link href="/race" className={`flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${active("/race")}`}>
+            <Trophy className="w-5 h-5" />
+            <span>Race</span>
+          </Link>
+        )}
 
         {/* Profile / Auth */}
         {isAuthenticated && user ? (

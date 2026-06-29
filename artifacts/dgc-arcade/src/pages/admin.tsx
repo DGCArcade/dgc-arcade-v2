@@ -313,13 +313,18 @@ export default function AdminDashboard() {
   const [plisioStatus, setPlisioStatus] = useState<
     Record<number, { found: boolean; sent: boolean | null; status?: string; operationId?: string | null }>
   >({});
-  const [bankSettings, setBankSettings] = useState({
-    aiSensitivity: 75,
-    autoApproveUnder: 50,
-    requireManualOver: 500,
-    signupBonus: 0,
-    plisioConnected: true,
-  });
+	  const [bankSettings, setBankSettings] = useState({
+	    aiSensitivity: 75,
+	    autoApproveUnder: 50,
+	    requireManualOver: 500,
+	    signupBonus: 0,
+	    plisioConnected: true,
+	    slotsEnabled: true,
+	    raceEnabled: true,
+	    leaderboardEnabled: true,
+	    gamesEnabled: true,
+	    maintenanceMode: false,
+	  });
   const [confirmReset, setConfirmReset] = useState<AdminUser | null>(null);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -2655,8 +2660,58 @@ export default function AdminDashboard() {
                       </CardContent>
                     </Card>
 
-                    {/* AI Fraud Settings */}
-                    <Card className="border-border/60 bg-card/60">
+	                    {/* Feature Management */}
+	                    <Card className="border-border/60 bg-card/60">
+	                      <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
+	                        <CardTitle className="text-sm flex items-center gap-2">
+	                          <Layers className="w-4 h-4 text-primary" /> Feature Management
+	                        </CardTitle>
+	                        {settingsSaving && <span className="text-xs text-muted-foreground">Saving…</span>}
+	                        {settingsSaved && <span className="text-xs text-green-400">Saved ✓</span>}
+	                      </CardHeader>
+	                      <CardContent className="px-4 pb-4 space-y-4">
+	                        <div className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 border border-border/20">
+	                          <div className="flex flex-col gap-0.5">
+	                            <span className="text-xs font-bold uppercase tracking-wider text-white">Maintenance Mode</span>
+	                            <p className="text-[10px] text-muted-foreground">Put the entire site behind a maintenance screen.</p>
+	                          </div>
+	                          <button 
+	                            onClick={() => saveBankSettings({ maintenanceMode: !bankSettings.maintenanceMode })}
+	                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${bankSettings.maintenanceMode ? "bg-red-500" : "bg-secondary"}`}
+	                          >
+	                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${bankSettings.maintenanceMode ? "translate-x-6" : "translate-x-1"}`} />
+	                          </button>
+	                        </div>
+
+	                        <div className="space-y-2">
+	                          {[
+	                            { id: "gamesEnabled", label: "Games Lobby", icon: "🎮" },
+	                            { id: "slotsEnabled", label: "Slots Section", icon: "🎰" },
+	                            { id: "raceEnabled", label: "Race Game", icon: "🏇" },
+	                            { id: "leaderboardEnabled", label: "Leaderboard", icon: "🏆" },
+	                          ].map((feat) => (
+	                            <div key={feat.id} className="flex items-center justify-between">
+	                              <div className="flex items-center gap-2">
+	                                <span className="text-sm">{feat.icon}</span>
+	                                <span className="text-xs text-muted-foreground uppercase tracking-wider">{feat.label}</span>
+	                              </div>
+	                              <button 
+	                                onClick={() => saveBankSettings({ [feat.id]: !bankSettings[feat.id as keyof typeof bankSettings] })}
+	                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${bankSettings[feat.id as keyof typeof bankSettings] ? "bg-primary" : "bg-secondary"}`}
+	                              >
+	                                <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${bankSettings[feat.id as keyof typeof bankSettings] ? "translate-x-5" : "translate-x-1"}`} />
+	                              </button>
+	                            </div>
+	                          ))}
+	                        </div>
+	                        <p className="text-[10px] text-muted-foreground italic border-t border-border/30 pt-2">
+	                          Disabling a feature hides it from navigation and serves a 404 browser error to anyone trying to access the URL directly.
+	                        </p>
+	                      </CardContent>
+	                    </Card>
+
+	                    {/* AI Fraud Settings */}
+	                    <Card className="border-border/60 bg-card/60">
                       <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
                         <CardTitle className="text-sm flex items-center gap-2">
                           <Shield className="w-4 h-4 text-red-400" /> AI Fraud Settings
@@ -3299,16 +3354,20 @@ export default function AdminDashboard() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 mt-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Username *</label>
-                <Input placeholder="username" value={newCreator.username} onChange={e => setNewCreator(p => ({ ...p, username: e.target.value }))} className="bg-secondary border-border/60" />
-              </div>
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Password *</label>
-                <Input type="password" placeholder="••••••••" value={newCreator.password} onChange={e => setNewCreator(p => ({ ...p, password: e.target.value }))} className="bg-secondary border-border/60" />
-              </div>
-            </div>
+	            <div className="grid grid-cols-2 gap-3">
+	              <div>
+	                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Username *</label>
+	                <Input placeholder="username" value={newCreator.username} onChange={e => setNewCreator(p => ({ ...p, username: e.target.value }))} className="bg-secondary border-border/60" />
+	              </div>
+	              <div>
+	                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Email *</label>
+	                <Input type="email" placeholder="email@example.com" value={newCreator.email || ""} onChange={e => setNewCreator(p => ({ ...p, email: e.target.value }))} className="bg-secondary border-border/60" />
+	              </div>
+	            </div>
+	            <div>
+	              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Password *</label>
+	              <Input type="password" placeholder="••••••••" value={newCreator.password} onChange={e => setNewCreator(p => ({ ...p, password: e.target.value }))} className="bg-secondary border-border/60" />
+	            </div>
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Display Name</label>
               <Input placeholder="e.g. xQc, Adin Ross" value={newCreator.displayName} onChange={e => setNewCreator(p => ({ ...p, displayName: e.target.value }))} className="bg-secondary border-border/60" />
@@ -3377,15 +3436,21 @@ export default function AdminDashboard() {
               Create a player or admin account. Admins can manage users but can never touch the Owner account.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 mt-2">
-            <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Username</label>
-              <Input placeholder="username" value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value }))} className="bg-secondary border-border/60" />
-            </div>
-            <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Password</label>
-              <Input type="password" placeholder="••••••••" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} className="bg-secondary border-border/60" />
-            </div>
+	          <div className="space-y-3 mt-2">
+	            <div className="grid grid-cols-2 gap-3">
+	              <div>
+	                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Username</label>
+	                <Input placeholder="username" value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value }))} className="bg-secondary border-border/60" />
+	              </div>
+	              <div>
+	                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Email</label>
+	                <Input type="email" placeholder="email@example.com" value={newUser.email || ""} onChange={e => setNewUser(p => ({ ...p, email: e.target.value }))} className="bg-secondary border-border/60" />
+	              </div>
+	            </div>
+	            <div>
+	              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Password</label>
+	              <Input type="password" placeholder="••••••••" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} className="bg-secondary border-border/60" />
+	            </div>
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Role</label>
               <div className="flex gap-2">

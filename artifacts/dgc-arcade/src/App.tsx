@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout/app-layout";
 import { useEffect, Suspense, lazy, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { usePlatformSettings } from "@/hooks/use-platform-settings";
 
 // Lazy load heavy pages for better initial load
 const Home = lazy(() => import("@/pages/home"));
@@ -23,6 +24,7 @@ const ResponsibleGamblingPage = lazy(() => import("@/pages/responsible-gambling"
 const AmlPage = lazy(() => import("@/pages/aml"));
 const Settings = lazy(() => import("@/pages/settings"));
 const CreatorPage = lazy(() => import("@/pages/creator"));
+const Maintenance = lazy(() => import("@/pages/maintenance"));
 const ProvablyFairPage = lazy(() => import("./pages/provably-fair"));
 const InstantPayoutsPage = lazy(() => import("./pages/instant-payouts"));
 const CryptoNativePage = lazy(() => import("./pages/crypto-native"));
@@ -85,18 +87,44 @@ function ScrollToTop() {
 }
 
 function Router() {
+  const { settings, isLoading: settingsLoading } = usePlatformSettings();
+  const { user } = useAuth();
+  const isOwner = user ? (user.username ?? "").toLowerCase() === "fanodgc" : false;
+
+  if (settingsLoading) return <PageLoader />;
+  if (settings.maintenanceMode && !isOwner) return <Maintenance />;
+
   return (
     <AppLayout>
       <ScrollToTop />
       <Suspense fallback={<PageLoader />}>
         <Switch>
           <Route path="/" component={Home} />
-          <Route path="/games" component={Games} />
-          <Route path="/slots" component={SlotsPage} />
-          <Route path="/slots/:slug" component={SlotGamePage} />
-          <Route path="/games/:gameId" component={GamePage} />
-          <Route path="/race" component={RacePage} />
-          <Route path="/leaderboard" component={Leaderboard} />
+          
+          <Route path="/games">
+            {settings.gamesEnabled ? <Games /> : <NotFound />}
+          </Route>
+          
+          <Route path="/slots">
+            {settings.slotsEnabled ? <SlotsPage /> : <NotFound />}
+          </Route>
+          
+          <Route path="/slots/:slug">
+            {settings.slotsEnabled ? <SlotGamePage /> : <NotFound />}
+          </Route>
+          
+          <Route path="/games/:gameId">
+            {settings.gamesEnabled ? <GamePage /> : <NotFound />}
+          </Route>
+          
+          <Route path="/race">
+            {settings.raceEnabled ? <RacePage /> : <NotFound />}
+          </Route>
+          
+          <Route path="/leaderboard">
+            {settings.leaderboardEnabled ? <Leaderboard /> : <NotFound />}
+          </Route>
+
           <Route path="/profile" component={Profile} />
           {/* Admin with optional tab sub-route so reloads preserve the active tab */}
           <Route path="/admin/:tab" component={Admin} />

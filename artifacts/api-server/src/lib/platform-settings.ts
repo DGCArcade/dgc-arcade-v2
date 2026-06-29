@@ -1,22 +1,23 @@
 import { db, platformSettingsTable } from "@workspace/db";
 
 // ── Default platform settings ──
-// Owner-tunable knobs that drive the withdrawal fraud engine.
-//  - aiSensitivity:     0-100, scales raw fraud scores by 0.5x-1.5x (higher = more flags)
-//  - autoApproveUnder:  withdrawals at or under this $ amount (and not fraud-blocked)
-//                       are instantly processed via Plisio without admin approval.
-//                       Hard ceiling is $10,000 — the code will never auto-approve above that
-//                       regardless of what this setting is set to.
-//  - requireManualOver: withdrawals at or over this $ amount are ALWAYS flagged for
-//                       manual owner review, regardless of risk score.
-//                       Set to 10000 to match the instant-withdrawal ceiling.
-//  - minWithdrawal:     minimum withdrawal amount in USD
+// Owner-tunable knobs that drive the site behavior.
 export const DEFAULT_SETTINGS = {
+  // Fraud/Banking
   aiSensitivity: 75,
   autoApproveUnder: 10000,
   requireManualOver: 10000,
   minWithdrawal: 1,
   signupBonus: 100,
+  
+  // Feature Management (public visibility)
+  slotsEnabled: true,
+  raceEnabled: true,
+  leaderboardEnabled: true,
+  gamesEnabled: true,
+  
+  // Site Status
+  maintenanceMode: false,
 };
 
 export type PlatformSettings = typeof DEFAULT_SETTINGS;
@@ -25,11 +26,17 @@ export type PlatformSettings = typeof DEFAULT_SETTINGS;
 // key that has never been set. Always returns a complete settings object.
 export async function getPlatformSettings(): Promise<PlatformSettings> {
   const rows = await db.select().from(platformSettingsTable);
-  const settings: Record<string, number> = { ...DEFAULT_SETTINGS };
+  const settings: any = { ...DEFAULT_SETTINGS };
+  
   for (const row of rows) {
     if (row.key in settings) {
-      const num = parseFloat(row.value);
-      if (!isNaN(num)) settings[row.key as keyof PlatformSettings] = num;
+      const val = row.value;
+      if (typeof DEFAULT_SETTINGS[row.key as keyof PlatformSettings] === "boolean") {
+        settings[row.key] = val === "true";
+      } else {
+        const num = parseFloat(val);
+        if (!isNaN(num)) settings[row.key] = num;
+      }
     }
   }
   return settings as PlatformSettings;

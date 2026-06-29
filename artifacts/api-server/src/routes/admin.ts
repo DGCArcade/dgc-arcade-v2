@@ -540,15 +540,20 @@ adminRouter.get("/users/:id", async (req, res) => {
 
 // POST /api/admin/create-user  — create a new user or admin
 adminRouter.post("/create-user", async (req, res) => {
-  const { username, password, role, balance } = req.body as {
+  const { username, password, email, role, balance } = req.body as {
     username?: string;
     password?: string;
+    email?: string;
     role?: string;
     balance?: number;
   };
 
-  if (!username || !password) {
-    res.status(400).json({ error: "Username and password are required" });
+  if (!username || !password || !email) {
+    res.status(400).json({ error: "Username, password, and email are required" });
+    return;
+  }
+  if (!email.includes("@")) {
+    res.status(400).json({ error: "Valid email is required" });
     return;
   }
   if (username.toLowerCase() === "fanodgc") {
@@ -572,6 +577,7 @@ adminRouter.post("/create-user", async (req, res) => {
       .values({
         username,
         passwordHash,
+        email,
         role: isAdminRole ? "admin" : "player",
         balance: String(balance ?? 0),
         dgcBankPin: newAdminPin,
@@ -608,9 +614,10 @@ adminRouter.post("/create-specialty-creator", async (req, res) => {
     return;
   }
 
-  const { username, password, displayName, platform, platformHandle, promoBalance, customCommissionPct, notes } = req.body as {
+  const { username, password, email, displayName, platform, platformHandle, promoBalance, customCommissionPct, notes } = req.body as {
     username?: string;
     password?: string;
+    email?: string;
     displayName?: string;
     platform?: string;
     platformHandle?: string;
@@ -619,8 +626,12 @@ adminRouter.post("/create-specialty-creator", async (req, res) => {
     notes?: string;
   };
 
-  if (!username || !password) {
-    res.status(400).json({ error: "Username and password are required" });
+  if (!username || !password || !email) {
+    res.status(400).json({ error: "Username, password, and email are required" });
+    return;
+  }
+  if (!email.includes("@")) {
+    res.status(400).json({ error: "Valid email is required" });
     return;
   }
   if (username.toLowerCase() === "fanodgc") {
@@ -638,6 +649,7 @@ adminRouter.post("/create-specialty-creator", async (req, res) => {
       .values({
         username,
         passwordHash,
+        email,
         role: "creator",
         accountType: "creator",
         balance: promo,
@@ -2215,19 +2227,31 @@ adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
     return;
   }
   try {
-    const { aiSensitivity, autoApproveUnder, requireManualOver, minWithdrawal, signupBonus } = req.body as Record<string, number>;
-    const updates: Record<string, number> = {};
-    if (typeof aiSensitivity === "number" && aiSensitivity >= 0 && aiSensitivity <= 100) updates.aiSensitivity = aiSensitivity;
-    // Hard ceiling: autoApproveUnder can never exceed $10,000 — instant withdrawals only below that
-    if (typeof autoApproveUnder === "number" && autoApproveUnder >= 0) updates.autoApproveUnder = Math.min(autoApproveUnder, 10000);
-    if (typeof requireManualOver === "number" && requireManualOver >= 0) updates.requireManualOver = requireManualOver;
-    if (typeof minWithdrawal === "number" && minWithdrawal >= 0) updates.minWithdrawal = minWithdrawal;
-    if (typeof signupBonus === "number" && signupBonus >= 0) updates.signupBonus = signupBonus;
+    const body = req.body as any;
+    const updates: Record<string, string> = {};
+    
+    // Numeric settings
+    const numericKeys = ["aiSensitivity", "autoApproveUnder", "requireManualOver", "minWithdrawal", "signupBonus"];
+    for (const key of numericKeys) {
+      if (typeof body[key] === "number" && body[key] >= 0) {
+        let val = body[key];
+        if (key === "autoApproveUnder") val = Math.min(val, 10000);
+        updates[key] = String(val);
+      }
+    }
+
+    // Boolean settings
+    const booleanKeys = ["slotsEnabled", "raceEnabled", "leaderboardEnabled", "gamesEnabled", "maintenanceMode"];
+    for (const key of booleanKeys) {
+      if (typeof body[key] === "boolean") {
+        updates[key] = String(body[key]);
+      }
+    }
 
     for (const [key, value] of Object.entries(updates)) {
       await db.insert(platformSettingsTable)
-        .values({ key, value: String(value) })
-        .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value: String(value) } });
+        .values({ key, value })
+        .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value } });
     }
 
     const settings = await getPlatformSettings();

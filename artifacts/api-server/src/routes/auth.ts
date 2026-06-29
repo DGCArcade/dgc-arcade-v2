@@ -70,10 +70,9 @@ authRouter.post("/register", async (req, res) => {
     const existing = await db.select({ id: usersTable.id }).from(usersTable).where(ilike(usersTable.username, username)).limit(1);
     if (existing.length > 0) { res.status(409).json({ error: "Username already taken" }); return; }
 
-    if (email) {
-      const existingEmail = await db.select({ id: usersTable.id }).from(usersTable).where(ilike(usersTable.email, email)).limit(1);
-      if (existingEmail.length > 0) { res.status(409).json({ error: "Email already registered" }); return; }
-    }
+    if (!email || !email.includes("@")) { res.status(400).json({ error: "Valid email is required" }); return; }
+    const existingEmail = await db.select({ id: usersTable.id }).from(usersTable).where(ilike(usersTable.email, email)).limit(1);
+    if (existingEmail.length > 0) { res.status(409).json({ error: "Email already registered" }); return; }
     if (deviceFingerprint) {
       const deviceExists = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.deviceFingerprint, deviceFingerprint)).limit(1);
       if (deviceExists.length > 0) { logger.warn({ deviceFingerprint, username }, "Duplicate device blocked"); res.status(409).json({ error: "An account already exists on this device." }); return; }

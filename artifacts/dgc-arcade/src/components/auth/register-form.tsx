@@ -37,7 +37,7 @@ function getDeviceFingerprint(): string {
 
 const registerSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters").max(24, "Username must be max 24 characters"),
-  email: z.string().email("Invalid email address").optional().or(z.literal("")),
+  email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   promoCode: z.string().optional().or(z.literal("")),
 });
@@ -117,7 +117,7 @@ export function RegisterForm() {
           name="email"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email (Optional)</FormLabel>
+              <FormLabel>Email</FormLabel>
               <FormControl>
                 <Input type="email" placeholder="your@email.com" {...field} />
               </FormControl>

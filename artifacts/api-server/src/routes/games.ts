@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, gamesTable, slotThemesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { getPlatformSettings } from "../lib/platform-settings.js";
 export const gamesRouter = Router();
 
 const PUBLIC_GAME_CACHE_MS = 60_000;
@@ -66,6 +67,11 @@ gamesRouter.get("/", async (req, res) => {
 // GET /api/games/slot-themes — returns all active slot themes (public)
 gamesRouter.get("/slot-themes", async (req, res) => {
   try {
+    const settings = await getPlatformSettings();
+    if (!settings.slotsEnabled) {
+      res.json({ themes: [] });
+      return;
+    }
     const now = Date.now();
     if (slotThemesCache && slotThemesCache.expiresAt > now) {
       res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
@@ -126,6 +132,23 @@ gamesRouter.get("/by-slug/:slug", async (req, res) => {
 });
 
 // GET /api/games/:gameId
+// GET /api/games/settings — returns public feature flags
+gamesRouter.get("/settings", async (req, res) => {
+  try {
+    const settings = await getPlatformSettings();
+    res.json({
+      slotsEnabled: settings.slotsEnabled,
+      raceEnabled: settings.raceEnabled,
+      leaderboardEnabled: settings.leaderboardEnabled,
+      gamesEnabled: settings.gamesEnabled,
+      maintenanceMode: settings.maintenanceMode,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Get public settings error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 gamesRouter.get("/:gameId", async (req, res) => {
   const gameId = parseInt(req.params.gameId);
   if (isNaN(gameId)) {
