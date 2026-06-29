@@ -7,7 +7,8 @@ import { savePendingGeo } from "@/lib/geo-sync";
 const SESSION_KEY = "dgc_geo_session_v2";
 
 const BLOCKED_COUNTRIES = ["GB","FR","NL","AU","BE","DK","DE","IT","RO","ES","SE","CH","CZ"];
-const ALLOWED_US_STATES = ["Indiana","Florida"];
+// The entire United States is unlocked — every US state is allowed.
+// Access is only denied for the blocked countries listed above.
 
 type GeoState = "loading" | "asking" | "verifying" | "blocked_country" | "blocked_state" | "blocked_declined" | "accepted";
 
@@ -231,15 +232,11 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
   async function processAccept(gpsLat?: number, gpsLon?: number) {
     setState("verifying");
     try {
-      // Block check
+      // Block check — only the denied countries are blocked. The entire United
+      // States is allowed (no per-state restriction).
       if (geoData?.country_code && BLOCKED_COUNTRIES.includes(geoData.country_code)) {
         sessionStorage.setItem(SESSION_KEY, "blocked_country");
         setState("blocked_country");
-        return;
-      }
-      if (geoData?.country_code === "US" && geoData?.region && !ALLOWED_US_STATES.includes(geoData.region)) {
-        sessionStorage.setItem(SESSION_KEY, "blocked_state");
-        setState("blocked_state");
         return;
       }
 

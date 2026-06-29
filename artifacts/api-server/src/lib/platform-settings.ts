@@ -11,7 +11,10 @@ export const DEFAULT_SETTINGS = {
   signupBonus: 100,
   
   // Feature Management (public visibility)
-  slotsEnabled: true,
+  // Slots are hidden from the public site by default. The slot engine, themes,
+  // and admin management remain available in the backend; an owner can re-enable
+  // public slots from the admin panel ("Slots Section" toggle) if desired.
+  slotsEnabled: false,
   raceEnabled: true,
   leaderboardEnabled: true,
   gamesEnabled: true,

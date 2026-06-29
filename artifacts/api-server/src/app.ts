@@ -7,7 +7,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { startBackgroundTasks } from "./lib/background-tasks.js";
 import { logVisitor } from "./services/visitor-service.js";
-import { ensureSlotGamesSeeded } from "./routes/games.js";
+import { ensureSlotGamesSeeded, ensureCoreGamesSeeded } from "./routes/games.js";
 import { pool } from "@workspace/db";
 
 const app: Express = express();
@@ -111,7 +111,12 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many attempts, please try again later." },
-  skip: (req) => isOwnerRequest(req),
+  // The /api/auth/me session check is polled every few seconds by the client.
+  // Because app.use("/api/auth", ...) also matches "/api/auth/me", those polls
+  // would otherwise burn this strict login/register budget and lock real users
+  // out after ~10 polls. Exempt /me here — it has its own generous meLimiter.
+  skip: (req) =>
+    isOwnerRequest(req) || req.originalUrl.split("?")[0] === "/api/auth/me",
 });
 
 // /api/auth/me polling: generous — 600 per 15 minutes (~1 per 1.5 s sustained)
@@ -194,8 +199,11 @@ app.use("/api", router);
 // Start background tasks (cleanup, etc.)
 startBackgroundTasks();
 
-// Ensure slot theme games are seeded in the games table (idempotent)
-ensureSlotGamesSeeded().catch(err => console.error("Slot game seeding error:", err));
+// Ensure the core game catalog + slot theme games are seeded in the games table.
+// Core games seed only when the table is empty; both are idempotent.
+ensureCoreGamesSeeded()
+  .then(() => ensureSlotGamesSeeded())
+  .catch(err => console.error("Game seeding error:", err));
 
 // ── Chicken Road session table migration (idempotent) ───────────────────────────
 (async () => {

@@ -21,7 +21,7 @@ export function usePlatformSettings() {
 
   return {
     settings: data ?? {
-      slotsEnabled: true,
+      slotsEnabled: false,
       raceEnabled: true,
       leaderboardEnabled: true,
       gamesEnabled: true,
