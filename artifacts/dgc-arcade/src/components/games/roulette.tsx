@@ -31,6 +31,7 @@ export function Roulette({ game }: RouletteProps) {
   const [win, setWin] = useState<boolean|null>(null);
   const [payout, setPayout] = useState(0);
   const [rotation, setRotation] = useState(0);
+  const [ballRotation, setBallRotation] = useState(0);
 
   const isRed = (n: number) => RED_NUMS.has(n);
 
@@ -56,8 +57,10 @@ export function Roulette({ game }: RouletteProps) {
           const currentActualRotation = rotation % 360;
           const targetFinalAngle = (360 - targetAngle) % 360;
           const extraRotation = (targetFinalAngle - currentActualRotation + 360) % 360;
-          const newRot = rotation + 1800 + extraRotation; // Exactly 5 full spins + the needed offset
+          const wheelDelta = 1800 + extraRotation;
+          const newRot = rotation + wheelDelta;
           setRotation(newRot);
+          setBallRotation(prev => prev - wheelDelta * 1.15);
 
           setTimeout(() => {
             setSpinning(false);
@@ -86,42 +89,57 @@ export function Roulette({ game }: RouletteProps) {
     <div className="roulette-game-root flex flex-col md:flex-row gap-8">
       {/* Wheel */}
       <div className="roulette-wheel-area flex-1 bg-secondary border border-border rounded-xl p-4 md:p-6 flex flex-col items-center justify-center min-h-[240px] md:min-h-[440px]">
-        <div className="relative">
-          <svg width="220" height="220" viewBox="0 0 220 220" className="drop-shadow-2xl w-full max-w-[220px]">
-            {/* Outer ring */}
-            <circle cx={cx} cy={cy} r={r+14} fill="#1a0a00" stroke="#CC8800" strokeWidth="4"/>
-            {/* Rotating wheel */}
-            <g ref={wheelRef}
-              style={{ transform: `rotate(${rotation}deg)`, transformOrigin: `${cx}px ${cy}px`, transition: spinning ? `transform 4s cubic-bezier(0.17,0.67,0.35,1)` : "none" }}>
-              {pockets.map((num, i) => {
-                const startAngle = (i / n) * 2 * Math.PI - Math.PI / 2;
-                const endAngle = ((i + 1) / n) * 2 * Math.PI - Math.PI / 2;
-                const x1 = cx + r * Math.cos(startAngle), y1 = cy + r * Math.sin(startAngle);
-                const x2 = cx + r * Math.cos(endAngle),   y2 = cy + r * Math.sin(endAngle);
-                const fill = num === 0 ? "#00AA44" : isRed(num) ? "#CC1111" : "#111";
-                const midAngle = (startAngle + endAngle) / 2;
-                const tx = cx + (r - 14) * Math.cos(midAngle), ty = cy + (r - 14) * Math.sin(midAngle);
-                return (
-                  <g key={i}>
-                    <path d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z`}
-                      fill={fill} stroke="#333" strokeWidth="0.5"/>
-                    <text x={tx} y={ty} textAnchor="middle" dominantBaseline="middle"
-                      fontSize="5" fontWeight="bold" fill="white" transform={`rotate(${(startAngle+endAngle)/2*180/Math.PI+90},${tx},${ty})`}>
-                      {num}
-                    </text>
-                  </g>
-                );
-              })}
-              {/* Hub */}
-              <circle cx={cx} cy={cy} r="18" fill="#CC8800" stroke="#FFD700" strokeWidth="2"/>
-              <circle cx={cx} cy={cy} r="8" fill="#111"/>
+        <div className="relative w-full h-full flex items-center justify-center">
+          <svg width="220" height="220" viewBox="0 0 220 220" className="drop-shadow-2xl w-full max-w-[min(100%,200px)] max-h-full" style={{ overflow: "visible" }}>
+            <defs>
+              <clipPath id="roulette-wheel-clip">
+                <circle cx={cx} cy={cy} r={r + 6} />
+              </clipPath>
+            </defs>
+            {/* Static outer bowl */}
+            <circle cx={cx} cy={cy} r={r + 14} fill="#1a0a00" stroke="#CC8800" strokeWidth="4"/>
+            {/* Wheel spins inside the bowl */}
+            <g clipPath="url(#roulette-wheel-clip)">
+              <g ref={wheelRef}
+                style={{
+                  transform: `rotate(${rotation}deg)`,
+                  transformOrigin: `${cx}px ${cy}px`,
+                  transition: spinning ? `transform 4s cubic-bezier(0.17,0.67,0.35,1)` : "none",
+                }}>
+                {pockets.map((num, i) => {
+                  const startAngle = (i / n) * 2 * Math.PI - Math.PI / 2;
+                  const endAngle = ((i + 1) / n) * 2 * Math.PI - Math.PI / 2;
+                  const x1 = cx + r * Math.cos(startAngle), y1 = cy + r * Math.sin(startAngle);
+                  const x2 = cx + r * Math.cos(endAngle),   y2 = cy + r * Math.sin(endAngle);
+                  const fill = num === 0 ? "#00AA44" : isRed(num) ? "#CC1111" : "#111";
+                  const midAngle = (startAngle + endAngle) / 2;
+                  const tx = cx + (r - 14) * Math.cos(midAngle), ty = cy + (r - 14) * Math.sin(midAngle);
+                  return (
+                    <g key={i}>
+                      <path d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z`}
+                        fill={fill} stroke="#333" strokeWidth="0.5"/>
+                      <text x={tx} y={ty} textAnchor="middle" dominantBaseline="middle"
+                        fontSize="5" fontWeight="bold" fill="white" transform={`rotate(${(startAngle+endAngle)/2*180/Math.PI+90},${tx},${ty})`}>
+                        {num}
+                      </text>
+                    </g>
+                  );
+                })}
+                <circle cx={cx} cy={cy} r="18" fill="#CC8800" stroke="#FFD700" strokeWidth="2"/>
+                <circle cx={cx} cy={cy} r="8" fill="#111"/>
+              </g>
             </g>
-            {/* Pointer */}
-            <polygon points={`${cx},${cy-r-4} ${cx-5},${cy-r+10} ${cx+5},${cy-r+10}`} fill="#FFD700"/>
-            {/* Ball result indicator */}
-            {result !== null && !spinning && (
-              <circle cx={cx} cy={cy-r+6} r="5" fill="white" stroke="#ccc" strokeWidth="1"/>
-            )}
+            {/* Ball orbits opposite direction on the track */}
+            <g style={{
+              transform: `rotate(${ballRotation}deg)`,
+              transformOrigin: `${cx}px ${cy}px`,
+              transition: spinning ? `transform 4s cubic-bezier(0.17,0.67,0.35,1)` : "none",
+            }}>
+              <circle cx={cx} cy={cy - r + 8} r="5" fill="white" stroke="#ccc" strokeWidth="1.2"
+                style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.6))" }}/>
+            </g>
+            {/* Static pointer */}
+            <polygon points={`${cx},${cy - r - 4} ${cx - 5},${cy - r + 10} ${cx + 5},${cy - r + 10}`} fill="#FFD700"/>
           </svg>
 
           {/* Result display */}

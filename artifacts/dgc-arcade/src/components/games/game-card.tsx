@@ -170,12 +170,15 @@ function CoverCrash() {
       </defs>
       <rect width="320" height="200" fill="url(#cr-bg)"/>
       {[40,80,120,160].map(y=><line key={y} x1="0" y1={y} x2="320" y2={y} stroke="#00FF87" strokeWidth="0.3" strokeOpacity="0.15"/>)}
-      <polyline points="20,185 90,165 155,125 225,65 280,22" fill="none" stroke="url(#cr-trail)" strokeWidth="3.5" strokeLinecap="round"/>
-      <g transform="translate(258,6) rotate(-38)">
-        <ellipse cx="11" cy="24" rx="11" ry="24" fill="#00FF87"/>
-        <polygon points="11,0 2,12 20,12" fill="#00CC66"/>
-        <rect x="3" y="42" width="16" height="7" rx="3" fill="#FF4444"/>
-        <circle cx="11" cy="24" r="5" fill="#001a0d"/>
+      <polyline className="cover-crash-line" points="20,185 90,165 155,125 225,65 280,22" fill="none" stroke="url(#cr-trail)" strokeWidth="3.5" strokeLinecap="round"/>
+      <circle className="cover-crash-flash" cx="258" cy="28" r="28" fill="#FF4444" opacity="0"/>
+      <g className="cover-crash-rocket" transform="translate(258, 6)">
+        <g transform="rotate(-38)">
+          <ellipse cx="11" cy="24" rx="11" ry="24" fill="#00FF87"/>
+          <polygon points="11,0 2,12 20,12" fill="#00CC66"/>
+          <rect x="3" y="42" width="16" height="7" rx="3" fill="#FF4444"/>
+          <circle cx="11" cy="24" r="5" fill="#001a0d"/>
+        </g>
       </g>
       <text x="28" y="52" fontFamily="monospace" fontWeight="900" fontSize="30" fill="#00FF87">2.47x</text>
       <text x="28" y="70" fontFamily="monospace" fontSize="9" fill="#00FF87" opacity="0.6">CRASH IN PROGRESS</text>
@@ -216,14 +219,24 @@ function CoverRoulette() {
   });
   return (
     <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+      <defs>
+        <clipPath id="cover-roulette-clip">
+          <circle cx={cx} cy={cy} r="88" />
+        </clipPath>
+      </defs>
       <rect width="320" height="200" fill="#0a0a0a"/>
       <circle cx={cx} cy={cy} r="95" fill="#1a0a00" stroke="#CC8800" strokeWidth="3.5"/>
-      <g className="animate-[spin_10s_linear_infinite]" style={{ transformOrigin: `${cx}px ${cy}px` }}>
-        {paths}
+      <g clipPath="url(#cover-roulette-clip)">
+        <g className="cover-wheel-spin">
+          {paths}
+          <circle cx={cx} cy={cy} r="26" fill="#CC8800" stroke="#FFD700" strokeWidth="2.5"/>
+          <circle cx={cx} cy={cy} r="11" fill="#111"/>
+        </g>
       </g>
-      <circle cx={cx} cy={cy} r="26" fill="#CC8800" stroke="#FFD700" strokeWidth="2.5"/>
-      <circle cx={cx} cy={cy} r="11" fill="#111"/>
-      <circle cx={cx+56} cy={cy-32} r="7" fill="white" stroke="#ccc" strokeWidth="1.5"/>
+      <g className="cover-ball-orbit">
+        <circle cx={cx} cy={cy - 72} r="7" fill="white" stroke="#ccc" strokeWidth="1.5"/>
+      </g>
+      <polygon points={`${cx},${cy - 95} ${cx - 6},${cy - 82} ${cx + 6},${cy - 82}`} fill="#FFD700"/>
     </svg>
   );
 }
@@ -239,13 +252,16 @@ function CoverMines() {
         const col=i%5, row=Math.floor(i/5);
         const x=42+col*50, y=28+row*40;
         const mine=mineIdx.includes(i), gem=gemIdx.includes(i);
+        const tapClass = [0,4,5,9].includes(i) ? `cover-mines-cell-${i}` : "";
+        const revealClass = mine ? "cover-mines-reveal-bomb" : gem ? "cover-mines-reveal-gem" : "";
+        const revealDelay = { 0: "0.2s", 4: "1.1s", 5: "2s", 9: "2.9s", 2: "3.4s", 7: "3.7s" }[i as 0|2|4|5|7|9] ?? "0s";
         return (
-          <g key={i}>
+          <g key={i} className={tapClass}>
             <rect x={x} y={y} width="40" height="30" rx="6"
               fill={mine?"#3d0000":gem?"#001a1a":"#0d0020"}
               stroke={mine?"#FF2222":gem?"#00FFCC":"#1a1040"} strokeWidth="1.5"/>
-            {mine&&<text x={x+20} y={y+22} textAnchor="middle" fontSize="18">💣</text>}
-            {gem&&<text x={x+20} y={y+22} textAnchor="middle" fontSize="18">💎</text>}
+            {mine&&<text className={revealClass} style={{ animationDelay: revealDelay }} x={x+20} y={y+22} textAnchor="middle" fontSize="18">💣</text>}
+            {gem&&<text className={revealClass} style={{ animationDelay: revealDelay }} x={x+20} y={y+22} textAnchor="middle" fontSize="18">💎</text>}
             {!mine&&!gem&&<text x={x+20} y={y+20} textAnchor="middle" fontSize="13" fill="#334">?</text>}
           </g>
         );
