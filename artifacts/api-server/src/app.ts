@@ -2,7 +2,7 @@ import express, { type Express, type Request } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import pinoHttp from "pino-http";
-import jwt from "jsonwebtoken";
+import { verifyToken, isOwnerUser } from "./middlewares/auth.js";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { startBackgroundTasks } from "./lib/background-tasks.js";
@@ -41,6 +41,14 @@ const ALLOWED_ORIGINS = [
   "https://dgcarcade.io",
   "https://www.dgcarcade.io",
   "https://dgc-arcade-frontend-cb8i.onrender.com",
+  ...(process.env.NODE_ENV !== "production"
+    ? [
+        "http://localhost:5000",
+        "http://127.0.0.1:5000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+      ]
+    : []),
 ];
 
 app.use(cors({
@@ -81,23 +89,14 @@ app.use((req, res, next) => {
 
 // ── Owner rate-limit bypass ──────────────────────────────────────────────────
 // The platform owner (fanodgc / role=owner) is NEVER rate-limited on any endpoint.
-// We decode the JWT from the Authorization header (no DB hit — pure token check).
-// If the token is missing, invalid, or belongs to a non-owner, the normal limiter applies.
-const OWNER_USERNAME_LOWER = "fanodgc";
-const _jwtSecret = process.env.JWT_SECRET ?? "";
-
 function isOwnerRequest(req: Request): boolean {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) return false;
     const token = authHeader.slice(7);
-    if (!_jwtSecret) return false;
-    const payload = jwt.verify(token, _jwtSecret) as { username?: string; role?: string } | null;
+    const payload = verifyToken(token);
     if (!payload) return false;
-    // Match by username OR role so either credential grants the bypass
-    const username = (payload.username ?? "").toLowerCase();
-    const role = (payload.role ?? "").toLowerCase();
-    return username === OWNER_USERNAME_LOWER || role === "owner";
+    return isOwnerUser(payload);
   } catch {
     return false;
   }

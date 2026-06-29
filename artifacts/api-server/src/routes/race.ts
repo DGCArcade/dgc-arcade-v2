@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, usersTable, gamesTable, betsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 import { createHash } from "crypto";
 
@@ -40,7 +41,7 @@ raceRouter.get("/racers", (_req, res) => {
   res.json(RACERS);
 });
 
-raceRouter.post("/run", requireAuth, async (req, res) => {
+raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) => {
   const userId = req.user!.userId;
   const { betAmount, racerId } = req.body as {
     betAmount: number;

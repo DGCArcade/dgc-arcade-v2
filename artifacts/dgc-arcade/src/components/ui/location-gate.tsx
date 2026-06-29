@@ -197,7 +197,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
       setGeoReady(true);
     } catch {
       setGeoFailed(true);
-      setGeoReady(true); // allow accept anyway if fetch fails
+      setGeoReady(false);
     }
   }
 
@@ -232,9 +232,16 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
   async function processAccept(gpsLat?: number, gpsLon?: number) {
     setState("verifying");
     try {
+      if (!geoData?.country_code) {
+        setGeoFailed(true);
+        setGeoReady(false);
+        setState("asking");
+        return;
+      }
+
       // Block check — only the denied countries are blocked. The entire United
       // States is allowed (no per-state restriction).
-      if (geoData?.country_code && BLOCKED_COUNTRIES.includes(geoData.country_code)) {
+      if (BLOCKED_COUNTRIES.includes(geoData.country_code)) {
         sessionStorage.setItem(SESSION_KEY, "blocked_country");
         setState("blocked_country");
         return;
@@ -292,8 +299,9 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
 
       setState("accepted");
     } catch {
-      sessionStorage.setItem(SESSION_KEY, "accepted");
-      setState("accepted");
+      setGeoFailed(true);
+      setGeoReady(false);
+      setState("asking");
     }
   }
 
@@ -435,9 +443,9 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             {geoReady && !geoFailed && <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />}
             {geoFailed && <MapPin className="w-3.5 h-3.5 flex-shrink-0" />}
             <span>
-              {!geoReady && "Detecting your location…"}
+              {!geoReady && !geoFailed && "Detecting your location…"}
               {geoReady && !geoFailed && `Location verified — ${geoData?.city ?? ""}${geoData?.city ? ", " : ""}${geoData?.country_code ?? ""}`}
-              {geoFailed && "Location check timed out — you may proceed"}
+              {geoFailed && "Location check failed — retry required before continuing"}
             </span>
           </div>
 
@@ -470,6 +478,11 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             <Button variant="outline" className="flex-1 gap-2" onClick={handleDecline}>
               <X className="w-4 h-4" /> Decline
             </Button>
+            {geoFailed ? (
+              <Button className="flex-1 gap-2 font-bold" onClick={handleRetry}>
+                <MapPin className="w-4 h-4" /> Retry Location Check
+              </Button>
+            ) : (
             <Button
               className="flex-1 gap-2 font-bold transition-all duration-500"
               style={geoReady ? {
@@ -483,6 +496,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
                 : <><Loader2 className="w-4 h-4 animate-spin" /> Verifying Location…</>
               }
             </Button>
+            )}
           </div>
         </div>
 

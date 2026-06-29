@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { diceRoundManager, type DiceRound, type DiceRoundBet } from "../lib/dice-round-manager.js";
-import { optionalAuth } from "../middlewares/auth.js";
+import { optionalAuth, requireAuth } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
@@ -97,12 +98,7 @@ diceLiveRouter.get("/next-round", optionalAuth, (req, res) => {
  * Place a bet in the current or next round.
  * Query param: roundId (optional, defaults to current round)
  */
-diceLiveRouter.post("/bet", optionalAuth, async (req, res) => {
-  if (!req.user) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
+diceLiveRouter.post("/bet", requireAuth, requireLocationVerified, async (req, res) => {
   const { amount, target, mode } = req.body;
   const roundId = req.query.roundId as string | undefined;
 
@@ -110,7 +106,7 @@ diceLiveRouter.post("/bet", optionalAuth, async (req, res) => {
     const [user] = await db
       .select({ username: usersTable.username })
       .from(usersTable)
-      .where(eq(usersTable.id, req.user.userId))
+      .where(eq(usersTable.id, req.user!.userId))
       .limit(1);
 
     if (!user) {
@@ -120,7 +116,7 @@ diceLiveRouter.post("/bet", optionalAuth, async (req, res) => {
 
     const bet: DiceRoundBet = {
       betId: 0, // Placeholder
-      userId: req.user.userId,
+      userId: req.user!.userId,
       username: user.username,
       amount: parseFloat(String(amount)),
       target: parseInt(String(target)),

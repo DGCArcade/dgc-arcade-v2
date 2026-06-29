@@ -4,6 +4,8 @@ import { eq, ilike, sql } from "drizzle-orm";
 import { getCryptoPrice } from "../lib/price-service.js";
 import { getUserBalance } from "../lib/balance-service.js";
 import { requireAuth } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
+import { isJurisdictionAllowed } from "../lib/geo-policy.js";
 import { sendEmailVerificationEmail } from "../lib/mail-service.js";
 export const usersRouter = Router();
 
@@ -80,16 +82,13 @@ usersRouter.get("/owner/plisio-balance", requireAuth, async (req, res) => {
   } catch { res.status(500).json({ error: "Failed to fetch Plisio balances" }); }
 });
 
-const BLOCKED_COUNTRIES = ["GB","FR","NL","AU","BE","DK","DE","IT","RO","ES","SE","CH","CZ"];
-const ALLOWED_US_STATES = ["Indiana","Florida"];
-
 usersRouter.post("/geo", requireAuth, async (req, res) => {
   const { country, countryCode, region, city, ip, hostname, asn, isp, lat, lon, timezone, deviceName, deviceOs, deviceBrowser, deviceType, vpnDetected, vpnProvider, fingerprint } = req.body;
   try {
     const str = (v: unknown) => (typeof v === "string" && v.trim().length > 0 ? v : undefined);
     const cc = typeof countryCode === "string" ? countryCode.toUpperCase() : "";
     const hasValidIp = typeof ip === "string" && ip.trim().length > 0;
-    const jurisdictionAllowed = cc.length > 0 && !BLOCKED_COUNTRIES.includes(cc) && !(cc === "US" && typeof region === "string" && region.length > 0 && !ALLOWED_US_STATES.includes(region));
+    const jurisdictionAllowed = cc.length > 0 && isJurisdictionAllowed(cc, typeof region === "string" ? region : undefined);
     const locationVerified = hasValidIp && jurisdictionAllowed;
     const updates = { geoCountry: str(country), geoCountryCode: str(countryCode), geoRegion: str(region), geoCity: str(city), geoIp: str(ip), geoHostname: str(hostname), geoAsn: str(asn), geoIsp: str(isp), geoLat: str(lat), geoLon: str(lon), geoTimezone: str(timezone), deviceName: str(deviceName), deviceOs: str(deviceOs), deviceBrowser: str(deviceBrowser), deviceType: str(deviceType), vpnProvider: str(vpnProvider), deviceFingerprint: str(fingerprint), vpnDetected: typeof vpnDetected === "boolean" ? vpnDetected : undefined, locationVerified: hasValidIp ? locationVerified : undefined };
     if (Object.values(updates).some((v) => v !== undefined)) await db.update(usersTable).set(updates).where(eq(usersTable.id, req.user!.userId));

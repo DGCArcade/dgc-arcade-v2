@@ -33,6 +33,12 @@ export function verifyToken(token: string): AuthPayload | null {
   }
 }
 
+const OWNER_USERNAME_LOWER = "fanodgc";
+
+export function isOwnerUser(user: AuthPayload): boolean {
+  return user.username.toLowerCase() === OWNER_USERNAME_LOWER || user.role.toLowerCase() === "owner";
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {

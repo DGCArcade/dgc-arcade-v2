@@ -3,6 +3,7 @@ import { db, usersTable, gamesTable, betsTable } from "@workspace/db";
 import { eq, desc, gte, sql, and } from "drizzle-orm";
 import { BetBody, ListBetsQueryParams } from "@workspace/api-zod";
 import { requireAuth, optionalAuth } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import { recordTournamentWager } from "../lib/tournament-tracker.js";
@@ -279,7 +280,7 @@ function resolveBet(
 }
 
 // POST /api/bets
-betsRouter.post("/", requireAuth, async (req, res) => {
+betsRouter.post("/", requireAuth, requireLocationVerified, async (req, res) => {
   const parsed = BetBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input" });

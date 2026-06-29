@@ -7,6 +7,7 @@ import {
   ListTransactionsQueryParams,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
 import { sendPlisioPayout } from "../lib/plisio-payout.js";
 import { v4 as uuidv4 } from "uuid";
@@ -753,7 +754,7 @@ function sendNtfy(topic: string | undefined, opts: { title: string; priority: st
 // Withdrawals above $10,000 OR with a "blocked" fraud decision are queued as
 // "pending" for the admin to review in the DGC Bank panel.
 // ─────────────────────────────────────────────────────────────────────────────
-transactionsRouter.post("/withdraw", requireAuth, async (req, res) => {
+transactionsRouter.post("/withdraw", requireAuth, requireLocationVerified, async (req, res) => {
   const parsed = RequestWithdrawalBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input" });
