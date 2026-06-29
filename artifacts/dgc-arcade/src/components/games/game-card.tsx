@@ -171,13 +171,13 @@ function CoverCrash() {
       <rect width="320" height="200" fill="url(#cr-bg)"/>
       {[40,80,120,160].map(y=><line key={y} x1="0" y1={y} x2="320" y2={y} stroke="#00FF87" strokeWidth="0.3" strokeOpacity="0.15"/>)}
       <polyline points="20,185 90,165 155,125 225,65 280,22" fill="none" stroke="url(#cr-trail)" strokeWidth="3.5" strokeLinecap="round"/>
-      <g transform="translate(258,6) rotate(-38)">
+      <g transform="translate(258, 6) rotate(-38)">
         <ellipse cx="11" cy="24" rx="11" ry="24" fill="#00FF87"/>
         <polygon points="11,0 2,12 20,12" fill="#00CC66"/>
         <rect x="3" y="42" width="16" height="7" rx="3" fill="#FF4444"/>
         <circle cx="11" cy="24" r="5" fill="#001a0d"/>
       </g>
-      <text x="28" y="52" fontFamily="monospace" fontWeight="900" fontSize="30" fill="#00FF87">2.47x</text>
+      <text className="cover-mult-pulse" x="28" y="52" fontFamily="monospace" fontWeight="900" fontSize="30" fill="#00FF87">2.47x</text>
       <text x="28" y="70" fontFamily="monospace" fontSize="9" fill="#00FF87" opacity="0.6">CRASH IN PROGRESS</text>
     </svg>
   );
@@ -216,14 +216,24 @@ function CoverRoulette() {
   });
   return (
     <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+      <defs>
+        <clipPath id="cover-roulette-clip">
+          <circle cx={cx} cy={cy} r="88" />
+        </clipPath>
+      </defs>
       <rect width="320" height="200" fill="#0a0a0a"/>
       <circle cx={cx} cy={cy} r="95" fill="#1a0a00" stroke="#CC8800" strokeWidth="3.5"/>
-      <g className="animate-[spin_10s_linear_infinite]" style={{ transformOrigin: `${cx}px ${cy}px` }}>
-        {paths}
+      <g clipPath="url(#cover-roulette-clip)">
+        <g className="cover-wheel-spin">
+          {paths}
+          <circle cx={cx} cy={cy} r="26" fill="#CC8800" stroke="#FFD700" strokeWidth="2.5"/>
+          <circle cx={cx} cy={cy} r="11" fill="#111"/>
+        </g>
       </g>
-      <circle cx={cx} cy={cy} r="26" fill="#CC8800" stroke="#FFD700" strokeWidth="2.5"/>
-      <circle cx={cx} cy={cy} r="11" fill="#111"/>
-      <circle cx={cx+56} cy={cy-32} r="7" fill="white" stroke="#ccc" strokeWidth="1.5"/>
+      <g className="cover-ball-orbit">
+        <circle cx={cx} cy={cy - 72} r="7" fill="white" stroke="#ccc" strokeWidth="1.5"/>
+      </g>
+      <polygon points={`${cx},${cy - 95} ${cx - 6},${cy - 82} ${cx + 6},${cy - 82}`} fill="#FFD700"/>
     </svg>
   );
 }
@@ -245,7 +255,7 @@ function CoverMines() {
               fill={mine?"#3d0000":gem?"#001a1a":"#0d0020"}
               stroke={mine?"#FF2222":gem?"#00FFCC":"#1a1040"} strokeWidth="1.5"/>
             {mine&&<text x={x+20} y={y+22} textAnchor="middle" fontSize="18">💣</text>}
-            {gem&&<text x={x+20} y={y+22} textAnchor="middle" fontSize="18">💎</text>}
+            {gem&&<text className={i === 4 ? "cover-gem-glow" : undefined} x={x+20} y={y+22} textAnchor="middle" fontSize="18">💎</text>}
             {!mine&&!gem&&<text x={x+20} y={y+20} textAnchor="middle" fontSize="13" fill="#334">?</text>}
           </g>
         );
@@ -511,10 +521,10 @@ const COVER_MAP: Record<string, React.ComponentType<{ slug: string }>> = {
 
 export function GameCard({ game }: { game: Game }) {
   const Cover = COVER_MAP[game.slug] ?? CoverDefault;
-  return (
-    <Link href={`/games/${game.id}`}>
-      <Card className="group relative overflow-hidden bg-card border-border/50 hover:border-primary/60 transition-all duration-300 cursor-pointer flex flex-col card-hover-glow h-full min-h-[160px] md:min-h-0">
-        <div className="aspect-[16/9] relative overflow-hidden bg-secondary shrink-0">
+
+  const cardContent = (
+    <Card className="group relative overflow-hidden bg-card border-border/50 hover:border-primary/60 transition-all duration-300 cursor-pointer flex flex-col card-hover-glow">
+        <div className="aspect-[16/9] relative overflow-hidden bg-secondary">
           <Cover slug={game.slug} />
           <div className="absolute inset-0 bg-gradient-to-t from-card/90 via-transparent to-transparent" />
           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 bg-black/30 pointer-events-none">
@@ -522,34 +532,29 @@ export function GameCard({ game }: { game: Game }) {
               <Play className="w-4 h-4 md:w-6 md:h-6 ml-0.5 text-primary-foreground" fill="currentColor" />
             </div>
           </div>
-          <div className="absolute top-1 left-1 md:top-2 md:left-2">
-            <span className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5 text-[8px] md:text-xs font-bold uppercase tracking-wider text-green-400 border border-green-500/30">
-              <span className="live-dot w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-green-400" />Live
+          <div className="absolute top-2 left-2">
+            <span className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-green-400 border border-green-500/30">
+              <span className="live-dot w-1.5 h-1.5 rounded-full bg-green-400" />Live
             </span>
           </div>
           {game.houseEdge != null && (
-            <div className="absolute top-1 right-1 md:top-2 md:right-2">
-              <span className="bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5 text-[8px] md:text-xs font-mono text-muted-foreground border border-border/40">
+            <div className="absolute top-2 right-2">
+              <span className="bg-black/70 backdrop-blur-sm rounded-full px-2 py-0.5 text-xs font-mono text-muted-foreground border border-border/40">
                 {game.houseEdge}%
               </span>
             </div>
           )}
         </div>
-        <div className="p-2 md:p-4 flex flex-col gap-1 md:gap-2 flex-1 min-h-0">
-          <h3 className="font-display font-bold text-sm md:text-lg text-foreground group-hover:text-primary transition-colors uppercase tracking-wide line-clamp-1 shrink-0">{game.name}</h3>
-          <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-1 md:line-clamp-1 shrink-0">{game.description}</p>
-          <div className="flex items-center justify-between text-[9px] md:text-xs font-mono text-muted-foreground pt-1.5 md:pt-2 border-t border-border/40 mt-auto shrink-0">
-            <span className="flex flex-col md:flex-row md:gap-1">
-              <span className="opacity-50 md:opacity-100">Min</span>
-              <span className="text-foreground font-bold">{formatCurrency(game.minBet)}</span>
-            </span>
-            <span className="flex flex-col md:flex-row md:gap-1 items-end md:items-start">
-              <span className="opacity-50 md:opacity-100">Max</span>
-              <span className="text-foreground font-bold">{formatCurrency(game.maxBet)}</span>
-            </span>
+        <div className="p-4 flex flex-col gap-2">
+          <h3 className="font-display font-bold text-lg text-foreground group-hover:text-primary transition-colors uppercase tracking-wide">{game.name}</h3>
+          <p className="text-xs text-muted-foreground line-clamp-1">{game.description}</p>
+          <div className="flex items-center justify-between text-xs font-mono text-muted-foreground pt-2 border-t border-border/40">
+            <span>Min <span className="text-foreground font-bold">{formatCurrency(game.minBet)}</span></span>
+            <span>Max <span className="text-foreground font-bold">{formatCurrency(game.maxBet)}</span></span>
           </div>
         </div>
       </Card>
-    </Link>
   );
+
+  return <Link href={`/games/${game.id}`}>{cardContent}</Link>;
 }

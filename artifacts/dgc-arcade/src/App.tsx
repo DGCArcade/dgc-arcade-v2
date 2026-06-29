@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout/app-layout";
+import { MobileGameProvider } from "@/hooks/use-mobile-game";
 import { useEffect, Suspense, lazy, useMemo, useRef, type ReactNode } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { usePlatformSettings } from "@/hooks/use-platform-settings";
@@ -146,21 +147,21 @@ function Router() {
         <Switch>
           <Route path="/" component={Home} />
           
-          {/* Feature Gated Routes — also require email verification */}
+          {/* Games — open to everyone; betting requires login + verified email */}
           <Route path="/games">
-            {settings.gamesEnabled ? <EmailVerifiedGate><Games /></EmailVerifiedGate> : <NotFound />}
+            {settings.gamesEnabled ? <Games /> : <NotFound />}
           </Route>
           
           <Route path="/slots">
-            {settings.slotsEnabled ? <EmailVerifiedGate><SlotsPage /></EmailVerifiedGate> : <NotFound />}
+            {settings.slotsEnabled ? <SlotsPage /> : <NotFound />}
           </Route>
           
           <Route path="/slots/:slug">
-            {settings.slotsEnabled ? <EmailVerifiedGate><SlotGamePage /></EmailVerifiedGate> : <NotFound />}
+            {settings.slotsEnabled ? <SlotGamePage /> : <NotFound />}
           </Route>
           
           <Route path="/games/:gameId">
-            {settings.gamesEnabled ? <EmailVerifiedGate><GamePage /></EmailVerifiedGate> : <NotFound />}
+            {settings.gamesEnabled ? <GamePage /> : <NotFound />}
           </Route>
           
           <Route path="/race">
@@ -199,10 +200,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
+        <MobileGameProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+          <Toaster />
+        </MobileGameProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
