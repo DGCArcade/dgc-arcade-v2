@@ -601,11 +601,11 @@ export default function AdminDashboard() {
     try {
       await adminFetch("/create-user", {
         method: "POST",
-        body: JSON.stringify({ username: newUser.username, password: newUser.password, role: newUser.role, balance: parseFloat(newUser.balance || "0") }),
+        body: JSON.stringify({ username: newUser.username, password: newUser.password, email: newUser.email, role: newUser.role, balance: parseFloat(newUser.balance || "0") }),
       });
       toast({ title: "✅ User Created", description: `@${newUser.username} (${newUser.role}) created successfully.` });
       setCreateUserOpen(false);
-      setNewUser({ username: "", password: "", role: "player", balance: "0" });
+      setNewUser({ username: "", password: "", email: "", role: "player", balance: "0" });
       loadUsers();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -625,6 +625,7 @@ export default function AdminDashboard() {
         body: JSON.stringify({
           username: newCreator.username,
           password: newCreator.password,
+          email: newCreator.email,
           displayName: newCreator.displayName || undefined,
           platform: newCreator.platform || undefined,
           platformHandle: newCreator.platformHandle || undefined,
@@ -639,7 +640,7 @@ export default function AdminDashboard() {
         className: "bg-purple-900 border-purple-500",
       });
       setCreateCreatorOpen(false);
-      setNewCreator({ username: "", password: "", displayName: "", platform: "", platformHandle: "", promoBalance: "0", customCommissionPct: "10", notes: "" });
+      setNewCreator({ username: "", password: "", email: "", displayName: "", platform: "", platformHandle: "", promoBalance: "0", customCommissionPct: "10", notes: "" });
       loadUsers();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
