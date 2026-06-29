@@ -1283,6 +1283,19 @@ body {
   }
 }
 
+.game-card-btn {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    MOBILE GAME OVERLAY — fixed fullscreen popup
 ═══════════════════════════════════════════════════════════════ */

@@ -45,9 +45,13 @@ export function useAuth() {
   const requireAuth = (callback: () => void) => {
     if (!user) {
       authModal.open("login");
-    } else {
-      callback();
+      return;
     }
+    if (!(user as any).emailVerified) {
+      window.dispatchEvent(new CustomEvent("openVerificationModal", { detail: { required: true } }));
+      return;
+    }
+    callback();
   };
 
   const cryptoBalances: CryptoBalance[] = (user as any)?.cryptoBalances ?? [];

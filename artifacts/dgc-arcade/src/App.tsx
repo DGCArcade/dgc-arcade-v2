@@ -147,21 +147,21 @@ function Router() {
         <Switch>
           <Route path="/" component={Home} />
           
-          {/* Feature Gated Routes — also require email verification */}
+          {/* Games — open to everyone; betting requires login + verified email */}
           <Route path="/games">
-            {settings.gamesEnabled ? <EmailVerifiedGate><Games /></EmailVerifiedGate> : <NotFound />}
+            {settings.gamesEnabled ? <Games /> : <NotFound />}
           </Route>
           
           <Route path="/slots">
-            {settings.slotsEnabled ? <EmailVerifiedGate><SlotsPage /></EmailVerifiedGate> : <NotFound />}
+            {settings.slotsEnabled ? <SlotsPage /> : <NotFound />}
           </Route>
           
           <Route path="/slots/:slug">
-            {settings.slotsEnabled ? <EmailVerifiedGate><SlotGamePage /></EmailVerifiedGate> : <NotFound />}
+            {settings.slotsEnabled ? <SlotGamePage /> : <NotFound />}
           </Route>
           
           <Route path="/games/:gameId">
-            {settings.gamesEnabled ? <EmailVerifiedGate><GamePage /></EmailVerifiedGate> : <NotFound />}
+            {settings.gamesEnabled ? <GamePage /> : <NotFound />}
           </Route>
           
           <Route path="/race">
