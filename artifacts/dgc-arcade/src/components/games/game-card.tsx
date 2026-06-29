@@ -230,7 +230,9 @@ function CoverRoulette() {
           <circle cx={cx} cy={cy} r="11" fill="#111"/>
         </g>
       </g>
-      <circle cx={cx} cy={cy - 72} r="7" fill="white" stroke="#ccc" strokeWidth="1.5"/>
+      <g className="cover-ball-orbit">
+        <circle cx={cx} cy={cy - 72} r="7" fill="white" stroke="#ccc" strokeWidth="1.5"/>
+      </g>
       <polygon points={`${cx},${cy - 95} ${cx - 6},${cy - 82} ${cx + 6},${cy - 82}`} fill="#FFD700"/>
     </svg>
   );
