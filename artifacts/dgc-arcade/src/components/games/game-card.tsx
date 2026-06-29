@@ -524,40 +524,34 @@ export function GameCard({ game }: { game: Game }) {
   };
 
   const cardContent = (
-    <Card className="group relative overflow-hidden bg-card border-border/50 hover:border-primary/60 transition-all duration-300 cursor-pointer flex flex-col card-hover-glow h-full min-h-[160px] md:min-h-0">
-        <div className="aspect-[16/9] relative overflow-hidden bg-secondary shrink-0">
+    <Card className="group relative overflow-hidden bg-card border-border/50 hover:border-primary/60 transition-all duration-300 cursor-pointer flex flex-col card-hover-glow">
+        <div className="aspect-[16/9] relative overflow-hidden bg-secondary">
           <Cover slug={game.slug} />
-          <div className="absolute inset-0 bg-gradient-to-t from-card/90 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-card/80 via-transparent to-transparent" />
           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 bg-black/30 pointer-events-none">
-            <div className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-primary flex items-center justify-center shadow-[0_0_24px_var(--theme-glow-strong)] scale-75 group-hover:scale-100 transition-transform duration-200">
-              <Play className="w-4 h-4 md:w-6 md:h-6 ml-0.5 text-primary-foreground" fill="currentColor" />
+            <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center shadow-[0_0_24px_var(--theme-glow-strong)] scale-75 group-hover:scale-100 transition-transform duration-200">
+              <Play className="w-6 h-6 ml-0.5 text-primary-foreground" fill="currentColor" />
             </div>
           </div>
-          <div className="absolute top-1 left-1 md:top-2 md:left-2">
-            <span className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5 text-[8px] md:text-xs font-bold uppercase tracking-wider text-green-400 border border-green-500/30">
-              <span className="live-dot w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-green-400" />Live
+          <div className="absolute top-2 left-2">
+            <span className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-green-400 border border-green-500/30">
+              <span className="live-dot w-1.5 h-1.5 rounded-full bg-green-400" />Live
             </span>
           </div>
           {game.houseEdge != null && (
-            <div className="absolute top-1 right-1 md:top-2 md:right-2">
-              <span className="bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5 text-[8px] md:text-xs font-mono text-muted-foreground border border-border/40">
+            <div className="absolute top-2 right-2">
+              <span className="bg-black/70 backdrop-blur-sm rounded-full px-2 py-0.5 text-xs font-mono text-muted-foreground border border-border/40">
                 {game.houseEdge}%
               </span>
             </div>
           )}
         </div>
-        <div className="p-2 md:p-4 flex flex-col gap-1 md:gap-2 flex-1 min-h-0">
-          <h3 className="font-display font-bold text-sm md:text-lg text-foreground group-hover:text-primary transition-colors uppercase tracking-wide line-clamp-1 shrink-0">{game.name}</h3>
-          <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-1 md:line-clamp-1 shrink-0">{game.description}</p>
-          <div className="flex items-center justify-between text-[9px] md:text-xs font-mono text-muted-foreground pt-1.5 md:pt-2 border-t border-border/40 mt-auto shrink-0">
-            <span className="flex flex-col md:flex-row md:gap-1">
-              <span className="opacity-50 md:opacity-100">Min</span>
-              <span className="text-foreground font-bold">{formatCurrency(game.minBet)}</span>
-            </span>
-            <span className="flex flex-col md:flex-row md:gap-1 items-end md:items-start">
-              <span className="opacity-50 md:opacity-100">Max</span>
-              <span className="text-foreground font-bold">{formatCurrency(game.maxBet)}</span>
-            </span>
+        <div className="p-4 flex flex-col gap-2">
+          <h3 className="font-display font-bold text-lg text-foreground group-hover:text-primary transition-colors uppercase tracking-wide">{game.name}</h3>
+          <p className="text-xs text-muted-foreground line-clamp-1">{game.description}</p>
+          <div className="flex items-center justify-between text-xs font-mono text-muted-foreground pt-2 border-t border-border/40">
+            <span>Min <span className="text-foreground font-bold">{formatCurrency(game.minBet)}</span></span>
+            <span>Max <span className="text-foreground font-bold">{formatCurrency(game.maxBet)}</span></span>
           </div>
         </div>
       </Card>

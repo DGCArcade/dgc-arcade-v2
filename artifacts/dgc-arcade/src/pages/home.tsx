@@ -440,16 +440,12 @@ export default function Home() {
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {featuredGames.length === 0
-            ? [1, 2, 3, 4].map((i) => (
-                <div key={i} className="aspect-[3/4.2] md:aspect-[16/9] bg-secondary/60 animate-pulse rounded-xl border border-border/40" />
+            ? [1, 2, 3].map((i) => (
+                <div key={i} className="aspect-[4/3] bg-secondary/60 animate-pulse rounded-xl border border-border/40" />
               ))
-            : featuredGames.map((game) => (
-                <div key={game.id} className="h-full">
-                  <GameCard game={game} />
-                </div>
-              ))}
+            : featuredGames.map((game) => <GameCard key={game.id} game={game} />)}
         </div>
       </section>
 

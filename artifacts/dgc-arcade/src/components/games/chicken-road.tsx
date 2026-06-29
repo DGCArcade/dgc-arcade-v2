@@ -349,7 +349,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
       </div>
 
       {/* Game Grid */}
-      <div className="flex-1 space-y-3">
+      <div className="chicken-road-play-area flex-1 space-y-3 min-w-0">
         {/* Provably Fair Hash Display */}
         {serverSeedHash && (
           <div className="bg-secondary/50 border border-border rounded-lg p-3 text-xs font-mono break-all">
