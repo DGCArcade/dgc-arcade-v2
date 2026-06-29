@@ -204,20 +204,23 @@ function CoverSlots() {
 }
 
 function CoverRoulette() {
-  const redNums = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+  const ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+  const RED_NUMS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
   const segments = 37;
   const r = 80, cx = 160, cy = 100;
-  const paths = Array.from({length:segments},(_,i)=>{
+  const paths = ORDER.map((num, i) => {
     const s = (i/segments)*2*Math.PI - Math.PI/2, e = ((i+1)/segments)*2*Math.PI - Math.PI/2;
     const x1=cx+r*Math.cos(s),y1=cy+r*Math.sin(s),x2=cx+r*Math.cos(e),y2=cy+r*Math.sin(e);
-    const fill = i===0 ? "#006600" : redNums.has(i) ? "#CC1111" : "#1a1a1a";
+    const fill = num === 0 ? "#00AA44" : RED_NUMS.has(num) ? "#CC1111" : "#1a1a1a";
     return <path key={i} d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z`} fill={fill} stroke="#333" strokeWidth="0.5"/>;
   });
   return (
     <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
       <rect width="320" height="200" fill="#0a0a0a"/>
       <circle cx={cx} cy={cy} r="95" fill="#1a0a00" stroke="#CC8800" strokeWidth="3.5"/>
-      {paths}
+      <g className="animate-[spin_10s_linear_infinite]" style={{ transformOrigin: `${cx}px ${cy}px` }}>
+        {paths}
+      </g>
       <circle cx={cx} cy={cy} r="26" fill="#CC8800" stroke="#FFD700" strokeWidth="2.5"/>
       <circle cx={cx} cy={cy} r="11" fill="#111"/>
       <circle cx={cx+56} cy={cy-32} r="7" fill="white" stroke="#ccc" strokeWidth="1.5"/>
@@ -510,7 +513,7 @@ export function GameCard({ game }: { game: Game }) {
   const Cover = COVER_MAP[game.slug] ?? CoverDefault;
   return (
     <Link href={`/games/${game.id}`}>
-      <Card className="group relative overflow-hidden bg-card border-border/50 hover:border-primary/60 transition-all duration-300 cursor-pointer flex flex-col card-hover-glow">
+      <Card className="group relative overflow-hidden bg-card border-border/50 hover:border-primary/60 transition-all duration-300 cursor-pointer flex flex-col card-hover-glow aspect-[3/4.2] md:aspect-auto">
         <div className="aspect-[16/9] relative overflow-hidden bg-secondary">
           <Cover slug={game.slug} />
           <div className="absolute inset-0 bg-gradient-to-t from-card/80 via-transparent to-transparent" />
@@ -519,25 +522,31 @@ export function GameCard({ game }: { game: Game }) {
               <Play className="w-6 h-6 ml-0.5 text-primary-foreground" fill="currentColor" />
             </div>
           </div>
-          <div className="absolute top-2 left-2">
-            <span className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-green-400 border border-green-500/30">
-              <span className="live-dot w-1.5 h-1.5 rounded-full bg-green-400" />Live
+          <div className="absolute top-1 left-1 md:top-2 md:left-2">
+            <span className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5 text-[8px] md:text-xs font-bold uppercase tracking-wider text-green-400 border border-green-500/30">
+              <span className="live-dot w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-green-400" />Live
             </span>
           </div>
           {game.houseEdge != null && (
-            <div className="absolute top-2 right-2">
-              <span className="bg-black/70 backdrop-blur-sm rounded-full px-2 py-0.5 text-xs font-mono text-muted-foreground border border-border/40">
+            <div className="absolute top-1 right-1 md:top-2 md:right-2">
+              <span className="bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5 text-[8px] md:text-xs font-mono text-muted-foreground border border-border/40">
                 {game.houseEdge}%
               </span>
             </div>
           )}
         </div>
-        <div className="p-4 flex flex-col gap-2">
-          <h3 className="font-display font-bold text-lg text-foreground group-hover:text-primary transition-colors uppercase tracking-wide">{game.name}</h3>
-          <p className="text-xs text-muted-foreground line-clamp-1">{game.description}</p>
-          <div className="flex items-center justify-between text-xs font-mono text-muted-foreground pt-2 border-t border-border/40">
-            <span>Min <span className="text-foreground font-bold">{formatCurrency(game.minBet)}</span></span>
-            <span>Max <span className="text-foreground font-bold">{formatCurrency(game.maxBet)}</span></span>
+        <div className="p-2 md:p-4 flex flex-col gap-1 md:gap-2">
+          <h3 className="font-display font-bold text-sm md:text-lg text-foreground group-hover:text-primary transition-colors uppercase tracking-wide line-clamp-1">{game.name}</h3>
+          <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-1">{game.description}</p>
+          <div className="flex items-center justify-between text-[9px] md:text-xs font-mono text-muted-foreground pt-1.5 md:pt-2 border-t border-border/40">
+            <span className="flex flex-col md:flex-row md:gap-1">
+              <span className="opacity-50 md:opacity-100">Min</span>
+              <span className="text-foreground font-bold">{formatCurrency(game.minBet)}</span>
+            </span>
+            <span className="flex flex-col md:flex-row md:gap-1 items-end md:items-start">
+              <span className="opacity-50 md:opacity-100">Max</span>
+              <span className="text-foreground font-bold">{formatCurrency(game.maxBet)}</span>
+            </span>
           </div>
         </div>
       </Card>
