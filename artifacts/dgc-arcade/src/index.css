@@ -474,6 +474,10 @@ body {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+@keyframes cover-ball-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
 @keyframes cover-mult-pulse {
   0%, 100% { opacity: 0.85; }
   50% { opacity: 1; }
@@ -484,7 +488,13 @@ body {
 }
 .cover-wheel-spin {
   transform-origin: 160px 100px;
-  animation: cover-wheel-spin 24s linear infinite;
+  transform-box: fill-box;
+  animation: cover-wheel-spin 20s linear infinite;
+}
+.cover-ball-orbit {
+  transform-origin: 160px 100px;
+  transform-box: fill-box;
+  animation: cover-ball-orbit 14s linear infinite;
 }
 .cover-mult-pulse {
   animation: cover-mult-pulse 2.5s ease-in-out infinite;
@@ -1658,6 +1668,16 @@ body {
     flex: 1 1 54% !important;
   }
 
+  .mobile-game-play-area .roulette-game-root--mobile .roulette-wheel-area {
+    flex: 1 1 52% !important;
+  }
+
+  .mobile-game-play-area .roulette-game-root--mobile .roulette-bet-panel {
+    flex: 0 0 46% !important;
+    width: 46% !important;
+    max-width: 46% !important;
+  }
+
   /* ── Dice Live: mirror desktop — bets LEFT, dice+feed RIGHT ── */
   .mobile-game-play-area.mobile-game--dice > * > *,
   .mobile-game-play-area.mobile-game--dice .w-full {
@@ -1750,54 +1770,7 @@ body {
     font-size: 10px !important;
   }
 
-  /* ── Roulette ── */
-  .mobile-game-play-area .roulette-wheel-area {
-    padding: 2px !important;
-  }
-
-  .mobile-game-play-area .roulette-wheel-area svg {
-    max-width: 100% !important;
-    max-height: 100% !important;
-    width: auto !important;
-    height: auto !important;
-  }
-
-  .mobile-game-play-area .roulette-bet-panel {
-    padding: 3px !important;
-    gap: 2px !important;
-  }
-
-  .mobile-game-play-area .roulette-bet-panel .space-y-3 {
-    gap: 2px !important;
-  }
-
-  .mobile-game-play-area .roulette-bet-panel button {
-    height: 28px !important;
-    min-height: 28px !important;
-    padding: 2px 4px !important;
-    font-size: 9px !important;
-  }
-
-  .mobile-game-play-area .roulette-bet-panel .h-14 {
-    height: 32px !important;
-    min-height: 32px !important;
-    font-size: 9px !important;
-  }
-
-  .mobile-game-play-area .roulette-bet-panel .max-h-36 {
-    max-height: 72px !important;
-    overflow-y: auto !important;
-  }
-
-  .mobile-game-play-area .roulette-bet-panel .grid.grid-cols-7 button {
-    width: 18px !important;
-    height: 16px !important;
-    font-size: 6px !important;
-  }
-
-  .mobile-game-play-area .roulette-bet-panel > .mt-4 {
-    display: none !important;
-  }
+  /* ── Roulette: component handles layout via roulette-game-root--mobile ── */
 
   /* ── Mines ── */
   .mobile-game-play-area .mines-grid-container {
