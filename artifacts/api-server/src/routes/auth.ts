@@ -63,6 +63,12 @@ authRouter.post("/register", async (req, res) => {
   const parsed = RegisterBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid input" }); return; }
   const { username, password, email } = req.body as any; // Allow email from body
+
+  // Enforce alphanumeric-only usernames (no spaces, @, dots, slashes, etc.)
+  if (!username || !/^[a-zA-Z0-9]+$/.test(username)) {
+    res.status(400).json({ error: "Username can only contain letters and numbers" });
+    return;
+  }
   const rawFp = req.headers["x-device-fingerprint"];
   const deviceFingerprint = typeof rawFp === "string" ? rawFp : null;
 

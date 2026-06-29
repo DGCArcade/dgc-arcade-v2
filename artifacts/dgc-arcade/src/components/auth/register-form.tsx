@@ -36,7 +36,11 @@ function getDeviceFingerprint(): string {
 }
 
 const registerSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters").max(24, "Username must be max 24 characters"),
+  username: z
+    .string()
+    .min(3, "Username must be at least 3 characters")
+    .max(24, "Username must be max 24 characters")
+    .regex(/^[a-zA-Z0-9]+$/, "Username can only contain letters and numbers — no spaces or special characters"),
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   promoCode: z.string().optional().or(z.literal("")),

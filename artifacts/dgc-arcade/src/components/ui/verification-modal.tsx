@@ -29,11 +29,11 @@ export function VerificationModal({ open, onClose, required = false }: Verificat
     return undefined;
   }, [resendCooldown]);
 
-  // Auto-send email when modal opens
+  // Reset state when modal opens/closes — do NOT auto-send (backend already sends on register)
   useEffect(() => {
     if (open && !hasSentInitial.current) {
-      handleResend(true);
       hasSentInitial.current = true;
+      setStatus({ type: "success", msg: "✉️ Verification email sent! Check your inbox." });
     }
     if (!open) {
       hasSentInitial.current = false;
