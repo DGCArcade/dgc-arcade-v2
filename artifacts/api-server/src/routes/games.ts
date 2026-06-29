@@ -8,6 +8,44 @@ const PUBLIC_GAME_CACHE_MS = 60_000;
 let activeGamesCache: { expiresAt: number; value: ReturnType<typeof formatGame>[] } | null = null;
 let slotThemesCache: { expiresAt: number; value: { themes: typeof slotThemesTable.$inferSelect[] } } | null = null;
 
+// ── Core (non-slot) table games shown in the lobby ───────────────────────────
+const CORE_GAMES: Array<{
+  slug: string;
+  name: string;
+  description: string;
+  minBet: string;
+  maxBet: string;
+  houseEdge: string;
+}> = [
+  { slug: "roulette", name: "Roulette", description: "Spin the wheel — European single-zero", minBet: "0.10", maxBet: "1000", houseEdge: "0.0270" },
+  { slug: "dice", name: "Dice", description: "Roll over or under your target", minBet: "0.10", maxBet: "1000", houseEdge: "0.0100" },
+  { slug: "crash", name: "Crash", description: "Cash out before the rocket crashes", minBet: "0.10", maxBet: "1000", houseEdge: "0.0300" },
+  { slug: "mines", name: "Mines", description: "Find the gems, avoid the bombs", minBet: "0.10", maxBet: "1000", houseEdge: "0.0300" },
+  { slug: "blackjack", name: "Blackjack", description: "Beat the dealer to 21", minBet: "0.10", maxBet: "1000", houseEdge: "0.0050" },
+  { slug: "hilo", name: "Hi-Lo", description: "Guess higher or lower", minBet: "0.10", maxBet: "1000", houseEdge: "0.0200" },
+  { slug: "coinflip", name: "Coin Flip", description: "50/50 — pays 2 to 1", minBet: "0.10", maxBet: "1000", houseEdge: "0.0200" },
+  { slug: "keno", name: "Keno", description: "Pick your lucky numbers", minBet: "0.10", maxBet: "1000", houseEdge: "0.0500" },
+  { slug: "chicken-road", name: "Chicken Road", description: "Cross the road, dodge the cars", minBet: "0.10", maxBet: "1000", houseEdge: "0.0400" },
+];
+
+// ── Bootstrap the core game catalog ONLY when the games table is empty ────────
+// This makes the lobby populate on a brand-new database. The empty-table guard
+// means it never resurrects or overwrites games an admin has intentionally
+// changed or removed — it only bootstraps a blank catalog. It touches no money,
+// balances, or wallet data.
+export async function ensureCoreGamesSeeded() {
+  try {
+    const existing = await db.select({ id: gamesTable.id }).from(gamesTable).limit(1);
+    if (existing.length > 0) return;
+    await db
+      .insert(gamesTable)
+      .values(CORE_GAMES.map((g) => ({ ...g, active: true })))
+      .onConflictDoNothing();
+  } catch (err) {
+    console.error("ensureCoreGamesSeeded error:", err);
+  }
+}
+
 // ── Ensure all active slot themes have a corresponding games table entry ──────
 export async function ensureSlotGamesSeeded() {
   try {

@@ -789,7 +789,6 @@ export default function Profile() {
                       <option value="keno">Keno</option>
                       <option value="mines">Mines</option>
                       <option value="blackjack">Blackjack</option>
-                      <option value="slots">Slots</option>
                     </select>
                   </div>
                   <button onClick={calculateVerificationHash} disabled={!vServerSeed || !vClientSeed || !vNonce}
