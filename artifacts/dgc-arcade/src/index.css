@@ -469,6 +469,75 @@ body {
   animation: roulette-spin 3s cubic-bezier(0.17,0.67,0.35,1) forwards;
 }
 
+/* ── Game card cover animations ──────────────────────────────────── */
+@keyframes cover-wheel-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes cover-ball-orbit {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+@keyframes cover-crash-rise {
+  0% { transform: translate(-220px, 170px); opacity: 0.5; }
+  50% { transform: translate(0px, 0px); opacity: 1; }
+  68% { transform: translate(8px, -6px) scale(1.1); opacity: 1; }
+  72% { transform: translate(10px, -8px) scale(1.4); opacity: 0.8; }
+  82%, 100% { transform: translate(12px, -10px) scale(0.2); opacity: 0; }
+}
+@keyframes cover-crash-line {
+  0% { stroke-dashoffset: 400; opacity: 0.3; }
+  40% { stroke-dashoffset: 0; opacity: 1; }
+  70% { stroke-dashoffset: 0; opacity: 1; }
+  85%, 100% { stroke-dashoffset: 0; opacity: 0.2; }
+}
+@keyframes cover-crash-flash {
+  0%, 68%, 100% { opacity: 0; }
+  72% { opacity: 0.85; }
+  78% { opacity: 0; }
+}
+@keyframes cover-mines-tap {
+  0%, 8% { transform: scale(1); filter: brightness(1); }
+  10% { transform: scale(0.92); filter: brightness(1.3); }
+  14% { transform: scale(1.05); filter: brightness(1.1); }
+  22%, 100% { transform: scale(1); filter: brightness(1); }
+}
+@keyframes cover-mines-reveal-gem {
+  0%, 10% { opacity: 0; transform: scale(0.5); }
+  14%, 80% { opacity: 1; transform: scale(1); }
+  88%, 100% { opacity: 0; transform: scale(0.5); }
+}
+@keyframes cover-mines-reveal-bomb {
+  0%, 10% { opacity: 0; transform: scale(0.5); }
+  14%, 18% { opacity: 1; transform: scale(1.2); }
+  22%, 80% { opacity: 1; transform: scale(1); }
+  88%, 100% { opacity: 0; transform: scale(0.5); }
+}
+.cover-wheel-spin {
+  transform-origin: 160px 100px;
+  animation: cover-wheel-spin 12s linear infinite;
+}
+.cover-ball-orbit {
+  transform-origin: 160px 100px;
+  animation: cover-ball-orbit 12s linear infinite;
+}
+.cover-crash-rocket {
+  animation: cover-crash-rise 3.5s ease-in-out infinite;
+}
+.cover-crash-line {
+  stroke-dasharray: 400;
+  animation: cover-crash-line 3.5s ease-in-out infinite;
+}
+.cover-crash-flash {
+  animation: cover-crash-flash 3.5s ease-in-out infinite;
+}
+.cover-mines-cell-0 { animation: cover-mines-tap 4s ease-in-out infinite 0s; transform-box: fill-box; transform-origin: center; }
+.cover-mines-cell-4 { animation: cover-mines-tap 4s ease-in-out infinite 0.9s; transform-box: fill-box; transform-origin: center; }
+.cover-mines-cell-5 { animation: cover-mines-tap 4s ease-in-out infinite 1.8s; transform-box: fill-box; transform-origin: center; }
+.cover-mines-cell-9 { animation: cover-mines-tap 4s ease-in-out infinite 2.7s; transform-box: fill-box; transform-origin: center; }
+.cover-mines-reveal-gem { opacity: 0; animation: cover-mines-reveal-gem 4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.cover-mines-reveal-bomb { opacity: 0; animation: cover-mines-reveal-bomb 4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
 /* ── Plinko ball drop ────────────────────────────────────────────── */
 @keyframes plinko-drop {
   0%   { top: 0; opacity: 1; }
@@ -1507,13 +1576,12 @@ body {
   }
 }
 
-/* Mobile game layout — side-by-side like desktop, compact to fit screen */
+/* Mobile game layout — compact mirror of each game's desktop DOM order */
 @media (max-width: 767px) {
-  /* In-page play area — fits viewport without scrolling to play */
   .mobile-game-play-area {
-    height: clamp(300px, 50dvh, 420px);
-    min-height: 300px;
-    max-height: 52dvh;
+    height: clamp(340px, 58dvh, 480px);
+    min-height: 340px;
+    max-height: 58dvh;
     overflow: hidden;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1521,34 +1589,15 @@ body {
     box-sizing: border-box;
   }
 
-  .mobile-game-play-area > * {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-  }
-
+  .mobile-game-play-area > *,
   .mobile-game-play-area > * > * {
     height: 100% !important;
     min-height: 0 !important;
+    overflow: hidden !important;
     box-sizing: border-box !important;
   }
 
-  .mobile-game-play-area .crash-chart-area,
-  .mobile-game-play-area .hilo-card-area,
-  .mobile-game-play-area .roulette-wheel-area,
-  .mobile-game-play-area .keno-grid-area {
-    min-height: 0 !important;
-  }
-
-  .mobile-game-play-area .crash-game-root,
-  .mobile-game-play-area .hilo-game-root,
-  .mobile-game-play-area .roulette-game-root,
-  .mobile-game-play-area .keno-game-root,
-  .mobile-game-play-area .chicken-road-game-root {
-    gap: 4px !important;
-  }
-
-  /* Keep horizontal layout (game left, bet panel right) */
+  /* Row layout — preserve DOM order (same as desktop flex-row) */
   .mobile-game-play-area .bj-game-root,
   .mobile-game-play-area .cf-root,
   .mobile-game-play-area .cf-game-root,
@@ -1559,94 +1608,19 @@ body {
   .mobile-game-play-area .hilo-game-root,
   .mobile-game-play-area .plinko-root,
   .mobile-game-play-area .plinko-game-root,
-  .mobile-game-play-area .chicken-road-game-root,
-  .mobile-game-overlay-body .bj-game-root,
-  .mobile-game-overlay-body .cf-root,
-  .mobile-game-overlay-body .cf-game-root,
-  .mobile-game-overlay-body .mines-game-root,
-  .mobile-game-overlay-body .crash-game-root,
-  .mobile-game-overlay-body .roulette-game-root,
-  .mobile-game-overlay-body .keno-game-root,
-  .mobile-game-overlay-body .hilo-game-root,
-  .mobile-game-overlay-body .plinko-root,
-  .mobile-game-overlay-body .plinko-game-root,
-  .mobile-game-overlay-body .chicken-road-game-root {
+  .mobile-game-play-area .chicken-road-game-root {
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: nowrap !important;
     align-items: stretch !important;
-    gap: 4px !important;
+    gap: 3px !important;
     height: 100% !important;
     max-height: 100% !important;
-    padding: 4px !important;
-    box-sizing: border-box !important;
-  }
-
-  /* Game play area — left column (~65%) */
-  .mobile-game-play-area .bj-table-area,
-  .mobile-game-play-area .cf-coin-area,
-  .mobile-game-play-area .cf-table-area,
-  .mobile-game-play-area .mines-grid-container,
-  .mobile-game-play-area .crash-chart-area,
-  .mobile-game-play-area .plinko-board-area,
-  .mobile-game-play-area .roulette-wheel-area,
-  .mobile-game-play-area .keno-grid-area,
-  .mobile-game-play-area .hilo-card-area,
-  .mobile-game-play-area .chicken-road-play-area,
-  .mobile-game-overlay-body .bj-table-area,
-  .mobile-game-overlay-body .cf-coin-area,
-  .mobile-game-overlay-body .cf-table-area,
-  .mobile-game-overlay-body .mines-grid-container,
-  .mobile-game-overlay-body .crash-chart-area,
-  .mobile-game-overlay-body .plinko-board-area,
-  .mobile-game-overlay-body .roulette-wheel-area,
-  .mobile-game-overlay-body .keno-grid-area,
-  .mobile-game-overlay-body .hilo-card-area,
-  .mobile-game-overlay-body .chicken-road-play-area {
-    flex: 1 1 65% !important;
-    width: auto !important;
-    min-width: 0 !important;
-    min-height: 0 !important;
-    order: 1 !important;
-    padding: 4px !important;
+    padding: 3px !important;
     overflow: hidden !important;
   }
 
-  /* Bet panels — right column (~32%) */
-  .mobile-game-play-area .bj-controls-bar,
-  .mobile-game-play-area .bj-bet-panel,
-  .mobile-game-play-area .cf-bet-panel,
-  .mobile-game-play-area .mines-bet-panel,
-  .mobile-game-play-area .crash-bet-panel,
-  .mobile-game-play-area .plinko-bet-panel,
-  .mobile-game-play-area .roulette-bet-panel,
-  .mobile-game-play-area .keno-bet-panel,
-  .mobile-game-play-area .hilo-bet-panel,
-  .mobile-game-play-area .chicken-road-bet-panel,
-  .mobile-game-overlay-body .bj-controls-bar,
-  .mobile-game-overlay-body .bj-bet-panel,
-  .mobile-game-overlay-body .cf-bet-panel,
-  .mobile-game-overlay-body .mines-bet-panel,
-  .mobile-game-overlay-body .crash-bet-panel,
-  .mobile-game-overlay-body .plinko-bet-panel,
-  .mobile-game-overlay-body .roulette-bet-panel,
-  .mobile-game-overlay-body .keno-bet-panel,
-  .mobile-game-overlay-body .hilo-bet-panel,
-  .mobile-game-overlay-body .chicken-road-bet-panel {
-    flex: 0 0 32% !important;
-    width: 32% !important;
-    max-width: 32% !important;
-    min-width: 0 !important;
-    order: 2 !important;
-    position: static !important;
-    padding: 6px !important;
-    gap: 4px !important;
-    overflow-y: auto !important;
-    font-size: 9px !important;
-    border-radius: 8px !important;
-  }
-
-  /* Override per-game inline @media column-reverse stacking */
+  /* Undo game-injected column-reverse / width:100% at ≤1024px */
   .mobile-game-play-area .bj-game-root,
   .mobile-game-play-area .cf-root,
   .mobile-game-play-area .mines-game-root,
@@ -1661,162 +1635,298 @@ body {
   .mobile-game-play-area .mines-grid-container,
   .mobile-game-play-area .mines-bet-panel,
   .mobile-game-play-area .plinko-board-area,
-  .mobile-game-play-area .plinko-bet-panel {
+  .mobile-game-play-area .plinko-bet-panel,
+  .mobile-game-play-area .crash-chart-area,
+  .mobile-game-play-area .crash-bet-panel,
+  .mobile-game-play-area .roulette-wheel-area,
+  .mobile-game-play-area .roulette-bet-panel,
+  .mobile-game-play-area .keno-grid-area,
+  .mobile-game-play-area .keno-bet-panel,
+  .mobile-game-play-area .hilo-card-area,
+  .mobile-game-play-area .hilo-bet-panel,
+  .mobile-game-play-area .chicken-road-bet-panel,
+  .mobile-game-play-area .chicken-road-play-area {
     order: unset !important;
+    width: auto !important;
+    min-height: 0 !important;
+    position: static !important;
   }
 
+  /* Play columns — flex grow (DOM order preserved) */
   .mobile-game-play-area .bj-table-area,
   .mobile-game-play-area .cf-coin-area,
   .mobile-game-play-area .mines-grid-container,
-  .mobile-game-play-area .plinko-board-area {
-    order: 1 !important;
+  .mobile-game-play-area .crash-chart-area,
+  .mobile-game-play-area .roulette-wheel-area,
+  .mobile-game-play-area .keno-grid-area,
+  .mobile-game-play-area .hilo-card-area,
+  .mobile-game-play-area .plinko-board-area,
+  .mobile-game-play-area .chicken-road-play-area {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    padding: 3px !important;
+    overflow: hidden !important;
   }
 
+  /* Bet columns — fixed narrow strip, no internal scroll */
   .mobile-game-play-area .bj-controls-bar,
   .mobile-game-play-area .cf-bet-panel,
   .mobile-game-play-area .mines-bet-panel,
-  .mobile-game-play-area .plinko-bet-panel {
-    order: 2 !important;
-  }
-
-  /* Chicken road — play area left, bets right (DOM order is reversed) */
-  .mobile-game-play-area .chicken-road-play-area {
-    order: 1 !important;
-  }
-  .mobile-game-play-area .chicken-road-bet-panel {
-    order: 2 !important;
-  }
-
-  .mobile-game-play-area .crash-chart-area {
-    min-height: 0 !important;
-    padding: 4px !important;
-  }
-  .mobile-game-play-area .crash-chart-area .font-mono {
-    font-size: 1.75rem !important;
-    line-height: 1 !important;
-  }
-
-  .mobile-game-play-area .cf-coin-area {
-    min-height: 0 !important;
-    padding: 6px !important;
-  }
-  .mobile-game-play-area .cf-coin-wrap {
-    --coin-size: clamp(56px, 18vw, 90px) !important;
-  }
-
-  .mobile-game-play-area .roulette-wheel-area {
-    min-height: 0 !important;
-    padding: 4px !important;
-  }
-  .mobile-game-play-area .roulette-wheel-area svg {
-    max-width: 100% !important;
-    height: auto !important;
-  }
-
-  /* Blackjack compact */
-  .mobile-game-play-area .bj-table-area {
-    padding: 6px 2px !important;
-    gap: 4px !important;
-    min-height: 0 !important;
-  }
-  .mobile-game-play-area .bj-card-container {
-    width: clamp(32px, 10vw, 52px) !important;
-    height: clamp(44px, 14vw, 72px) !important;
-  }
-  .mobile-game-play-area .bj-controls-bar {
-    padding: 6px !important;
-    gap: 4px !important;
-    max-width: 32% !important;
-  }
-  .mobile-game-play-area .bj-action-btn {
-    padding: 6px !important;
-    font-size: 9px !important;
-  }
-
-  /* Dice Live — dice left, bets right */
-  .mobile-game-play-area .dice-container {
-    display: grid !important;
-    grid-template-columns: 1fr 32% !important;
-    grid-template-rows: 1fr auto !important;
-    gap: 4px !important;
-    height: 100% !important;
-    padding: 4px !important;
-    box-sizing: border-box !important;
-  }
-  .mobile-game-play-area .dice-display {
-    grid-column: 1 !important;
-    grid-row: 1 !important;
-    padding: 4px !important;
-    min-height: 0 !important;
-    order: unset !important;
-  }
-  .mobile-game-play-area .live-feed {
-    grid-column: 1 !important;
-    grid-row: 2 !important;
-    padding: 4px !important;
-    max-height: 60px !important;
-    overflow: hidden !important;
-  }
-  .mobile-game-play-area .betting-panel {
-    grid-column: 2 !important;
-    grid-row: 1 / 3 !important;
-    padding: 6px !important;
-    overflow-y: auto !important;
-    width: auto !important;
-    max-width: none !important;
-    order: unset !important;
-  }
-  .mobile-game-play-area .sha-display {
-    display: none !important;
-  }
-  .mobile-game-play-area .dice-size {
-    width: 48px !important;
-    height: 48px !important;
-  }
-  .mobile-game-play-area .result-text {
-    font-size: 24px !important;
-  }
-
-  .mobile-game-play-area > div {
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-
-  .mobile-game-play-area .chicken-road-play-area > div:first-child,
-  .mobile-game-play-area .chicken-road-play-area > div:nth-child(2) {
-    display: none !important;
-  }
-  .mobile-game-play-area .mines-grid-container {
-    padding: 4px !important;
-  }
-
-  /* Compact bet panel controls */
-  .mobile-game-play-area input,
-  .mobile-game-play-area select {
-    font-size: 12px !important;
-    padding: 4px 6px !important;
-  }
-  .mobile-game-play-area label {
-    font-size: 8px !important;
-  }
-  .mobile-game-play-area button {
-    font-size: 9px !important;
-  }
-  .mobile-game-play-area .crash-bet-panel button,
-  .mobile-game-play-area .roulette-bet-panel button,
-  .mobile-game-play-area .keno-bet-panel button,
-  .mobile-game-play-area .hilo-bet-panel button {
-    height: auto !important;
-    min-height: 32px !important;
-    padding: 6px !important;
-    font-size: 9px !important;
-  }
   .mobile-game-play-area .crash-bet-panel,
   .mobile-game-play-area .roulette-bet-panel,
   .mobile-game-play-area .keno-bet-panel,
-  .mobile-game-play-area .hilo-bet-panel {
-    padding: 6px !important;
+  .mobile-game-play-area .hilo-bet-panel,
+  .mobile-game-play-area .plinko-bet-panel,
+  .mobile-game-play-area .chicken-road-bet-panel,
+  .mobile-game-play-area .betting-panel {
+    flex: 0 0 34% !important;
+    width: 34% !important;
+    max-width: 34% !important;
+    min-width: 0 !important;
+    padding: 4px !important;
+    gap: 3px !important;
+    overflow: hidden !important;
+    font-size: 8px !important;
+    border-radius: 8px !important;
+  }
+
+  /* ── Dice Live: mirror desktop — bets LEFT, dice+feed RIGHT ── */
+  .mobile-game-play-area.mobile-game--dice > * > *,
+  .mobile-game-play-area.mobile-game--dice .w-full {
+    padding: 0 !important;
+  }
+
+  .mobile-game-play-area .dice-container {
+    display: grid !important;
+    grid-template-columns: 34% 1fr !important;
+    grid-template-rows: 1fr minmax(0, auto) !important;
+    gap: 3px !important;
+    height: 100% !important;
+    padding: 3px !important;
+  }
+
+  .mobile-game-play-area .betting-panel {
+    grid-column: 1 !important;
+    grid-row: 1 / 3 !important;
+    flex: unset !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+
+  .mobile-game-play-area .dice-display {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    padding: 3px !important;
+    min-height: 0 !important;
+  }
+
+  .mobile-game-play-area .live-feed {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+    padding: 3px !important;
+    max-height: 52px !important;
+    overflow: hidden !important;
+  }
+
+  .mobile-game-play-area .sha-display {
+    display: none !important;
+  }
+
+  .mobile-game-play-area .dice-size {
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  .mobile-game-play-area .result-text {
+    font-size: 22px !important;
+  }
+
+  .mobile-game-play-area .dice-display {
+    min-height: unset !important;
+    gap: 8px !important;
+  }
+
+  /* ── Blackjack ── */
+  .mobile-game-play-area .bj-table-area {
+    padding: 4px 2px !important;
+    gap: 2px !important;
+    min-height: 0 !important;
+  }
+
+  .mobile-game-play-area .bj-card-container {
+    width: clamp(30px, 9vw, 48px) !important;
+    height: clamp(42px, 12vw, 66px) !important;
+  }
+
+  .mobile-game-play-area .bj-controls-bar {
+    padding: 4px !important;
+    gap: 3px !important;
+    max-width: 34% !important;
+  }
+
+  .mobile-game-play-area .bj-action-btn {
+    padding: 5px 2px !important;
+    font-size: 8px !important;
+  }
+
+  /* ── Coinflip ── */
+  .mobile-game-play-area .cf-coin-area {
+    min-height: 0 !important;
+    padding: 4px !important;
+  }
+
+  .mobile-game-play-area .cf-coin-wrap {
+    --coin-size: clamp(52px, 16vw, 80px) !important;
+  }
+
+  .mobile-game-play-area .cf-stats-mobile {
+    display: none !important;
+  }
+
+  /* ── Crash ── */
+  .mobile-game-play-area .crash-chart-area {
+    padding: 3px !important;
+  }
+
+  .mobile-game-play-area .crash-chart-area .font-mono {
+    font-size: 1.5rem !important;
+    line-height: 1 !important;
+  }
+
+  .mobile-game-play-area .crash-bet-panel {
+    gap: 3px !important;
+  }
+
+  .mobile-game-play-area .crash-bet-panel .h-14 {
+    height: 36px !important;
+    min-height: 36px !important;
+    font-size: 10px !important;
+  }
+
+  /* ── Roulette ── */
+  .mobile-game-play-area .roulette-wheel-area {
+    padding: 2px !important;
+  }
+
+  .mobile-game-play-area .roulette-wheel-area svg {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    width: auto !important;
+    height: auto !important;
+  }
+
+  .mobile-game-play-area .roulette-bet-panel {
+    padding: 3px !important;
+    gap: 2px !important;
+  }
+
+  .mobile-game-play-area .roulette-bet-panel .space-y-3 {
+    gap: 2px !important;
+  }
+
+  .mobile-game-play-area .roulette-bet-panel button {
+    height: 22px !important;
+    min-height: 22px !important;
+    padding: 1px 2px !important;
+    font-size: 7px !important;
+  }
+
+  .mobile-game-play-area .roulette-bet-panel .h-14 {
+    height: 32px !important;
+    min-height: 32px !important;
+    font-size: 9px !important;
+  }
+
+  .mobile-game-play-area .roulette-bet-panel .max-h-36 {
+    max-height: 56px !important;
+    overflow: hidden !important;
+  }
+
+  .mobile-game-play-area .roulette-bet-panel .grid.grid-cols-7 button {
+    width: 18px !important;
+    height: 16px !important;
+    font-size: 6px !important;
+  }
+
+  .mobile-game-play-area .roulette-bet-panel > .mt-4 {
+    display: none !important;
+  }
+
+  /* ── Mines ── */
+  .mobile-game-play-area .mines-grid-container {
+    padding: 3px !important;
     gap: 4px !important;
+  }
+
+  .mobile-game-play-area .mines-bet-panel > div:first-child {
+    display: none !important;
+  }
+
+  .mobile-game-play-area .mines-bet-panel {
+    gap: 3px !important;
+  }
+
+  /* ── Keno / HiLo ── */
+  .mobile-game-play-area .keno-grid-area,
+  .mobile-game-play-area .hilo-card-area {
+    padding: 3px !important;
+    gap: 4px !important;
+  }
+
+  .mobile-game-play-area .keno-bet-panel .h-14,
+  .mobile-game-play-area .hilo-bet-panel .h-14 {
+    height: 34px !important;
+    min-height: 34px !important;
+    font-size: 9px !important;
+  }
+
+  /* ── Plinko ── */
+  .mobile-game-play-area .plinko-board-area {
+    padding: 3px !important;
+  }
+
+  /* ── Chicken Road: bets LEFT (DOM first), road RIGHT ── */
+  .mobile-game-play-area .chicken-road-play-area > div:first-child {
+    display: none !important;
+  }
+
+  .mobile-game-play-area .chicken-road-bet-panel .grid-cols-2 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 2px !important;
+  }
+
+  .mobile-game-play-area .chicken-road-bet-panel button,
+  .mobile-game-play-area .chicken-road-bet-panel .text-2xl {
+    font-size: 10px !important;
+  }
+
+  /* ── Global compact controls — no scroll inside game shell ── */
+  .mobile-game-play-area input,
+  .mobile-game-play-area select {
+    font-size: 10px !important;
+    padding: 3px 4px !important;
+    min-height: 0 !important;
+  }
+
+  .mobile-game-play-area label {
+    font-size: 7px !important;
+    letter-spacing: 0.04em !important;
+  }
+
+  .mobile-game-play-area button {
+    font-size: 8px !important;
+  }
+
+  .mobile-game-play-area .gap-8,
+  .mobile-game-play-area .gap-6,
+  .mobile-game-play-area .gap-5,
+  .mobile-game-play-area .gap-4 {
+    gap: 3px !important;
+  }
+
+  .mobile-game-play-area .p-6,
+  .mobile-game-play-area .p-4 {
+    padding: 4px !important;
   }
 }
 

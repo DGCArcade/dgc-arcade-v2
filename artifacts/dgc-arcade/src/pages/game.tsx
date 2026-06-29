@@ -240,7 +240,7 @@ export default function GamePage() {
 
       <GameHeader game={game} compact={isMobile} />
 
-      <div className={isMobile ? "mobile-game-play-area" : undefined}>
+      <div className={isMobile ? `mobile-game-play-area mobile-game--${game.slug}` : undefined}>
         <GameRenderer game={game} />
       </div>
 
