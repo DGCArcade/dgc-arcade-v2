@@ -13,5 +13,5 @@ cd /home/runner/workspace
 git --no-optional-locks status
 echo ""
 echo "Pushing to origin main..."
-git push https://DGC4:${GITHUB_TOKEN}@github.com/DGC4/dgc-arcade-v2.git HEAD:main
-echo "Done — pushed to github.com/DGC4/dgc-arcade-v2"
+git push https://DGCArcade:${GITHUB_TOKEN}@github.com/DGCArcade/dgc-arcade-v2.git HEAD:main --force
+echo "Done — pushed to github.com/DGCArcade/dgc-arcade-v2"
