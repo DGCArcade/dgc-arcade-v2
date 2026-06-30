@@ -262,9 +262,9 @@ function MinesGame({ game }: MinesProps) {
 
       <style>{`
         @media (max-width: 1024px) {
-          .mines-game-root { flex-direction: column-reverse !important; padding: 8px !important; gap: 16px !important; }
-          .mines-bet-panel { width: 100% !important; position: static !important; order: 1; }
-          .mines-grid-container { width: 100% !important; order: 2; min-height: auto !important; padding: 16px 10px !important; }
+          .mines-game-root { flex-direction: column !important; padding: 6px !important; gap: 8px !important; }
+          .mines-bet-panel { width: 100% !important; position: static !important; order: 2 !important; max-width: 100% !important; }
+          .mines-grid-container { width: 100% !important; order: 1 !important; min-height: auto !important; padding: 10px 8px !important; }
           .mines-cell { width: 100% !important; height: auto !important; aspect-ratio: 1/1 !important; }
         }
         @keyframes mines-reveal { 0% { transform: scale(0.7) rotateY(90deg); opacity: 0; } 100% { transform: scale(1) rotateY(0deg); opacity: 1; } }
@@ -408,13 +408,13 @@ function MinesGame({ game }: MinesProps) {
 
       {/* ── BET PANEL (right side) ── */}
       <div className="mines-bet-panel" style={{
-        width: 280, flexShrink: 0,
+        width: isMobile ? "100%" : 280, flexShrink: 0,
         background: "rgba(8,12,26,0.88)",
         border: "1.5px solid rgba(255,255,255,0.07)",
-        borderRadius: 14, padding: "14px",
-        display: "flex", flexDirection: "column", gap: 12,
+        borderRadius: 14, padding: isMobile ? "10px" : "14px",
+        display: "flex", flexDirection: "column", gap: isMobile ? 8 : 12,
         backdropFilter: "blur(14px)",
-        position: "sticky", top: 80,
+        position: isMobile ? "static" : "sticky", top: isMobile ? undefined : 80,
       }}>
 
         {/* Panel title */}

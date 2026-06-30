@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ChickenRoadRenderer } from "@/lib/chicken-road-engine/ChickenRoadRenderer";
 import type { CrossAnim, ChickenRoadState, HazardType } from "@/lib/chicken-road-engine/types";
 import { StakeChickenBoard } from "./stake-chicken-board";
@@ -34,10 +35,15 @@ function toEngineState(props: ChickenRoadBoardProps): ChickenRoadState {
 }
 
 export function ChickenRoadBoard(props: ChickenRoadBoardProps) {
+  const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<ChickenRoadRenderer | null>(null);
-  const [useFallback, setUseFallback] = useState(false);
+  const [useFallback, setUseFallback] = useState(isMobile);
   const [pixiReady, setPixiReady] = useState(false);
+
+  useEffect(() => {
+    if (isMobile) setUseFallback(true);
+  }, [isMobile]);
 
   useEffect(() => {
     if (useFallback) return;

@@ -229,10 +229,10 @@ export function Coinflip({ game }: CoinflipProps) {
       <style>{`
         /* ── Responsive layout ── */
         @media (max-width: 1024px) {
-          .cf-root { flex-direction: column-reverse !important; padding: 8px !important; gap: 10px !important; }
-          .cf-coin-area { order: 2; width: 100% !important; min-height: 280px !important; padding: 24px 16px !important; }
-          .cf-bet-panel { order: 1; width: 100% !important; position: static !important; }
-          .cf-coin-wrap { --coin-size: clamp(140px, 38vw, 200px) !important; }
+          .cf-root { flex-direction: column !important; padding: 6px !important; gap: 8px !important; }
+          .cf-coin-area { order: 1 !important; width: 100% !important; min-height: 160px !important; padding: 12px 10px !important; }
+          .cf-bet-panel { order: 2 !important; width: 100% !important; position: static !important; }
+          .cf-coin-wrap { transform: scale(0.72); transform-origin: center center; }
           /* Stats row visible below coin on mobile */
           .cf-stats-mobile { display: flex !important; }
           /* Stats row in bet panel hidden on mobile (avoid duplication) */
