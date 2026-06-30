@@ -193,7 +193,7 @@ function MyBetsFeed() {
   const { data: bets, isLoading } = useListBets({ limit: 20 }, {
     query: {
       queryKey: getListBetsQueryKey({ limit: 20 }),
-      refetchInterval: 6000,
+      refetchInterval: 10_000,
     }
   });
   return <BetsTable bets={bets as unknown as Bet[] ?? []} loading={isLoading} emptyMsg="No bets placed yet. Start playing!" />;
@@ -252,7 +252,7 @@ export function LiveFeed() {
   const { data: allBets, isLoading } = useListRecentBetsAll({ limit: 20 }, {
     query: {
       queryKey: getListRecentBetsAllQueryKey({ limit: 20 }),
-      refetchInterval: 5000,
+      refetchInterval: 10_000,
     }
   });
 

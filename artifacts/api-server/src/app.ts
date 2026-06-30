@@ -1,5 +1,6 @@
 import express, { type Express, type Request } from "express";
 import cors from "cors";
+import compression from "compression";
 import rateLimit from "express-rate-limit";
 import pinoHttp from "pino-http";
 import { verifyToken, isOwnerUser } from "./middlewares/auth.js";
@@ -11,10 +12,14 @@ import { ensureSlotGamesSeeded, ensureCoreGamesSeeded } from "./routes/games.js"
 import { pool } from "@workspace/db";
 
 const app: Express = express();
+const isProduction = process.env.NODE_ENV === "production";
 
 // Behind Render's reverse proxy: trust the first hop so req.ip and rate limiting
 // key off the real client IP (and the express-rate-limit X-Forwarded-For warning clears).
 app.set("trust proxy", 1);
+
+// Gzip JSON responses — cuts payload size on slow cross-region links
+app.use(compression({ threshold: 1024 }));
 
 app.use(
   pinoHttp({
@@ -53,39 +58,32 @@ const ALLOWED_ORIGINS = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, Render health checks)
     if (!origin) return callback(null, true);
     if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS: origin '${origin}' not allowed`));
+    // Return false (not an Error) so browsers get a clean CORS denial, not a 500
+    callback(null, false);
   },
   credentials: true,
 }));
 
-// Security headers and caching optimization
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
-  res.setHeader("Referrer-Policy", "no-referrer");
-  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (isProduction) {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   res.setHeader("Cross-Origin-Resource-Policy", "same-site");
-  // Compression hint for proxies
-  res.setHeader("Vary", "Accept-Encoding");
   next();
 });
 
-// ── Response compression and performance headers ──────────────────────────────
-// Cache static assets aggressively
+// Default: no browser cache for dynamic API responses. Individual routes
+// override with their own Cache-Control (games, leaderboard, bets, etc.).
 app.use((req, res, next) => {
-  if (req.url.match(/\.(js|css|png|jpg|gif|svg|woff|woff2|ttf|eot)$/i)) {
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-  } else if (req.url.startsWith("/api/games") || req.url.startsWith("/api/leaderboard")) {
-    // Cache public game data for 1 minute
-    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
-  } else if (req.method === "GET") {
-    // Default: no cache for dynamic content
+  if (req.method === "GET" && req.url.startsWith("/api/")) {
     res.setHeader("Cache-Control", "private, no-cache, no-store, must-revalidate");
   }
   next();
@@ -196,14 +194,6 @@ const geoLimiter = rateLimit({
 // Body parser with size limits for performance
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
-
-// ── Connection pooling optimization ──────────────────────────────────────────
-// Ensure database connections are properly pooled
-if (pool) {
-  pool.on("error", (err) => {
-    logger.error({ err }, "Unexpected error on idle client in pool");
-  });
-}
 
 // ── Visitor Tracking Middleware ──────────────────────────────────────────────
 app.use((req, _res, next) => {

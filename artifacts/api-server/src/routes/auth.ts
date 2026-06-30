@@ -14,7 +14,7 @@ import { getRequestContext } from "../lib/request-context.js";
 export const authRouter = Router();
 
 async function formatUser(user: typeof usersTable.$inferSelect) {
-  const { totalBalance, cryptoBalances } = await getUserBalance(user.id);
+  const { totalBalance, cryptoBalances } = await getUserBalance(user.id, user.balance);
 
   return {
     id: user.id,

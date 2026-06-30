@@ -8,6 +8,11 @@ const PUBLIC_GAME_CACHE_MS = 60_000;
 let activeGamesCache: { expiresAt: number; value: ReturnType<typeof formatGame>[] } | null = null;
 let slotThemesCache: { expiresAt: number; value: { themes: typeof slotThemesTable.$inferSelect[] } } | null = null;
 
+export function invalidatePublicGamesCache() {
+  activeGamesCache = null;
+  slotThemesCache = null;
+}
+
 // ── Core (non-slot) table games shown in the lobby ───────────────────────────
 const CORE_GAMES: Array<{
   slug: string;

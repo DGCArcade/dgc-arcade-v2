@@ -4,45 +4,45 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
+// Prefer Neon's pooled endpoint (DATABASE_POOL_URL) when set — keeps warm
+// connections to Singapore and cuts Oregon↔Singapore handshake latency.
+const connectionString =
+  process.env.DATABASE_POOL_URL ?? process.env.DATABASE_URL;
+
+if (!connectionString) {
   throw new Error(
     "DATABASE_URL must be set. Did you forget to provision a database?",
   );
 }
 
-// Neon.tech requires SSL from external hosts like Render
+// Neon.tech requires SSL from external hosts like Render (Oregon)
 const ssl =
   process.env.NODE_ENV === "production"
     ? { rejectUnauthorized: false }
     : undefined;
 
-// Optimized connection pool for Neon (Singapore region)
-// Neon supports connection pooling for better performance
-const poolConfig = {
-  connectionString: process.env.DATABASE_URL,
+const poolConfig: pg.PoolConfig = {
+  connectionString,
   ssl,
-  // Connection pool settings optimized for production
-  max: Number(process.env.PG_POOL_MAX ?? 20), // Increased from 10 for better concurrency
-  min: Number(process.env.PG_POOL_MIN ?? 5), // Maintain minimum connections
-  idleTimeoutMillis: 30_000, // 30 seconds
-  connectionTimeoutMillis: 10_000, // 10 seconds
+  max: Number(process.env.PG_POOL_MAX ?? 20),
+  min: Number(process.env.PG_POOL_MIN ?? 2),
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 10_000,
   keepAlive: true,
-  // Neon-specific optimizations
   application_name: "dgc-arcade-api",
-  // Enable TCP keepalive for long-lived connections
-  statement_timeout: 30000, // 30 seconds per statement
 };
 
 export const pool = new Pool(poolConfig);
 
-// Log pool events for monitoring
-pool.on("connect", () => {
-  // Connection established
+// statement_timeout must be set per-connection — not a valid Pool option
+pool.on("connect", (client) => {
+  client.query("SET statement_timeout = 30000").catch(() => {});
 });
 
 pool.on("error", (err) => {
   console.error("Unexpected error on idle client in pool", err);
 });
-export const db = drizzle(pool, { schema, logger: false }); // Disable query logging in production for performance
+
+export const db = drizzle(pool, { schema, logger: false });
 
 export * from "./schema";

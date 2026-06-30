@@ -6,7 +6,7 @@ export function PlatformStats() {
   const { data: stats, isLoading } = useGetPlatformStats({
     query: {
       queryKey: getGetPlatformStatsQueryKey(),
-      refetchInterval: 5000,
+      refetchInterval: 15_000,
     }
   });
 

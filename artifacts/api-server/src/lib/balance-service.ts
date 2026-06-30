@@ -16,11 +16,18 @@ export interface UserBalance {
 /**
  * Calculates the real-time balance for a user, including live crypto valuations.
  */
-export async function getUserBalance(userId: number): Promise<UserBalance> {
-  const [user] = await db.select({ balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+export async function getUserBalance(
+  userId: number,
+  prefetchedStaticBalance?: string,
+): Promise<UserBalance> {
+  // Batch DB reads in parallel — each round trip costs ~150ms Oregon↔Singapore.
+  const [user, cryptoBalances] = await Promise.all([
+    prefetchedStaticBalance !== undefined
+      ? Promise.resolve({ balance: prefetchedStaticBalance })
+      : db.select({ balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, userId)).limit(1).then((rows) => rows[0]),
+    db.select().from(userBalancesTable).where(eq(userBalancesTable.userId, userId)),
+  ]);
   if (!user) throw new Error("User not found");
-
-  const cryptoBalances = await db.select().from(userBalancesTable).where(eq(userBalancesTable.userId, userId));
   
   // OPTIMIZATION: Fetch all prices in parallel first, then map. 
   // This reduces the impact of Oregon-to-Singapore latency by batching operations.
