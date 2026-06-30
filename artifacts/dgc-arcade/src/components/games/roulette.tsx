@@ -138,7 +138,7 @@ export function Roulette({ game }: RouletteProps) {
   );
 
   return (
-    <div className={isMobile ? "roulette-game-root roulette-game-root--mobile flex flex-row" : "roulette-game-root flex flex-col md:flex-row gap-8"}>
+    <div className={isMobile ? "roulette-game-root roulette-game-root--mobile flex flex-col" : "roulette-game-root flex flex-col md:flex-row gap-8"}>
       <style>{`
         .roulette-wheel-svg { width: 100%; height: 100%; max-width: 220px; max-height: 220px; overflow: visible; }
         .roulette-wheel-spin,
@@ -151,16 +151,18 @@ export function Roulette({ game }: RouletteProps) {
         }
 
         .roulette-game-root--mobile {
-          flex-direction: row !important;
+          flex-direction: column !important;
           align-items: stretch !important;
           height: 100% !important;
-          gap: 4px !important;
+          gap: 6px !important;
           padding: 0 !important;
         }
         .roulette-game-root--mobile .roulette-wheel-area {
-          flex: 1 1 52% !important;
+          order: 1 !important;
+          flex: 1 1 auto !important;
           min-width: 0 !important;
-          min-height: 0 !important;
+          min-height: 140px !important;
+          max-height: 42dvh !important;
           padding: 4px !important;
           border-radius: 10px !important;
         }
@@ -183,15 +185,14 @@ export function Roulette({ game }: RouletteProps) {
           margin-top: 2px !important;
         }
         .roulette-game-root--mobile .roulette-bet-panel {
-          flex: 0 0 46% !important;
-          width: 46% !important;
-          max-width: 46% !important;
+          order: 2 !important;
+          flex: 0 0 auto !important;
+          width: 100% !important;
+          max-width: 100% !important;
           min-width: 0 !important;
           padding: 6px !important;
           gap: 5px !important;
-          overflow-x: hidden !important;
-          overflow-y: auto !important;
-          -webkit-overflow-scrolling: touch;
+          overflow: visible !important;
         }
         .roulette-game-root--mobile .roulette-bet-panel label {
           font-size: 9px !important;
@@ -220,15 +221,17 @@ export function Roulette({ game }: RouletteProps) {
           margin-top: 4px !important;
         }
         .roulette-game-root--mobile .roulette-number-picker {
-          max-height: 88px !important;
-          overflow-y: auto !important;
-          -webkit-overflow-scrolling: touch;
+          max-height: none !important;
+          overflow: visible !important;
+          grid-template-columns: repeat(10, minmax(0, 1fr)) !important;
+          gap: 2px !important;
         }
         .roulette-game-root--mobile .roulette-number-picker button {
-          width: 22px !important;
-          height: 22px !important;
-          min-height: 22px !important;
-          font-size: 8px !important;
+          width: 100% !important;
+          height: 20px !important;
+          min-height: 20px !important;
+          font-size: 7px !important;
+          padding: 0 !important;
         }
         .roulette-game-root--mobile .roulette-pf-panel { display: none !important; }
       `}</style>
@@ -303,7 +306,7 @@ export function Roulette({ game }: RouletteProps) {
           </div>
           <div>
             <div className="text-xs text-muted-foreground mb-1.5">Pick a number (35x)</div>
-            <div className="roulette-number-picker grid grid-cols-7 gap-1 max-h-36 overflow-y-auto">
+            <div className="roulette-number-picker grid grid-cols-10 gap-1">
               {[0,...Array.from({length:36},(_,i)=>i+1)].map(num=>(
                 <button key={num} type="button" onClick={()=>setBet({betType:"number",betValue:num})} disabled={spinning}
                   className={`w-8 h-7 rounded text-xs font-bold transition-all ${

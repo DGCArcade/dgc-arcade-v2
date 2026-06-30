@@ -294,7 +294,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
 
   return (
     <div className="chicken-road-game-root flex flex-col lg:flex-row gap-4 md:gap-6">
-      <div className="chicken-road-bet-panel lg:w-72 shrink-0 space-y-4 bg-card border border-border rounded-xl p-4">
+      <div className="chicken-road-bet-panel order-2 lg:order-none lg:w-72 shrink-0 space-y-4 bg-card border border-border rounded-xl p-4">
         <div className="flex gap-1 p-1 bg-secondary/50 rounded-lg">
           <button type="button" className="flex-1 text-xs font-bold uppercase py-1.5 rounded-md bg-primary text-primary-foreground">
             Manual
@@ -387,9 +387,9 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         </p>
       </div>
 
-      <div className="chicken-road-play-area flex-1 min-w-0">
+      <div className="chicken-road-play-area order-1 lg:order-none flex-1 min-w-0">
         {serverSeedHash && !serverSeed && (
-          <div className="mb-2 text-[10px] font-mono text-muted-foreground break-all hidden sm:block">
+          <div className="chicken-road-seed-hash mb-2 text-[10px] font-mono text-muted-foreground break-all hidden sm:block">
             <span className="uppercase font-bold mr-1">SHA-256 commit:</span>
             <span className="text-primary">{serverSeedHash}</span>
           </div>

@@ -206,8 +206,8 @@ export default function RacePage() {
   );
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto px-2 md:px-4 pb-4">
-      <div className="flex items-center gap-3">
+    <div className="race-mobile-page space-y-3 max-w-7xl mx-auto px-2 md:px-4 pb-4 min-h-0">
+      <div className="flex items-center gap-3 shrink-0">
         <Link href="/games">
           <button type="button" className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
             <ChevronLeft className="w-4 h-4" /> Games
@@ -216,14 +216,14 @@ export default function RacePage() {
         <h1 className="font-display font-black text-2xl md:text-3xl uppercase tracking-widest">🏇 DGC Derby</h1>
       </div>
 
-      {/* Mobile: controls always on top so START RACE is never buried */}
-      <div className="lg:hidden">{controlsPanel}</div>
+      {/* Mobile: compact controls above track */}
+      <div className="lg:hidden shrink-0">{controlsPanel}</div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6 min-h-0">
         <div className="hidden lg:block">{controlsPanel}</div>
 
-        <div className="lg:col-span-2 space-y-3">
-          <Card className="bg-card border-border p-0 overflow-hidden">
+        <div className="lg:col-span-2 space-y-2 min-h-0">
+          <Card className="bg-card border-border p-0 overflow-hidden flex flex-col min-h-[220px]">
             <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 bg-secondary/30">
               <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 <Video className="w-3.5 h-3.5" /> Camera
@@ -239,7 +239,7 @@ export default function RacePage() {
                 ))}
               </div>
             </div>
-            <div className="relative h-72 sm:h-96 md:h-[26rem] lg:h-[28rem] derby-track-scene">
+            <div className="relative flex-1 min-h-[200px] h-[42dvh] sm:h-72 md:h-[26rem] lg:h-[28rem] derby-track-scene">
               {!racing && !result && camera !== "side" && camera !== "aerial" ? (
                 <DerbySideView {...viewProps} cameraX={0} winnerId={undefined} showResult={false} />
               ) : (

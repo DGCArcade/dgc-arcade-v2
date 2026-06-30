@@ -233,9 +233,21 @@ export class ChickenRoadRenderer {
     };
   }
 
+  private killLaneTweens() {
+    this.laneContainers.forEach(lane => gsap.killTweensOf(lane));
+    gsap.killTweensOf(this.chickenContainer);
+    gsap.killTweensOf(this.chickenContainer.scale);
+    this.ambientCars.forEach(c => gsap.killTweensOf(c));
+  }
+
   updateState(state: ChickenRoadState) {
-    if (this.ready) this.renderState(state);
-    else this.state = state;
+    try {
+      if (this.ready) this.renderState(state);
+      else this.state = state;
+    } catch (err) {
+      console.error("Chicken Road render error:", err);
+      throw err;
+    }
   }
 
   private resize() {
@@ -255,6 +267,7 @@ export class ChickenRoadRenderer {
 
     const rebuild = this.needsLaneRebuild(state);
     if (rebuild) {
+      this.killLaneTweens();
       this.buildLanes(state);
       this.drawSkyline(state);
       this.startAmbientTraffic(state.lanes);
@@ -610,7 +623,7 @@ export class ChickenRoadRenderer {
   destroy() {
     this.resizeObserver?.disconnect();
     this.clearAnimSprite();
-    this.ambientCars.forEach(c => gsap.killTweensOf(c));
+    this.killLaneTweens();
     gsap.killTweensOf(this.world);
     gsap.killTweensOf(this.chickenContainer);
     if (this.app) {
