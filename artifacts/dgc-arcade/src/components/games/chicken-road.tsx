@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,8 +7,13 @@ import type { Game } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { StakeChickenBoard, type CrossAnim } from "./chicken-road/stake-chicken-board";
+import { StakeChickenBoard, type CrossAnim, type HazardType } from "./chicken-road/stake-chicken-board";
 import { ProvablyFairPanel } from "./provably-fair-panel";
+import {
+  STAKE_TIERS,
+  getStakeMultiplierTable,
+  type StakeTier,
+} from "@/lib/chicken-road-stake-math";
 import {
   playChickenCluck,
   playCrossSuccess,
@@ -16,34 +21,15 @@ import {
   playCarPass,
   playBarrierClang,
   playManholeIgnite,
+  playChickenSpawn,
 } from "@/lib/chicken-road-sounds";
 
-const LANES = 15;
-const CROSS_TILE = 2;
 const CAR_ANIM_MS = 850;
 const BARRIER_MS = 500;
 
 function getToken() { return localStorage.getItem("dgc_token"); }
 function authHeaders() { return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }; }
 
-const TIERS = {
-  low:    { label: "Low",    desc: "1 hazard / lane",  color: "text-green-400" },
-  medium: { label: "Medium", desc: "2 hazards / lane", color: "text-yellow-400" },
-  high:   { label: "High",   desc: "3 hazards / lane", color: "text-orange-400" },
-  max:    { label: "Max",    desc: "4 hazards / lane",   color: "text-red-400" },
-} as const;
-
-type Tier = keyof typeof TIERS;
-
-function calcMultiplier(tier: Tier, step: number): number {
-  const safeMap = { low: 4, medium: 3, high: 2, max: 1 };
-  const safe = safeMap[tier];
-  let m = 1;
-  for (let i = 0; i <= step; i++) m = (m * (5 / safe)) * 0.99;
-  return m;
-}
-
-/** Cosmetic near-miss barrier — deterministic from session, does not affect outcome */
 function shouldShowNearMiss(sessionId: number, lane: number): boolean {
   return ((sessionId * 17 + lane * 31) % 5) === 0;
 }
@@ -71,7 +57,8 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
   const animLock = useRef(false);
 
   const [amount, setAmount] = useState(minBet);
-  const [tier, setTier] = useState<Tier>("medium");
+  const [tier, setTier] = useState<StakeTier>("medium");
+  const [maxLanes, setMaxLanes] = useState<number>(STAKE_TIERS.medium.maxSteps);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [serverSeedHash, setServerSeedHash] = useState("");
   const [serverSeed, setServerSeed] = useState("");
@@ -83,11 +70,16 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
   const [status, setStatus] = useState<"idle" | "active" | "won" | "lost">("idle");
   const [loading, setLoading] = useState(false);
   const [hopping, setHopping] = useState(false);
+  const [chickenVisible, setChickenVisible] = useState(false);
   const [bustLane, setBustLane] = useState<number | undefined>();
+  const [bustHazard, setBustHazard] = useState<HazardType | undefined>();
   const [crossAnim, setCrossAnim] = useState<CrossAnim>(null);
-  const [laneMultipliers, setLaneMultipliers] = useState(() =>
-    Array.from({ length: LANES }, (_, i) => calcMultiplier("medium", i))
-  );
+  const [laneMultipliers, setLaneMultipliers] = useState(() => getStakeMultiplierTable("medium"));
+
+  useEffect(() => {
+    setMaxLanes(STAKE_TIERS[tier].maxSteps);
+    setLaneMultipliers(getStakeMultiplierTable(tier));
+  }, [tier]);
 
   const startGame = () => {
     requireAuth(async () => {
@@ -113,9 +105,14 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         setMultiplier(1);
         setPayout(0);
         setBustLane(undefined);
+        setBustHazard(undefined);
         setCrossAnim(null);
         setStatus("active");
-        setLaneMultipliers(data.multipliers ?? Array.from({ length: LANES }, (_, i) => calcMultiplier(tier, i)));
+        setMaxLanes(data.maxSteps ?? STAKE_TIERS[tier].maxSteps);
+        setLaneMultipliers(data.multipliers ?? getStakeMultiplierTable(tier));
+
+        setChickenVisible(true);
+        playChickenSpawn();
         playChickenCluck();
         qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
       } catch (err: unknown) {
@@ -142,7 +139,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         fetch("/api/chicken-road/progress", {
           method: "POST",
           headers: authHeaders(),
-          body: JSON.stringify({ sessionId, laneIndex: lane, tileIndex: CROSS_TILE }),
+          body: JSON.stringify({ sessionId, laneIndex: lane }),
         }).then(async r => {
           const d = await r.json();
           if (!r.ok) throw new Error(d.error || "Failed to cross");
@@ -151,13 +148,19 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         delay(CAR_ANIM_MS),
       ]);
 
-      if (data.isCar) {
-        setCrossAnim({ lane, phase: "done", carDirection: carDir });
+      if (data.isDeath) {
+        const hazard: HazardType = data.hazardType === "manhole" ? "manhole" : "car";
+        setCrossAnim({ lane, phase: hazard === "manhole" ? "manhole-fire" : "done", carDirection: carDir });
         setBustLane(lane);
+        setBustHazard(hazard);
         setStatus("lost");
         setServerSeed(data.serverSeed || "");
         playChickenBust();
-        toast({ title: "Hit by a car!", variant: "destructive" });
+        if (hazard === "manhole") playManholeIgnite();
+        toast({
+          title: hazard === "car" ? "Hit by a car!" : "Manhole collapsed!",
+          variant: "destructive",
+        });
       } else {
         const nearMiss = shouldShowNearMiss(sessionId, lane);
         if (nearMiss) {
@@ -171,7 +174,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         playManholeIgnite();
         playChickenCluck();
 
-        const newMult = data.multiplier ?? calcMultiplier(tier, lane);
+        const newMult = data.multiplier ?? 1;
         setMultiplier(newMult);
         setCrossAnim(null);
 
@@ -179,8 +182,11 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
           setStatus("won");
           setPayout(data.payout);
           setServerSeed(data.serverSeed || "");
-          setCurrentLane(LANES);
-          toast({ title: `Cleared all ${LANES} lanes!`, description: `Payout: $${Number(data.payout).toFixed(2)}` });
+          setCurrentLane(maxLanes);
+          toast({
+            title: `Cleared all ${maxLanes} lanes!`,
+            description: `Payout: $${Number(data.payout).toFixed(2)}`,
+          });
         } else {
           setCurrentLane(lane + 1);
         }
@@ -194,7 +200,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
       setTimeout(() => setHopping(false), 450);
       animLock.current = false;
     }
-  }, [status, loading, sessionId, currentLane, tier, toast, qc]);
+  }, [status, loading, sessionId, currentLane, maxLanes, toast, qc]);
 
   const cashout = async () => {
     if (status !== "active" || currentLane === 0 || loading || !sessionId || animLock.current) return;
@@ -220,7 +226,23 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
     }
   };
 
-  const isIdle = status === "idle" || status === "won" || status === "lost";
+  const resetToIdle = () => {
+    setStatus("idle");
+    setChickenVisible(false);
+    setCurrentLane(0);
+    setMultiplier(1);
+    setPayout(0);
+    setSessionId(null);
+    setServerSeed("");
+    setServerSeedHash("");
+    setBustLane(undefined);
+    setBustHazard(undefined);
+    setCrossAnim(null);
+  };
+
+  const isIdle = status === "idle";
+  const isEnded = status === "won" || status === "lost";
+  const canConfigure = isIdle || isEnded;
   const netGain = status === "active" && currentLane > 0 ? amount * (multiplier - 1) : payout > 0 ? payout - amount : 0;
 
   return (
@@ -234,11 +256,11 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
 
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Amount</label>
-          <Input type="number" value={amount} min={minBet} max={maxBet} step={0.01} disabled={!isIdle}
+          <Input type="number" value={amount} min={minBet} max={maxBet} step={0.01} disabled={!canConfigure}
             onChange={e => setAmount(parseFloat(e.target.value) || minBet)} className="font-mono" />
           <div className="grid grid-cols-4 gap-1">
             {[0.5, 2, 5, 10].map(mult => (
-              <button key={mult} type="button" disabled={!isIdle}
+              <button key={mult} type="button" disabled={!canConfigure}
                 onClick={() => setAmount(prev => Math.min(maxBet, Math.max(minBet, parseFloat((prev * mult).toFixed(2)))))}
                 className="text-xs font-bold bg-secondary border border-border rounded py-1 disabled:opacity-40">
                 {mult === 0.5 ? "½" : `${mult}×`}
@@ -250,11 +272,15 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Difficulty</label>
           <div className="grid grid-cols-2 gap-2">
-            {(Object.keys(TIERS) as Tier[]).map(t => (
-              <button key={t} type="button" disabled={!isIdle} onClick={() => setTier(t)}
-                className={`text-xs font-bold border rounded px-2 py-2 disabled:opacity-40 ${tier === t ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border"}`}>
-                <span className={TIERS[t].color}>{TIERS[t].label}</span>
-                <div className="text-muted-foreground font-mono text-[9px]">{TIERS[t].desc}</div>
+            {(Object.keys(STAKE_TIERS) as StakeTier[]).map(t => (
+              <button key={t} type="button" disabled={!canConfigure} onClick={() => setTier(t)}
+                className={`text-xs font-bold border rounded px-2 py-2 disabled:opacity-40 text-left ${
+                  tier === t ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border"
+                }`}>
+                <span>{STAKE_TIERS[t].label}</span>
+                <div className={`font-mono text-[9px] ${tier === t ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                  {STAKE_TIERS[t].desc}
+                </div>
               </button>
             ))}
           </div>
@@ -268,8 +294,8 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         )}
 
         {isIdle ? (
-          <Button className="w-full font-display font-black uppercase h-12 text-base" onClick={startGame} disabled={loading}>
-            {loading ? "…" : "Go"}
+          <Button className="w-full font-display font-black uppercase h-12 text-base bg-blue-600 hover:bg-blue-500" onClick={startGame} disabled={loading}>
+            {loading ? "…" : "Play"}
           </Button>
         ) : status === "active" ? (
           <div className="space-y-2">
@@ -281,6 +307,10 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
               {loading ? "Crossing…" : "Go"}
             </Button>
           </div>
+        ) : isEnded ? (
+          <Button className="w-full font-display font-black uppercase h-12" onClick={resetToIdle}>
+            Play Again
+          </Button>
         ) : null}
 
         {status === "won" && payout > 0 && (
@@ -304,6 +334,10 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
             verifyPath={`/api/chicken-road/verify/${sessionId}`}
           />
         )}
+
+        <p className="text-[9px] text-muted-foreground leading-relaxed">
+          98% RTP · Provably fair · Fisher-Yates death placement on 20 positions. Cash out anytime after your first safe cross.
+        </p>
       </div>
 
       <div className="chicken-road-play-area flex-1 min-w-0">
@@ -314,12 +348,14 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
           </div>
         )}
         <StakeChickenBoard
-          lanes={LANES}
+          lanes={maxLanes}
           currentLane={currentLane}
           status={status}
           multipliers={laneMultipliers}
           hopping={hopping}
+          chickenVisible={chickenVisible}
           bustLane={bustLane}
+          bustHazard={bustHazard}
           crossAnim={crossAnim}
         />
       </div>

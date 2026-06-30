@@ -7,19 +7,32 @@ import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import { recordTournamentWager } from "../lib/tournament-tracker.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
-import { 
-  generateChickenRoadMatrix, 
-  calculateMultiplier, 
-  TIER_CONFIGS, 
+import {
+  generateChickenRoadLayout,
+  calculateMultiplier,
+  getMultiplierTable,
+  maxStepsForTier,
+  TIER_CONFIGS,
   normalizeTier,
-  CROSS_TILE_INDEX,
-  LANES,
-  TILES_PER_LANE,
+  parseLayout,
   verifyChickenRoadSession,
   type DifficultyTier,
+  RTP,
 } from "../lib/chicken-road-engine.js";
 
 export const chickenRoadRouter = Router();
+
+// GET /api/chicken-road/config — public preview multipliers per tier (Stake guest-mode board)
+chickenRoadRouter.get("/config", (_req, res) => {
+  const tiers = (Object.keys(TIER_CONFIGS) as DifficultyTier[]).map(tier => ({
+    tier,
+    label: TIER_CONFIGS[tier].label,
+    deaths: TIER_CONFIGS[tier].deaths,
+    maxSteps: maxStepsForTier(tier),
+    multipliers: getMultiplierTable(tier),
+  }));
+  res.json({ rtp: RTP, positions: 20, tiers });
+});
 
 // POST /api/chicken-road/initialize
 chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, async (req, res) => {
@@ -60,16 +73,14 @@ chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, asyn
     const [game] = await db.select().from(gamesTable).where(eq(gamesTable.id, gameId)).limit(1);
     if (!game) { res.status(404).json({ error: "Game not found" }); return; }
 
-    // Deduct balance
     const finalBalance = await deductBalance(user.id, amount);
 
-    // Cryptographic Generation
-    const serverSeed = uuidv4().replace(/-/g, "") + uuidv4().replace(/-/g, ""); // 64-byte secure hex
+    const serverSeed = uuidv4().replace(/-/g, "") + uuidv4().replace(/-/g, "");
     const clientSeed = rawClientSeed || "chicken-road";
     const nonce = 1;
 
-    // Deterministic Byte-to-Grid Mapping
-    const matrix = generateChickenRoadMatrix(serverSeed, clientSeed, nonce, tier);
+    const layout = generateChickenRoadLayout(serverSeed, clientSeed, nonce, tier);
+    const maxSteps = maxStepsForTier(tier);
 
     const [session] = await db.insert(chickenRoadSessionsTable).values({
       userId: user.id,
@@ -79,13 +90,12 @@ chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, asyn
       clientSeed,
       nonce,
       tier,
-      matrix: JSON.stringify(matrix),
+      matrix: JSON.stringify(layout),
       revealed: JSON.stringify([]),
       status: "active",
       currentMultiplier: "1",
     }).returning();
 
-    // Do NOT expose the serverSeed yet. Expose its SHA-256 hash.
     const serverSeedHash = createHash("sha256").update(serverSeed).digest("hex");
 
     res.json({
@@ -96,11 +106,11 @@ chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, asyn
       nonce,
       tier,
       tierLabel: TIER_CONFIGS[tier].label,
-      lanes: LANES,
-      crossTileIndex: CROSS_TILE_INDEX,
+      maxSteps,
+      rtp: RTP,
       status: "active",
       currentMultiplier: 1,
-      multipliers: Array.from({ length: LANES }, (_, i) => calculateMultiplier(tier, i)),
+      multipliers: getMultiplierTable(tier),
     });
 
   } catch (err) {
@@ -111,17 +121,10 @@ chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, asyn
 
 // POST /api/chicken-road/progress
 chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async (req, res) => {
-  const { sessionId, laneIndex, tileIndex: rawTile } = req.body;
-  const tileIndex = rawTile !== undefined ? Number(rawTile) : CROSS_TILE_INDEX;
+  const { sessionId, laneIndex } = req.body;
 
   if (!sessionId || laneIndex === undefined) {
     res.status(400).json({ error: "sessionId and laneIndex required" });
-    return;
-  }
-
-  // Only the fixed crosswalk tile is valid — prevents client from picking safe tiles
-  if (tileIndex !== CROSS_TILE_INDEX) {
-    res.status(400).json({ error: "Invalid cross position" });
     return;
   }
 
@@ -139,36 +142,29 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
     if (!session) { res.status(404).json({ error: "Session not found" }); return; }
     if (session.status !== "active") { res.status(400).json({ error: "Session is not active" }); return; }
 
+    const tier = normalizeTier(session.tier);
+    const maxSteps = maxStepsForTier(tier);
     const revealed: number[] = JSON.parse(session.revealed);
-    
-    // Validate lane sequence — strict order, no skipping or replay
+
     if (laneNum !== revealed.length) {
       res.status(400).json({ error: `Must play lane ${revealed.length} next` });
       return;
     }
-    
-    if (laneNum >= LANES) {
-      res.status(400).json({ error: "Game completed all lanes" });
-      return;
-    }
-    
-    if (tileIndex < 0 || tileIndex >= TILES_PER_LANE) {
-      res.status(400).json({ error: "Invalid tile index" });
+
+    if (laneNum >= maxSteps) {
+      res.status(400).json({ error: "All lanes completed — cash out" });
       return;
     }
 
-    const matrix: number[][] = JSON.parse(session.matrix);
-    const laneCars = matrix[laneNum];
-    
-    // Check for collision (Bust)
-    if (laneCars.includes(tileIndex)) {
-      revealed.push(tileIndex);
-      
+    const layout = parseLayout(session.matrix);
+    const isDeath = layout.deathSteps.includes(laneNum);
+    const hazardType = layout.hazardTypes[laneNum] ?? "car";
+
+    if (isDeath) {
+      revealed.push(laneNum);
+
       await db.update(chickenRoadSessionsTable)
-        .set({ 
-          status: "lost", 
-          revealed: JSON.stringify(revealed) 
-        })
+        .set({ status: "lost", revealed: JSON.stringify(revealed) })
         .where(eq(chickenRoadSessionsTable.id, session.id));
 
       await db.insert(betsTable).values({
@@ -182,38 +178,31 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
         serverSeedHash: createHash("sha256").update(session.serverSeed).digest("hex"),
         clientSeed: session.clientSeed,
         nonce: session.nonce,
-        meta: { matrix, revealed, result: "bust", tier: session.tier },
+        meta: { layout, revealed, result: "bust", tier: session.tier, hazardType },
       });
 
-      // Fire and forget wager tracking
       recordTournamentWager(session.userId, parseFloat(session.bet), req.log).catch(() => {});
 
       res.json({
         status: "lost",
         laneIndex: laneNum,
-        tileIndex,
-        isCar: true,
-        matrix, // Reveal full board on loss
-        serverSeed: session.serverSeed, // Reveal seed on game over
+        isDeath: true,
+        hazardType,
+        layout,
+        serverSeed: session.serverSeed,
       });
       return;
     }
 
-    // Success - Path is clear
-    revealed.push(tileIndex);
-    const newMultiplier = calculateMultiplier(session.tier as DifficultyTier, laneNum);
-    
-    // If completed all lanes, auto-cashout
-    if (revealed.length === LANES) {
+    revealed.push(laneNum);
+    const newMultiplier = calculateMultiplier(tier, laneNum);
+
+    if (revealed.length === maxSteps) {
       const payout = parseFloat(session.bet) * newMultiplier;
       const finalBalance = await creditBalance(session.userId, payout);
 
       await db.update(chickenRoadSessionsTable)
-        .set({ 
-          status: "won", 
-          revealed: JSON.stringify(revealed),
-          currentMultiplier: String(newMultiplier)
-        })
+        .set({ status: "won", revealed: JSON.stringify(revealed), currentMultiplier: String(newMultiplier) })
         .where(eq(chickenRoadSessionsTable.id, session.id));
 
       await db.insert(betsTable).values({
@@ -227,7 +216,7 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
         serverSeedHash: createHash("sha256").update(session.serverSeed).digest("hex"),
         clientSeed: session.clientSeed,
         nonce: session.nonce,
-        meta: { matrix, revealed, result: "completed", tier: session.tier },
+        meta: { layout, revealed, result: "completed", tier: session.tier },
       });
 
       recordTournamentWager(session.userId, parseFloat(session.bet), req.log).catch(() => {});
@@ -235,31 +224,25 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
       res.json({
         status: "won",
         laneIndex: laneNum,
-        tileIndex,
-        isCar: false,
+        isDeath: false,
         multiplier: newMultiplier,
         payout,
         balance: finalBalance,
-        matrix, // Reveal full board on win
-        serverSeed: session.serverSeed, // Reveal seed on game over
+        layout,
+        serverSeed: session.serverSeed,
       });
       return;
     }
 
-    // Continue game — do NOT expose matrix while active
     await db.update(chickenRoadSessionsTable)
-      .set({ 
-        revealed: JSON.stringify(revealed),
-        currentMultiplier: String(newMultiplier)
-      })
+      .set({ revealed: JSON.stringify(revealed), currentMultiplier: String(newMultiplier) })
       .where(eq(chickenRoadSessionsTable.id, session.id));
 
     res.json({
       status: "active",
       laneIndex: laneNum,
-      tileIndex,
-      isCar: false,
-      multiplier: newMultiplier
+      isDeath: false,
+      multiplier: newMultiplier,
     });
 
   } catch (err) {
@@ -286,8 +269,7 @@ chickenRoadRouter.post("/settle", requireAuth, requireLocationVerified, async (r
     if (session.status !== "active") { res.status(400).json({ error: "Session is not active" }); return; }
 
     const revealed: number[] = JSON.parse(session.revealed);
-    
-    // Cannot cashout on step 0
+
     if (revealed.length === 0) {
       res.status(400).json({ error: "Cannot cashout before making a move" });
       return;
@@ -295,10 +277,8 @@ chickenRoadRouter.post("/settle", requireAuth, requireLocationVerified, async (r
 
     const multiplier = parseFloat(session.currentMultiplier);
     const payout = parseFloat(session.bet) * multiplier;
-    
     const finalBalance = await creditBalance(session.userId, payout);
-
-    const matrix: number[][] = JSON.parse(session.matrix);
+    const layout = parseLayout(session.matrix);
 
     await db.update(chickenRoadSessionsTable)
       .set({ status: "won" })
@@ -315,7 +295,7 @@ chickenRoadRouter.post("/settle", requireAuth, requireLocationVerified, async (r
       serverSeedHash: createHash("sha256").update(session.serverSeed).digest("hex"),
       clientSeed: session.clientSeed,
       nonce: session.nonce,
-      meta: { matrix, revealed, result: "cashed_out", tier: session.tier },
+      meta: { layout, revealed, result: "cashed_out", tier: session.tier },
     });
 
     recordTournamentWager(session.userId, parseFloat(session.bet), req.log).catch(() => {});
@@ -325,8 +305,8 @@ chickenRoadRouter.post("/settle", requireAuth, requireLocationVerified, async (r
       multiplier,
       payout,
       balance: finalBalance,
-      matrix, // Reveal full board on cashout
-      serverSeed: session.serverSeed, // Reveal seed on game over
+      layout,
+      serverSeed: session.serverSeed,
     });
 
   } catch (err) {
@@ -335,7 +315,7 @@ chickenRoadRouter.post("/settle", requireAuth, requireLocationVerified, async (r
   }
 });
 
-// GET /api/chicken-road/verify/:sessionId — provably fair verification
+// GET /api/chicken-road/verify/:sessionId
 chickenRoadRouter.get("/verify/:sessionId", async (req, res) => {
   try {
     const sessionId = parseInt(req.params.sessionId, 10);
@@ -356,12 +336,13 @@ chickenRoadRouter.get("/verify/:sessionId", async (req, res) => {
     }
     const tier = normalizeTier(session.tier);
     const result = verifyChickenRoadSession(session.serverSeed, session.clientSeed ?? "chicken-road", session.nonce, tier);
-    const storedMatrix: number[][] = JSON.parse(session.matrix);
-    const matrixMatch = JSON.stringify(result.matrix) === JSON.stringify(storedMatrix);
+    const storedLayout = parseLayout(session.matrix);
+    const layoutMatch =
+      JSON.stringify(storedLayout.deathSteps) === JSON.stringify(result.deathSteps);
     res.json({
       ...result,
-      matrixMatch,
-      storedMatrix,
+      layoutMatch,
+      storedLayout,
       revealed: JSON.parse(session.revealed),
     });
   } catch (err) {
