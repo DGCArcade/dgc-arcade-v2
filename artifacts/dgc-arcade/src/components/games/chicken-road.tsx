@@ -7,7 +7,7 @@ import type { Game } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { StakeChickenBoard, type CrossAnim, type HazardType } from "./chicken-road/stake-chicken-board";
+import { PixiChickenBoard, type CrossAnim, type HazardType } from "./chicken-road/pixi-chicken-board";
 import { ProvablyFairPanel } from "./provably-fair-panel";
 import {
   STAKE_TIERS,
@@ -347,7 +347,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
             <span className="text-primary">{serverSeedHash}</span>
           </div>
         )}
-        <StakeChickenBoard
+        <PixiChickenBoard
           lanes={maxLanes}
           currentLane={currentLane}
           status={status}
