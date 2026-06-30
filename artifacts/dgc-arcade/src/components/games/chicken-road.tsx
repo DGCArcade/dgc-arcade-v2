@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,12 +7,21 @@ import type { Game } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { StakeChickenBoard } from "./chicken-road/stake-chicken-board";
+import { StakeChickenBoard, type CrossAnim } from "./chicken-road/stake-chicken-board";
 import { ProvablyFairPanel } from "./provably-fair-panel";
-import { playChickenCluck, playCrossSuccess, playChickenBust, playCarPass } from "@/lib/chicken-road-sounds";
+import {
+  playChickenCluck,
+  playCrossSuccess,
+  playChickenBust,
+  playCarPass,
+  playBarrierClang,
+  playManholeIgnite,
+} from "@/lib/chicken-road-sounds";
 
 const LANES = 15;
 const CROSS_TILE = 2;
+const CAR_ANIM_MS = 850;
+const BARRIER_MS = 500;
 
 function getToken() { return localStorage.getItem("dgc_token"); }
 function authHeaders() { return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }; }
@@ -34,6 +43,15 @@ function calcMultiplier(tier: Tier, step: number): number {
   return m;
 }
 
+/** Cosmetic near-miss barrier — deterministic from session, does not affect outcome */
+function shouldShowNearMiss(sessionId: number, lane: number): boolean {
+  return ((sessionId * 17 + lane * 31) % 5) === 0;
+}
+
+function delay(ms: number) {
+  return new Promise<void>(r => setTimeout(r, ms));
+}
+
 interface ChickenRoadProps { game: Game }
 
 export function ChickenRoad(props: ChickenRoadProps) {
@@ -50,6 +68,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
   const qc = useQueryClient();
   const minBet = parseFloat(String(game.minBet ?? 0.01));
   const maxBet = parseFloat(String(game.maxBet ?? 1_000_000));
+  const animLock = useRef(false);
 
   const [amount, setAmount] = useState(minBet);
   const [tier, setTier] = useState<Tier>("medium");
@@ -65,6 +84,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
   const [loading, setLoading] = useState(false);
   const [hopping, setHopping] = useState(false);
   const [bustLane, setBustLane] = useState<number | undefined>();
+  const [crossAnim, setCrossAnim] = useState<CrossAnim>(null);
   const [laneMultipliers, setLaneMultipliers] = useState(() =>
     Array.from({ length: LANES }, (_, i) => calcMultiplier("medium", i))
   );
@@ -93,6 +113,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         setMultiplier(1);
         setPayout(0);
         setBustLane(undefined);
+        setCrossAnim(null);
         setStatus("active");
         setLaneMultipliers(data.multipliers ?? Array.from({ length: LANES }, (_, i) => calcMultiplier(tier, i)));
         playChickenCluck();
@@ -106,31 +127,53 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
   };
 
   const crossLane = useCallback(async () => {
-    if (status !== "active" || loading || !sessionId) return;
+    if (status !== "active" || loading || !sessionId || animLock.current) return;
+    animLock.current = true;
     setLoading(true);
-    setHopping(true);
+
+    const lane = currentLane;
+    const carDir: "down" | "up" = lane % 2 === 0 ? "down" : "up";
+
+    setCrossAnim({ lane, phase: carDir === "down" ? "car-down" : "car-up", carDirection: carDir });
     playCarPass();
 
     try {
-      const res = await fetch("/api/chicken-road/progress", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ sessionId, laneIndex: currentLane, tileIndex: CROSS_TILE }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to cross");
+      const [data] = await Promise.all([
+        fetch("/api/chicken-road/progress", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ sessionId, laneIndex: lane, tileIndex: CROSS_TILE }),
+        }).then(async r => {
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || "Failed to cross");
+          return d;
+        }),
+        delay(CAR_ANIM_MS),
+      ]);
 
       if (data.isCar) {
-        setBustLane(currentLane);
+        setCrossAnim({ lane, phase: "done", carDirection: carDir });
+        setBustLane(lane);
         setStatus("lost");
         setServerSeed(data.serverSeed || "");
         playChickenBust();
         toast({ title: "Hit by a car!", variant: "destructive" });
       } else {
-        const newMult = data.multiplier ?? calcMultiplier(tier, currentLane);
-        setMultiplier(newMult);
+        const nearMiss = shouldShowNearMiss(sessionId, lane);
+        if (nearMiss) {
+          setCrossAnim({ lane, phase: "barrier", carDirection: carDir });
+          playBarrierClang();
+          await delay(BARRIER_MS);
+        }
+
+        setHopping(true);
         playCrossSuccess();
+        playManholeIgnite();
         playChickenCluck();
+
+        const newMult = data.multiplier ?? calcMultiplier(tier, lane);
+        setMultiplier(newMult);
+        setCrossAnim(null);
 
         if (data.status === "won") {
           setStatus("won");
@@ -139,20 +182,22 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
           setCurrentLane(LANES);
           toast({ title: `Cleared all ${LANES} lanes!`, description: `Payout: $${Number(data.payout).toFixed(2)}` });
         } else {
-          setCurrentLane(currentLane + 1);
+          setCurrentLane(lane + 1);
         }
       }
       qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
     } catch (err: unknown) {
+      setCrossAnim(null);
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
       setTimeout(() => setHopping(false), 450);
+      animLock.current = false;
     }
   }, [status, loading, sessionId, currentLane, tier, toast, qc]);
 
   const cashout = async () => {
-    if (status !== "active" || currentLane === 0 || loading || !sessionId) return;
+    if (status !== "active" || currentLane === 0 || loading || !sessionId || animLock.current) return;
     setLoading(true);
     try {
       const res = await fetch("/api/chicken-road/settle", {
@@ -182,11 +227,9 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
     <div className="chicken-road-game-root flex flex-col lg:flex-row gap-4 md:gap-6">
       <div className="chicken-road-bet-panel lg:w-72 shrink-0 space-y-4 bg-card border border-border rounded-xl p-4">
         <div className="flex gap-1 p-1 bg-secondary/50 rounded-lg">
-          {(["manual"] as const).map(m => (
-            <button key={m} type="button" className="flex-1 text-xs font-bold uppercase py-1.5 rounded-md bg-primary text-primary-foreground">
-              Manual
-            </button>
-          ))}
+          <button type="button" className="flex-1 text-xs font-bold uppercase py-1.5 rounded-md bg-primary text-primary-foreground">
+            Manual
+          </button>
         </div>
 
         <div className="space-y-2">
@@ -275,9 +318,9 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
           currentLane={currentLane}
           status={status}
           multipliers={laneMultipliers}
-          loading={loading}
           hopping={hopping}
           bustLane={bustLane}
+          crossAnim={crossAnim}
         />
       </div>
     </div>

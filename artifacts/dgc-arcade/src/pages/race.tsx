@@ -239,7 +239,7 @@ export default function RacePage() {
                 ))}
               </div>
             </div>
-            <div className="relative h-60 sm:h-80 md:h-[22rem] derby-track-scene">
+            <div className="relative h-72 sm:h-96 md:h-[26rem] lg:h-[28rem] derby-track-scene">
               {!racing && !result && camera !== "side" && camera !== "aerial" ? (
                 <DerbySideView {...viewProps} cameraX={0} winnerId={undefined} showResult={false} />
               ) : (

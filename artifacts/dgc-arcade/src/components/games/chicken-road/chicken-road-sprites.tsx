@@ -80,13 +80,68 @@ export function CarSprite({
   );
 }
 
+/** Stake-style construction barrier — pops on near-miss */
+export function BarrierSprite({ size = 48 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 48 40" width={size} height={size * 0.83} className="cr-barrier-pop drop-shadow-lg">
+      <rect x="4" y="8" width="40" height="24" rx="2" fill="#2563EB" stroke="#1D4ED8" strokeWidth="1" />
+      {[0, 1, 2, 3].map(i => (
+        <rect key={i} x={6 + i * 10} y="10" width="8" height="20" fill={i % 2 === 0 ? "#fff" : "#2563EB"} />
+      ))}
+      <rect x="2" y="30" width="6" height="8" fill="#4A5568" />
+      <rect x="40" y="30" width="6" height="8" fill="#4A5568" />
+    </svg>
+  );
+}
+
+/** City sewer grate with multiplier — fire glow underneath when active */
+export function ManholeCover({
+  multiplier,
+  state,
+}: {
+  multiplier: number;
+  state: "idle" | "past" | "current" | "future" | "bust";
+}) {
+  const lit = state === "past" || state === "current";
+  const isCurrent = state === "current";
+
+  return (
+    <div className="relative flex flex-col items-center">
+      {lit && (
+        <div className={`cr-manhole-fire absolute -top-3 left-1/2 -translate-x-1/2 w-14 h-8 rounded-full blur-md ${isCurrent ? "cr-fire-intense" : "opacity-70"}`} />
+      )}
+      <div className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center z-10 ${
+        state === "bust" ? "bg-red-900/80 border-2 border-red-400" :
+        isCurrent ? "bg-[#1e3a5f] border-2 border-blue-400 shadow-lg shadow-blue-500/40 scale-110" :
+        lit ? "bg-[#2d3748] border-2 border-blue-500/60" :
+        "bg-[#252a35] border-2 border-white/15"
+      }`}>
+        <svg viewBox="0 0 48 48" className="absolute inset-0 w-full h-full rounded-full opacity-90">
+          <circle cx="24" cy="24" r="22" fill="#3a4555" stroke="#555" strokeWidth="1" />
+          <circle cx="24" cy="24" r="18" fill="none" stroke="#222" strokeWidth="2" strokeDasharray="3 2" />
+          {[0, 45, 90, 135].map(deg => (
+            <line key={deg} x1="24" y1="24" x2="24" y2="8" stroke="#222" strokeWidth="1.5"
+              transform={`rotate(${deg} 24 24)`} />
+          ))}
+          <circle cx="24" cy="24" r="4" fill="#222" />
+        </svg>
+        <span className={`relative z-10 font-mono font-black text-[9px] sm:text-[10px] ${
+          lit ? "text-white" : "text-white/50"
+        }`}>
+          {multiplier.toFixed(2)}×
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function TrafficLight({ active }: { active: "red" | "yellow" | "green" }) {
   return (
     <svg viewBox="0 0 28 72" width={22} height={58}>
       <rect x="8" y="4" width="12" height="56" rx="4" fill="#2D3748" stroke="#4A5568" />
-      <circle cx="14" cy="16" r="5" fill={active === "red" ? "#FC8181" : "#3D1A1A"} />
-      <circle cx="14" cy="34" r="5" fill={active === "yellow" ? "#F6E05E" : "#3D3D1A"} />
-      <circle cx="14" cy="52" r="5" fill={active === "green" ? "#68D391" : "#1A3D2A"} />
+      <circle cx="14" cy="16" r="5" fill={active === "red" ? "#FC8181" : "#3D1A1A"} className={active === "red" ? "cr-light-glow-red" : ""} />
+      <circle cx="14" cy="34" r="5" fill={active === "yellow" ? "#F6E05E" : "#3D3D1A"} className={active === "yellow" ? "cr-light-glow-yellow" : ""} />
+      <circle cx="14" cy="52" r="5" fill={active === "green" ? "#68D391" : "#1A3D2A"} className={active === "green" ? "cr-light-glow-green" : ""} />
       <rect x="12" y="60" width="4" height="8" fill="#4A5568" />
     </svg>
   );
