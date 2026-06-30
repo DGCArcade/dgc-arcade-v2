@@ -1,4 +1,5 @@
 import { HorseSilkBadge, type RacerDef } from "./derby-horse";
+import { buildStandings } from "./derby-race-utils";
 
 type RacerProgress = { racerId: number; progress: number; done: boolean };
 
@@ -18,12 +19,7 @@ export function DerbyRaceHUD({
 }) {
   if (!racing) return null;
 
-  const sorted = [...racers]
-    .map(r => ({
-      r,
-      prog: progress.find(p => p.racerId === r.id)?.progress ?? 0,
-    }))
-    .sort((a, b) => b.prog - a.prog);
+  const sorted = buildStandings(racers, progress);
 
   return (
     <div
@@ -40,29 +36,29 @@ export function DerbyRaceHUD({
           Positions
         </span>
         <div className={`flex flex-col ${compact ? "gap-0.5" : "gap-1"}`}>
-          {sorted.map(({ r, prog }, i) => (
-            <div
-              key={r.id}
-              className={`flex items-center gap-1.5 rounded px-1 py-0.5 ${
-                r.id === selectedRacer ? "bg-yellow-500/15 border border-yellow-400/25" : ""
+        {sorted.map((s, i) => (
+          <div
+            key={s.r.id}
+            className={`flex items-center gap-1.5 rounded px-1 py-0.5 ${
+              s.r.id === selectedRacer ? "bg-yellow-500/15 border border-yellow-400/25" : ""
+            }`}
+          >
+            <span
+              className={`text-[8px] font-black w-3.5 text-center shrink-0 ${
+                i === 0 ? "text-yellow-400" : i === 1 ? "text-gray-300" : i === 2 ? "text-amber-600" : "text-white/50"
               }`}
             >
-              <span
-                className={`text-[8px] font-black w-3.5 text-center shrink-0 ${
-                  i === 0 ? "text-yellow-400" : i === 1 ? "text-gray-300" : i === 2 ? "text-amber-600" : "text-white/50"
-                }`}
-              >
-                {i + 1}
-              </span>
-              <HorseSilkBadge r={r} size="xs" highlight={r.id === selectedRacer} />
-              <span className={`font-bold text-white truncate flex-1 ${compact ? "text-[8px]" : "text-[9px]"}`}>
-                {r.name}
-              </span>
-              <span className={`font-mono text-white/50 shrink-0 ${compact ? "text-[7px]" : "text-[8px]"}`}>
-                {Math.round(prog)}m
-              </span>
-            </div>
-          ))}
+              {s.rank}
+            </span>
+            <HorseSilkBadge r={s.r} size="xs" highlight={s.r.id === selectedRacer} />
+            <span className={`font-bold text-white truncate flex-1 ${compact ? "text-[8px]" : "text-[9px]"}`}>
+              {s.r.name}
+            </span>
+            <span className={`font-mono shrink-0 ${compact ? "text-[7px]" : "text-[8px]"} ${i === 0 ? "text-yellow-400/90" : "text-white/45"}`}>
+              {i === 0 ? "LEAD" : `−${Math.round(s.gapBehind)}m`}
+            </span>
+          </div>
+        ))}
         </div>
       </div>
     </div>

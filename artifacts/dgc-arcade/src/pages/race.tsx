@@ -216,7 +216,7 @@ export default function RacePage() {
     if (angle === "aerial") return <DerbyAerialView {...viewProps} camera={angle} />;
     if (angle === "front") return <DerbyFrontChaseView {...viewProps} camera={angle} />;
     if (angle === "finish") {
-      return <DerbyFinishView racers={RACERS} progress={progress} winnerId={result?.winnerRacerId} />;
+      return <DerbyFinishView racers={RACERS} progress={progress} winnerId={result?.winnerRacerId} compact={isMobile} />;
     }
     return (
       <DerbySideView
