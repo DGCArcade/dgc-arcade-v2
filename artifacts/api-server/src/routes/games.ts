@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, gamesTable, slotThemesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { getPlatformSettings } from "../lib/platform-settings.js";
+import { getPlatformSettings, isGameSlugEnabled } from "../lib/platform-settings.js";
 export const gamesRouter = Router();
 
 const PUBLIC_GAME_CACHE_MS = 60_000;
@@ -73,20 +73,23 @@ export async function ensureSlotGamesSeeded() {
   }
 }
 
-export async function ensureRaceGameSeeded() {
+async function ensureGameSeeded(slug: string) {
+  const def = CORE_GAMES.find((g) => g.slug === slug);
+  if (!def) return;
   try {
-    await db.insert(gamesTable).values({
-      slug: "race",
-      name: "DGC Derby",
-      description: "Pick your horse — first place pays 5.5×",
-      minBet: "0.10",
-      maxBet: "1000",
-      houseEdge: "0.0500",
-      active: true,
-    }).onConflictDoNothing();
+    await db.insert(gamesTable).values({ ...def, active: true }).onConflictDoNothing();
+    invalidatePublicGamesCache();
   } catch (err) {
-    console.error("ensureRaceGameSeeded error:", err);
+    console.error(`ensureGameSeeded(${slug}) error:`, err);
   }
+}
+
+export async function ensureRaceGameSeeded() {
+  return ensureGameSeeded("race");
+}
+
+export async function ensureChickenRoadSeeded() {
+  return ensureGameSeeded("chicken-road");
 }
 
 function formatGame(g: typeof gamesTable.$inferSelect) {
@@ -114,7 +117,10 @@ gamesRouter.get("/", async (req, res) => {
     }
 
     const games = await db.select().from(gamesTable).where(eq(gamesTable.active, true));
-    const value = games.map(formatGame);
+    const settings = await getPlatformSettings();
+    const value = games
+      .filter((g) => isGameSlugEnabled(settings, g.slug))
+      .map(formatGame);
     activeGamesCache = { value, expiresAt: now + PUBLIC_GAME_CACHE_MS };
     res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
     res.json(value);
@@ -202,6 +208,12 @@ gamesRouter.get("/settings", async (req, res) => {
       leaderboardEnabled: settings.leaderboardEnabled,
       gamesEnabled: settings.gamesEnabled,
       maintenanceMode: settings.maintenanceMode,
+      disabledGameSlugs: settings.disabledGameSlugs,
+      custom404Enabled: settings.custom404Enabled,
+      custom404Title: settings.custom404Title,
+      custom404Message: settings.custom404Message,
+      custom404ButtonText: settings.custom404ButtonText,
+      custom404ButtonUrl: settings.custom404ButtonUrl,
     });
   } catch (err) {
     req.log.error({ err }, "Get public settings error");

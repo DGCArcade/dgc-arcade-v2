@@ -325,6 +325,12 @@ export default function AdminDashboard() {
 	    leaderboardEnabled: true,
 	    gamesEnabled: true,
 	    maintenanceMode: false,
+	    disabledGameSlugs: [] as string[],
+	    custom404Enabled: false,
+	    custom404Title: "Page Not Found",
+	    custom404Message: "The page you're looking for doesn't exist or has been moved.",
+	    custom404ButtonText: "Back to Home",
+	    custom404ButtonUrl: "/",
 	  });
   const [confirmReset, setConfirmReset] = useState<AdminUser | null>(null);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -2696,6 +2702,98 @@ export default function AdminDashboard() {
                   <p className="text-[10px] text-amber-200/70 leading-relaxed">
                     <strong>Note:</strong> Disabling a feature hides it from all navigation menus. Any user attempting to visit the URL directly will see a realistic browser "404 Not Found" error.
                   </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Per-game toggles */}
+            <Card className="border-border/60 bg-card/60 shadow-xl shadow-primary/5">
+              <CardHeader className="pb-2 pt-4 px-4 border-b border-border/40 mb-4">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-primary" /> Individual Games
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-2 max-h-72 overflow-y-auto">
+                {[
+                  { slug: "roulette", label: "Roulette" },
+                  { slug: "dice", label: "Dice" },
+                  { slug: "crash", label: "Crash" },
+                  { slug: "mines", label: "Mines" },
+                  { slug: "blackjack", label: "Blackjack" },
+                  { slug: "hilo", label: "Hi-Lo" },
+                  { slug: "coinflip", label: "Coin Flip" },
+                  { slug: "keno", label: "Keno" },
+                  { slug: "chicken-road", label: "Chicken Road" },
+                  { slug: "race", label: "DGC Derby" },
+                ].map((g) => {
+                  const disabled = (bankSettings.disabledGameSlugs ?? []).includes(g.slug);
+                  return (
+                    <div key={g.slug} className="flex items-center justify-between p-2 rounded-lg bg-secondary/20 border border-border/10">
+                      <span className="text-xs font-bold uppercase tracking-wider">{g.label}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const list = bankSettings.disabledGameSlugs ?? [];
+                          const next = disabled ? list.filter((s: string) => s !== g.slug) : [...list, g.slug];
+                          saveBankSettings({ disabledGameSlugs: next });
+                        }}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-all ${!disabled ? "bg-primary" : "bg-secondary"}`}
+                      >
+                        <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${!disabled ? "translate-x-5" : "translate-x-1"}`} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
+            {/* Custom 404 page */}
+            <Card className="border-border/60 bg-card/60 shadow-xl shadow-primary/5 md:col-span-2">
+              <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between border-b border-border/40 mb-4">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-primary" /> Site-Wide Custom 404 Page
+                </CardTitle>
+                <button
+                  type="button"
+                  onClick={() => saveBankSettings({ custom404Enabled: !bankSettings.custom404Enabled })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all ${bankSettings.custom404Enabled ? "bg-primary" : "bg-secondary"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${bankSettings.custom404Enabled ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Title</label>
+                  <input
+                    className="w-full bg-background border border-border/40 rounded-lg px-3 py-2 text-sm"
+                    value={bankSettings.custom404Title ?? ""}
+                    onChange={e => setBankSettings(p => ({ ...p, custom404Title: e.target.value }))}
+                    onBlur={e => saveBankSettings({ custom404Title: e.target.value })}
+                  />
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Message</label>
+                  <textarea
+                    className="w-full bg-background border border-border/40 rounded-lg px-3 py-2 text-sm min-h-[80px]"
+                    value={bankSettings.custom404Message ?? ""}
+                    onChange={e => setBankSettings(p => ({ ...p, custom404Message: e.target.value }))}
+                    onBlur={e => saveBankSettings({ custom404Message: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-3">
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Button Text</label>
+                  <input
+                    className="w-full bg-background border border-border/40 rounded-lg px-3 py-2 text-sm"
+                    value={bankSettings.custom404ButtonText ?? ""}
+                    onChange={e => setBankSettings(p => ({ ...p, custom404ButtonText: e.target.value }))}
+                    onBlur={e => saveBankSettings({ custom404ButtonText: e.target.value })}
+                  />
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Button URL</label>
+                  <input
+                    className="w-full bg-background border border-border/40 rounded-lg px-3 py-2 text-sm font-mono"
+                    value={bankSettings.custom404ButtonUrl ?? ""}
+                    onChange={e => setBankSettings(p => ({ ...p, custom404ButtonUrl: e.target.value }))}
+                    onBlur={e => saveBankSettings({ custom404ButtonUrl: e.target.value })}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Applies to every missing route site-wide when enabled.</p>
                 </div>
               </CardContent>
             </Card>

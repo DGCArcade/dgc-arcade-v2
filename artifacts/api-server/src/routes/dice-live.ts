@@ -44,8 +44,7 @@ diceLiveRouter.get("/round", optionalAuth, (req, res) => {
         amount: b.amount,
         target: b.target,
         mode: b.mode,
-        won: b.won,
-        payout: b.payout,
+        ...(round.state === "results" ? { won: b.won, payout: b.payout } : {}),
       })),
     });
   } catch (err) {

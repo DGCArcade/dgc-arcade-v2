@@ -2323,11 +2323,22 @@ adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
     }
 
     // Boolean settings
-    const booleanKeys = ["slotsEnabled", "raceEnabled", "leaderboardEnabled", "gamesEnabled", "maintenanceMode"];
+    const booleanKeys = ["slotsEnabled", "raceEnabled", "leaderboardEnabled", "gamesEnabled", "maintenanceMode", "custom404Enabled"];
     for (const key of booleanKeys) {
       if (typeof body[key] === "boolean") {
         updates[key] = String(body[key]);
       }
+    }
+
+    const stringKeys = ["custom404Title", "custom404Message", "custom404ButtonText", "custom404ButtonUrl"];
+    for (const key of stringKeys) {
+      if (typeof body[key] === "string") {
+        updates[key] = body[key];
+      }
+    }
+
+    if (Array.isArray(body.disabledGameSlugs)) {
+      updates.disabledGameSlugs = JSON.stringify(body.disabledGameSlugs.filter((s: unknown) => typeof s === "string"));
     }
 
     for (const [key, value] of Object.entries(updates)) {

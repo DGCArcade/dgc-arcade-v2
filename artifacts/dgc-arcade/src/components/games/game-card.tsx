@@ -513,8 +513,18 @@ const COVER_MAP: Record<string, React.ComponentType<{ slug: string }>> = {
   "race":        () => <CoverRace />,
 };
 
+/** Route slugs that live on dedicated pages instead of /games/:id */
+const GAME_HREF_OVERRIDES: Record<string, string> = {
+  race: "/race",
+};
+
+function getGameHref(game: Game): string {
+  return GAME_HREF_OVERRIDES[game.slug] ?? `/games/${game.id}`;
+}
+
 export function GameCard({ game }: { game: Game }) {
   const Cover = COVER_MAP[game.slug] ?? CoverDefault;
+  const href = getGameHref(game);
 
   const cardContent = (
     <Card className="group relative overflow-hidden bg-card border-border/50 hover:border-primary/60 transition-all duration-300 cursor-pointer flex flex-col card-hover-glow">
@@ -550,5 +560,5 @@ export function GameCard({ game }: { game: Game }) {
       </Card>
   );
 
-  return <Link href={`/games/${game.id}`}>{cardContent}</Link>;
+  return <Link href={href} className="block h-full">{cardContent}</Link>;
 }

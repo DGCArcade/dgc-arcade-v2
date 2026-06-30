@@ -1769,6 +1769,22 @@ body {
     border-radius: 8px !important;
   }
 
+  .mobile-game-play-area .crash-live-grid {
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    gap: 4px !important;
+  }
+
+  .mobile-game-play-area .crash-sha-col {
+    display: none !important;
+  }
+
+  .mobile-game-play-area .crash-feed-col {
+    max-height: 28% !important;
+    overflow: hidden !important;
+  }
+
   /* Blackjack uses its own mobile component layout */
   .mobile-game-play-area .bj-game-root--mobile .bj-controls-bar {
     flex: 0 0 44% !important;
