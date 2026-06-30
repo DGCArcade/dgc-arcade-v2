@@ -22,6 +22,44 @@ import {
 
 export const chickenRoadRouter = Router();
 
+// GET /api/chicken-road/session — resume active session for logged-in user
+chickenRoadRouter.get("/session", requireAuth, async (req, res) => {
+  try {
+    const [session] = await db.select().from(chickenRoadSessionsTable)
+      .where(and(eq(chickenRoadSessionsTable.userId, req.user!.userId), eq(chickenRoadSessionsTable.status, "active")))
+      .limit(1);
+
+    if (!session) {
+      res.json({ session: null });
+      return;
+    }
+
+    const tier = normalizeTier(session.tier);
+    const revealed: number[] = JSON.parse(session.revealed);
+    const serverSeedHash = createHash("sha256").update(session.serverSeed).digest("hex");
+
+    res.json({
+      session: {
+        sessionId: session.id,
+        serverSeedHash,
+        clientSeed: session.clientSeed,
+        nonce: session.nonce,
+        tier,
+        tierLabel: TIER_CONFIGS[tier].label,
+        maxSteps: maxStepsForTier(tier),
+        currentLane: revealed.length,
+        currentMultiplier: parseFloat(session.currentMultiplier),
+        bet: parseFloat(session.bet),
+        multipliers: getMultiplierTable(tier),
+        status: "active",
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Chicken Road session fetch error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // GET /api/chicken-road/config — public preview multipliers per tier (Stake guest-mode board)
 chickenRoadRouter.get("/config", (_req, res) => {
   const tiers = (Object.keys(TIER_CONFIGS) as DifficultyTier[]).map(tier => ({

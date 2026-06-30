@@ -7,7 +7,7 @@ import type { Game } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { PixiChickenBoard, type CrossAnim, type HazardType } from "./chicken-road/pixi-chicken-board";
+import { ChickenRoadBoard, type CrossAnim, type HazardType } from "./chicken-road/chicken-road-board-view";
 import { ProvablyFairPanel } from "./provably-fair-panel";
 import {
   STAKE_TIERS,
@@ -77,9 +77,54 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
   const [laneMultipliers, setLaneMultipliers] = useState(() => getStakeMultiplierTable("medium"));
 
   useEffect(() => {
+    fetch("/api/chicken-road/config")
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!data?.tiers) return;
+        const tierData = data.tiers.find((t: { tier: string }) => t.tier === tier);
+        if (tierData) {
+          setMaxLanes(tierData.maxSteps);
+          setLaneMultipliers(tierData.multipliers);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     setMaxLanes(STAKE_TIERS[tier].maxSteps);
     setLaneMultipliers(getStakeMultiplierTable(tier));
+    fetch("/api/chicken-road/config")
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        const tierData = data?.tiers?.find((t: { tier: string }) => t.tier === tier);
+        if (tierData?.multipliers) setLaneMultipliers(tierData.multipliers);
+        if (tierData?.maxSteps) setMaxLanes(tierData.maxSteps);
+      })
+      .catch(() => {});
   }, [tier]);
+
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+    fetch("/api/chicken-road/session", { headers: authHeaders() })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!data?.session) return;
+        const s = data.session;
+        setSessionId(s.sessionId);
+        setServerSeedHash(s.serverSeedHash ?? "");
+        setServerSeed("");
+        setNonce(s.nonce ?? 1);
+        setCurrentLane(s.currentLane ?? 0);
+        setMultiplier(s.currentMultiplier ?? 1);
+        setTier((s.tier as StakeTier) ?? "medium");
+        setMaxLanes(s.maxSteps ?? STAKE_TIERS.medium.maxSteps);
+        setLaneMultipliers(s.multipliers ?? getStakeMultiplierTable(s.tier ?? "medium"));
+        setStatus("active");
+        setChickenVisible(true);
+      })
+      .catch(() => {});
+  }, []);
 
   const startGame = () => {
     requireAuth(async () => {
@@ -115,6 +160,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         playChickenSpawn();
         playChickenCluck();
         qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
+        qc.invalidateQueries({ queryKey: ["getMe"] });
       } catch (err: unknown) {
         toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
       } finally {
@@ -219,6 +265,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
       playCrossSuccess();
       toast({ title: `Cashed out ${data.multiplier?.toFixed(2)}×`, description: `$${Number(data.payout).toFixed(2)}` });
       qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
+      qc.invalidateQueries({ queryKey: ["getMe"] });
     } catch (err: unknown) {
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
     } finally {
@@ -347,7 +394,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
             <span className="text-primary">{serverSeedHash}</span>
           </div>
         )}
-        <PixiChickenBoard
+        <ChickenRoadBoard
           lanes={maxLanes}
           currentLane={currentLane}
           status={status}
@@ -357,6 +404,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
           bustLane={bustLane}
           bustHazard={bustHazard}
           crossAnim={crossAnim}
+          previewMode={status === "idle"}
         />
       </div>
     </div>
