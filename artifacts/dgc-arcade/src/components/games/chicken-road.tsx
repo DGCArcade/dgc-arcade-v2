@@ -24,10 +24,13 @@ import {
   playChickenSpawn,
   startChickenRoadAmbience,
   stopChickenRoadAmbience,
+  playCarCrash,
 } from "@/lib/chicken-road-sounds";
 
 const CAR_ANIM_MS = 850;
 const BARRIER_MS = 500;
+const CAR_IMPACT_MS = 800;
+const MANHOLE_BUST_MS = 700;
 
 function getToken() { return localStorage.getItem("dgc_token"); }
 function authHeaders() { return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }; }
@@ -207,13 +210,21 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
 
       if (data.isDeath) {
         const hazard: HazardType = data.hazardType === "manhole" ? "manhole" : "car";
-        setCrossAnim({ lane, phase: hazard === "manhole" ? "manhole-fire" : "done", carDirection: carDir });
+        if (hazard === "car") {
+          setCrossAnim({ lane, phase: "car-impact", carDirection: carDir });
+          playCarCrash();
+          await delay(CAR_IMPACT_MS);
+        } else {
+          setCrossAnim({ lane, phase: "manhole-fire", carDirection: carDir });
+          playManholeIgnite();
+          await delay(MANHOLE_BUST_MS);
+        }
         setBustLane(lane);
         setBustHazard(hazard);
         setStatus("lost");
+        setCrossAnim(null);
         setServerSeed(data.serverSeed || "");
         playChickenBust();
-        if (hazard === "manhole") playManholeIgnite();
         toast({
           title: hazard === "car" ? "Hit by a car!" : "Manhole collapsed!",
           variant: "destructive",

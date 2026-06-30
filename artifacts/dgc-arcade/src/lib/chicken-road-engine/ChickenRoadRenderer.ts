@@ -634,11 +634,55 @@ export class ChickenRoadRenderer {
     if (crossAnim.phase === "barrier") {
       const barrier = new PIXI.Graphics();
       drawBarrier(barrier);
-      barrier.y = boardH * 0.38;
-      barrier.scale.set(0.15);
+      barrier.y = -40;
+      barrier.scale.set(1);
       container.addChild(barrier);
-      gsap.to(barrier.scale, { x: 1, y: 1, duration: 0.35, ease: "back.out(2.5)" });
-      gsap.to(container, { x: laneX + 5, duration: 0.05, yoyo: true, repeat: 5, onComplete: () => this.clearAnimSprite() });
+      gsap.to(barrier, { y: boardH * 0.38, duration: 0.28, ease: "power2.in" });
+      gsap.to(barrier.scale, { x: 1.08, y: 0.92, duration: 0.08, delay: 0.28, yoyo: true, repeat: 3 });
+      gsap.to(container, { x: laneX + 4, duration: 0.05, delay: 0.28, yoyo: true, repeat: 5, onComplete: () => this.clearAnimSprite() });
+    }
+
+    if (crossAnim.phase === "car-impact") {
+      const car = new PIXI.Graphics();
+      drawCar(car, 0xe74c3c, crossAnim.lane);
+      car.y = crossAnim.carDirection === "down" ? -50 : boardH + 30;
+      container.addChild(car);
+      const impactY = boardH * 0.4;
+      gsap.to(car, {
+        y: impactY,
+        duration: 0.22,
+        ease: "power3.in",
+        onComplete: () => {
+          gsap.to(car, { rotation: 0.08, duration: 0.05, yoyo: true, repeat: 5 });
+          gsap.to(container, { x: laneX + 6, duration: 0.06, yoyo: true, repeat: 4 });
+        },
+      });
+      for (let i = 0; i < 12; i++) {
+        const p = new PIXI.Graphics();
+        p.circle(0, 0, 2 + Math.random() * 4);
+        p.fill({ color: i % 2 === 0 ? 0xffcc00 : 0xff4400, alpha: 0.95 });
+        p.x = (Math.random() - 0.5) * 20;
+        p.y = impactY;
+        container.addChild(p);
+        const angle = (Math.random() - 0.5) * Math.PI;
+        gsap.to(p, {
+          x: p.x + Math.cos(angle) * (30 + Math.random() * 40),
+          y: impactY + Math.sin(angle) * (20 + Math.random() * 30),
+          alpha: 0,
+          duration: 0.4 + Math.random() * 0.25,
+          delay: 0.2,
+          ease: "power2.out",
+        });
+      }
+      gsap.to(this.chickenContainer, {
+        rotation: 0.5,
+        y: this.chickenContainer.y + 30,
+        alpha: 0.3,
+        duration: 0.35,
+        delay: 0.2,
+        ease: "power2.out",
+      });
+      gsap.delayedCall(0.85, () => this.clearAnimSprite());
     }
 
     if (crossAnim.phase === "manhole-fire") {
