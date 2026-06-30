@@ -3,7 +3,7 @@ export type HazardType = "car" | "manhole";
 
 export type CrossAnim = {
   lane: number;
-  phase: "car-down" | "car-up" | "barrier" | "manhole-fire" | "done";
+  phase: "car-down" | "car-up" | "barrier" | "car-impact" | "manhole-fire" | "done";
   carDirection: "down" | "up";
 } | null;
 

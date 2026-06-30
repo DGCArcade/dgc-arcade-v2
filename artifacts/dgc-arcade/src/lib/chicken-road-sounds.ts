@@ -112,6 +112,26 @@ export function stopChickenRoadAmbience() {
   }
 }
 
+export function playCarCrash() {
+  const c = ac();
+  const now = c.currentTime;
+
+  const crash = c.createOscillator();
+  const crashGain = c.createGain();
+  crash.type = "sawtooth";
+  crash.frequency.setValueAtTime(180, now);
+  crash.frequency.exponentialRampToValueAtTime(40, now + 0.2);
+  crashGain.gain.setValueAtTime(0.2, now);
+  crashGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+  crash.connect(crashGain);
+  crashGain.connect(c.destination);
+  crash.start(now);
+  crash.stop(now + 0.35);
+
+  noiseBurst(c, 0.15, 200, 0.35);
+  playCarPass(true);
+}
+
 export function playChickenSpawn() {
   const c = ac();
   const now = c.currentTime;

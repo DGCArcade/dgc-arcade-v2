@@ -1,5 +1,6 @@
 import { Trophy } from "lucide-react";
 import { DerbyHorse, HorseSilkBadge, type RacerDef } from "./derby-horse";
+import { DerbyRaceHUD, DerbyLaneRankBadge } from "./derby-race-hud";
 
 export type RacerProgress = { racerId: number; progress: number; done: boolean };
 export type CameraAngle = "side" | "front" | "aerial" | "finish";
@@ -9,6 +10,9 @@ const LANE_COUNT = 6;
 /** Uniform vertical lane slots — every horse shares the same X at the gate */
 const LANE_BOTTOMS = [2, 14, 26, 38, 50, 62];
 const LANE_BOTTOMS_MOBILE = [4, 16, 28, 40, 52, 64];
+/** Evenly spaced chase-camera lane columns */
+const CHASE_LANE_LEFT = [4, 19, 34, 49, 64, 79];
+const CHASE_LANE_LEFT_DESKTOP = [7, 21, 35, 49, 63, 77];
 
 function HorseRacerLabel({
   r,
@@ -219,27 +223,52 @@ export function DerbyFrontChaseView({
   selectedRacer: number | null;
   compact?: boolean;
 }) {
+  const laneLefts = compact ? CHASE_LANE_LEFT : CHASE_LANE_LEFT_DESKTOP;
+
+  const rankMap = new Map<number, number>();
+  if (racing) {
+    [...racers]
+      .map(r => ({ id: r.id, prog: progress.find(p => p.racerId === r.id)?.progress ?? 0 }))
+      .sort((a, b) => b.prog - a.prog)
+      .forEach((x, i) => rankMap.set(x.id, i + 1));
+  }
+
+  const gateBottom = compact ? 12 : 8;
+  const gateScale = compact ? 0.5 : 0.65;
+  const horseScale = compact ? 0.72 : 1;
+
   return (
     <div className="relative h-full w-full overflow-hidden derby-front-scene">
+      <DerbyRaceHUD racers={racers} progress={progress} selectedRacer={selectedRacer} racing={racing && compact} />
       <SkyAndHorizon />
-      <div className="absolute inset-x-[8%] bottom-0 top-[32%]"
+      <div className="absolute inset-x-[4%] bottom-0 top-[30%] derby-chase-track"
         style={{
           background: "linear-gradient(180deg, #9B7B3A 0%, #6B4E2E 35%, #4A3520 100%)",
-          clipPath: "polygon(18% 0%, 82% 0%, 100% 100%, 0% 100%)",
+          clipPath: "polygon(8% 0%, 92% 0%, 100% 100%, 0% 100%)",
         }}
       />
-      <div className="absolute inset-x-[20%] bottom-0 top-[40%] border-l border-r border-white/15"
-        style={{ clipPath: "polygon(12% 0%, 88% 0%, 100% 100%, 0% 100%)" }} />
 
-      <div className="absolute top-[34%] left-[20%] right-[20%] flex justify-between px-[1%] opacity-75">
-        {racers.map(r => (
-          <div key={r.id} className="w-1.5 h-10 bg-[#8B4513] border border-[#FFD700]/40 rounded-t-sm" />
+      {/* Lane guides — visible columns so each horse has its own lane */}
+      {laneLefts.map((left, i) => (
+        <div
+          key={i}
+          className="absolute top-[32%] bottom-0 w-px bg-white/10 pointer-events-none"
+          style={{ left: `${left + 4}%` }}
+        />
+      ))}
+
+      <div className="absolute top-[30%] left-[4%] right-[4%] flex justify-between px-[1%] opacity-60">
+        {racers.map((r, i) => (
+          <div key={r.id} className="flex flex-col items-center" style={{ width: `${100 / 6}%` }}>
+            <HorseSilkBadge r={r} size="xs" highlight={r.id === selectedRacer} />
+            <div className="w-1 h-8 mt-0.5 bg-[#8B4513] border border-[#FFD700]/30 rounded-t-sm" />
+          </div>
         ))}
       </div>
 
       {[0, 1, 2, 3, 4, 5].map(i => (
-        <div key={i} className="absolute left-0 right-0 h-px bg-white/12 derby-lane-dash"
-          style={{ bottom: `${10 + i * 12}%`, animationDelay: `${i * 0.12}s` }} />
+        <div key={i} className="absolute left-0 right-0 h-px bg-white/10 derby-lane-dash"
+          style={{ bottom: `${8 + i * 11}%`, animationDelay: `${i * 0.12}s` }} />
       ))}
 
       <div className="absolute inset-0">
@@ -248,29 +277,41 @@ export function DerbyFrontChaseView({
           const prog = (p?.progress ?? 0) / TRACK_LEN;
           const gallop = racing && !p?.done;
           const isMyPick = r.id === selectedRacer;
-          const atGate = prog < 0.03;
-          const scale = atGate ? (compact ? 0.75 : 0.68) : (compact ? 0.75 : 0.68) + prog * 0.75;
-          const bottom = atGate ? (compact ? 10 : 8) : (compact ? 10 : 8) + prog * 32;
-          const left = compact ? 4 + laneIdx * 15 : 8 + laneIdx * 14;
+          const atGate = prog < 0.02;
+          const rank = rankMap.get(r.id) ?? 0;
+          const isLeader = rank === 1 && racing;
+          const scale = atGate ? gateScale : gateScale + prog * (compact ? 0.42 : 0.55);
+          const bottom = atGate ? gateBottom : gateBottom + prog * (compact ? 52 : 38);
+          const left = laneLefts[laneIdx];
 
           return (
-            <div key={r.id} className="absolute flex flex-col items-center transition-none"
+            <div
+              key={r.id}
+              className="absolute flex flex-col items-center transition-none derby-chase-horse"
               style={{
                 bottom: `${bottom}%`,
                 left: `${left}%`,
+                width: compact ? "14%" : "12%",
                 transform: `scale(${scale})`,
-                zIndex: Math.round(prog * 100) + laneIdx,
-                opacity: atGate ? 1 : 0.85 + prog * 0.15,
-              }}>
-              <HorseRacerLabel r={r} isMyPick={isMyPick} compact />
-              <div className={gallop ? "derby-horse-bob" : ""}>
-                <DerbyHorse r={r} gallop={gallop} view="front-chase" scale={1} />
+                zIndex: Math.round(prog * 200) + laneIdx + (isMyPick ? 50 : 0),
+                opacity: atGate ? 1 : 0.88 + prog * 0.12,
+              }}
+            >
+              <div className="relative">
+                {racing && rank > 0 && <DerbyLaneRankBadge rank={rank} isLeader={isLeader} />}
+                <HorseRacerLabel r={r} isMyPick={isMyPick} compact />
+                <div className={`${gallop ? "derby-horse-bob" : ""} ${isMyPick ? "derby-pick-ring rounded-md" : ""}`}>
+                  <DerbyHorse r={r} gallop={gallop} view="front-chase" scale={horseScale} />
+                </div>
+                {gallop && (
+                  <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-6 h-1.5 derby-dust-puff rounded-full" />
+                )}
               </div>
             </div>
           );
         })}
       </div>
-      {racing && <div className="absolute inset-0 pointer-events-none derby-speed-lines opacity-20" />}
+      {racing && <div className="absolute inset-0 pointer-events-none derby-speed-lines opacity-25" />}
     </div>
   );
 }

@@ -4,17 +4,17 @@ import {
   CarSprite,
   TrafficLight,
   ManholeCover,
-  BarrierSprite,
   getCarColor,
 } from "./chicken-road-sprites";
 import { AmbientLaneTraffic } from "./ambient-traffic";
+import { CarCrashEffect, BarrierDropEffect } from "./crash-effects";
 
 export type LaneState = "idle" | "past" | "current" | "future" | "bust";
 export type HazardType = "car" | "manhole";
 
 export type CrossAnim = {
   lane: number;
-  phase: "car-down" | "car-up" | "barrier" | "manhole-fire" | "done";
+  phase: "car-down" | "car-up" | "barrier" | "car-impact" | "manhole-fire" | "done";
   carDirection: "down" | "up";
 } | null;
 
@@ -70,9 +70,12 @@ function LaneStrip({
   const showCar = isCrossing && crossAnim.phase === "car-down";
   const showCarUp = isCrossing && crossAnim.phase === "car-up";
   const showBarrier = isCrossing && crossAnim.phase === "barrier";
+  const showCarImpact = isCrossing && crossAnim.phase === "car-impact";
   const showManholeBurst = isCrossing && crossAnim.phase === "manhole-fire";
   const isBust = bustLane === laneIndex && state === "bust";
-  const hideAmbient = isCrossing && (crossAnim.phase === "car-down" || crossAnim.phase === "car-up");
+  const hideAmbient = isCrossing && (
+    crossAnim.phase === "car-down" || crossAnim.phase === "car-up" || crossAnim.phase === "car-impact"
+  );
 
   return (
     <div className={`cr-stake-lane relative flex-shrink-0 w-[72px] sm:w-[80px] h-full ${
@@ -99,10 +102,9 @@ function LaneStrip({
             <CarSprite color={getCarColor(laneIndex + 1)} variant={variants[(laneIndex + 1) % 3]} size={38} direction="up" />
           </div>
         )}
-        {showBarrier && (
-          <div className="absolute left-1/2 top-[36%] -translate-x-1/2 z-20">
-            <BarrierSprite size={42} />
-          </div>
+        {showBarrier && <BarrierDropEffect size={42} />}
+        {showCarImpact && (
+          <CarCrashEffect laneIndex={laneIndex} direction={crossAnim.carDirection} />
         )}
         {showManholeBurst && (
           <div className="absolute left-1/2 bottom-[20%] -translate-x-1/2 z-20">
@@ -110,7 +112,7 @@ function LaneStrip({
           </div>
         )}
 
-        {isBust && bustHazard === "car" && (
+        {isBust && bustHazard === "car" && !showCarImpact && (
           <div className="absolute left-1/2 top-[38%] -translate-x-1/2 z-20 cr-car-bust-shake">
             <CarSprite color="#E74C3C" variant="sedan" size={44} direction="down" />
           </div>
