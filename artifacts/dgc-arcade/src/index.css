@@ -470,14 +470,6 @@ body {
 }
 
 /* ── Game card cover animations (subtle) ─────────────────────────── */
-@keyframes cover-wheel-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-@keyframes cover-ball-orbit {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(-360deg); }
-}
 @keyframes cover-mult-pulse {
   0%, 100% { opacity: 0.85; }
   50% { opacity: 1; }
@@ -485,16 +477,6 @@ body {
 @keyframes cover-gem-glow {
   0%, 100% { opacity: 0.7; }
   50% { opacity: 1; filter: drop-shadow(0 0 4px #00FFCC); }
-}
-.cover-wheel-spin {
-  transform-origin: 160px 100px;
-  transform-box: fill-box;
-  animation: cover-wheel-spin 20s linear infinite;
-}
-.cover-ball-orbit {
-  transform-origin: 160px 100px;
-  transform-box: fill-box;
-  animation: cover-ball-orbit 14s linear infinite;
 }
 .cover-mult-pulse {
   animation: cover-mult-pulse 2.5s ease-in-out infinite;
