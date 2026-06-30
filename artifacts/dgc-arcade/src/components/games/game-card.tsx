@@ -341,95 +341,56 @@ function CoverBlackjack() {
 }
 
 function CoverChickenRoad() {
-  const laneColors = ["#0a1a0a","#0d1f0d","#0a1a0a","#0d1f0d","#0a1a0a","#0d1f0d","#0a1a0a","#0d1f0d","#0a1a0a","#0d1f0d"];
-  const carPositions = [{lane:1,tile:2},{lane:3,tile:0},{lane:5,tile:3},{lane:7,tile:1},{lane:9,tile:4}];
-  const LANE_H = 16;
-  const TILE_W = 28;
+  const LANE_H = 14;
+  const TILE_W = 24;
   return (
     <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
       <defs>
         <linearGradient id="cr2-bg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#050f05"/>
-          <stop offset="100%" stopColor="#010801"/>
+          <stop offset="0%" stopColor="#0a1a0a"/>
+          <stop offset="100%" stopColor="#020802"/>
         </linearGradient>
-        <radialGradient id="cr2-glow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#00FF44" stopOpacity="0.18"/>
-          <stop offset="100%" stopColor="#00FF44" stopOpacity="0"/>
-        </radialGradient>
-        <filter id="cr2-blur">
-          <feGaussianBlur stdDeviation="2.5" result="blur"/>
-          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
       </defs>
-
       <rect width="320" height="200" fill="url(#cr2-bg)"/>
-      <ellipse cx="160" cy="100" rx="160" ry="100" fill="url(#cr2-glow)"/>
 
-      {/* Road grid — 10 lanes × 5 tiles */}
-      {laneColors.map((fill, lane) => {
-        const y = 12 + lane * (LANE_H + 2);
+      {/* Road lanes */}
+      {Array.from({length:6}).map((_, lane) => {
+        const y = 20 + lane * (LANE_H + 4);
         return (
           <g key={lane}>
-            <rect x="30" y={y} width={5 * TILE_W + 4} height={LANE_H} rx="3" fill={fill} stroke="#1a3a1a" strokeWidth="0.8"/>
-            {[0,1,2,3,4].map(tile => (
-              <rect key={tile} x={32 + tile * (TILE_W + 1)} y={y+1} width={TILE_W-2} height={LANE_H-2} rx="2"
-                fill="none" stroke="#1f3f1f" strokeWidth="0.5"/>
-            ))}
+            <rect x="20" y={y} width="220" height={LANE_H} rx="3" fill="#0d1f0d" stroke="#1a3a1a" strokeWidth="0.8"/>
+            <line x1="20" y1={y + LANE_H/2} x2="240" y2={y + LANE_H/2} stroke="#FFD700" strokeWidth="0.5" strokeDasharray="6 8" opacity="0.35"/>
           </g>
         );
       })}
 
-      {/* Cars (hazards) */}
-      {carPositions.map((pos, i) => {
-        const y = 12 + pos.lane * (LANE_H + 2) + 2;
-        const x = 32 + pos.tile * (TILE_W + 1);
-        return (
-          <g key={i} filter="url(#cr2-blur)">
-            <rect x={x+1} y={y+1} width={TILE_W-4} height={LANE_H-5} rx="3" fill="#FF2222" opacity="0.95"/>
-            <rect x={x+4} y={y+2} width={TILE_W-10} height={4} rx="1" fill="#FF6666" opacity="0.7"/>
-            <circle cx={x+4} cy={y+LANE_H-6} r="2" fill="#333"/>
-            <circle cx={x+TILE_W-7} cy={y+LANE_H-6} r="2" fill="#333"/>
+      {/* Animated cars */}
+      {[0, 2, 4].map((lane, i) => (
+        <g key={lane} className="cover-car-drive" style={{ animationDelay: `${i * 1.4}s`, animationDuration: `${2.8 + i * 0.4}s` }}>
+          <g transform={`translate(0, ${22 + lane * (LANE_H + 4)})`}>
+            <rect x="0" y="2" width="22" height={LANE_H - 4} rx="3" fill="#FF3333"/>
+            <rect x="3" y="3" width="14" height="4" rx="1" fill="#FF8888" opacity="0.8"/>
+            <circle cx="5" cy={LANE_H - 3} r="2" fill="#222"/>
+            <circle cx="17" cy={LANE_H - 3} r="2" fill="#222"/>
           </g>
-        );
-      })}
-
-      {/* Chicken — in lane 4, tile 1 (safe spot) */}
-      {(() => {
-        const cx2 = 32 + 1 * (TILE_W + 1) + (TILE_W-2)/2;
-        const cy2 = 12 + 4 * (LANE_H + 2) + LANE_H/2;
-        return (
-          <g filter="url(#cr2-blur)">
-            <ellipse cx={cx2} cy={cy2+1} rx="6" ry="5" fill="#FFD700"/>
-            <circle cx={cx2} cy={cy2-3} r="4" fill="#FFD700"/>
-            <polygon points={`${cx2+4},${cy2-4} ${cx2+8},${cy2-5} ${cx2+7},${cy2-2}`} fill="#FF8800"/>
-            <circle cx={cx2+1} cy={cy2-4} r="1" fill="#1a1a1a"/>
-            <text x={cx2} y={cy2+14} textAnchor="middle" fontSize="7" fill="#00FF44" fontWeight="900" letterSpacing="0.5">SAFE</text>
-          </g>
-        );
-      })()}
-
-      {/* Safe zone marker */}
-      <rect x="175" y="12" width="28" height={10*(LANE_H+2)-2} rx="3" fill="#00FF44" opacity="0.06" stroke="#00FF44" strokeWidth="0.8" strokeDasharray="3 3"/>
-      <text x="189" y="9" textAnchor="middle" fontSize="6" fill="#00FF44" opacity="0.7" letterSpacing="1">GOAL</text>
-
-      {/* Multiplier labels on right */}
-      {["1.2x","1.6x","2.1x","2.8x","3.8x","5.2x","7x","10x","14x","20x"].map((m, i) => (
-        <text key={i} x="215" y={12 + i*(LANE_H+2) + LANE_H/2 + 4}
-          fontSize="8" fontWeight="900" fill={i < 3 ? "#00CC44" : i < 6 ? "#FFB800" : "#FF4444"}
-          fontFamily="monospace">{m}</text>
+        </g>
       ))}
 
-      {/* Title */}
-      <text x="264" y="90" textAnchor="middle" fontSize="11" fontWeight="900" fill="white" letterSpacing="1"
-        transform="rotate(-90 264 90)">CHICKEN ROAD</text>
+      {/* Hopping chicken */}
+      <g className="cover-chicken-hop" style={{ transformOrigin: "70px 95px" }}>
+        <ellipse cx="70" cy="98" rx="9" ry="7" fill="#FFD700"/>
+        <circle cx="70" cy="90" r="6" fill="#FFD700"/>
+        <polygon points="76,88 84,86 82,92" fill="#FF8800"/>
+        <circle cx="72" cy="89" r="1.2" fill="#111"/>
+        <rect x="64" y="102" width="2" height="5" fill="#FF8800"/>
+        <rect x="74" y="102" width="2" height="5" fill="#FF8800"/>
+      </g>
 
-      {/* Difficulty tags */}
-      {[["EASY","#00CC44"],["MED","#FFB800"],["HARD","#FF6622"],["XTREME","#FF2222"]].map(([label,color],i)=>(
-        <rect key={i} x={30+i*37} y="186" width="32" height="10" rx="3" fill={color as string} opacity="0.85"/>
-      ))}
-      {[["EASY","#00CC44"],["MED","#FFB800"],["HARD","#FF6622"],["XTREME","#FF2222"]].map(([label,color],i)=>(
-        <text key={i} x={30+i*37+16} y="194" textAnchor="middle" fontSize="6.5" fontWeight="900" fill="#000">{label}</text>
-      ))}
+      {/* Goal zone */}
+      <rect x="200" y="18" width="24" height={6 * (LANE_H + 4)} rx="4" fill="#00FF44" opacity="0.08" stroke="#00FF44" strokeWidth="1" strokeDasharray="4 3"/>
+      <text x="212" y="14" textAnchor="middle" fontSize="7" fill="#00FF44" fontWeight="900">GOAL</text>
+
+      <text x="270" y="100" fontSize="10" fontWeight="900" fill="white" letterSpacing="1" transform="rotate(-90 270 100)">CHICKEN ROAD</text>
     </svg>
   );
 }
@@ -490,68 +451,47 @@ function CoverDefault({ slug }: { slug: string }) {
 }
 
 function CoverRace() {
+  const horses = [
+    { x: 180, y: 118, color: "#ef4444", delay: "0s" },
+    { x: 155, y: 132, color: "#f59e0b", delay: "0.1s" },
+    { x: 130, y: 146, color: "#8b5cf6", delay: "0.2s" },
+  ];
   return (
-    <svg viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+    <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
       <defs>
         <linearGradient id="race-sky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#0f172a"/>
-          <stop offset="100%" stopColor="#1e3a5f"/>
+          <stop offset="0%" stopColor="#87CEEB"/>
+          <stop offset="100%" stopColor="#E8C872"/>
         </linearGradient>
-        <linearGradient id="race-ground" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#15803d"/>
-          <stop offset="100%" stopColor="#166534"/>
+        <linearGradient id="race-dirt" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#8B6914"/>
+          <stop offset="100%" stopColor="#5C4033"/>
         </linearGradient>
       </defs>
-      <rect width="200" height="140" fill="url(#race-sky)"/>
-      {/* Ground */}
-      <rect x="0" y="95" width="200" height="45" fill="url(#race-ground)"/>
-      {/* Track lanes */}
-      <rect x="0" y="95" width="200" height="3" fill="#ca8a04" opacity="0.7"/>
-      <rect x="0" y="105" width="200" height="1" fill="white" opacity="0.2" strokeDasharray="8,6"/>
-      <rect x="0" y="115" width="200" height="1" fill="white" opacity="0.2"/>
+      <rect width="320" height="200" fill="url(#race-sky)"/>
+      <rect x="0" y="100" width="320" height="100" fill="url(#race-dirt)"/>
+      <line x1="0" y1="108" x2="320" y2="108" stroke="white" strokeWidth="1" opacity="0.4"/>
       {/* Finish line */}
-      <rect x="170" y="85" width="4" height="50" fill="white" opacity="0.9"/>
-      {[0,1,2,3,4,5].map(i => (
-        <rect key={i} x="170" y={85 + i*8} width="4" height="4"
-          fill={i % 2 === 0 ? "#111" : "white"} opacity="0.9"/>
+      <g transform="translate(260, 95)">
+        <rect x="0" y="0" width="6" height="70" fill="white"/>
+        {[0,1,2,3,4,5,6,7].map(i => (
+          <rect key={i} x="0" y={i*8} width="6" height="4" fill={i%2===0?"#111":"white"}/>
+        ))}
+      </g>
+      {/* Animated horses */}
+      {horses.map((h, i) => (
+        <g key={i} className="cover-race-gallop" style={{ animationDelay: h.delay }}>
+          <g transform={`translate(${h.x}, ${h.y})`}>
+            <ellipse cx="0" cy="0" rx="14" ry="6" fill={h.color}/>
+            <circle cx="12" cy="-4" r="5" fill={h.color}/>
+            <rect x="-6" y="4" width="2" height="8" fill="#333" className="horse-leg-front"/>
+            <rect x="4" y="4" width="2" height="8" fill="#333" className="horse-leg-back"/>
+            <rect x="2" y="-2" width="6" height="5" rx="1" fill="#fff" opacity="0.85"/>
+          </g>
+        </g>
       ))}
-      {/* Horse 1 - red, leading */}
-      <g transform="translate(130,90)">
-        <ellipse cx="12" cy="5" rx="14" ry="5" fill="#ef4444"/>
-        <circle cx="24" cy="3" r="4" fill="#ef4444"/>
-        <rect x="2" y="8" width="3" height="8" fill="#ef4444"/>
-        <rect x="8" y="9" width="3" height="7" fill="#ef4444"/>
-        <rect x="15" y="9" width="3" height="7" fill="#ef4444"/>
-        <rect x="21" y="9" width="3" height="7" fill="#ef4444"/>
-        <text x="12" y="3" textAnchor="middle" fontSize="6" fill="white" fontWeight="bold">1</text>
-      </g>
-      {/* Horse 2 - yellow, close second */}
-      <g transform="translate(105,100)">
-        <ellipse cx="12" cy="5" rx="14" ry="5" fill="#f59e0b"/>
-        <circle cx="24" cy="3" r="4" fill="#f59e0b"/>
-        <rect x="2" y="8" width="3" height="8" fill="#f59e0b"/>
-        <rect x="8" y="9" width="3" height="7" fill="#f59e0b"/>
-        <rect x="15" y="9" width="3" height="7" fill="#f59e0b"/>
-        <rect x="21" y="9" width="3" height="7" fill="#f59e0b"/>
-      </g>
-      {/* Horse 3 - purple, third */}
-      <g transform="translate(80,108)">
-        <ellipse cx="12" cy="5" rx="14" ry="5" fill="#8b5cf6"/>
-        <circle cx="24" cy="3" r="4" fill="#8b5cf6"/>
-        <rect x="2" y="8" width="3" height="8" fill="#8b5cf6"/>
-        <rect x="15" y="9" width="3" height="7" fill="#8b5cf6"/>
-      </g>
-      {/* Trophy */}
-      <g transform="translate(150,55)">
-        <rect x="8" y="0" width="14" height="14" rx="2" fill="#ca8a04" opacity="0.9"/>
-        <text x="15" y="11" textAnchor="middle" fontSize="10">🏆</text>
-      </g>
-      {/* Stars */}
-      {[[20,15],[60,8],[100,20],[140,10],[170,25]].map(([x,y],i) => (
-        <circle key={i} cx={x} cy={y} r="1" fill="white" opacity={0.4 + i*0.1}/>
-      ))}
-      {/* 5.5x label */}
-      <text x="100" y="75" textAnchor="middle" fontSize="14" fontWeight="bold" fill="#fbbf24" opacity="0.95">5.5×</text>
+      <text x="160" y="40" textAnchor="middle" fontSize="18" fontWeight="900" fill="white" opacity="0.9" letterSpacing="2">DGC DERBY</text>
+      <text x="160" y="62" textAnchor="middle" fontSize="12" fontWeight="900" fill="#FFD700">5.5×</text>
     </svg>
   );
 }

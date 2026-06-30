@@ -8,7 +8,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { startBackgroundTasks } from "./lib/background-tasks.js";
 import { logVisitor } from "./services/visitor-service.js";
-import { ensureSlotGamesSeeded, ensureCoreGamesSeeded } from "./routes/games.js";
+import { ensureSlotGamesSeeded, ensureCoreGamesSeeded, ensureRaceGameSeeded } from "./routes/games.js";
 import { pool } from "@workspace/db";
 
 const app: Express = express();
@@ -229,6 +229,7 @@ startBackgroundTasks();
 // Core games seed only when the table is empty; both are idempotent.
 ensureCoreGamesSeeded()
   .then(() => ensureSlotGamesSeeded())
+  .then(() => ensureRaceGameSeeded())
   .catch(err => console.error("Game seeding error:", err));
 
 // ── Chicken Road session table migration (idempotent) ───────────────────────────
