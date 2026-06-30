@@ -56,7 +56,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <Navbar />
           <main className={`flex-1 w-full mx-auto flex flex-col overflow-x-hidden min-h-0 ${
             mobileGameMode
-              ? "max-w-full px-0 py-0 pb-0 overflow-hidden"
+              ? "max-w-full px-0 py-0 pb-0 overflow-hidden [&>*]:flex-1 [&>*]:min-h-0"
               : "max-w-7xl px-2 sm:px-4 md:px-6 lg:px-8 py-3 md:py-8 pb-20 md:pb-8"
           }`}>
             {children}
