@@ -119,6 +119,18 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
     return;
   }
 
+  // Only the fixed crosswalk tile is valid — prevents client from picking safe tiles
+  if (tileIndex !== CROSS_TILE_INDEX) {
+    res.status(400).json({ error: "Invalid cross position" });
+    return;
+  }
+
+  const laneNum = Number(laneIndex);
+  if (!Number.isInteger(laneNum) || laneNum < 0) {
+    res.status(400).json({ error: "Invalid lane index" });
+    return;
+  }
+
   try {
     const [session] = await db.select().from(chickenRoadSessionsTable)
       .where(and(eq(chickenRoadSessionsTable.id, sessionId), eq(chickenRoadSessionsTable.userId, req.user!.userId)))
@@ -129,13 +141,13 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
 
     const revealed: number[] = JSON.parse(session.revealed);
     
-    // Validate lane sequence
-    if (laneIndex !== revealed.length) {
+    // Validate lane sequence — strict order, no skipping or replay
+    if (laneNum !== revealed.length) {
       res.status(400).json({ error: `Must play lane ${revealed.length} next` });
       return;
     }
     
-    if (laneIndex >= LANES) {
+    if (laneNum >= LANES) {
       res.status(400).json({ error: "Game completed all lanes" });
       return;
     }
@@ -146,7 +158,7 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
     }
 
     const matrix: number[][] = JSON.parse(session.matrix);
-    const laneCars = matrix[laneIndex];
+    const laneCars = matrix[laneNum];
     
     // Check for collision (Bust)
     if (laneCars.includes(tileIndex)) {
@@ -178,7 +190,7 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
 
       res.json({
         status: "lost",
-        laneIndex,
+        laneIndex: laneNum,
         tileIndex,
         isCar: true,
         matrix, // Reveal full board on loss
@@ -189,7 +201,7 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
 
     // Success - Path is clear
     revealed.push(tileIndex);
-    const newMultiplier = calculateMultiplier(session.tier as DifficultyTier, laneIndex);
+    const newMultiplier = calculateMultiplier(session.tier as DifficultyTier, laneNum);
     
     // If completed all lanes, auto-cashout
     if (revealed.length === LANES) {
@@ -222,7 +234,7 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
 
       res.json({
         status: "won",
-        laneIndex,
+        laneIndex: laneNum,
         tileIndex,
         isCar: false,
         multiplier: newMultiplier,
@@ -234,7 +246,7 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
       return;
     }
 
-    // Continue game
+    // Continue game — do NOT expose matrix while active
     await db.update(chickenRoadSessionsTable)
       .set({ 
         revealed: JSON.stringify(revealed),
@@ -244,7 +256,7 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
 
     res.json({
       status: "active",
-      laneIndex,
+      laneIndex: laneNum,
       tileIndex,
       isCar: false,
       multiplier: newMultiplier

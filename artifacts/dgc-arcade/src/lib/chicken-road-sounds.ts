@@ -79,3 +79,43 @@ export function playChickenBust() {
   osc.stop(now + 0.45);
   playCarPass(true);
 }
+
+export function playBarrierClang() {
+  const c = ac();
+  const now = c.currentTime;
+  const osc = c.createOscillator();
+  const gain = c.createGain();
+  osc.type = "square";
+  osc.frequency.setValueAtTime(320, now);
+  osc.frequency.exponentialRampToValueAtTime(180, now + 0.08);
+  gain.gain.setValueAtTime(0.12, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+  osc.connect(gain);
+  gain.connect(c.destination);
+  osc.start(now);
+  osc.stop(now + 0.15);
+}
+
+export function playManholeIgnite() {
+  const c = ac();
+  const now = c.currentTime;
+  const bufferSize = Math.floor(c.sampleRate * 0.2);
+  const buffer = c.createBuffer(1, bufferSize, c.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    const t = i / c.sampleRate;
+    const env = Math.exp(-t * 12);
+    data[i] = (Math.random() * 2 - 1) * env * 0.15;
+  }
+  const src = c.createBufferSource();
+  src.buffer = buffer;
+  const filter = c.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 600;
+  const gain = c.createGain();
+  gain.gain.value = 0.25;
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(c.destination);
+  src.start(now);
+}
