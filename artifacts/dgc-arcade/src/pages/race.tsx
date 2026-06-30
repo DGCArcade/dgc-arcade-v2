@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthModal } from "@/hooks/use-auth-modal";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
@@ -48,6 +49,7 @@ type RaceResult = {
 };
 
 export default function RacePage() {
+  const isMobile = useIsMobile();
   const { user, isAuthenticated } = useAuth();
   const { open } = useAuthModal();
   const queryClient = useQueryClient();
@@ -169,44 +171,166 @@ export default function RacePage() {
     );
   }
 
-  const controlsPanel = (
-    <Card className="bg-card border-border p-4 md:p-5 space-y-4">
-      <div>
-        <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-2">Pick Your Horse</div>
-        <div className="grid grid-cols-2 gap-2">
-          {RACERS.map(r => (
-            <button key={r.id} type="button" disabled={racing} onClick={() => setSelectedRacer(r.id)}
-              className={`flex items-center gap-1.5 p-2 rounded-lg border transition-all font-bold text-xs ${selectedRacer === r.id ? "border-2" : "border-border/50 hover:border-border bg-secondary/30"} disabled:opacity-50`}
-              style={selectedRacer === r.id ? { borderColor: r.silk, backgroundColor: `${r.silk}18` } : undefined}>
-              <DerbyHorse r={r} gallop={false} scale={0.55} />
-              <span>{r.name}</span>
+  const trackCard = (
+    <Card className="race-track-card bg-card border-border p-0 overflow-hidden flex flex-col min-h-0 h-full">
+      <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/40 bg-secondary/30 shrink-0">
+        <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <Video className="w-3 h-3" /> Camera
+        </div>
+        <div className="flex gap-1 flex-wrap justify-end">
+          {CAMERAS.map(c => (
+            <button key={c.id} type="button"
+              onClick={() => setCamera(c.id)}
+              disabled={c.id === "finish" && !result && !racing}
+              className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-all ${camera === c.id ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary/60 text-muted-foreground hover:text-foreground"} disabled:opacity-40`}>
+              {c.label}
             </button>
           ))}
         </div>
       </div>
-      <div>
-        <label className="text-xs uppercase tracking-widest font-bold text-muted-foreground block mb-2">Bet Amount (USD)</label>
-        <Input type="number" min="0.01" step="0.01" value={betAmount} onChange={e => setBetAmount(e.target.value)} disabled={racing} className="font-mono bg-secondary border-border" />
-        {user && <p className="text-xs text-muted-foreground font-mono mt-1.5">Balance: <span className="text-primary font-bold">{formatCurrency(user.balance)}</span></p>}
+      <div className="relative flex-1 min-h-[200px] derby-track-scene">
+        <div className="absolute inset-0 overflow-hidden">
+          {!racing && !result && camera !== "side" && camera !== "aerial" ? (
+            <DerbySideView {...viewProps} cameraX={0} winnerId={undefined} showResult={false} />
+          ) : (
+            renderCamera()
+          )}
+        </div>
       </div>
-      <Button className="w-full font-display font-black uppercase tracking-widest text-base h-12 shadow-lg" disabled={racing} onClick={runRace}>
-        <Zap className="w-5 h-5" /> {racing ? "Racing…" : "START RACE"}
-      </Button>
-      {result && (
-        <ProvablyFairPanel
-          betId={result.betId}
-          serverSeedHash={result.serverSeedHash}
-          serverSeed={result.serverSeed}
-          clientSeed={result.clientSeed}
-          nonce={result.nonce}
-          verifyPath={`/api/race/verify/${result.betId}`}
-        />
+      {racing && (
+        <div className="px-2 py-1.5 border-t border-border/30 bg-primary/5 flex items-center justify-center gap-2 shrink-0">
+          <span className="live-dot w-2 h-2 rounded-full bg-green-400" />
+          <span className="text-[9px] font-bold uppercase tracking-widest text-green-400">Live Race</span>
+        </div>
       )}
     </Card>
   );
 
+  const resultCard = result ? (
+    <Card className={`race-result-card border-2 p-3 shrink-0 ${result.won ? "border-green-500/60 bg-green-500/5" : "border-destructive/40 bg-destructive/5"}`}>
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <h3 className="font-display font-black uppercase tracking-widest text-sm flex items-center gap-2">
+          {result.won ? <><Trophy className="w-4 h-4 text-yellow-400" /> Winner!</> : `Finished #${result.playerPlace}`}
+        </h3>
+        <Button variant="outline" size="sm" className="h-7 text-[10px]" onClick={resetRace} disabled={racing}>Again</Button>
+      </div>
+      <div className="grid grid-cols-3 gap-1.5 text-center">
+        <div className="bg-secondary/50 rounded-lg p-1.5">
+          <div className={`font-mono font-black text-sm ${result.profit >= 0 ? "text-green-400" : "text-destructive"}`}>{result.profit >= 0 ? "+" : ""}{formatCurrency(result.profit)}</div>
+          <div className="text-[9px] text-muted-foreground uppercase">Profit</div>
+        </div>
+        <div className="bg-secondary/50 rounded-lg p-1.5">
+          <div className="font-mono font-black text-sm text-primary">{result.multiplier.toFixed(2)}×</div>
+          <div className="text-[9px] text-muted-foreground uppercase">Mult</div>
+        </div>
+        <div className="bg-secondary/50 rounded-lg p-1.5">
+          <div className="font-mono font-black text-sm">{formatCurrency(result.newBalance)}</div>
+          <div className="text-[9px] text-muted-foreground uppercase">Balance</div>
+        </div>
+      </div>
+      {!isMobile && (
+        <div className="mt-3 pt-3 border-t border-border/40">
+          <ProvablyFairPanel
+            betId={result.betId}
+            serverSeedHash={result.serverSeedHash}
+            serverSeed={result.serverSeed}
+            clientSeed={result.clientSeed}
+            nonce={result.nonce}
+            verifyPath={`/api/race/verify/${result.betId}`}
+          />
+        </div>
+      )}
+    </Card>
+  ) : null;
+
+  const horsePicker = (compact: boolean) => (
+    <div className={compact ? "race-horse-strip" : ""}>
+      <div className={`text-xs uppercase tracking-widest font-bold text-muted-foreground mb-2 ${compact ? "px-0.5" : ""}`}>
+        Pick Your Horse
+      </div>
+      <div className={compact
+        ? "flex gap-1.5 overflow-x-auto pb-1 -mx-0.5 px-0.5 scrollbar-none"
+        : "grid grid-cols-2 gap-2"}>
+        {RACERS.map(r => (
+          <button key={r.id} type="button" disabled={racing} onClick={() => setSelectedRacer(r.id)}
+            className={`race-horse-btn flex items-center gap-1 rounded-lg border transition-all font-bold disabled:opacity-50 shrink-0 ${
+              compact ? "flex-col p-1.5 min-w-[52px] text-[9px]" : "gap-1.5 p-2 text-xs"
+            } ${selectedRacer === r.id ? "border-2" : "border-border/50 hover:border-border bg-secondary/30"}`}
+            style={selectedRacer === r.id ? { borderColor: r.silk, backgroundColor: `${r.silk}18` } : undefined}>
+            <DerbyHorse r={r} gallop={false} scale={compact ? 0.42 : 0.55} />
+            <span className={compact ? "truncate max-w-[48px]" : ""}>{r.name}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const betControls = (compact: boolean) => (
+    <div className={compact ? "space-y-2" : "space-y-4"}>
+      {horsePicker(compact)}
+      <div className={compact ? "flex gap-2 items-end" : ""}>
+        <div className={compact ? "flex-1 min-w-0" : ""}>
+          <label className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-1">Bet (USD)</label>
+          <Input type="number" min="0.01" step="0.01" value={betAmount} onChange={e => setBetAmount(e.target.value)} disabled={racing} className="font-mono bg-secondary border-border h-9 text-sm" />
+          {user && !compact && (
+            <p className="text-xs text-muted-foreground font-mono mt-1.5">
+              Balance: <span className="text-primary font-bold">{formatCurrency(user.balance)}</span>
+            </p>
+          )}
+        </div>
+        <Button
+          className={`font-display font-black uppercase tracking-widest shadow-lg shrink-0 ${compact ? "h-9 px-4 text-xs" : "w-full text-base h-12"}`}
+          disabled={racing}
+          onClick={runRace}
+        >
+          <Zap className="w-4 h-4" /> {racing ? "Racing…" : compact ? "Race" : "START RACE"}
+        </Button>
+      </div>
+      {user && compact && (
+        <p className="text-[10px] text-muted-foreground font-mono text-center">
+          Balance: <span className="text-primary font-bold">{formatCurrency(user.balance)}</span>
+        </p>
+      )}
+    </div>
+  );
+
+  const desktopControlsPanel = (
+    <Card className="bg-card border-border p-4 md:p-5 space-y-4">
+      {betControls(false)}
+    </Card>
+  );
+
+  if (isMobile) {
+    return (
+      <div className="race-mobile-shell">
+        <div className="game-mobile-header">
+          <Link href="/games" className="inline-flex items-center text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors shrink-0">
+            <ChevronLeft className="w-4 h-4" /> Back
+          </Link>
+          <div className="min-w-0 flex-1 text-center px-2">
+            <h1 className="font-display font-black text-sm uppercase tracking-widest truncate">🏇 DGC Derby</h1>
+            <p className="text-[10px] text-muted-foreground font-mono">First place pays 5.5×</p>
+          </div>
+          <div className="w-12 shrink-0" />
+        </div>
+
+        <div className="race-mobile-track-wrap">
+          {trackCard}
+        </div>
+
+        {resultCard}
+
+        <div className="race-mobile-controls">
+          <Card className="bg-card border-border p-2.5 space-y-2">
+            {betControls(true)}
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="race-mobile-page space-y-3 max-w-7xl mx-auto px-2 md:px-4 pb-4 min-h-0">
+    <div className="race-desktop-page space-y-3 max-w-7xl mx-auto px-2 md:px-4 pb-4 min-h-0">
       <div className="flex items-center gap-3 shrink-0">
         <Link href="/games">
           <button type="button" className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
@@ -216,68 +340,12 @@ export default function RacePage() {
         <h1 className="font-display font-black text-2xl md:text-3xl uppercase tracking-widest">🏇 DGC Derby</h1>
       </div>
 
-      {/* Mobile: compact controls above track */}
-      <div className="lg:hidden shrink-0">{controlsPanel}</div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6 min-h-0">
-        <div className="hidden lg:block">{controlsPanel}</div>
+        <div>{desktopControlsPanel}</div>
 
         <div className="lg:col-span-2 space-y-2 min-h-0">
-          <Card className="bg-card border-border p-0 overflow-hidden flex flex-col min-h-[220px]">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 bg-secondary/30">
-              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                <Video className="w-3.5 h-3.5" /> Camera
-              </div>
-              <div className="flex gap-1 flex-wrap justify-end">
-                {CAMERAS.map(c => (
-                  <button key={c.id} type="button"
-                    onClick={() => setCamera(c.id)}
-                    disabled={c.id === "finish" && !result && !racing}
-                    className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-all ${camera === c.id ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary/60 text-muted-foreground hover:text-foreground"} disabled:opacity-40`}>
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="relative flex-1 min-h-[200px] h-[42dvh] sm:h-72 md:h-[26rem] lg:h-[28rem] derby-track-scene">
-              {!racing && !result && camera !== "side" && camera !== "aerial" ? (
-                <DerbySideView {...viewProps} cameraX={0} winnerId={undefined} showResult={false} />
-              ) : (
-                renderCamera()
-              )}
-            </div>
-            {racing && (
-              <div className="px-3 py-2 border-t border-border/30 bg-primary/5 flex items-center justify-center gap-2">
-                <span className="live-dot w-2 h-2 rounded-full bg-green-400" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-green-400">Live Race</span>
-              </div>
-            )}
-          </Card>
-
-          {result && (
-            <Card className={`border-2 p-4 ${result.won ? "border-green-500/60 bg-green-500/5" : "border-destructive/40 bg-destructive/5"}`}>
-              <div className="flex items-center justify-between mb-3 gap-2">
-                <h3 className="font-display font-black uppercase tracking-widest text-base md:text-lg flex items-center gap-2">
-                  {result.won ? <><Trophy className="w-5 h-5 text-yellow-400" /> Winner!</> : `Finished #${result.playerPlace}`}
-                </h3>
-                <Button variant="outline" size="sm" onClick={resetRace} disabled={racing}>Race Again</Button>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-secondary/50 rounded-lg p-2">
-                  <div className={`font-mono font-black text-base ${result.profit >= 0 ? "text-green-400" : "text-destructive"}`}>{result.profit >= 0 ? "+" : ""}{formatCurrency(result.profit)}</div>
-                  <div className="text-[10px] text-muted-foreground uppercase">Profit</div>
-                </div>
-                <div className="bg-secondary/50 rounded-lg p-2">
-                  <div className="font-mono font-black text-base text-primary">{result.multiplier.toFixed(2)}×</div>
-                  <div className="text-[10px] text-muted-foreground uppercase">Multiplier</div>
-                </div>
-                <div className="bg-secondary/50 rounded-lg p-2">
-                  <div className="font-mono font-black text-base">{formatCurrency(result.newBalance)}</div>
-                  <div className="text-[10px] text-muted-foreground uppercase">Balance</div>
-                </div>
-              </div>
-            </Card>
-          )}
+          <div className="min-h-[220px] h-[28rem]">{trackCard}</div>
+          {resultCard}
         </div>
       </div>
     </div>

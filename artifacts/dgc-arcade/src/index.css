@@ -2258,24 +2258,89 @@ body {
   }
 }
 
-/* DGC Derby — mobile track visibility */
+/* DGC Derby — mobile: track on top, compact controls below */
 @media (max-width: 767px) {
-  .race-mobile-page {
+  .race-mobile-shell {
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
+    height: 100%;
     min-height: 0;
-    padding-bottom: env(safe-area-inset-bottom, 8px);
+    overflow: hidden;
+    width: 100%;
   }
 
+  .race-mobile-track-wrap {
+    flex: 1 1 0;
+    min-height: 42dvh;
+    max-height: 58dvh;
+    display: flex;
+    flex-direction: column;
+    padding: 4px 6px 0;
+    overflow: hidden;
+  }
+
+  .race-mobile-track-wrap .race-track-card {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .race-mobile-track-wrap .derby-track-scene {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 200px !important;
+    height: 100% !important;
+    width: 100% !important;
+  }
+
+  .race-mobile-track-wrap .derby-track-scene > * {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .race-mobile-track-wrap .derby-side-scene,
+  .race-mobile-track-wrap .derby-front-scene,
+  .race-mobile-track-wrap .derby-aerial-scene {
+    min-height: 100% !important;
+    height: 100% !important;
+  }
+
+  .race-mobile-controls {
+    flex: 0 0 auto;
+    padding: 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom, 6px));
+    max-height: 42vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .race-mobile-controls .race-horse-strip {
+    overflow: hidden;
+  }
+
+  .race-horse-strip .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .race-horse-strip .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  .race-result-card {
+    margin: 0 6px 4px;
+  }
+
+  /* Legacy class — keep for any cached builds */
   .race-mobile-page .derby-track-scene {
     min-height: 200px !important;
     height: 42dvh !important;
-  }
-
-  .race-mobile-page .derby-side-scene,
-  .race-mobile-page .derby-front-scene,
-  .race-mobile-page .derby-aerial-scene {
-    min-height: 100% !important;
   }
 
   .game-mobile-viewport .crash-chart-area {
