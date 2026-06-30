@@ -1884,6 +1884,15 @@ body {
   overflow-x: hidden;
 }
 
+.chicken-road-play-area {
+  min-height: 360px;
+}
+
+.chicken-road-play-area .cr-stake-board {
+  min-height: 340px;
+  height: 100%;
+}
+
 /* Classic Slots — mobile overrides */
 @media (max-width: 767px) {
   .slot-game {

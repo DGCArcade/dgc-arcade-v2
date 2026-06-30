@@ -409,7 +409,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         </p>
       </div>
 
-      <div className="chicken-road-play-area order-1 lg:order-none flex-1 min-w-0">
+      <div className="chicken-road-play-area order-1 lg:order-none flex-1 min-w-0 min-h-[360px]">
         {serverSeedHash && !serverSeed && (
           <div className="chicken-road-seed-hash mb-2 text-[10px] font-mono text-muted-foreground break-all hidden sm:block">
             <span className="uppercase font-bold mr-1">SHA-256 commit:</span>

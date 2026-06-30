@@ -13,7 +13,7 @@ import { formatCurrency } from "@/lib/format";
 import { ChevronLeft, Trophy, Zap, Video } from "lucide-react";
 import { ProvablyFairPanel } from "@/components/games/provably-fair-panel";
 import { startHorseGallopLoop, stopHorseGallopLoop, playRaceStartBugle, playRaceFinishCheer, playGateOpenClang, startCrowdAmbience, stopCrowdAmbience } from "@/lib/horse-gallop-sound";
-import { DerbyHorse } from "@/components/games/derby/derby-horse";
+import { DerbyHorsePicker } from "@/components/games/derby/derby-horse-picker";
 import {
   DerbySideView,
   DerbyFrontChaseView,
@@ -259,26 +259,13 @@ export default function RacePage() {
   ) : null;
 
   const horsePicker = (compact: boolean) => (
-    <div className={compact ? "race-horse-strip" : ""}>
-      <div className={`text-xs uppercase tracking-widest font-bold text-muted-foreground mb-2 ${compact ? "px-0.5" : ""}`}>
-        Pick Your Horse
-      </div>
-      <div className={compact
-        ? "flex gap-1.5 overflow-x-auto pb-1 -mx-0.5 px-0.5 scrollbar-none"
-        : "grid grid-cols-2 gap-2"}>
-        {RACERS.map(r => (
-          <button key={r.id} type="button" disabled={racing} onClick={() => setSelectedRacer(r.id)}
-            className={`race-horse-btn flex items-center gap-1 rounded-lg border transition-all font-bold disabled:opacity-50 shrink-0 ${
-              compact ? "flex-col p-1.5 min-w-[52px] text-[9px]" : "gap-1.5 p-2 text-xs"
-            } ${selectedRacer === r.id ? "border-2" : "border-border/50 hover:border-border bg-secondary/30"}`}
-            style={selectedRacer === r.id ? { borderColor: r.silk, backgroundColor: `${r.silk}18` } : undefined}>
-            <DerbyHorse r={r} gallop={false} scale={compact ? 0.48 : 0.55} showBadge />
-            <span className={`font-mono font-black ${compact ? "text-[8px]" : "text-[10px]"}`} style={{ color: r.silk }}>#{r.num}</span>
-            <span className={compact ? "truncate max-w-[48px]" : ""}>{r.name}</span>
-          </button>
-        ))}
-      </div>
-    </div>
+    <DerbyHorsePicker
+      racers={RACERS}
+      selectedId={selectedRacer}
+      onSelect={setSelectedRacer}
+      disabled={racing}
+      compact={compact}
+    />
   );
 
   const betControls = (compact: boolean) => (
@@ -347,20 +334,23 @@ export default function RacePage() {
 
   return (
     <div className="race-desktop-page space-y-3 max-w-7xl mx-auto px-2 md:px-4 pb-4 min-h-0">
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex flex-wrap items-center gap-3 shrink-0">
         <Link href="/games">
           <button type="button" className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
             <ChevronLeft className="w-4 h-4" /> Games
           </button>
         </Link>
-        <h1 className="font-display font-black text-2xl md:text-3xl uppercase tracking-widest">🏇 DGC Derby</h1>
+        <div>
+          <h1 className="font-display font-black text-2xl md:text-3xl uppercase tracking-widest">🏇 DGC Derby</h1>
+          <p className="text-xs text-muted-foreground font-mono mt-0.5">Pick 1 of 6 horses · 1st place pays 5.5×</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6 min-h-0">
-        <div>{desktopControlsPanel}</div>
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 md:gap-6 min-h-0">
+        <div className="lg:col-span-2">{desktopControlsPanel}</div>
 
-        <div className="lg:col-span-2 space-y-2 min-h-0">
-          <div className="min-h-[220px] h-[28rem]">{trackCard}</div>
+        <div className="lg:col-span-3 space-y-2 min-h-0">
+          <div className="min-h-[280px] h-[32rem] lg:h-[36rem]">{trackCard}</div>
           {resultCard}
         </div>
       </div>
