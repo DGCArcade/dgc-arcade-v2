@@ -5,6 +5,7 @@ import { eq, desc, ilike, and, sql, count, or, gt, ne } from "drizzle-orm";
 // Using native fetch available in Node.js 18+
 import { requireAdmin } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
+import { invalidatePublicGamesCache } from "./games.js";
 import { logAudit } from "../services/audit.js";
 import { recordLedger, recordLedgerStandalone } from "../services/ledger.js";
 import { getUserBalance } from "../lib/balance-service.js";
@@ -3788,6 +3789,7 @@ adminRouter.post("/slots/themes", async (req, res) => {
       ip: req.ip,
     }).catch(() => {});
 
+    invalidatePublicGamesCache();
     res.json({ theme });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
@@ -3852,6 +3854,7 @@ adminRouter.patch("/slots/themes/:id", async (req, res) => {
       note: `Theme slug: ${before.slug}`,
     }).catch(() => {});
 
+    invalidatePublicGamesCache();
     res.json({ theme: updated });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });

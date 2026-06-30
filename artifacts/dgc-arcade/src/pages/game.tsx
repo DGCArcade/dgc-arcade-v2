@@ -160,7 +160,7 @@ export default function GamePage() {
   const { data: bets } = useListBets({ limit: 10 }, {
     query: {
       queryKey: getListBetsQueryKey({ limit: 10 }),
-      refetchInterval: 5000,
+      refetchInterval: 15_000,
       enabled: isAuthenticated,
     },
   });

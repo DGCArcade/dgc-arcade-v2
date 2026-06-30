@@ -22,8 +22,8 @@ export function useAuth() {
       },
       staleTime: 30000, // Keep user data fresh for 30s to prevent flickering on refresh
       gcTime: 1000 * 60 * 60, // Cache user data for 1 hour
-      refetchInterval: 5000,
-      refetchOnWindowFocus: true,
+      refetchInterval: 30_000,
+      refetchOnWindowFocus: false,
       refetchOnMount: false, // Don't refetch on every mount if we have cached data
     },
   });
