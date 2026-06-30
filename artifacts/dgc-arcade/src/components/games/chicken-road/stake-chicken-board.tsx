@@ -7,6 +7,7 @@ import {
   BarrierSprite,
   getCarColor,
 } from "./chicken-road-sprites";
+import { AmbientLaneTraffic } from "./ambient-traffic";
 
 export type LaneState = "idle" | "past" | "current" | "future" | "bust";
 export type HazardType = "car" | "manhole";
@@ -53,6 +54,7 @@ function LaneStrip({
   crossAnim,
   bustLane,
   bustHazard,
+  trafficActive,
 }: {
   laneIndex: number;
   state: LaneState;
@@ -60,6 +62,7 @@ function LaneStrip({
   crossAnim: CrossAnim;
   bustLane?: number;
   bustHazard?: HazardType;
+  trafficActive: boolean;
 }) {
   const variants = ["sedan", "suv", "truck"] as const;
   const variant = variants[laneIndex % 3];
@@ -69,15 +72,22 @@ function LaneStrip({
   const showBarrier = isCrossing && crossAnim.phase === "barrier";
   const showManholeBurst = isCrossing && crossAnim.phase === "manhole-fire";
   const isBust = bustLane === laneIndex && state === "bust";
+  const hideAmbient = isCrossing && (crossAnim.phase === "car-down" || crossAnim.phase === "car-up");
 
   return (
     <div className={`cr-stake-lane relative flex-shrink-0 w-[72px] sm:w-[80px] h-full ${
-      state === "future" ? "opacity-45" : ""
+      state === "future" ? "opacity-55" : ""
     }`}>
-      <div className={`absolute inset-x-0 top-0 bottom-[72px] bg-[#4a5568] border-x border-[#5a6578] ${
+      <div className={`absolute inset-x-0 top-0 bottom-[72px] bg-[#4a5568] border-x border-[#5a6578] overflow-hidden ${
         state === "current" ? "cr-lane-active" : ""
       }`}>
         <div className="absolute left-1/2 top-3 bottom-3 w-0 border-l border-dashed border-white/12" />
+
+        <AmbientLaneTraffic
+          laneIndex={laneIndex}
+          active={trafficActive}
+          hideDuringCross={hideAmbient}
+        />
 
         {showCar && (
           <div className="absolute left-1/2 -translate-x-1/2 cr-car-pass-once z-10">
@@ -113,7 +123,7 @@ function LaneStrip({
       </div>
 
       <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20">
-        <ManholeCover multiplier={multiplier} state={state} />
+        <ManholeCover multiplier={multiplier} state={state} showAmbientFire={trafficActive} />
       </div>
     </div>
   );
@@ -131,6 +141,7 @@ export function StakeChickenBoard({
   crossAnim,
 }: StakeChickenBoardProps) {
   const isActive = status === "active";
+  const trafficActive = status === "idle" || status === "active";
   const laneWidth = 80;
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -193,6 +204,7 @@ export function StakeChickenBoard({
                   crossAnim={crossAnim}
                   bustLane={bustLane}
                   bustHazard={bustHazard}
+                  trafficActive={trafficActive}
                 />
               );
             })}

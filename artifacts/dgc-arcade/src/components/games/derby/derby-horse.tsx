@@ -10,82 +10,152 @@ export type RacerDef = {
 
 type HorseView = "side" | "top" | "front-chase";
 
+/** Silk number badge — always visible so players know which horse is which */
+export function HorseSilkBadge({
+  r,
+  size = "sm",
+  highlight = false,
+}: {
+  r: RacerDef;
+  size?: "xs" | "sm" | "md";
+  highlight?: boolean;
+}) {
+  const dim = size === "xs" ? "text-[7px] min-w-[14px] h-[14px]" : size === "sm" ? "text-[8px] min-w-[18px] h-[18px]" : "text-[10px] min-w-[22px] h-[22px]";
+  return (
+    <span
+      className={`inline-flex items-center justify-center rounded font-black font-mono border shadow-sm ${dim} ${
+        highlight ? "ring-2 ring-yellow-400 ring-offset-1 ring-offset-black/50" : ""
+      }`}
+      style={{ backgroundColor: r.silk, borderColor: "rgba(255,255,255,0.5)", color: "#111" }}
+    >
+      {r.num}
+    </span>
+  );
+}
+
 export function DerbyHorse({
   r,
   gallop,
   scale = 1,
   view = "side",
   facing = "right",
+  showBadge = false,
 }: {
   r: RacerDef;
   gallop: boolean;
   scale?: number;
   view?: HorseView;
   facing?: "left" | "right";
+  showBadge?: boolean;
 }) {
   const flip = facing === "left" ? "scaleX(-1)" : undefined;
   const cls = gallop ? "horse-gallop" : "";
 
   if (view === "top") {
     return (
-      <svg viewBox="0 0 56 36" width={52 * scale} height={34 * scale} className={`drop-shadow-md ${cls}`} style={{ transform: flip }}>
-        <ellipse cx="28" cy="20" rx="20" ry="9" fill={r.coat} />
-        <ellipse cx="42" cy="17" rx="8" ry="6" fill={r.coat} />
-        <ellipse cx="46" cy="16" rx="2" ry="1.5" fill="#111" />
-        <rect x="24" y="12" width="10" height="7" rx="1.5" fill={r.silk} stroke="#fff" strokeWidth="0.6" />
-        <text x="29" y="17" textAnchor="middle" fontSize="5" fontWeight="900" fill="#111">{r.num}</text>
-        <path d="M14 18 Q8 14 10 24" stroke={r.mane} strokeWidth="3" fill="none" strokeLinecap="round" />
-        {gallop && (
-          <>
-            <ellipse cx="20" cy="28" rx="4" ry="2" fill={r.mane} opacity="0.8" className="horse-leg-front" />
-            <ellipse cx="34" cy="28" rx="4" ry="2" fill={r.mane} opacity="0.8" className="horse-leg-back" />
-          </>
-        )}
-      </svg>
+      <div className="relative flex flex-col items-center" style={{ transform: flip }}>
+        {showBadge && <HorseSilkBadge r={r} size="xs" />}
+        <svg viewBox="0 0 56 40" width={52 * scale} height={36 * scale} className={`drop-shadow-md ${cls}`}>
+          <ellipse cx="28" cy="34" rx="16" ry="3" fill="#000" opacity="0.2" />
+          <ellipse cx="28" cy="22" rx="18" ry="8" fill={r.coat} />
+          <ellipse cx="40" cy="20" rx="9" ry="6" fill={r.coat} />
+          <ellipse cx="44" cy="19" rx="2.5" ry="2" fill="#111" />
+          <path d="M16 22 Q10 18 12 28 Q16 26 18 24" fill={r.mane} />
+          <path d="M34 30 L32 38 M38 30 L40 38" stroke={r.mane} strokeWidth="2.5" strokeLinecap="round" />
+          <rect x="24" y="16" width="12" height="8" rx="1.5" fill={r.silk} stroke="#fff" strokeWidth="0.5" />
+          <text x="30" y="22" textAnchor="middle" fontSize="5" fontWeight="900" fill="#111">{r.num}</text>
+          {gallop && (
+            <>
+              <ellipse cx="22" cy="32" rx="3.5" ry="2" fill={r.mane} opacity="0.85" className="horse-leg-front" />
+              <ellipse cx="36" cy="32" rx="3.5" ry="2" fill={r.mane} opacity="0.85" className="horse-leg-back" />
+            </>
+          )}
+        </svg>
+      </div>
     );
   }
 
   if (view === "front-chase") {
     const s = scale;
     return (
-      <svg viewBox="0 0 64 80" width={48 * s} height={60 * s} className={`drop-shadow-xl ${cls}`}>
-        <ellipse cx="32" cy="68" rx="18" ry="4" fill="#8B6914" opacity={gallop ? 0.5 : 0.25} className={gallop ? "horse-dust" : ""} />
-        <path d="M18 52 L14 68 L20 68 L22 52 Z" fill={r.mane} className="horse-leg-back" />
-        <path d="M46 52 L42 68 L48 68 L50 52 Z" fill={r.mane} className="horse-leg-front" />
-        <ellipse cx="32" cy="42" rx="20" ry="14" fill={r.coat} />
-        <ellipse cx="32" cy="44" rx="14" ry="8" fill={r.body} opacity="0.4" />
-        <ellipse cx="32" cy="22" rx="14" ry="12" fill={r.coat} />
-        <ellipse cx="32" cy="18" rx="5" ry="4" fill={r.coat} />
-        <ellipse cx="26" cy="16" rx="2" ry="2.5" fill="#1a1a1a" />
-        <ellipse cx="38" cy="16" rx="2" ry="2.5" fill="#1a1a1a" />
-        <path d="M24 10 Q22 4 28 6 Q30 12 26 14" fill={r.mane} />
-        <path d="M40 10 Q42 4 36 6 Q34 12 38 14" fill={r.mane} />
-        <rect x="24" y="28" width="16" height="11" rx="2" fill={r.silk} stroke="#fff" strokeWidth="0.8" />
-        <text x="32" y="36" textAnchor="middle" fontSize="7" fontWeight="900" fill="#111">{r.num}</text>
-        <circle cx="32" cy="24" r="4" fill="#F5D0A0" />
-      </svg>
+      <div className="relative flex flex-col items-center">
+        {showBadge && <HorseSilkBadge r={r} size="xs" />}
+        <svg viewBox="0 0 64 84" width={48 * s} height={62 * s} className={`drop-shadow-xl ${cls}`}>
+          <ellipse cx="32" cy="76" rx="16" ry="3.5" fill="#000" opacity="0.25" />
+          <ellipse cx="32" cy="72" rx="18" ry="4" fill="#8B6914" opacity={gallop ? 0.55 : 0.2} className={gallop ? "horse-dust" : ""} />
+          {/* Legs */}
+          <path d="M20 54 L16 72 L22 72 L24 54 Z" fill={r.coat} stroke={r.mane} strokeWidth="0.5" className="horse-leg-back" />
+          <path d="M44 54 L40 72 L46 72 L48 54 Z" fill={r.coat} stroke={r.mane} strokeWidth="0.5" className="horse-leg-front" />
+          <path d="M26 54 L22 70 L28 70 L30 54 Z" fill={r.coat} className="horse-leg-front" />
+          <path d="M38 54 L34 70 L40 70 L42 54 Z" fill={r.coat} className="horse-leg-back" />
+          {/* Body */}
+          <ellipse cx="32" cy="44" rx="18" ry="13" fill={r.coat} />
+          <ellipse cx="32" cy="46" rx="13" ry="7" fill={r.body} opacity="0.35" />
+          {/* Neck + head */}
+          <path d="M32 34 Q28 22 32 14 Q36 22 32 34" fill={r.coat} />
+          <ellipse cx="32" cy="14" rx="10" ry="9" fill={r.coat} />
+          <ellipse cx="26" cy="12" rx="2.2" ry="2.8" fill="#1a1a1a" />
+          <ellipse cx="38" cy="12" rx="2.2" ry="2.8" fill="#1a1a1a" />
+          <circle cx="27" cy="11" r="0.7" fill="#fff" opacity="0.8" />
+          <circle cx="39" cy="11" r="0.7" fill="#fff" opacity="0.8" />
+          <ellipse cx="32" cy="16" rx="4" ry="3" fill="#F5D0A0" />
+          <path d="M24 8 Q22 2 28 4 Q30 10 26 12" fill={r.mane} />
+          <path d="M40 8 Q42 2 36 4 Q34 10 38 12" fill={r.mane} />
+          {/* Silk */}
+          <rect x="22" y="30" width="20" height="12" rx="2" fill={r.silk} stroke="#fff" strokeWidth="0.8" />
+          <text x="32" y="39" textAnchor="middle" fontSize="7" fontWeight="900" fill="#111">{r.num}</text>
+          <path d="M28 18 Q24 8 20 6" stroke={r.mane} strokeWidth="2.5" fill="none" strokeLinecap="round" />
+          <path d="M36 18 Q40 8 44 6" stroke={r.mane} strokeWidth="2.5" fill="none" strokeLinecap="round" />
+        </svg>
+      </div>
     );
   }
 
+  // Side profile — more anatomically detailed
   return (
-    <svg viewBox="0 0 96 56" width={88 * scale} height={52 * scale} className={`drop-shadow-lg ${cls}`} style={{ transform: flip }}>
-      <ellipse cx="16" cy="48" rx="14" ry="3" fill="#8B6914" opacity={gallop ? 0.55 : 0.2} className={gallop ? "horse-dust" : ""} />
-      <path d="M26 38 L22 50 L26 50 L30 38 Z" fill={r.mane} className="horse-leg-back" />
-      <path d="M34 38 L30 50 L34 50 L38 38 Z" fill={r.mane} className="horse-leg-front" />
-      <ellipse cx="46" cy="30" rx="26" ry="12" fill={r.coat} />
-      <ellipse cx="46" cy="32" rx="20" ry="7" fill={r.body} opacity="0.35" />
-      <path d="M58 24 Q66 14 74 12 Q78 20 72 28 Q62 32 54 30 Z" fill={r.coat} />
-      <ellipse cx="78" cy="16" rx="11" ry="8" fill={r.coat} />
-      <ellipse cx="84" cy="14" rx="2.5" ry="2" fill="#111" />
-      <path d="M72 8 L74 3 L78 10 Z" fill={r.coat} />
-      <path d="M64 8 Q58 2 62 0 Q68 6 66 14 Q70 10 72 18" fill={r.mane} />
-      <path d="M22 26 Q10 20 12 34 Q18 32 24 30 Z" fill={r.mane} />
-      <path d="M52 38 L48 50 L52 50 L56 38 Z" fill={r.mane} className="horse-leg-front" />
-      <path d="M60 38 L56 50 L60 50 L64 38 Z" fill={r.mane} className="horse-leg-back" />
-      <rect x="38" y="18" width="14" height="11" rx="2" fill={r.silk} stroke="#fff" strokeWidth="0.7" />
-      <text x="45" y="26" textAnchor="middle" fontSize="7" fontWeight="900" fill="#111">{r.num}</text>
-      <circle cx="45" cy="14" r="4" fill="#F5D0A0" />
-      <ellipse cx="45" cy="12" rx="4" ry="3.5" fill="#333" opacity="0.85" />
-    </svg>
+    <div className="relative flex flex-col items-center" style={{ transform: flip }}>
+      {showBadge && <HorseSilkBadge r={r} size="sm" />}
+      <svg viewBox="0 0 100 60" width={92 * scale} height={54 * scale} className={`drop-shadow-lg ${cls}`}>
+        <defs>
+          <linearGradient id={`coat-${r.id}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={r.coat} />
+            <stop offset="100%" stopColor={r.body} />
+          </linearGradient>
+        </defs>
+        {/* Ground shadow */}
+        <ellipse cx="18" cy="54" rx="16" ry="3" fill="#000" opacity="0.22" />
+        <ellipse cx="18" cy="52" rx="14" ry="2.5" fill="#8B6914" opacity={gallop ? 0.5 : 0.15} className={gallop ? "horse-dust" : ""} />
+        {/* Back legs */}
+        <path d="M28 40 L24 52 L28 52 L32 40 Z" fill={r.coat} className="horse-leg-back" />
+        <path d="M34 40 L30 52 L34 52 L38 40 Z" fill={r.coat} className="horse-leg-back" />
+        {/* Tail */}
+        <path d="M18 30 Q8 26 10 38 Q14 34 20 32" fill={r.mane} />
+        {/* Body */}
+        <ellipse cx="44" cy="32" rx="24" ry="11" fill={`url(#coat-${r.id})`} />
+        <ellipse cx="44" cy="34" rx="18" ry="6" fill={r.body} opacity="0.3" />
+        {/* Front legs */}
+        <path d="M54 40 L50 52 L54 52 L58 40 Z" fill={r.coat} className="horse-leg-front" />
+        <path d="M62 40 L58 52 L62 52 L66 40 Z" fill={r.coat} className="horse-leg-front" />
+        {/* Neck */}
+        <path d="M58 26 Q68 16 74 14 Q78 22 72 30 Q64 34 58 30 Z" fill={r.coat} />
+        {/* Head */}
+        <ellipse cx="80" cy="18" rx="12" ry="9" fill={r.coat} />
+        <ellipse cx="86" cy="16" rx="2.5" ry="2" fill="#111" />
+        <circle cx="87" cy="15.5" r="0.8" fill="#fff" opacity="0.7" />
+        <path d="M88 18 L92 16 L90 20 Z" fill={r.coat} />
+        {/* Ears */}
+        <path d="M74 8 L76 2 L78 10 Z" fill={r.coat} />
+        {/* Mane */}
+        <path d="M62 10 Q58 2 64 0 Q70 8 68 16 Q72 12 76 20" fill={r.mane} />
+        <path d="M56 22 Q48 18 50 28 Q54 26 58 24" fill={r.mane} opacity="0.85" />
+        {/* Silk / saddle cloth */}
+        <rect x="36" y="20" width="16" height="12" rx="2" fill={r.silk} stroke="#fff" strokeWidth="0.7" />
+        <text x="44" y="28.5" textAnchor="middle" fontSize="7" fontWeight="900" fill="#111">{r.num}</text>
+        {/* Bridle hint */}
+        <path d="M80 20 Q84 24 82 28" stroke="#333" strokeWidth="0.8" fill="none" opacity="0.5" />
+        {/* Nostril */}
+        <ellipse cx="90" cy="20" rx="1.5" ry="1" fill={r.body} opacity="0.6" />
+      </svg>
+    </div>
   );
 }

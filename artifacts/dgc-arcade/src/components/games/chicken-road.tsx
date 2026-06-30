@@ -22,6 +22,8 @@ import {
   playBarrierClang,
   playManholeIgnite,
   playChickenSpawn,
+  startChickenRoadAmbience,
+  stopChickenRoadAmbience,
 } from "@/lib/chicken-road-sounds";
 
 const CAR_ANIM_MS = 850;
@@ -102,6 +104,15 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
       })
       .catch(() => {});
   }, [tier]);
+
+  useEffect(() => {
+    if (status === "idle" || status === "active") {
+      startChickenRoadAmbience();
+    } else {
+      stopChickenRoadAmbience();
+    }
+    return () => stopChickenRoadAmbience();
+  }, [status]);
 
   useEffect(() => {
     const token = getToken();
