@@ -9,19 +9,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+import { ProvablyFairPanel } from "./provably-fair-panel";
+
 interface KenoProps { game: Game }
 
+// Matches server kenoTable in bets.ts (pre house-edge)
 const PAYOUT_TABLE: Record<number, number[]> = {
-  1:  [0,3.8],
-  2:  [0,0,7],
-  3:  [0,0,1.4,26],
-  4:  [0,0,1,2,50],
-  5:  [0,0,0.5,1.5,15,100],
-  6:  [0,0,0,1.2,5,40,200],
-  7:  [0,0,0,1,2.5,15,100,500],
-  8:  [0,0,0,0.5,2,7,40,200,1000],
-  9:  [0,0,0,0.5,1.5,5,20,80,400,2000],
-  10: [0,0,0,0,1,3,12,50,200,1000,5000],
+  1:  [0, 3],
+  2:  [0, 0, 6],
+  3:  [0, 0, 2, 10],
+  4:  [0, 0, 1, 4, 15],
+  5:  [0, 0, 0, 2, 6, 25],
+  6:  [0, 0, 0, 1, 3, 10, 50],
+  7:  [0, 0, 0, 0, 2, 5, 20, 100],
+  8:  [0, 0, 0, 0, 1, 3, 10, 40, 200],
+  9:  [0, 0, 0, 0, 0, 2, 6, 20, 100, 500],
+  10: [0, 0, 0, 0, 0, 1, 4, 12, 50, 200, 1000],
 };
 
 export function Keno({ game }: KenoProps) {
@@ -37,6 +40,8 @@ export function Keno({ game }: KenoProps) {
   const [playing, setPlaying] = useState(false);
   const [payout, setPayout] = useState<number|null>(null);
   const [won, setWon] = useState<boolean|null>(null);
+  const [matchCount, setMatchCount] = useState(0);
+  const [pf, setPf] = useState<{ betId?: number; serverSeedHash?: string; serverSeed?: string; clientSeed?: string; nonce?: number }>({});
 
   const toggleNum = (n: number) => {
     if (playing) return;
@@ -69,21 +74,29 @@ export function Keno({ game }: KenoProps) {
         onSuccess: (data) => {
           const meta = data.bet.meta as Record<string,unknown>;
           const drawnNums = (meta?.drawn as number[]) ?? [];
-          const matchNums = (meta?.matches as number[]) ?? [];
+          const matchNums = (meta?.matchedNumbers as number[]) ?? [];
+          const count = Number(meta?.matchCount ?? matchNums.length);
 
-          // Reveal drawn numbers one by one
           let i = 0;
           const interval = setInterval(() => {
             if (i >= drawnNums.length) {
               clearInterval(interval);
               setMatches(matchNums);
+              setMatchCount(count);
               setPayout(data.payout);
               setWon(data.won);
               setPlaying(false);
+              setPf({
+                betId: data.bet.id,
+                serverSeedHash: data.bet.serverSeedHash ?? undefined,
+                serverSeed: data.bet.serverSeed ?? undefined,
+                clientSeed: data.bet.clientSeed ?? undefined,
+                nonce: data.bet.nonce ?? undefined,
+              });
               qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
               qc.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
               qc.invalidateQueries({ queryKey: getListBetsQueryKey() });
-              if (data.won) toast({ title:`${matchNums.length} matches! +${formatCurrency(data.payout)}`, className:"bg-green-500 text-white" });
+              if (data.won) toast({ title:`${count} matches! +${formatCurrency(data.payout)}`, className:"bg-green-500 text-white" });
               return;
             }
             setDrawn(prev => [...prev, drawnNums[i]]);
@@ -136,7 +149,7 @@ export function Keno({ game }: KenoProps) {
 
         {payout !== null && won !== null && (
           <div className={`text-center font-display font-black text-2xl uppercase tracking-widest ${won?"text-green-400":"text-muted-foreground"}`}>
-            {matches.length} match{matches.length!==1?"es":""}! {won ? `+${formatCurrency(payout)}` : "Better luck next time"}
+            {matchCount} match{matchCount!==1?"es":""}! {won ? `+${formatCurrency(payout!)}` : "Better luck next time"}
           </div>
         )}
       </div>
@@ -170,6 +183,8 @@ export function Keno({ game }: KenoProps) {
           onClick={play} disabled={playing||selected.size<1||placeBet.isPending}>
           {playing ? "Drawing…" : "Play Keno"}
         </Button>
+
+        <ProvablyFairPanel {...pf} />
       </div>
     </div>
   );

@@ -31,6 +31,7 @@ const CORE_GAMES: Array<{
   { slug: "coinflip", name: "Coin Flip", description: "50/50 — pays 2 to 1", minBet: "0.10", maxBet: "1000", houseEdge: "0.0200" },
   { slug: "keno", name: "Keno", description: "Pick your lucky numbers", minBet: "0.10", maxBet: "1000", houseEdge: "0.0500" },
   { slug: "chicken-road", name: "Chicken Road", description: "Cross the road, dodge the cars", minBet: "0.10", maxBet: "1000", houseEdge: "0.0400" },
+  { slug: "race", name: "DGC Derby", description: "Pick your horse — first place pays 5.5×", minBet: "0.10", maxBet: "1000", houseEdge: "0.0500" },
 ];
 
 // ── Bootstrap the core game catalog ONLY when the games table is empty ────────
@@ -69,6 +70,22 @@ export async function ensureSlotGamesSeeded() {
     }
   } catch (err) {
     console.error("ensureSlotGamesSeeded error:", err);
+  }
+}
+
+export async function ensureRaceGameSeeded() {
+  try {
+    await db.insert(gamesTable).values({
+      slug: "race",
+      name: "DGC Derby",
+      description: "Pick your horse — first place pays 5.5×",
+      minBet: "0.10",
+      maxBet: "1000",
+      houseEdge: "0.0500",
+      active: true,
+    }).onConflictDoNothing();
+  } catch (err) {
+    console.error("ensureRaceGameSeeded error:", err);
   }
 }
 

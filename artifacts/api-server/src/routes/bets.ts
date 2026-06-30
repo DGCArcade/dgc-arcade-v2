@@ -63,7 +63,8 @@ function resolveBet(
   seed: number,
   serverSeed: string,
   clientSeedStr: string,
-  meta: Record<string, unknown> | null
+  meta: Record<string, unknown> | null,
+  nonce: number,
 ): BetResolution {
   switch (gameSlug) {
     case "coinflip": {
@@ -197,17 +198,29 @@ function resolveBet(
     }
 
     case "hilo": {
-      // A card is drawn (1-13), player guesses higher/lower than a threshold
       const card = Math.floor(seed * 13) + 1;
-      const guess = (meta?.guess as string) ?? "higher";
-      const threshold = Number(meta?.threshold ?? 7);
+      let guess = (meta?.guess as string) ?? "higher";
+      if (meta?.pick === "hi") guess = "higher";
+      if (meta?.pick === "lo") guess = "lower";
+      let threshold = Number(meta?.threshold ?? 7);
+      if (meta?.currentRank != null && meta?.currentRank !== "") {
+        const RANKS = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
+        const idx = RANKS.indexOf(String(meta.currentRank));
+        if (idx >= 0) threshold = idx + 1;
+      }
       let won = false;
       if (guess === "higher") { won = card > threshold; }
       else if (guess === "lower") { won = card < threshold; }
-      else { won = card === threshold; } // exact = 13x
+      else { won = card === threshold; }
       const winChance = guess === "exact" ? 1/13 : guess === "higher" ? (13 - threshold) / 13 : (threshold - 1) / 13;
       const multiplier = won ? Math.max(1.01, (1 - houseEdge) / Math.max(0.01, winChance)) : 0;
-      return { won, multiplier, payout: won ? amount * multiplier : 0, resultMeta: { card, guess, threshold } };
+      const suitIdx = Math.floor(getOutcomeN(serverSeed, clientSeedStr, "hilo-suit", nonce) * 4);
+      const SUITS = ["♠","♥","♦","♣"];
+      const RANKS = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
+      return {
+        won, multiplier, payout: won ? amount * multiplier : 0,
+        resultMeta: { card, drawnRank: RANKS[card - 1], suit: SUITS[suitIdx], guess, threshold },
+      };
     }
 
     case "keno": {
@@ -236,9 +249,13 @@ function resolveBet(
       const pickCount = Math.min(10, Math.max(1, picks.length));
       const table = kenoTable[pickCount] ?? [0, 3];
       const baseMultiplier = table[Math.min(matches, table.length - 1)] ?? 0;
+      const matchedNumbers = picks.filter(p => drawn.includes(p));
       const multiplier = baseMultiplier * (1 - houseEdge);
       const won = multiplier > 0;
-      return { won, multiplier, payout: won ? amount * multiplier : 0, resultMeta: { drawn, matches, picks } };
+      return {
+        won, multiplier, payout: won ? amount * multiplier : 0,
+        resultMeta: { drawn, matchCount: matches, matchedNumbers, picks },
+      };
     }
 
     case "dice": {
@@ -262,10 +279,14 @@ function resolveBet(
     case "chicken-road":
       throw new Error("Chicken Road must be played via /api/chicken-road session endpoints");
 
-    default: {
-      const won = seed < 0.5 * (1 - houseEdge);
-      return { won, multiplier: won ? 2 : 0, payout: won ? amount * 2 : 0 };
-    }
+    case "race":
+      throw new Error("Horse Race must be played via /api/race/run");
+
+    case "plinko":
+      throw new Error("Plinko is not yet available");
+
+    default:
+      throw new Error(`Unknown game slug: ${gameSlug}`);
   }
 }
 
@@ -322,10 +343,17 @@ betsRouter.post("/", requireAuth, requireLocationVerified, async (req, res) => {
     const nonce = user.totalBets + 1;
     
     const seedValue = getOutcome(serverSeed, clientSeedStr, game.slug, nonce);
-    const { won, multiplier, payout, resultMeta } = resolveBet(
-      game.slug, amount, houseEdge, seedValue, serverSeed, clientSeedStr,
-      (meta as Record<string, unknown>) ?? null
-    );
+    let won: boolean, multiplier: number, payout: number, resultMeta: Record<string, unknown> | undefined;
+    try {
+      ({ won, multiplier, payout, resultMeta } = resolveBet(
+        game.slug, amount, houseEdge, seedValue, serverSeed, clientSeedStr,
+        (meta as Record<string, unknown>) ?? null, nonce
+      ));
+    } catch (err: any) {
+      await creditBalance(user.id, amount);
+      res.status(400).json({ error: err.message || "Unsupported game" });
+      return;
+    }
 
     // If this is a dice game, add it to the live round feed
     if (game.slug === "dice") {

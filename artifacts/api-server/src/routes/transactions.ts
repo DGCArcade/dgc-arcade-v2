@@ -809,11 +809,11 @@ transactionsRouter.post("/withdraw", requireAuth, requireLocationVerified, async
       return;
     }
 
-    // ── 100% Wagering Requirement Check ──────────────────────────────────────────
-    // Users must wager at least 100% of their sign-up bonus before withdrawing.
+    // Must wager at least the greater of signup bonus or accumulated wager requirement (deposits).
     const totalWagered = parseFloat(String(user.totalWageredAmount ?? 0));
     const signupBonus = parseFloat(String(user.signupBonus ?? 100));
-    const wagerRequirement = signupBonus * 1.0; // 100% of signup bonus
+    const dbWagerReq = parseFloat(String(user.wagerRequirement ?? 0));
+    const wagerRequirement = Math.max(signupBonus, dbWagerReq);
     const wagerProgress = totalWagered / wagerRequirement;
     const wagerPercentage = Math.min(100, Math.round(wagerProgress * 100));
 

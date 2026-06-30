@@ -154,17 +154,38 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
   }
 }
 
-/** Platform owner only (fanodgc username or owner role). */
-export function requireOwner(req: Request, res: Response, next: NextFunction) {
-  if (!req.user) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
+/** Platform owner only — role revalidated from DB on every request. */
+export async function requireOwner(req: Request, res: Response, next: NextFunction) {
+  try {
+    const token = readBearerToken(req);
+    if (!token) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
+    const payload = verifyToken(token);
+    if (!payload) {
+      res.status(401).json({ error: "Invalid or expired token" });
+      return;
+    }
+    const dbUser = await loadDbUser(payload.userId);
+    if (!dbUser) {
+      res.status(401).json({ error: "User not found" });
+      return;
+    }
+    if (dbUser.isBanned) {
+      res.status(403).json({ error: "Account suspended", code: "ACCOUNT_BANNED" });
+      return;
+    }
+    if (dbUser.role !== "owner" && dbUser.username.toLowerCase() !== OWNER_USERNAME_LOWER) {
+      res.status(403).json({ error: "Owner access required" });
+      return;
+    }
+    req.user = { userId: payload.userId, username: dbUser.username, role: dbUser.role };
+    req.dbUser = dbUser;
+    next();
+  } catch (err) {
+    next(err);
   }
-  if (!isOwnerUser(req.user)) {
-    res.status(403).json({ error: "Owner access required" });
-    return;
-  }
-  next();
 }
 
 /** Creator dashboard / bank — creator account type or creator role only. */

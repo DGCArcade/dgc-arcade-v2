@@ -1,12 +1,13 @@
 import { Router } from "express";
 import { db, usersTable, gamesTable, betsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 import { requireLocationVerified } from "../middlewares/location.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 import { logBetActivity } from "../services/activity-log.js";
 import { getRequestContext } from "../lib/request-context.js";
-import { createHash, randomBytes } from "crypto";
+import { createHash } from "crypto";
+import { v4 as uuidv4 } from "uuid";
 
 export const raceRouter = Router();
 
@@ -19,22 +20,23 @@ const RACERS = [
   { id: 6, name: "Phantom", emoji: "🐎", color: "#ec4899" },
 ];
 
-function seedRandom(seed: string, max: number): number {
-  const h = createHash("sha256").update(seed).digest("hex");
-  return parseInt(h.slice(0, 8), 16) % max;
+function generateServerSeed(): string {
+  return uuidv4().replace(/-/g, "");
 }
 
-function generateRacePositions(seed: string): number[] {
-  const positions: number[] = [];
+function getOutcome(serverSeed: string, clientSeed: string, gameSlug: string, nonce: number): number {
+  const message = `${clientSeed}:${nonce}:${gameSlug}`;
+  const hash = createHash("sha256").update(`${serverSeed}:${message}`).digest("hex");
+  return parseInt(hash.slice(0, 8), 16) / 0xffffffff;
+}
+
+function generateRacePositions(serverSeed: string, clientSeed: string, nonce: number): number[] {
   const available = [1, 2, 3, 4, 5, 6];
-  let s = seed;
+  const positions: number[] = [];
   for (let i = 0; i < 6; i++) {
-    const idx = seedRandom(s + i, available.length);
+    const idx = Math.floor(getOutcome(serverSeed, clientSeed, "race", nonce + i) * available.length);
     positions.push(available[idx]);
     available.splice(idx, 1);
-    s = createHash("sha256")
-      .update(s + i)
-      .digest("hex");
   }
   return positions;
 }
@@ -45,9 +47,10 @@ raceRouter.get("/racers", (_req, res) => {
 
 raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) => {
   const userId = req.user!.userId;
-  const { betAmount, racerId } = req.body as {
+  const { betAmount, racerId, clientSeed } = req.body as {
     betAmount: number;
     racerId: number;
+    clientSeed?: string;
   };
 
   if (!betAmount || betAmount <= 0)
@@ -63,6 +66,12 @@ raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) =
   if (!game || !game.active)
     return res.status(400).json({ error: "Race game not available" });
 
+  const minBet = parseFloat(game.minBet);
+  const maxBet = parseFloat(game.maxBet);
+  const houseEdge = parseFloat(game.houseEdge);
+  if (betAmount < minBet || betAmount > maxBet)
+    return res.status(400).json({ error: `Bet must be between ${minBet} and ${maxBet}` });
+
   const [user] = await db
     .select()
     .from(usersTable)
@@ -70,32 +79,33 @@ raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) =
     .limit(1);
   if (!user) return res.status(404).json({ error: "User not found" });
 
-  // Standardized balance deduction (crypto-first, live prices)
   try {
     await deductBalance(userId, betAmount);
   } catch (err: any) {
     return res.status(400).json({ error: err.message || "Insufficient balance" });
   }
 
-  const seed = `${userId}:${Date.now()}:${randomBytes(16).toString("hex")}`;
-  const finishOrder = generateRacePositions(seed);
+  const serverSeed = generateServerSeed();
+  const serverSeedHash = createHash("sha256").update(serverSeed).digest("hex");
+  const clientSeedStr = clientSeed ?? uuidv4();
+  const nonce = user.totalBets + 1;
+
+  const finishOrder = generateRacePositions(serverSeed, clientSeedStr, nonce);
   const winnerRacerId = finishOrder[0];
   const playerPlace = finishOrder.indexOf(racerId) + 1;
 
   const won = playerPlace === 1;
-  const multiplier = won ? 5.5 : 0;
+  const rawMultiplier = won ? 5.5 : 0;
+  const multiplier = won ? rawMultiplier * (1 - houseEdge) : 0;
   const payout = won ? betAmount * multiplier : 0;
   const profit = payout - betAmount;
 
-  // Standardized balance credit and stat updates
   const finalBalance = await creditBalance(userId, payout);
-  const newRaceWagered = parseFloat(user.totalWageredAmount ?? "0") + betAmount;
-  await db
-    .update(usersTable)
-    .set({
-      totalWageredAmount: String(newRaceWagered),
-    })
-    .where(eq(usersTable.id, userId));
+  await db.update(usersTable).set({
+    totalBets: sql`coalesce(total_bets, 0) + 1`,
+    totalWon: sql`coalesce(total_won, 0) + ${won ? payout : 0}`,
+    totalWageredAmount: sql`coalesce(total_wagered_amount, 0) + ${betAmount}`,
+  }).where(eq(usersTable.id, userId));
 
   const [betRow] = await db.insert(betsTable).values({
     userId,
@@ -104,6 +114,10 @@ raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) =
     payout: String(payout),
     multiplier: String(multiplier),
     won,
+    serverSeed,
+    serverSeedHash,
+    clientSeed: clientSeedStr,
+    nonce,
     meta: { racerId, winnerRacerId, finishOrder, playerPlace, username: user.username },
   }).returning({ id: betsTable.id });
 
@@ -120,6 +134,7 @@ raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) =
   });
 
   return res.json({
+    betId: betRow.id,
     won,
     racerId,
     winnerRacerId,
@@ -129,5 +144,33 @@ raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) =
     payout,
     profit,
     newBalance: finalBalance,
+    serverSeedHash,
+    serverSeed,
+    clientSeed: clientSeedStr,
+    nonce,
+  });
+});
+
+// GET /api/race/verify/:betId
+raceRouter.get("/verify/:betId", async (req, res) => {
+  const betId = parseInt(req.params.betId, 10);
+  if (isNaN(betId)) return res.status(400).json({ error: "Invalid bet ID" });
+
+  const [bet] = await db.select().from(betsTable).where(eq(betsTable.id, betId)).limit(1);
+  if (!bet || !bet.serverSeed) return res.status(404).json({ error: "Bet not found" });
+
+  const meta = bet.meta as Record<string, unknown>;
+  const recomputed = generateRacePositions(bet.serverSeed, bet.clientSeed ?? "", bet.nonce ?? 1);
+
+  return res.json({
+    verified: JSON.stringify(recomputed) === JSON.stringify(meta.finishOrder),
+    betId: bet.id,
+    serverSeedHash: bet.serverSeedHash,
+    serverSeed: bet.serverSeed,
+    clientSeed: bet.clientSeed,
+    nonce: bet.nonce,
+    finishOrder: meta.finishOrder,
+    recomputedOrder: recomputed,
+    algorithm: "SHA256(serverSeed:clientSeed:nonce:race)",
   });
 });
