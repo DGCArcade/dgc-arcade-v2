@@ -19,6 +19,7 @@ import { ownerAiRouter } from "./owner-ai.js";
 import { visitorLogsRouter } from "./visitor-logs.js";
 import { jackpotRouter } from "./jackpot.js";
 import { diceLiveRouter } from "./dice-live.js";
+import { crashLiveRouter } from "./crash-live.js";
 import { chickenRoadRouter } from "./chicken-road.js";
 
 const router: IRouter = Router();
@@ -43,6 +44,7 @@ router.use("/admin", ownerAiRouter);
 router.use("/admin/visitor-logs", visitorLogsRouter);
 router.use("/jackpot", jackpotRouter);
 router.use("/dice/live", diceLiveRouter);
+router.use("/crash/live", crashLiveRouter);
 router.use("/chicken-road", chickenRoadRouter);
 
 export default router;

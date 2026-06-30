@@ -2,7 +2,7 @@ import { useParams, Link } from "wouter";
 import { useGetGame, getGetGameQueryKey, useListBets, getListBetsQueryKey, type BetRecord } from "@workspace/api-client-react";
 import { Coinflip } from "@/components/games/coinflip";
 import { Slots } from "@/components/games/slots";
-import { Crash } from "@/components/games/crash";
+import { CrashGameLive as Crash } from "@/components/games/crash-game-live";
 import { Blackjack } from "@/components/games/blackjack";
 import { Roulette } from "@/components/games/roulette";
 import { Mines } from "@/components/games/mines";

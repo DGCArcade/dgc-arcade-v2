@@ -6,7 +6,27 @@ export interface PublicSettings {
   leaderboardEnabled: boolean;
   gamesEnabled: boolean;
   maintenanceMode: boolean;
+  disabledGameSlugs: string[];
+  custom404Enabled: boolean;
+  custom404Title: string;
+  custom404Message: string;
+  custom404ButtonText: string;
+  custom404ButtonUrl: string;
 }
+
+const DEFAULTS: PublicSettings = {
+  slotsEnabled: false,
+  raceEnabled: true,
+  leaderboardEnabled: true,
+  gamesEnabled: true,
+  maintenanceMode: false,
+  disabledGameSlugs: [],
+  custom404Enabled: false,
+  custom404Title: "Page Not Found",
+  custom404Message: "The page you're looking for doesn't exist or has been moved.",
+  custom404ButtonText: "Back to Home",
+  custom404ButtonUrl: "/",
+};
 
 export function usePlatformSettings() {
   const { data, isLoading, error } = useQuery<PublicSettings>({
@@ -16,17 +36,11 @@ export function usePlatformSettings() {
       if (!res.ok) throw new Error("Failed to fetch settings");
       return res.json();
     },
-    staleTime: 60000, // 1 minute
+    staleTime: 60000,
   });
 
   return {
-    settings: data ?? {
-      slotsEnabled: false,
-      raceEnabled: true,
-      leaderboardEnabled: true,
-      gamesEnabled: true,
-      maintenanceMode: false,
-    },
+    settings: data ?? DEFAULTS,
     isLoading,
     error,
   };

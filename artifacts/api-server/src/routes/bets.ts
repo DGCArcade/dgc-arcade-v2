@@ -161,13 +161,8 @@ function resolveBet(
       };
     }
 
-    case "crash": {
-      const crashPoint = Math.max(1.0, 1 / (1 - seed * (1 - houseEdge)));
-      const cashoutAt = (meta?.cashoutAt as number) ?? 1.5;
-      const won = cashoutAt <= crashPoint;
-      const multiplier = won ? cashoutAt : 0;
-      return { won, multiplier, payout: won ? amount * cashoutAt : 0, resultMeta: { crashPoint } };
-    }
+    case "crash":
+      throw new Error("Crash must be played via /api/crash/live/bet");
 
     case "roulette": {
       const pocket = Math.floor(seed * 37); // 0-36
@@ -316,7 +311,7 @@ betsRouter.post("/", requireAuth, requireLocationVerified, async (req, res) => {
 
     if (!game || !game.active) { res.status(404).json({ error: "Game not found or inactive" }); return; }
 
-    const SESSION_ONLY_SLUGS = new Set(["mines", "blackjack", "chicken-road"]);
+    const SESSION_ONLY_SLUGS = new Set(["mines", "blackjack", "chicken-road", "crash"]);
     if (SESSION_ONLY_SLUGS.has(game.slug)) {
       res.status(400).json({ error: "This game must be played through its dedicated session API." });
       return;
@@ -359,14 +354,12 @@ betsRouter.post("/", requireAuth, requireLocationVerified, async (req, res) => {
     if (game.slug === "dice") {
       try {
         diceRoundManager.addBetToRound({
-          betId: 0, // Placeholder
+          betId: 0,
           userId: user.id,
           username: user.username,
           amount,
           target: Number((meta as any)?.target ?? 50),
           mode: (meta as any)?.mode === "under" ? "under" : "over",
-          won,
-          payout,
         });
       } catch (err) {
         // Silently fail if betting window is closed, it just won't show in live feed

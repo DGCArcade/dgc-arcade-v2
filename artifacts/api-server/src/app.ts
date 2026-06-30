@@ -8,7 +8,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { startBackgroundTasks } from "./lib/background-tasks.js";
 import { logVisitor } from "./services/visitor-service.js";
-import { ensureSlotGamesSeeded, ensureCoreGamesSeeded, ensureRaceGameSeeded } from "./routes/games.js";
+import { ensureSlotGamesSeeded, ensureCoreGamesSeeded, ensureRaceGameSeeded, ensureChickenRoadSeeded } from "./routes/games.js";
 import { pool } from "@workspace/db";
 
 const app: Express = express();
@@ -230,6 +230,7 @@ startBackgroundTasks();
 ensureCoreGamesSeeded()
   .then(() => ensureSlotGamesSeeded())
   .then(() => ensureRaceGameSeeded())
+  .then(() => ensureChickenRoadSeeded())
   .catch(err => console.error("Game seeding error:", err));
 
 // ── Chicken Road session table migration (idempotent) ───────────────────────────
