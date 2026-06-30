@@ -116,14 +116,14 @@ export function ManholeCover({
         lit ? "bg-[#2d3748] border-2 border-blue-500/60" :
         "bg-[#252a35] border-2 border-white/15"
       }`}>
-        <svg viewBox="0 0 48 48" className="absolute inset-0 w-full h-full rounded-full opacity-90">
-          <circle cx="24" cy="24" r="22" fill="#3a4555" stroke="#555" strokeWidth="1" />
-          <circle cx="24" cy="24" r="18" fill="none" stroke="#222" strokeWidth="2" strokeDasharray="3 2" />
-          {[0, 45, 90, 135].map(deg => (
-            <line key={deg} x1="24" y1="24" x2="24" y2="8" stroke="#222" strokeWidth="1.5"
-              transform={`rotate(${deg} 24 24)`} />
-          ))}
-          <circle cx="24" cy="24" r="4" fill="#222" />
+        <svg viewBox="0 0 48 48" className="absolute inset-0 w-full h-full rounded-full opacity-95">
+          <circle cx="24" cy="24" r="22" fill="#3d4858" stroke="#2a3140" strokeWidth="1.5" />
+          <circle cx="24" cy="24" r="17" fill="none" stroke="#1a1f28" strokeWidth="2" />
+          {/* Stake-style III grate bars */}
+          <rect x="14" y="10" width="4" height="28" rx="1" fill="#1a1f28" />
+          <rect x="22" y="10" width="4" height="28" rx="1" fill="#1a1f28" />
+          <rect x="30" y="10" width="4" height="28" rx="1" fill="#1a1f28" />
+          <circle cx="24" cy="24" r="3" fill="#151920" />
         </svg>
         <span className={`relative z-10 font-mono font-black text-[9px] sm:text-[10px] ${
           lit ? "text-white" : "text-white/50"

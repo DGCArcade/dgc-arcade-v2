@@ -6,6 +6,23 @@ function ac(): AudioContext {
   return ctx;
 }
 
+export function playChickenSpawn() {
+  const c = ac();
+  const now = c.currentTime;
+  const osc = c.createOscillator();
+  const gain = c.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(300, now);
+  osc.frequency.exponentialRampToValueAtTime(600, now + 0.12);
+  gain.gain.setValueAtTime(0.08, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+  osc.connect(gain);
+  gain.connect(c.destination);
+  osc.start(now);
+  osc.stop(now + 0.2);
+  playChickenCluck();
+}
+
 export function playChickenCluck() {
   const c = ac();
   const now = c.currentTime;
