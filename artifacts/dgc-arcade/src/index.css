@@ -499,15 +499,15 @@ body {
   50% { opacity: 0.5; transform: scaleX(1.3); }
 }
 .horse-gallop {
-  animation: horse-bob 0.35s ease-in-out infinite;
+  animation: horse-bob 0.42s ease-in-out infinite;
 }
 .horse-gallop .horse-leg-front {
   transform-origin: center top;
-  animation: horse-leg-swing 0.35s ease-in-out infinite;
+  animation: horse-leg-swing 0.21s ease-in-out infinite;
 }
 .horse-gallop .horse-leg-back {
   transform-origin: center top;
-  animation: horse-leg-swing 0.35s ease-in-out infinite reverse;
+  animation: horse-leg-swing 0.21s ease-in-out infinite reverse;
 }
 .horse-dust {
   animation: horse-dust-puff 0.35s ease-in-out infinite;
@@ -542,11 +542,16 @@ body {
   animation: cr-chicken-hop-anim 0.45s ease-out;
 }
 @keyframes cr-car-drive-anim {
-  from { transform: translateY(-120%); }
-  to { transform: translateY(220%); }
+  from { transform: translateY(-130%); }
+  to { transform: translateY(230%); }
 }
-.cr-car-lane {
-  animation: cr-car-drive-anim 2.8s linear infinite;
+.cr-car-lane-down {
+  animation: cr-car-drive-anim 2.4s linear infinite;
+  z-index: 5;
+  pointer-events: none;
+}
+.cr-car-lane-up {
+  animation: cr-car-drive-anim 3.1s linear infinite reverse;
   z-index: 5;
   pointer-events: none;
 }
