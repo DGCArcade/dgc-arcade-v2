@@ -483,7 +483,7 @@ export class ChickenRoadRenderer {
     const boardH = this.app?.screen.height ?? CHICKEN_ROAD_LAYOUT.boardHeight;
     const onSidewalk =
       (state.status === "active" && state.currentLane === 0) ||
-      (state.status === "idle" && state.previewMode);
+      (state.status === "idle" && !!state.previewMode);
     const chickenLane =
       state.status === "active" && state.currentLane > 0
         ? state.currentLane - 1
@@ -491,7 +491,7 @@ export class ChickenRoadRenderer {
           ? Math.max(0, state.currentLane - 1)
           : -1;
 
-    const showChicken = state.chickenVisible || (state.status === "idle" && state.previewMode);
+    const showChicken = state.chickenVisible || (state.status === "idle" && !!state.previewMode);
     this.chickenContainer.visible = showChicken;
     if (!showChicken) return;
 
@@ -519,7 +519,7 @@ export class ChickenRoadRenderer {
     const { laneWidth, sidewalkWidth } = CHICKEN_ROAD_LAYOUT;
     const onSidewalk =
       (state.status === "active" && state.currentLane === 0) ||
-      (state.status === "idle" && state.previewMode);
+      (state.status === "idle" && !!state.previewMode);
     const chickenLane =
       state.status === "active" && state.currentLane > 0
         ? state.currentLane - 1
@@ -528,7 +528,7 @@ export class ChickenRoadRenderer {
           : -1;
 
     let targetX = 0;
-    const showChicken = state.chickenVisible || (state.status === "idle" && state.previewMode);
+    const showChicken = state.chickenVisible || (state.status === "idle" && !!state.previewMode);
     if (!onSidewalk && chickenLane >= 0 && showChicken) {
       const chickenWorldX = sidewalkWidth + chickenLane * laneWidth + laneWidth / 2;
       targetX = Math.max(0, chickenWorldX - this.app.screen.width / 2);
