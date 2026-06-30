@@ -8,7 +8,7 @@ import { getPlatformSettings } from "../lib/platform-settings.js";
 import { invalidatePublicGamesCache } from "./games.js";
 import { logAudit } from "../services/audit.js";
 import { recordLedger, recordLedgerStandalone } from "../services/ledger.js";
-import { getUserBalance } from "../lib/balance-service.js";
+import { getUserBalance, creditBalance } from "../lib/balance-service.js";
 import { getPlisioPayoutReadiness, sendPlisioPayout } from "../lib/plisio-payout.js";
 import { getDailyWinLoss, getDailyWithdrawals, getDailyDeposits } from "../services/stats-service.js";
 import { getCryptoPrice } from "../lib/price-service.js";
@@ -1089,24 +1089,19 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
           .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "pending")))
           .returning({ id: transactionsTable.id });
         if (flipped.length === 0) return false;
-        const [userAfter] = await txn
-          .update(usersTable)
-          .set({ balance: sql`balance + ${refundAmount}` })
-          .where(eq(usersTable.id, tx.userId))
-          .returning({ balance: usersTable.balance });
-        if (userAfter) {
-          const balanceAfter = parseFloat(userAfter.balance);
-          await recordLedger(txn, {
-            userId: tx.userId,
-            amount: refundAmount,
-            balanceBefore: balanceAfter - refundAmount,
-            balanceAfter,
-            reason: "withdrawal_refund",
-            referenceId: txId,
-            referenceType: "transaction",
-            note: `Withdrawal rejected by admin #${req.user!.userId}`,
-          });
-        }
+        await creditBalance(tx.userId, refundAmount, tx.currency ?? "USD", txn);
+        const { totalBalance } = await getUserBalance(tx.userId);
+        const balanceAfter = totalBalance;
+        await recordLedger(txn, {
+          userId: tx.userId,
+          amount: refundAmount,
+          balanceBefore: balanceAfter - refundAmount,
+          balanceAfter,
+          reason: "withdrawal_refund",
+          referenceId: txId,
+          referenceType: "transaction",
+          note: `Withdrawal rejected by admin #${req.user!.userId}`,
+        });
         return true;
       });
       if (!refunded) {
@@ -3297,15 +3292,15 @@ adminRouter.post("/tournaments/:id/end", async (req, res) => {
 });
 
 // POST /api/admin/tournaments/:id/award — credit prize to a winner's balance
-adminRouter.post("/tournaments/:id/award", async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+adminRouter.post("/tournaments/:id/award", requireBankSession, async (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
   const { userId, amount } = req.body as { userId?: number; amount?: number };
   if (!userId || !amount || amount <= 0) { res.status(400).json({ error: "userId and amount > 0 are required" }); return; }
   try {
     const [target] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
     if (!target) { res.status(404).json({ error: "User not found" }); return; }
-    await db.update(usersTable).set({ balance: sql`balance + ${amount}` }).where(eq(usersTable.id, userId));
+    await creditBalance(userId, amount);
     await db.insert(transactionsTable).values({
       userId, type: "bet_win", amount: String(amount), currency: "USD", status: "completed",
       metadata: JSON.stringify({ source: "tournament_prize", tournamentId: id, awardedBy: req.user!.userId }),

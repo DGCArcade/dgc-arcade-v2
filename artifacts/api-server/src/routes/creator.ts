@@ -159,9 +159,17 @@ creatorRouter.post("/request-payout", requireCreator, async (req, res) => {
       }
       if (coin === "platform") {
         await db.transaction(async (txn) => {
+          await txn.execute(sql`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`);
+          const [locked] = await txn
+            .select({ promoBalance: usersTable.promoBalance, balance: usersTable.balance })
+            .from(usersTable)
+            .where(eq(usersTable.id, user.id))
+            .limit(1);
+          const lockedPromo = parseFloat(locked?.promoBalance ?? "0");
+          if (lockedPromo < amount) throw new Error("INSUFFICIENT_COMMISSION");
           await txn.update(usersTable).set({
-            promoBalance: String(available - amount),
-            balance: String(parseFloat(user.balance ?? "0") + amount),
+            promoBalance: String(lockedPromo - amount),
+            balance: String(parseFloat(locked?.balance ?? "0") + amount),
           }).where(eq(usersTable.id, user.id));
           await txn.insert(creatorBankTxnsTable).values({
             creatorId: user.id,
@@ -181,6 +189,7 @@ creatorRouter.post("/request-payout", requireCreator, async (req, res) => {
       res.json({ success: true, message: coin === "platform" ? "Deployed to your wallet." : "Payout request submitted. We will process it within 24h." });
     } else {
       await db.transaction(async (txn) => {
+        await txn.execute(sql`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`);
         const earned = await txn.select({ total: sum(referralsTable.earnedAmount) })
           .from(referralsTable)
           .where(eq(referralsTable.referrerId, user.id));
@@ -208,6 +217,10 @@ creatorRouter.post("/request-payout", requireCreator, async (req, res) => {
   } catch (err) {
     if (err instanceof Error && err.message === "NO_COMMISSION") {
       res.status(400).json({ error: "No commission earned yet" });
+      return;
+    }
+    if (err instanceof Error && err.message === "INSUFFICIENT_COMMISSION") {
+      res.status(400).json({ error: "Insufficient commission balance" });
       return;
     }
     req.log.error({ err }, "Creator request-payout error");

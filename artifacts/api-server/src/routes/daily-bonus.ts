@@ -91,52 +91,62 @@ dailyBonusRouter.post("/claim", requireAuth, async (req, res) => {
   try {
     const today = todayStr();
     const yesterday = yesterdayStr();
+    const userId = req.user!.userId;
 
-    const [user] = await db
-      .select({ id: usersTable.id, balance: usersTable.balance, totalBets: usersTable.totalBets, totalWon: usersTable.totalWon })
-      .from(usersTable)
-      .where(eq(usersTable.id, req.user!.userId))
-      .limit(1);
-    if (!user) { res.status(401).json({ error: "User not found" }); return; }
+    const result = await db.transaction(async (txn) => {
+      await txn.execute(sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`);
 
-    // Check today
-    const existing = await db
-      .select({ id: dailyBonusClaimsTable.id })
-      .from(dailyBonusClaimsTable)
-      .where(and(eq(dailyBonusClaimsTable.userId, user.id), eq(dailyBonusClaimsTable.claimedDate, today)))
-      .limit(1);
-    if (existing.length > 0) {
+      const [user] = await txn
+        .select({ id: usersTable.id, totalBets: usersTable.totalBets, totalWon: usersTable.totalWon })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId))
+        .limit(1);
+      if (!user) throw new Error("USER_NOT_FOUND");
+
+      const existing = await txn
+        .select({ id: dailyBonusClaimsTable.id })
+        .from(dailyBonusClaimsTable)
+        .where(and(eq(dailyBonusClaimsTable.userId, user.id), eq(dailyBonusClaimsTable.claimedDate, today)))
+        .limit(1);
+      if (existing.length > 0) throw new Error("ALREADY_CLAIMED");
+
+      const [yesterdayClaim] = await txn
+        .select({ streakDay: dailyBonusClaimsTable.streakDay })
+        .from(dailyBonusClaimsTable)
+        .where(and(eq(dailyBonusClaimsTable.userId, user.id), eq(dailyBonusClaimsTable.claimedDate, yesterday)))
+        .limit(1);
+
+      const streakDay = yesterdayClaim ? yesterdayClaim.streakDay + 1 : 1;
+      const base = getBaseBonusAmount(user.totalBets, parseFloat(user.totalWon));
+      const bonusAmount = applyStreakMultiplier(base, streakDay);
+
+      await txn.insert(dailyBonusClaimsTable).values({
+        userId: user.id,
+        amount: String(bonusAmount),
+        claimedDate: today,
+        streakDay,
+      });
+
+      const newBalance = await creditBalance(user.id, bonusAmount, undefined, txn);
+      await txn.update(usersTable)
+        .set({ wagerRequirement: sql`coalesce(wager_requirement, 0) + ${bonusAmount}` })
+        .where(eq(usersTable.id, user.id));
+
+      return { bonusAmount, streakDay, newBalance };
+    });
+
+    req.log.info({ userId, ...result }, "Daily bonus claimed");
+    res.json({ claimed: true, ...result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg === "ALREADY_CLAIMED") {
       res.status(400).json({ error: "Already claimed today" });
       return;
     }
-
-    // Determine streak
-    const [yesterdayClaim] = await db
-      .select({ streakDay: dailyBonusClaimsTable.streakDay })
-      .from(dailyBonusClaimsTable)
-      .where(and(eq(dailyBonusClaimsTable.userId, user.id), eq(dailyBonusClaimsTable.claimedDate, yesterday)))
-      .limit(1);
-
-    const streakDay = yesterdayClaim ? yesterdayClaim.streakDay + 1 : 1;
-    const base = getBaseBonusAmount(user.totalBets, parseFloat(user.totalWon));
-    const bonusAmount = applyStreakMultiplier(base, streakDay);
-    const finalBalance = await creditBalance(user.id, bonusAmount);
-    await db.update(usersTable)
-      .set({ 
-        wagerRequirement: sql`coalesce(wager_requirement, 0) + ${bonusAmount}`
-      })
-      .where(eq(usersTable.id, user.id));
-    const newBalance = finalBalance;
-    await db.insert(dailyBonusClaimsTable).values({
-      userId: user.id,
-      amount: String(bonusAmount),
-      claimedDate: today,
-      streakDay,
-    });
-
-    req.log.info({ userId: user.id, bonusAmount, streakDay, newBalance }, "Daily bonus claimed");
-    res.json({ claimed: true, bonusAmount, streakDay, newBalance });
-  } catch (err) {
+    if (msg === "USER_NOT_FOUND") {
+      res.status(401).json({ error: "User not found" });
+      return;
+    }
     req.log.error({ err }, "Daily bonus claim error");
     res.status(500).json({ error: "Internal server error" });
   }

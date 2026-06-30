@@ -576,7 +576,7 @@ export function Blackjack({ game }: BlackjackProps) {
   };
 
   return (
-    <div className={isMobile ? "bj-game-root bj-game-root--mobile" : "bj-game-root"} style={{ display: "flex", flexDirection: "row", width: "100%", padding: isMobile ? 0 : 12, gap: isMobile ? 4 : 12, boxSizing: "border-box" }}>
+    <div className={isMobile ? "bj-game-root bj-game-root--mobile" : "bj-game-root"} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", width: "100%", padding: isMobile ? 0 : 12, gap: isMobile ? 4 : 12, boxSizing: "border-box" }}>
       <style>{`
         /* Tablet only — stack controls above table */
         @media (min-width: 768px) and (max-width: 1024px) {
@@ -585,29 +585,55 @@ export function Blackjack({ game }: BlackjackProps) {
           .bj-game-root:not(.bj-game-root--mobile) .bj-controls-bar { width: 100% !important; order: 1; position: static !important; }
         }
 
-        /* Phone — dedicated compact side-by-side (inside mobile-game-play-area) */
+        /* Phone — column stack like Mines: felt table on top, full-width bets below */
         .bj-game-root--mobile {
-          flex-direction: row !important;
+          flex-direction: column !important;
           align-items: stretch !important;
           height: 100% !important;
           padding: 0 !important;
           gap: 4px !important;
+          overflow: hidden !important;
         }
         .bj-game-root--mobile .bj-table-area {
-          flex: 1 1 54% !important;
+          flex: 1 1 auto !important;
           min-width: 0 !important;
           min-height: 0 !important;
-          width: auto !important;
+          width: 100% !important;
+          max-height: none !important;
           padding: 6px 4px !important;
           border-width: 2px !important;
           border-radius: 10px !important;
           justify-content: center !important;
           gap: 4px !important;
+          order: 1 !important;
         }
-        .bj-game-root--mobile .bj-table-deco,
-        .bj-game-root--mobile .bj-table-footer,
+        .bj-game-root--mobile .bj-table-deco {
+          display: block !important;
+          width: 72% !important;
+          height: 58% !important;
+          top: 18% !important;
+          border-width: 1px !important;
+          opacity: 0.22 !important;
+        }
         .bj-game-root--mobile .bj-deck-stack {
-          display: none !important;
+          display: block !important;
+          top: 6px !important;
+          right: 6px !important;
+          width: 36px !important;
+          height: 50px !important;
+          transform: scale(0.55);
+          transform-origin: top right;
+        }
+        .bj-game-root--mobile .bj-deck-stack > div {
+          width: 36px !important;
+          height: 50px !important;
+        }
+        .bj-game-root--mobile .bj-table-footer {
+          display: block !important;
+          bottom: 3px !important;
+          font-size: 5px !important;
+          letter-spacing: 0.5px !important;
+          opacity: 0.55 !important;
         }
         .bj-game-root--mobile .bj-table-title {
           font-size: 7px !important;
@@ -625,14 +651,14 @@ export function Blackjack({ game }: BlackjackProps) {
         .bj-game-root--mobile .bj-score-value { font-size: 14px !important; }
         .bj-game-root--mobile .bj-score-label { font-size: 6px !important; margin-bottom: 0 !important; }
         .bj-game-root--mobile .bj-controls-bar {
-          flex: 0 0 44% !important;
-          width: 44% !important;
-          max-width: 44% !important;
+          flex: 0 0 auto !important;
+          width: 100% !important;
+          max-width: 100% !important;
           min-width: 0 !important;
-          padding: 6px !important;
-          gap: 5px !important;
-          overflow-y: auto !important;
-          -webkit-overflow-scrolling: touch;
+          padding: 6px 8px !important;
+          gap: 4px !important;
+          overflow: visible !important;
+          order: 2 !important;
         }
         .bj-game-root--mobile .bj-controls-bar input {
           font-size: 12px !important;
@@ -826,7 +852,7 @@ export function Blackjack({ game }: BlackjackProps) {
       </div>
 
       {/* ── CONTROLS BAR ── */}
-      <div className="bj-controls-bar" style={{
+      <div className="bj-controls-bar bj-bet-panel" style={{
         display: "flex", flexDirection: "column", gap: isMobile ? 5 : 12, background: "rgba(8,12,26,0.9)", borderRadius: 12, padding: isMobile ? 6 : 14,
         border: "1px solid rgba(255,255,255,0.08)", width: isMobile ? undefined : 280, maxWidth: isMobile ? undefined : 280, flexShrink: isMobile ? 0 : undefined
       }}>
@@ -864,12 +890,12 @@ export function Blackjack({ game }: BlackjackProps) {
             {isDone ? "NEW GAME" : loading ? "DEALING..." : "PLACE BET"}
           </button>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 6 : 8 }}>
-            <div style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
+          <div className="bj-action-row" style={{ display: "flex", flexDirection: "column", gap: isMobile ? 6 : 8 }}>
+            <div className="bj-action-row" style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
               <button onClick={() => doAction("hit")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 10 : 12, fontWeight: 900, fontSize: 12 }}>HIT</button>
               <button onClick={() => doAction("stand")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 10 : 12, fontWeight: 900, fontSize: 12 }}>STAND</button>
             </div>
-            <div style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
+            <div className="bj-action-row" style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
               <button onClick={() => doAction("double")} disabled={loading || (isSplit ? (splitHands?.[activeHandIndex]?.length ?? 0) !== 2 : playerHand.length !== 2)} className="bj-action-btn" style={{ flex: 1, background: "#7c3aed", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>DOUBLE</button>
               {insuranceEligible && <button onClick={() => doAction("insurance")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#d97706", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>INSURE</button>}
               {((!isSplit && playerHand.length === 2 && playerHand[0].rank === playerHand[1].rank) || 
