@@ -519,7 +519,7 @@ const GAME_HREF_OVERRIDES: Record<string, string> = {
 };
 
 function getGameHref(game: Game): string {
-  return GAME_HREF_OVERRIDES[game.slug] ?? `/games/${game.id}`;
+  return GAME_HREF_OVERRIDES[game.slug] ?? `/games/${game.slug}`;
 }
 
 export function GameCard({ game }: { game: Game }) {

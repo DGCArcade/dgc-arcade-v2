@@ -221,20 +221,35 @@ gamesRouter.get("/settings", async (req, res) => {
   }
 });
 
-gamesRouter.get("/:gameId", async (req, res) => {
-  const gameId = parseInt(req.params.gameId);
-  if (isNaN(gameId)) {
-    res.status(400).json({ error: "Invalid game ID" });
+gamesRouter.get("/:gameIdOrSlug", async (req, res) => {
+  const raw = String(req.params.gameIdOrSlug ?? "").trim();
+  if (!raw) {
+    res.status(400).json({ error: "Game reference required" });
     return;
   }
+
+  const isNumericId = /^\d+$/.test(raw);
+
   try {
-    const [game] = await db
-      .select()
-      .from(gamesTable)
-      .where(eq(gamesTable.id, gameId))
-      .limit(1);
+    const settings = await getPlatformSettings();
+
+    const [game] = isNumericId
+      ? await db
+          .select()
+          .from(gamesTable)
+          .where(eq(gamesTable.id, parseInt(raw, 10)))
+          .limit(1)
+      : await db
+          .select()
+          .from(gamesTable)
+          .where(eq(gamesTable.slug, raw))
+          .limit(1);
 
     if (!game) {
+      res.status(404).json({ error: "Game not found" });
+      return;
+    }
+    if (!game.active || !isGameSlugEnabled(settings, game.slug)) {
       res.status(404).json({ error: "Game not found" });
       return;
     }

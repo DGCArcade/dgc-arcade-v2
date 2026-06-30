@@ -1,5 +1,6 @@
-import { useParams, Link } from "wouter";
-import { useGetGame, getGetGameQueryKey, useListBets, getListBetsQueryKey, type BetRecord } from "@workspace/api-client-react";
+import { useParams, Link, useLocation } from "wouter";
+import { useListBets, getListBetsQueryKey, type BetRecord, type Game } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { Coinflip } from "@/components/games/coinflip";
 import { Slots } from "@/components/games/slots";
 import { CrashGameLive as Crash } from "@/components/games/crash-game-live";
@@ -145,17 +146,28 @@ function RecentBetsTable({ gameBets }: { gameBets: BetRecord[] }) {
 
 export default function GamePage() {
   const params = useParams();
-  const gameId = Number(params.gameId);
+  const gameRef = String(params.gameId ?? "").trim();
+  const [, setLocation] = useLocation();
   const isMobile = useIsMobile();
   const { isAuthenticated } = useAuth();
   const [showBets, setShowBets] = useState(false);
 
-  const { data: game, isLoading } = useGetGame(gameId, {
-    query: {
-      queryKey: getGetGameQueryKey(gameId),
-      enabled: !!gameId && !isNaN(gameId),
+  const { data: game, isLoading, isError } = useQuery<Game>({
+    queryKey: ["/api/games", gameRef],
+    enabled: gameRef.length > 0,
+    queryFn: async () => {
+      const res = await fetch(`/api/games/${encodeURIComponent(gameRef)}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? "Game not found");
+      }
+      return res.json();
     },
   });
+
+  useEffect(() => {
+    if (game?.slug === "race") setLocation("/race");
+  }, [game?.slug, setLocation]);
 
   const { data: bets } = useListBets({ limit: 10 }, {
     query: {
@@ -179,9 +191,26 @@ export default function GamePage() {
 
   if (!game) {
     return (
-      <div className="text-center py-20">
-        <h2 className="font-display font-bold text-3xl uppercase tracking-widest mb-4">Game Not Found</h2>
+      <div className="text-center py-20 px-4">
+        <h2 className="font-display font-bold text-3xl uppercase tracking-widest mb-4">
+          {isError ? "Could Not Load Game" : "Game Not Found"}
+        </h2>
+        <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
+          {isError
+            ? "The game server could not be reached, or this game may be disabled. Try again from the lobby."
+            : gameRef
+              ? `No active game matches “${gameRef}”. IDs differ between environments — use the lobby link instead of a saved numeric URL.`
+              : "Invalid game link."}
+        </p>
         <Link href="/games" className="text-primary hover:underline font-bold uppercase">Back to Lobby</Link>
+      </div>
+    );
+  }
+
+  if (game.slug === "race") {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-primary" />
       </div>
     );
   }
