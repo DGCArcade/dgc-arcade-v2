@@ -19,23 +19,53 @@ export function ChickenSprite({ hopping, size = 52, facing = "right" }: { hoppin
   );
 }
 
-const CAR_PALETTE = ["#E74C3C", "#3498DB", "#9B59B6", "#2ECC71", "#F39C12", "#1ABC9C"];
+const CAR_PALETTE = ["#C0392B", "#2980B9", "#8E44AD", "#27AE60", "#D35400", "#16A085"];
+
+function darken(hex: string, amt = 0.15) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, ((n >> 16) & 0xff) * (1 - amt)) | 0;
+  const g = Math.max(0, ((n >> 8) & 0xff) * (1 - amt)) | 0;
+  const b = Math.max(0, (n & 0xff) * (1 - amt)) | 0;
+  return `rgb(${r},${g},${b})`;
+}
 
 function CarShadow({ w, h }: { w: number; h: number }) {
   return (
-    <ellipse cx={w / 2} cy={h - 2} rx={w * 0.38} ry={3} fill="#000" opacity="0.28" />
+    <ellipse cx={w / 2} cy={h - 2} rx={w * 0.4} ry={3.5} fill="#000" opacity="0.32" />
   );
 }
 
-function CarHeadlights({ x, y, facing }: { x: number; y: number; facing: "up" | "down" }) {
-  const glow = facing === "down" ? y + 4 : y - 2;
+function CarLights({ direction, variant }: { direction: "up" | "down"; variant: string }) {
+  if (direction === "down") {
+    return (
+      <>
+        <ellipse cx="14" cy="6" rx="4" ry="2.5" fill="#FFFDE7" opacity="0.9" />
+        <ellipse cx="22" cy="6" rx="4" ry="2.5" fill="#FFFDE7" opacity="0.9" />
+        <ellipse cx="14" cy="8" rx="6" ry="3" fill="#F6E05E" opacity="0.25" className="cr-car-headlight-glow" />
+        <ellipse cx="22" cy="8" rx="6" ry="3" fill="#F6E05E" opacity="0.25" className="cr-car-headlight-glow" />
+      </>
+    );
+  }
   return (
     <>
-      <rect x={x} y={y} width="3" height="4" rx="1" fill="#FFF9C4" opacity="0.95" />
-      <rect x={x + 8} y={y} width="3" height="4" rx="1" fill="#FFF9C4" opacity="0.95" />
-      <ellipse cx={x + 1.5} cy={glow} rx="5" ry="3" fill="#F6E05E" opacity="0.35" className="cr-car-headlight-glow" />
-      <ellipse cx={x + 9.5} cy={glow} rx="5" ry="3" fill="#F6E05E" opacity="0.35" className="cr-car-headlight-glow" />
+      <rect x="12" y={variant === "truck" ? 62 : 56} width="5" height="3" rx="1" fill="#FF4444" opacity="0.9" />
+      <rect x="19" y={variant === "truck" ? 62 : 56} width="5" height="3" rx="1" fill="#FF4444" opacity="0.9" />
+      <ellipse cx="14.5" cy={variant === "truck" ? 64 : 58} rx="4" ry="2" fill="#FF0000" opacity="0.2" />
+      <ellipse cx="21.5" cy={variant === "truck" ? 64 : 58} rx="4" ry="2" fill="#FF0000" opacity="0.2" />
     </>
+  );
+}
+
+function CarWheels({ cy, wheelCls }: { cy: number; wheelCls: string }) {
+  return (
+    <g className={wheelCls}>
+      <circle cx="10" cy={cy} r="5.5" fill="#1a1a1a" />
+      <circle cx="26" cy={cy} r="5.5" fill="#1a1a1a" />
+      <circle cx="10" cy={cy} r="2.2" fill="#718096" />
+      <circle cx="26" cy={cy} r="2.2" fill="#718096" />
+      <circle cx="10" cy={cy} r="0.8" fill="#A0AEC0" />
+      <circle cx="26" cy={cy} r="0.8" fill="#A0AEC0" />
+    </g>
   );
 }
 
@@ -61,61 +91,81 @@ export function CarSprite({
 
   if (variant === "truck") {
     return (
-      <svg viewBox="0 0 44 72" width={w} height={h} style={{ transform: flip }} className={`drop-shadow-lg ${motionCls}`}>
-        <CarShadow w={44} h={72} />
-        <rect x="6" y="4" width="32" height="36" rx="4" fill={color} />
-        <rect x="8" y="8" width="28" height="14" rx="2" fill="#1a1a2e" opacity="0.5" />
-        <rect x="10" y="10" width="10" height="8" rx="1" fill="#fff" opacity="0.12" />
-        <rect x="4" y="38" width="36" height="18" rx="3" fill={color} style={{ filter: "brightness(0.88)" }} />
-        <rect x="2" y="52" width="40" height="8" rx="2" fill="#2d3748" />
-        <g className={wheelCls}>
-          <circle cx="12" cy="62" r="5" fill="#1a1a1a" />
-          <circle cx="32" cy="62" r="5" fill="#1a1a1a" />
-          <circle cx="12" cy="62" r="2" fill="#718096" />
-          <circle cx="32" cy="62" r="2" fill="#718096" />
-        </g>
-        <CarHeadlights x={14} y={direction === "down" ? 2 : 66} facing={direction} />
-        <rect x="38" y="44" width="4" height="6" rx="1" fill="#F6E05E" />
+      <svg viewBox="0 0 36 68" width={w} height={h} style={{ transform: flip }} className={`drop-shadow-lg ${motionCls}`}>
+        <defs>
+          <linearGradient id={`truck-body-${color}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={darken(color)} />
+            <stop offset="40%" stopColor={color} />
+            <stop offset="100%" stopColor={darken(color, 0.2)} />
+          </linearGradient>
+        </defs>
+        <CarShadow w={36} h={68} />
+        <path d="M8 6 H28 Q32 6 32 10 V34 Q32 38 28 38 H8 Q4 38 4 34 V10 Q4 6 8 6 Z" fill={`url(#truck-body-${color})`} />
+        <rect x="8" y="10" width="20" height="12" rx="2" fill="#1a2030" opacity="0.55" />
+        <rect x="10" y="12" width="8" height="7" rx="1" fill="#fff" opacity="0.1" />
+        <path d="M4 38 H32 Q34 38 34 42 V50 Q34 54 30 54 H6 Q2 54 2 50 V42 Q2 38 4 38 Z" fill={darken(color, 0.1)} />
+        <rect x="2" y="52" width="32" height="7" rx="2" fill="#2d3748" />
+        <rect x="30" y="42" width="3" height="5" rx="1" fill="#CBD5E0" opacity="0.7" />
+        <rect x="3" y="42" width="3" height="5" rx="1" fill="#CBD5E0" opacity="0.7" />
+        <CarWheels cy={60} wheelCls={wheelCls} />
+        <CarLights direction={direction} variant="truck" />
       </svg>
     );
   }
 
   if (variant === "suv") {
     return (
-      <svg viewBox="0 0 40 68" width={w} height={h} style={{ transform: flip }} className={`drop-shadow-lg ${motionCls}`}>
-        <CarShadow w={40} h={68} />
-        <rect x="4" y="10" width="32" height="38" rx="8" fill={color} />
-        <rect x="8" y="14" width="24" height="14" rx="3" fill="#1a1a2e" opacity="0.45" />
-        <rect x="10" y="16" width="8" height="8" rx="1" fill="#fff" opacity="0.1" />
-        <rect x="6" y="44" width="28" height="10" rx="2" fill="#2d3748" />
-        <g className={wheelCls}>
-          <circle cx="11" cy="56" r="5" fill="#1a1a1a" />
-          <circle cx="29" cy="56" r="5" fill="#1a1a1a" />
-          <circle cx="11" cy="56" r="2" fill="#A0AEC0" />
-          <circle cx="29" cy="56" r="2" fill="#A0AEC0" />
-        </g>
-        <CarHeadlights x={12} y={direction === "down" ? 8 : 58} facing={direction} />
-        <rect x="34" y="30" width="3" height="5" rx="1" fill="#F6E05E" opacity="0.9" />
+      <svg viewBox="0 0 36 64" width={w} height={h} style={{ transform: flip }} className={`drop-shadow-lg ${motionCls}`}>
+        <defs>
+          <linearGradient id={`suv-body-${color}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={darken(color)} />
+            <stop offset="45%" stopColor={color} />
+            <stop offset="100%" stopColor={darken(color, 0.18)} />
+          </linearGradient>
+          <linearGradient id={`suv-glass-${color}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3d4f6a" />
+            <stop offset="100%" stopColor="#1a2438" />
+          </linearGradient>
+        </defs>
+        <CarShadow w={36} h={64} />
+        <path d="M6 14 Q6 8 12 8 H24 Q30 8 30 14 V42 Q30 48 24 48 H12 Q6 48 6 42 Z" fill={`url(#suv-body-${color})`} />
+        <path d="M10 14 H26 Q28 14 28 18 V26 H8 V18 Q8 14 10 14 Z" fill={`url(#suv-glass-${color})`} opacity="0.85" />
+        <rect x="11" y="16" width="6" height="5" rx="1" fill="#fff" opacity="0.12" />
+        <rect x="5" y="46" width="26" height="6" rx="2" fill="#2d3748" />
+        <rect x="29" y="28" width="2.5" height="4" rx="0.5" fill="#CBD5E0" />
+        <rect x="4.5" y="28" width="2.5" height="4" rx="0.5" fill="#CBD5E0" />
+        <ellipse cx="18" cy="12" rx="8" ry="2" fill="#fff" opacity="0.08" />
+        <CarWheels cy={54} wheelCls={wheelCls} />
+        <CarLights direction={direction} variant="suv" />
       </svg>
     );
   }
 
   return (
     <svg viewBox="0 0 36 64" width={w} height={h} style={{ transform: flip }} className={`drop-shadow-lg ${motionCls}`}>
+      <defs>
+        <linearGradient id={`sedan-body-${color}`} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={darken(color, 0.12)} />
+          <stop offset="35%" stopColor={color} />
+          <stop offset="100%" stopColor={darken(color, 0.22)} />
+        </linearGradient>
+        <linearGradient id={`sedan-glass-${color}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#445570" />
+          <stop offset="100%" stopColor="#1a2438" />
+        </linearGradient>
+      </defs>
       <CarShadow w={36} h={64} />
-      <rect x="4" y="8" width="28" height="36" rx="7" fill={color} />
-      <rect x="8" y="12" width="20" height="12" rx="2" fill="#1a1a2e" opacity="0.5" />
-      <rect x="10" y="14" width="7" height="6" rx="1" fill="#fff" opacity="0.12" />
-      <path d="M6 40 H30" stroke="#000" opacity="0.12" strokeWidth="1" />
-      <rect x="6" y="42" width="24" height="8" rx="2" fill="#2d3748" />
-      <g className={wheelCls}>
-        <circle cx="10" cy="54" r="5" fill="#1a1a1a" />
-        <circle cx="26" cy="54" r="5" fill="#1a1a1a" />
-        <circle cx="10" cy="54" r="2" fill="#A0AEC0" />
-        <circle cx="26" cy="54" r="2" fill="#A0AEC0" />
-      </g>
-      <CarHeadlights x={10} y={direction === "down" ? 6 : 56} facing={direction} />
-      <rect x="30" y="22" width="3" height="4" rx="1" fill="#F6E05E" />
+      <path d="M8 12 Q8 6 14 6 H22 Q28 6 28 12 V40 Q28 46 22 46 H14 Q8 46 8 40 Z" fill={`url(#sedan-body-${color})`} />
+      <path d="M11 12 H25 Q27 12 27 16 V24 H9 V16 Q9 12 11 12 Z" fill={`url(#sedan-glass-${color})`} opacity="0.88" />
+      <rect x="12" y="14" width="5" height="5" rx="1" fill="#fff" opacity="0.14" />
+      <path d="M9 40 H27" stroke="#000" opacity="0.1" strokeWidth="0.8" />
+      <rect x="7" y="42" width="22" height="6" rx="2" fill="#2d3748" />
+      <rect x="27.5" y="24" width="2" height="3.5" rx="0.5" fill="#CBD5E0" opacity="0.8" />
+      <rect x="6.5" y="24" width="2" height="3.5" rx="0.5" fill="#CBD5E0" opacity="0.8" />
+      <ellipse cx="18" cy="10" rx="7" ry="1.8" fill="#fff" opacity="0.1" />
+      <rect x="12" y="44" width="12" height="2" rx="0.5" fill="#1a202c" opacity="0.5" />
+      <CarWheels cy={52} wheelCls={wheelCls} />
+      <CarLights direction={direction} variant="sedan" />
     </svg>
   );
 }

@@ -35,12 +35,14 @@ const RACERS = [
   { id: 6, name: "Phantom", body: "#4A1A38", coat: "#7A2A5A", mane: "#280A1E", silk: "#F9A8D4", num: "6" },
 ];
 
-const CAMERAS: { id: CameraAngle; label: string }[] = [
-  { id: "side", label: "Side" },
-  { id: "front", label: "Chase" },
-  { id: "aerial", label: "Aerial" },
-  { id: "finish", label: "Finish" },
+const CAMERAS: { id: CameraAngle; label: string; mobileLabel?: string }[] = [
+  { id: "side", label: "Side", mobileLabel: "Track" },
+  { id: "front", label: "Chase", mobileLabel: "Lanes" },
+  { id: "aerial", label: "Aerial", mobileLabel: "Aerial" },
+  { id: "finish", label: "Finish", mobileLabel: "Finish" },
 ];
+
+const MOBILE_CAMERAS: CameraAngle[] = ["front", "side", "finish"];
 
 type RaceResult = {
   betId: number; won: boolean; winnerRacerId: number; finishOrder: number[];
@@ -59,7 +61,7 @@ export default function RacePage() {
   const [racing, setRacing] = useState(false);
   const [result, setResult] = useState<RaceResult | null>(null);
   const [progress, setProgress] = useState<RacerProgress[]>(RACERS.map(r => ({ racerId: r.id, progress: 0, done: false })));
-  const [camera, setCamera] = useState<CameraAngle>("side");
+  const [camera, setCamera] = useState<CameraAngle>(() => (typeof window !== "undefined" && window.innerWidth < 768 ? "front" : "side"));
   const [cameraX, setCameraX] = useState(0);
   const animRef = useRef<number | null>(null);
   const startRef = useRef(0);
@@ -71,11 +73,17 @@ export default function RacePage() {
     resultRef.current = null;
     setProgress(RACERS.map(r => ({ racerId: r.id, progress: 0, done: false })));
     setCameraX(0);
-    setCamera("side");
+    setCamera(isMobile ? "front" : "side");
     gallopStarted.current = false;
     stopHorseGallopLoop();
     stopCrowdAmbience();
-  }, []);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (isMobile && camera === "aerial") setCamera("front");
+  }, [isMobile, camera]);
+
+  const visibleCameras = isMobile ? CAMERAS.filter(c => MOBILE_CAMERAS.includes(c.id)) : CAMERAS;
 
   async function runRace() {
     if (!isAuthenticated) { open("login"); return; }
@@ -84,6 +92,7 @@ export default function RacePage() {
     if (isNaN(amt) || amt <= 0) { toast({ title: "Invalid bet", variant: "destructive" }); return; }
     resetRace();
     setRacing(true);
+    if (isMobile) setCamera("front");
 
     const token = getToken();
     let res: RaceResult;
@@ -158,6 +167,7 @@ export default function RacePage() {
     progress,
     racing,
     selectedRacer,
+    compact: isMobile,
   };
 
   function renderCamera() {
@@ -183,12 +193,12 @@ export default function RacePage() {
           <Video className="w-3 h-3" /> Camera
         </div>
         <div className="flex gap-1 flex-wrap justify-end">
-          {CAMERAS.map(c => (
+          {visibleCameras.map(c => (
             <button key={c.id} type="button"
               onClick={() => setCamera(c.id)}
               disabled={c.id === "finish" && !result && !racing}
               className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-all ${camera === c.id ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary/60 text-muted-foreground hover:text-foreground"} disabled:opacity-40`}>
-              {c.label}
+              {isMobile ? (c.mobileLabel ?? c.label) : c.label}
             </button>
           ))}
         </div>
@@ -262,7 +272,8 @@ export default function RacePage() {
               compact ? "flex-col p-1.5 min-w-[52px] text-[9px]" : "gap-1.5 p-2 text-xs"
             } ${selectedRacer === r.id ? "border-2" : "border-border/50 hover:border-border bg-secondary/30"}`}
             style={selectedRacer === r.id ? { borderColor: r.silk, backgroundColor: `${r.silk}18` } : undefined}>
-            <DerbyHorse r={r} gallop={false} scale={compact ? 0.42 : 0.55} />
+            <DerbyHorse r={r} gallop={false} scale={compact ? 0.48 : 0.55} showBadge />
+            <span className={`font-mono font-black ${compact ? "text-[8px]" : "text-[10px]"}`} style={{ color: r.silk }}>#{r.num}</span>
             <span className={compact ? "truncate max-w-[48px]" : ""}>{r.name}</span>
           </button>
         ))}

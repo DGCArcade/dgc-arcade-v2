@@ -65,31 +65,51 @@ function drawChicken(g: PIXI.Graphics, scale = 1) {
 function drawCar(g: PIXI.Graphics, color: number, variant: number, scale = 1) {
   g.clear();
   const truck = variant % 3 === 2;
+  const suv = variant % 3 === 1;
+  const darken = (c: number, f = 0.85) => {
+    const r = ((c >> 16) & 0xff) * f;
+    const gr = ((c >> 8) & 0xff) * f;
+    const b = (c & 0xff) * f;
+    return (r << 16) | (gr << 8) | b;
+  };
+
   if (truck) {
-    g.roundRect(-15 * scale, -30 * scale, 30 * scale, 38 * scale, 5 * scale);
+    g.roundRect(-14 * scale, -28 * scale, 28 * scale, 32 * scale, 4 * scale);
     g.fill(color);
-    g.roundRect(-13 * scale, -26 * scale, 26 * scale, 15 * scale, 3 * scale);
-    g.fill({ color: 0x111827, alpha: 0.5 });
-    g.roundRect(-17 * scale, 6 * scale, 34 * scale, 20 * scale, 3 * scale);
-    g.fill({ color, alpha: 0.88 });
-    g.circle(-11 * scale, 28 * scale, 6 * scale);
+    g.roundRect(-12 * scale, -24 * scale, 24 * scale, 12 * scale, 2 * scale);
+    g.fill({ color: 0x111827, alpha: 0.55 });
+    g.roundRect(-16 * scale, 2 * scale, 32 * scale, 18 * scale, 3 * scale);
+    g.fill(darken(color));
+    g.roundRect(-14 * scale, 18 * scale, 28 * scale, 6 * scale, 2 * scale);
+    g.fill(0x2d3748);
+    g.circle(-9 * scale, 26 * scale, 5.5 * scale);
     g.fill(0x111111);
-    g.circle(11 * scale, 28 * scale, 6 * scale);
+    g.circle(9 * scale, 26 * scale, 5.5 * scale);
     g.fill(0x111111);
+    g.roundRect(10 * scale, 4 * scale, 3 * scale, 4 * scale, 1);
+    g.fill(0xfbbf24);
     return;
   }
-  g.roundRect(-15 * scale, -22 * scale, 30 * scale, 40 * scale, 8 * scale);
+
+  const bodyH = suv ? 36 : 34;
+  g.roundRect(-14 * scale, -20 * scale, 28 * scale, bodyH * scale, (suv ? 7 : 6) * scale);
   g.fill(color);
-  g.roundRect(-11 * scale, -18 * scale, 22 * scale, 14 * scale, 3 * scale);
-  g.fill({ color: 0x111827, alpha: 0.5 });
-  g.roundRect(-13 * scale, 16 * scale, 26 * scale, 10 * scale, 2 * scale);
+  g.roundRect(-11 * scale, -16 * scale, 22 * scale, 12 * scale, 3 * scale);
+  g.fill({ color: 0x1a2438, alpha: 0.75 });
+  g.roundRect(-12 * scale, 14 * scale, 24 * scale, 8 * scale, 2 * scale);
   g.fill(0x1f2937);
-  g.circle(-9 * scale, 30 * scale, 6 * scale);
+  g.circle(-8 * scale, 24 * scale, 5.5 * scale);
   g.fill(0x111111);
-  g.circle(9 * scale, 30 * scale, 6 * scale);
+  g.circle(8 * scale, 24 * scale, 5.5 * scale);
   g.fill(0x111111);
-  g.roundRect(12 * scale, 4 * scale, 4 * scale, 6 * scale, 1);
-  g.fill(0xfbbf24);
+  g.circle(-8 * scale, 24 * scale, 2 * scale);
+  g.fill(0x718096);
+  g.circle(8 * scale, 24 * scale, 2 * scale);
+  g.fill(0x718096);
+  g.roundRect(10 * scale, -2 * scale, 3 * scale, 5 * scale, 1);
+  g.fill(0xfde68a);
+  g.ellipse(0, -18 * scale, 8 * scale, 2 * scale);
+  g.fill({ color: 0xffffff, alpha: 0.12 });
 }
 
 function drawBarrier(g: PIXI.Graphics) {

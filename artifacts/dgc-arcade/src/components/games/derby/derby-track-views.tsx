@@ -1,5 +1,5 @@
 import { Trophy } from "lucide-react";
-import { DerbyHorse, type RacerDef } from "./derby-horse";
+import { DerbyHorse, HorseSilkBadge, type RacerDef } from "./derby-horse";
 
 export type RacerProgress = { racerId: number; progress: number; done: boolean };
 export type CameraAngle = "side" | "front" | "aerial" | "finish";
@@ -8,6 +8,33 @@ const TRACK_LEN = 100;
 const LANE_COUNT = 6;
 /** Uniform vertical lane slots — every horse shares the same X at the gate */
 const LANE_BOTTOMS = [2, 14, 26, 38, 50, 62];
+const LANE_BOTTOMS_MOBILE = [4, 16, 28, 40, 52, 64];
+
+function HorseRacerLabel({
+  r,
+  isMyPick,
+  compact,
+}: {
+  r: RacerDef;
+  isMyPick: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`flex items-center gap-0.5 mb-0.5 ${compact ? "scale-90" : ""}`}>
+      <HorseSilkBadge r={r} size={compact ? "xs" : "sm"} highlight={isMyPick} />
+      {!compact && (
+        <span className="text-[7px] font-bold text-white/90 drop-shadow-[0_1px_2px_#000] max-w-[36px] truncate">
+          {r.name}
+        </span>
+      )}
+      {isMyPick && (
+        <span className="text-[6px] font-black uppercase text-yellow-300 bg-black/50 px-1 rounded border border-yellow-400/50">
+          YOU
+        </span>
+      )}
+    </div>
+  );
+}
 
 function SkyAndHorizon() {
   return (
@@ -36,6 +63,7 @@ export function DerbySideView({
   selectedRacer,
   winnerId,
   showResult,
+  compact = false,
 }: {
   racers: RacerDef[];
   progress: RacerProgress[];
@@ -44,14 +72,35 @@ export function DerbySideView({
   selectedRacer: number | null;
   winnerId?: number;
   showResult: boolean;
+  /** Mobile/narrow viewport — taller lanes, visible labels, gate below horses */
+  compact?: boolean;
 }) {
   const atGate = !racing && progress.every(p => p.progress < 1);
   const gateOpening = racing && progress.every(p => p.progress < 2);
+  const laneBottoms = compact ? LANE_BOTTOMS_MOBILE : LANE_BOTTOMS;
+  const horseScale = compact ? 0.82 : 1;
 
   return (
     <div className="relative h-full w-full overflow-hidden derby-side-scene">
       <SkyAndHorizon />
       <CrowdSilhouette animated={racing} />
+
+      {/* Mobile: lineup legend so players know their horse before the gate opens */}
+      {compact && atGate && selectedRacer && (
+        <div className="absolute top-1 left-1 right-1 z-30 flex items-center justify-center gap-1.5 px-2 py-1 rounded-md bg-black/55 border border-white/10 backdrop-blur-sm">
+          <span className="text-[8px] font-bold uppercase text-white/60 shrink-0">Your pick</span>
+          {(() => {
+            const pick = racers.find(x => x.id === selectedRacer);
+            return pick ? (
+              <>
+                <HorseSilkBadge r={pick} size="sm" highlight />
+                <span className="text-[10px] font-black text-white truncate">{pick.name}</span>
+                <span className="text-[8px] text-white/50">Lane {pick.id}</span>
+              </>
+            ) : null;
+          })()}
+        </div>
+      )}
 
       {/* Distant hills */}
       <div className="absolute bottom-[36%] left-0 right-0 h-20 bg-[#5A8F45] opacity-45"
@@ -66,8 +115,8 @@ export function DerbySideView({
       {/* Track surface — taller */}
       <div className="absolute bottom-0 left-0 right-0 h-[38%] bg-gradient-to-b from-[#C9A66B] via-[#A8844E] to-[#5C4028]" />
       {/* Lane stripes */}
-      {LANE_BOTTOMS.map((b, i) => (
-        <div key={i} className="absolute left-0 right-0 h-px bg-white/12" style={{ bottom: `${b + 10}%` }} />
+      {laneBottoms.map((b, i) => (
+        <div key={i} className="absolute left-0 right-0 h-px bg-white/12" style={{ bottom: `${b + 8}%` }} />
       ))}
       {/* Inner rail */}
       <div className="absolute bottom-[24%] left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#FFD700]/60 to-transparent shadow-sm" />
@@ -100,19 +149,19 @@ export function DerbySideView({
           <span className="text-[11px] font-black text-white uppercase tracking-widest drop-shadow mt-1">Finish</span>
         </div>
 
-        {/* Starting gate — opens when race begins */}
+        {/* Starting gate — stall doors at leg height; horses render in front */}
         {(atGate || gateOpening) && (
-          <div className={`absolute left-[0.5%] bottom-0 flex flex-col items-start z-20 ${gateOpening ? "derby-gate-open" : ""}`}>
+          <div className={`absolute left-[0.5%] bottom-0 flex flex-col items-start z-[8] pointer-events-none ${gateOpening ? "derby-gate-open" : ""}`}>
             <div className="flex gap-px">
               {Array.from({ length: LANE_COUNT }, (_, i) => (
                 <div
                   key={i}
-                  className={`w-4 h-16 bg-gradient-to-b from-[#A0522D] to-[#5C3317] border border-[#FFD700]/50 rounded-t-sm shadow-inner derby-gate-door`}
+                  className={`${compact ? "w-3 h-10" : "w-4 h-12"} bg-gradient-to-b from-[#A0522D] to-[#5C3317] border border-[#FFD700]/50 rounded-t-sm shadow-inner derby-gate-door opacity-90`}
                   style={{ animationDelay: `${i * 0.04}s` }}
                 />
               ))}
             </div>
-            <span className="text-[9px] font-black text-white/90 uppercase tracking-widest mt-1 ml-1 drop-shadow">Start</span>
+            <span className="text-[8px] font-black text-white/80 uppercase tracking-widest mt-0.5 ml-1 drop-shadow">Start</span>
           </div>
         )}
 
@@ -131,23 +180,19 @@ export function DerbySideView({
               className="absolute flex items-end justify-center"
               style={{
                 left: `${left}%`,
-                bottom: `${LANE_BOTTOMS[lane]}%`,
-                width: "7%",
-                zIndex: 10 + lane,
+                bottom: `${laneBottoms[lane]}%`,
+                width: compact ? "9%" : "7%",
+                zIndex: 12 + lane,
               }}
             >
               <div className="relative flex flex-col items-center">
-                {isMyPick && (
-                  <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[8px] font-black uppercase text-yellow-300 drop-shadow-[0_1px_3px_#000] whitespace-nowrap px-1.5 py-0.5 rounded bg-black/40 border border-yellow-400/40">
-                    YOU
-                  </span>
-                )}
+                <HorseRacerLabel r={r} isMyPick={isMyPick} compact={compact} />
                 <div className={`relative ${isMyPick ? "derby-pick-ring" : ""} ${isWinner ? "brightness-110" : ""} ${gallop ? "derby-horse-bob" : ""}`}>
-                  <DerbyHorse r={r} gallop={gallop} scale={1} />
+                  <DerbyHorse r={r} gallop={gallop} scale={horseScale} showBadge={false} />
                   {gallop && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-2 derby-dust-puff rounded-full" />}
                 </div>
                 {isWinner && (
-                  <Trophy className="absolute -top-3 -right-4 w-5 h-5 text-yellow-400 animate-bounce shrink-0 drop-shadow" />
+                  <Trophy className="absolute -top-1 -right-3 w-4 h-4 text-yellow-400 animate-bounce shrink-0 drop-shadow" />
                 )}
               </div>
             </div>
@@ -166,11 +211,13 @@ export function DerbyFrontChaseView({
   progress,
   racing,
   selectedRacer,
+  compact = false,
 }: {
   racers: RacerDef[];
   progress: RacerProgress[];
   racing: boolean;
   selectedRacer: number | null;
+  compact?: boolean;
 }) {
   return (
     <div className="relative h-full w-full overflow-hidden derby-front-scene">
@@ -202,9 +249,9 @@ export function DerbyFrontChaseView({
           const gallop = racing && !p?.done;
           const isMyPick = r.id === selectedRacer;
           const atGate = prog < 0.03;
-          const scale = atGate ? 0.68 : 0.68 + prog * 0.75;
-          const bottom = atGate ? 8 : 8 + prog * 32;
-          const left = 8 + laneIdx * 14;
+          const scale = atGate ? (compact ? 0.75 : 0.68) : (compact ? 0.75 : 0.68) + prog * 0.75;
+          const bottom = atGate ? (compact ? 10 : 8) : (compact ? 10 : 8) + prog * 32;
+          const left = compact ? 4 + laneIdx * 15 : 8 + laneIdx * 14;
 
           return (
             <div key={r.id} className="absolute flex flex-col items-center transition-none"
@@ -215,13 +262,10 @@ export function DerbyFrontChaseView({
                 zIndex: Math.round(prog * 100) + laneIdx,
                 opacity: atGate ? 1 : 0.85 + prog * 0.15,
               }}>
-              {isMyPick && (
-                <span className="text-[7px] font-black text-yellow-300 mb-0.5 drop-shadow px-1 rounded bg-black/30 border border-yellow-400/30">YOU</span>
-              )}
+              <HorseRacerLabel r={r} isMyPick={isMyPick} compact />
               <div className={gallop ? "derby-horse-bob" : ""}>
                 <DerbyHorse r={r} gallop={gallop} view="front-chase" scale={1} />
               </div>
-              <span className="text-[8px] font-mono font-bold text-white/80 mt-0.5">#{r.num}</span>
             </div>
           );
         })}
@@ -250,11 +294,13 @@ export function DerbyAerialView({
   progress,
   racing,
   selectedRacer,
+  compact = false,
 }: {
   racers: RacerDef[];
   progress: RacerProgress[];
   racing: boolean;
   selectedRacer: number | null;
+  compact?: boolean;
 }) {
   return (
     <div className="relative h-full w-full overflow-hidden derby-aerial-scene bg-[#3D6B35]">
@@ -305,12 +351,13 @@ export function DerbyAerialView({
               zIndex: 10 + lane,
             }}>
             <div style={{ transform: `rotate(${-pos.rot}deg)` }} className="relative flex flex-col items-center">
-              {isMyPick && (
-                <div className="text-[7px] font-black text-yellow-300 text-center mb-0.5 drop-shadow px-1 rounded bg-black/30">YOU</div>
-              )}
+              <HorseSilkBadge r={r} size="xs" highlight={isMyPick} />
               <div className={isMyPick ? "derby-pick-ring rounded-full" : ""}>
-                <DerbyHorse r={r} gallop={gallop} view="top" scale={0.95} />
+                <DerbyHorse r={r} gallop={gallop} view="top" scale={compact ? 0.8 : 0.95} />
               </div>
+              {compact && (
+                <span className="text-[6px] font-bold text-white drop-shadow mt-0.5">{r.num}</span>
+              )}
             </div>
           </div>
         );

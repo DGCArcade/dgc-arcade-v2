@@ -2409,6 +2409,15 @@ body {
     height: 100% !important;
   }
 
+  .race-mobile-track-wrap .derby-pick-ring::after {
+    inset: -2px;
+    border-width: 1.5px;
+  }
+
+  .race-mobile-track-wrap .derby-gate-door {
+    opacity: 0.75;
+  }
+
   .race-mobile-controls {
     flex: 0 0 auto;
     padding: 6px;
