@@ -37,6 +37,47 @@ export function clearAuthToken(): void {
   localStorage.removeItem("dgc_token");
 }
 
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError;
+}
+
+export function getApiErrorStatus(error: unknown): number | undefined {
+  if (isApiError(error)) return error.status;
+  const legacy = error as { response?: { status?: number }; status?: number };
+  return legacy?.response?.status ?? legacy?.status;
+}
+
+const AUTH_EXPIRED_EVENT = "dgc:auth-expired";
+const AUTH_LOGIN_EVENT = "dgc:auth-login";
+let lastSessionExpiredAt = 0;
+
+/** Clear stored session after 401 — debounced to avoid storms. */
+export function notifySessionExpired(): void {
+  if (typeof window === "undefined") return;
+  const now = Date.now();
+  if (now - lastSessionExpiredAt < 2000) return;
+  lastSessionExpiredAt = now;
+  clearAuthToken();
+  window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
+}
+
+export function notifyAuthLogin(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(AUTH_LOGIN_EVENT));
+}
+
+export function onSessionExpired(listener: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(AUTH_EXPIRED_EVENT, listener);
+  return () => window.removeEventListener(AUTH_EXPIRED_EVENT, listener);
+}
+
+export function onAuthLogin(listener: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(AUTH_LOGIN_EVENT, listener);
+  return () => window.removeEventListener(AUTH_LOGIN_EVENT, listener);
+}
+
 // Automatically use the token from localStorage on every request
 setAuthTokenGetter(() => {
   return typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
@@ -377,6 +418,9 @@ export async function customFetch<T = unknown>(
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
+    if (response.status === 401 && headers.has("authorization")) {
+      notifySessionExpired();
+    }
     throw new ApiError(response, errorData, requestInfo);
   }
 

@@ -32,11 +32,11 @@ const CryptoNativePage = lazy(() => import("./pages/crypto-native"));
 
 // Gate: if user is logged in but email not verified, block game access and force verification
 function EmailVerifiedGate({ children }: { children: ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, isInitialAuthLoading } = useAuth();
   const fired = useRef(false);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isInitialAuthLoading) return;
     const unverified = user && !(user as any).emailVerified;
     if (unverified && !fired.current) {
       fired.current = true;
@@ -45,9 +45,9 @@ function EmailVerifiedGate({ children }: { children: ReactNode }) {
     if (!unverified) {
       fired.current = false;
     }
-  }, [user, isLoading]);
+  }, [user, isInitialAuthLoading]);
 
-  if (isLoading) {
+  if (isInitialAuthLoading) {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-primary" />
