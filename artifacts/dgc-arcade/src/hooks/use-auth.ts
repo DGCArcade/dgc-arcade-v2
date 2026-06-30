@@ -1,5 +1,13 @@
-import { useGetMe, getGetMeQueryKey, useLogout } from "@workspace/api-client-react";
-import { clearAuthToken } from "@workspace/api-client-react";
+import { useEffect, useState } from "react";
+import {
+  useGetMe,
+  getGetMeQueryKey,
+  useLogout,
+  clearAuthToken,
+  getApiErrorStatus,
+  onSessionExpired,
+  onAuthLogin,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthModal } from "./use-auth-modal";
 
@@ -10,35 +18,64 @@ export interface CryptoBalance {
   usdValue: number;
 }
 
+function readHasToken(): boolean {
+  return typeof localStorage !== "undefined" && !!localStorage.getItem("dgc_token");
+}
+
 export function useAuth() {
   const queryClient = useQueryClient();
-  const { data: user, isLoading } = useGetMe({
+  const [hasToken, setHasToken] = useState(readHasToken);
+
+  useEffect(() => {
+    const syncToken = () => setHasToken(readHasToken());
+    const clearSession = () => {
+      clearAuthToken();
+      queryClient.setQueryData(getGetMeQueryKey(), null);
+      queryClient.cancelQueries({ queryKey: getGetMeQueryKey() });
+      setHasToken(false);
+    };
+    const unsubExpired = onSessionExpired(clearSession);
+    const unsubLogin = onAuthLogin(syncToken);
+    return () => {
+      unsubExpired();
+      unsubLogin();
+    };
+  }, [queryClient]);
+
+  const { data: user, isLoading, isPending, isFetching, isError } = useGetMe({
     query: {
       queryKey: getGetMeQueryKey(),
-      retry: (count, error: any) => {
-        // Only retry if it's a network error, not a 401/403
-        if (error?.response?.status === 401 || error?.response?.status === 403) return false;
-        return count < 2;
+      enabled: hasToken,
+      retry: (count, error) => {
+        const status = getApiErrorStatus(error);
+        if (status === 401 || status === 403) return false;
+        return count < 1;
       },
-      staleTime: 30000, // Keep user data fresh for 30s to prevent flickering on refresh
-      gcTime: 1000 * 60 * 60, // Cache user data for 1 hour
-      refetchInterval: 30_000,
+      staleTime: 30_000,
+      gcTime: 1000 * 60 * 60,
+      refetchInterval: (query) => {
+        if (!readHasToken()) return false;
+        if (query.state.status === "error") return false;
+        if (!query.state.data) return false;
+        return 30_000;
+      },
       refetchOnWindowFocus: false,
-      refetchOnMount: false, // Don't refetch on every mount if we have cached data
+      refetchOnMount: false,
+      refetchOnReconnect: false,
     },
   });
 
   const logoutMutation = useLogout();
-  
   const authModal = useAuthModal();
 
   const logout = () => {
     logoutMutation.mutate(undefined, {
       onSettled: () => {
         clearAuthToken();
-        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+        queryClient.cancelQueries({ queryKey: getGetMeQueryKey() });
         queryClient.setQueryData(getGetMeQueryKey(), null);
-      }
+        setHasToken(false);
+      },
     });
   };
 
@@ -55,10 +92,13 @@ export function useAuth() {
   };
 
   const cryptoBalances: CryptoBalance[] = (user as any)?.cryptoBalances ?? [];
+  const isInitialAuthLoading = hasToken && isPending && !user && !isError;
 
   return {
     user: user ?? null,
-    isLoading,
+    isLoading: isInitialAuthLoading,
+    isInitialAuthLoading,
+    isFetching,
     isAuthenticated: !!user,
     logout,
     requireAuth,

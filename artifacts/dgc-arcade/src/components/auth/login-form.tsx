@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useLogin, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useLogin, getGetMeQueryKey, notifyAuthLogin } from "@workspace/api-client-react";
 import { setAuthToken } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -37,6 +37,7 @@ export function LoginForm() {
       onSuccess: (result) => {
         setAuthToken(result.token);
         queryClient.setQueryData(getGetMeQueryKey(), result.user);
+        notifyAuthLogin();
         void flushPendingGeo();
         toast({ title: "Welcome back", description: "You have successfully logged in." });
         authModal.close();

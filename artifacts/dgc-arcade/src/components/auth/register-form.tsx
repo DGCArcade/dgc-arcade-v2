@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useRegister, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useRegister, getGetMeQueryKey, notifyAuthLogin } from "@workspace/api-client-react";
 import { setAuthToken } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { flushPendingGeo } from "@/lib/geo-sync";
@@ -92,6 +92,7 @@ export function RegisterForm() {
       }
       setAuthToken(result.token);
       queryClient.setQueryData(getGetMeQueryKey(), result.user);
+      notifyAuthLogin();
       void flushPendingGeo();
       authModal.close();
       // Auto-open email verification modal immediately after signup

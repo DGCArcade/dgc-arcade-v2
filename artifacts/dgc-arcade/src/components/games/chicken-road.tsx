@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { getListBetsQueryKey } from "@workspace/api-client-react";
+import { getListBetsQueryKey, getGetMeQueryKey } from "@workspace/api-client-react";
 import type { Game } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -160,7 +160,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         playChickenSpawn();
         playChickenCluck();
         qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
-        qc.invalidateQueries({ queryKey: ["getMe"] });
+        qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
       } catch (err: unknown) {
         toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
       } finally {
@@ -265,7 +265,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
       playCrossSuccess();
       toast({ title: `Cashed out ${data.multiplier?.toFixed(2)}×`, description: `$${Number(data.payout).toFixed(2)}` });
       qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
-      qc.invalidateQueries({ queryKey: ["getMe"] });
+      qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
     } catch (err: unknown) {
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
     } finally {
