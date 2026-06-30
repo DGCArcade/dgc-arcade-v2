@@ -12,7 +12,7 @@ import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { formatCurrency } from "@/lib/format";
 import { ChevronLeft, Trophy, Zap, Video } from "lucide-react";
 import { ProvablyFairPanel } from "@/components/games/provably-fair-panel";
-import { startHorseGallopLoop, stopHorseGallopLoop, playRaceStartBugle, playRaceFinishCheer } from "@/lib/horse-gallop-sound";
+import { startHorseGallopLoop, stopHorseGallopLoop, playRaceStartBugle, playRaceFinishCheer, playGateOpenClang, startCrowdAmbience, stopCrowdAmbience } from "@/lib/horse-gallop-sound";
 import { DerbyHorse } from "@/components/games/derby/derby-horse";
 import {
   DerbySideView,
@@ -74,6 +74,7 @@ export default function RacePage() {
     setCamera("side");
     gallopStarted.current = false;
     stopHorseGallopLoop();
+    stopCrowdAmbience();
   }, []);
 
   async function runRace() {
@@ -106,13 +107,15 @@ export default function RacePage() {
 
     startRef.current = performance.now();
     playRaceStartBugle();
+    startCrowdAmbience();
 
-    const GATE_MS = 400;
+    const GATE_MS = 500;
 
     const tick = (now: number) => {
       const elapsed = now - startRef.current;
       if (elapsed > GATE_MS && !gallopStarted.current) {
         gallopStarted.current = true;
+        playGateOpenClang();
         startHorseGallopLoop();
       }
 
@@ -131,6 +134,7 @@ export default function RacePage() {
 
       if (next.every(p => p.done)) {
         stopHorseGallopLoop();
+        stopCrowdAmbience();
         playRaceFinishCheer();
         setResult(resultRef.current);
         setRacing(false);
@@ -146,6 +150,7 @@ export default function RacePage() {
   useEffect(() => () => {
     if (animRef.current) cancelAnimationFrame(animRef.current);
     stopHorseGallopLoop();
+    stopCrowdAmbience();
   }, []);
 
   const viewProps = {

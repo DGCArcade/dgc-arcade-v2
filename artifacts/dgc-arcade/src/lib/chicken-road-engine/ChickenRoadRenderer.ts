@@ -103,29 +103,52 @@ function drawBarrier(g: PIXI.Graphics) {
   }
 }
 
-function drawManhole(container: PIXI.Container, multiplier: number, state: LaneState) {
+function drawManhole(container: PIXI.Container, multiplier: number, state: LaneState, gameActive = true) {
   container.removeChildren();
   const lit = state === "past" || state === "current";
   const isCurrent = state === "current";
   const isBust = state === "bust";
+  const showEmber = gameActive && (state === "future" || state === "idle" || lit);
 
-  if (lit) {
+  if (showEmber) {
     const glow = new PIXI.Graphics();
-    glow.circle(0, 0, isCurrent ? 38 : 32);
-    glow.fill({ color: STAKE.fire, alpha: isCurrent ? 0.35 : 0.2 });
+    const glowR = isCurrent ? 38 : lit ? 32 : 26;
+    glow.circle(0, 0, glowR);
+    glow.fill({ color: STAKE.fire, alpha: isCurrent ? 0.38 : lit ? 0.22 : 0.12 });
     container.addChild(glow);
     const fire = new PIXI.Graphics();
-    fire.ellipse(0, -10, isCurrent ? 40 : 30, isCurrent ? 18 : 14);
-    fire.fill({ color: STAKE.fire, alpha: isCurrent ? 0.8 : 0.5 });
+    const fw = isCurrent ? 40 : lit ? 30 : 22;
+    const fh = isCurrent ? 18 : lit ? 14 : 10;
+    fire.ellipse(0, -10, fw, fh);
+    fire.fill({ color: STAKE.fire, alpha: isCurrent ? 0.85 : lit ? 0.5 : 0.28 });
     container.addChild(fire);
     gsap.to(fire.scale, {
-      x: 1.15,
-      y: 1.15,
-      duration: isCurrent ? 0.35 : 0.55,
+      x: isCurrent ? 1.2 : 1.1,
+      y: isCurrent ? 1.2 : 1.1,
+      duration: isCurrent ? 0.32 : 0.55,
       yoyo: true,
       repeat: -1,
       ease: "sine.inOut",
     });
+    if (isCurrent) {
+      for (let s = 0; s < 4; s++) {
+        const spark = new PIXI.Graphics();
+        spark.circle(0, 0, 2);
+        spark.fill({ color: 0xffcc00, alpha: 0.9 });
+        spark.x = (Math.random() - 0.5) * 20;
+        spark.y = -14;
+        container.addChild(spark);
+        gsap.to(spark, {
+          y: -28 - Math.random() * 12,
+          x: spark.x + (Math.random() - 0.5) * 16,
+          alpha: 0,
+          duration: 0.5 + Math.random() * 0.3,
+          repeat: -1,
+          delay: s * 0.15,
+          ease: "power2.out",
+        });
+      }
+    }
   }
 
   const cover = new PIXI.Graphics();
@@ -270,6 +293,8 @@ export class ChickenRoadRenderer {
       this.killLaneTweens();
       this.buildLanes(state);
       this.drawSkyline(state);
+    }
+    if (rebuild || this.ambientCars.length !== state.lanes) {
       this.startAmbientTraffic(state.lanes);
     }
     this.positionChicken(state);
@@ -339,7 +364,7 @@ export class ChickenRoadRenderer {
       const mult = multipliers[i] ?? 1;
       const manhole = new PIXI.Container();
       manhole.y = Math.min(manholeY, boardH - 72);
-      drawManhole(manhole, mult, laneState);
+      drawManhole(manhole, mult, laneState, state.status === "idle" || state.status === "active");
       lane.addChild(manhole);
 
       if (state.bustLane === i && state.status === "lost") {
@@ -469,23 +494,27 @@ export class ChickenRoadRenderer {
     this.ambientCars = [];
 
     const { laneWidth, sidewalkWidth } = CHICKEN_ROAD_LAYOUT;
-    for (let i = 0; i < Math.min(lanes, 8); i++) {
+    const boardH = this.app?.screen.height ?? 500;
+
+    for (let i = 0; i < lanes; i++) {
       const carWrap = new PIXI.Container();
       const car = new PIXI.Graphics();
-      drawCar(car, CAR_COLORS[i % CAR_COLORS.length], i + 2, 0.9);
+      drawCar(car, CAR_COLORS[i % CAR_COLORS.length], i + 2, 0.88);
       carWrap.addChild(car);
       carWrap.x = sidewalkWidth + i * laneWidth + laneWidth / 2;
-      carWrap.y = -80 - (i % 3) * 40;
-      carWrap.alpha = 0.55;
+      const goingDown = i % 2 === 0;
+      carWrap.y = goingDown ? -90 - (i % 4) * 30 : boardH + 50 + (i % 3) * 25;
+      carWrap.alpha = 0.62;
       this.world.addChild(carWrap);
       this.ambientCars.push(carWrap);
 
-      const boardH = this.app?.screen.height ?? 500;
+      const duration = 2.1 + (i % 5) * 0.38;
+      const delay = (i * 0.38) % duration;
       gsap.to(carWrap, {
-        y: boardH + 60,
-        duration: 2.2 + (i % 4) * 0.4,
+        y: goingDown ? boardH + 70 : -90,
+        duration,
         repeat: -1,
-        delay: i * 0.35,
+        delay,
         ease: "none",
       });
     }

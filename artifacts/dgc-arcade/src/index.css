@@ -535,6 +535,44 @@ body {
   background: repeating-linear-gradient(90deg, transparent 0, transparent 40px, rgba(255,255,255,0.08) 40px, rgba(255,255,255,0.08) 42px);
   animation: derby-speed-line 0.4s linear infinite;
 }
+@keyframes derby-crowd-wave-anim {
+  0%, 100% { transform: translateY(0); opacity: 0.35; }
+  50% { transform: translateY(-2px); opacity: 0.45; }
+}
+.derby-crowd-wave {
+  animation: derby-crowd-wave-anim 0.8s ease-in-out infinite;
+}
+@keyframes derby-gate-door-open {
+  0% { transform: rotateX(0deg); opacity: 1; }
+  100% { transform: rotateX(75deg) translateY(-8px); opacity: 0.15; }
+}
+.derby-gate-open .derby-gate-door {
+  transform-origin: bottom center;
+  animation: derby-gate-door-open 0.45s ease-in forwards;
+}
+@keyframes derby-horse-bob-anim {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.derby-horse-bob {
+  animation: derby-horse-bob-anim 0.21s ease-in-out infinite;
+}
+@keyframes derby-dust-puff-anim {
+  0% { transform: translateX(-50%) scale(0.6); opacity: 0.5; }
+  100% { transform: translateX(-50%) scale(1.4); opacity: 0; }
+}
+.derby-dust-puff {
+  background: radial-gradient(ellipse, rgba(139,105,20,0.6) 0%, transparent 70%);
+  animation: derby-dust-puff-anim 0.35s ease-out infinite;
+}
+@keyframes derby-track-motion-anim {
+  from { background-position: 0 0; }
+  to { background-position: 60px 0; }
+}
+.derby-track-motion {
+  background: repeating-linear-gradient(90deg, transparent 0, transparent 24px, rgba(255,255,255,0.04) 24px, rgba(255,255,255,0.04) 26px);
+  animation: derby-track-motion-anim 0.35s linear infinite;
+}
 @keyframes derby-lane-dash-move {
   from { transform: translateY(0); }
   to { transform: translateY(8px); }
@@ -618,6 +656,66 @@ body {
   background: radial-gradient(ellipse, #ffaa00 0%, #ff4400 35%, #ff0000 55%, transparent 75%);
   animation: cr-manhole-fire-anim 0.4s ease-in-out infinite;
 }
+@keyframes cr-manhole-ember-anim {
+  0%, 100% { opacity: 0.35; transform: translateX(-50%) scale(0.85); }
+  50% { opacity: 0.65; transform: translateX(-50%) scale(1); }
+}
+.cr-manhole-ember {
+  background: radial-gradient(ellipse, #ff7700 0%, #ff3300 50%, transparent 72%);
+  animation: cr-manhole-ember-anim 1.1s ease-in-out infinite;
+}
+@keyframes cr-manhole-sparks-anim {
+  0% { opacity: 0; transform: translateX(-50%) translateY(0) scale(0.5); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-18px) scale(1.2); }
+}
+.cr-manhole-sparks {
+  background: radial-gradient(circle, #ffdd00 0%, #ff6600 40%, transparent 70%);
+  animation: cr-manhole-sparks-anim 0.7s ease-out infinite;
+}
+/* Continuous ambient traffic — Stake-style always-on cars */
+@keyframes cr-car-ambient-down-anim {
+  0% { transform: translate(-50%, -130%); opacity: 0; }
+  6% { opacity: 0.75; }
+  94% { opacity: 0.75; }
+  100% { transform: translate(-50%, 230%); opacity: 0; }
+}
+@keyframes cr-car-ambient-up-anim {
+  0% { transform: translate(-50%, 230%); opacity: 0; }
+  6% { opacity: 0.75; }
+  94% { opacity: 0.75; }
+  100% { transform: translate(-50%, -130%); opacity: 0; }
+}
+.cr-car-ambient-down {
+  animation: cr-car-ambient-down-anim 2.8s linear infinite;
+  top: 0;
+  bottom: auto;
+  height: 100%;
+}
+.cr-car-ambient-up {
+  animation: cr-car-ambient-up-anim 2.8s linear infinite;
+  top: 0;
+  bottom: auto;
+  height: 100%;
+}
+@keyframes cr-car-headlight-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.5; }
+}
+.cr-car-headlight-glow {
+  animation: cr-car-headlight-pulse 1.8s ease-in-out infinite;
+}
+@keyframes cr-car-wheel-spin-anim {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.cr-car-wheel-spin {
+  transform-origin: center;
+  animation: cr-car-wheel-spin-anim 0.35s linear infinite;
+}
+.cr-car-ambient-motion {
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));
+}
 @keyframes cr-light-pulse {
   0%, 100% { filter: brightness(1); }
   50% { filter: brightness(1.6); }
@@ -630,8 +728,8 @@ body {
   scrollbar-color: rgba(255,255,255,0.2) transparent;
 }
 .cr-lane-active {
-  box-shadow: inset 0 0 24px rgba(59, 130, 246, 0.12);
-  background: #505a6a !important;
+  box-shadow: inset 0 0 24px rgba(74, 158, 255, 0.15);
+  background: linear-gradient(180deg, #4a5568 0%, #526178 50%, #4a5568 100%) !important;
 }
 
 /* ── Cover art: race horses ──────────────────────────────────────── */

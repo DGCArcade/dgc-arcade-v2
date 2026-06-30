@@ -21,32 +21,60 @@ export function ChickenSprite({ hopping, size = 52, facing = "right" }: { hoppin
 
 const CAR_PALETTE = ["#E74C3C", "#3498DB", "#9B59B6", "#2ECC71", "#F39C12", "#1ABC9C"];
 
+function CarShadow({ w, h }: { w: number; h: number }) {
+  return (
+    <ellipse cx={w / 2} cy={h - 2} rx={w * 0.38} ry={3} fill="#000" opacity="0.28" />
+  );
+}
+
+function CarHeadlights({ x, y, facing }: { x: number; y: number; facing: "up" | "down" }) {
+  const glow = facing === "down" ? y + 4 : y - 2;
+  return (
+    <>
+      <rect x={x} y={y} width="3" height="4" rx="1" fill="#FFF9C4" opacity="0.95" />
+      <rect x={x + 8} y={y} width="3" height="4" rx="1" fill="#FFF9C4" opacity="0.95" />
+      <ellipse cx={x + 1.5} cy={glow} rx="5" ry="3" fill="#F6E05E" opacity="0.35" className="cr-car-headlight-glow" />
+      <ellipse cx={x + 9.5} cy={glow} rx="5" ry="3" fill="#F6E05E" opacity="0.35" className="cr-car-headlight-glow" />
+    </>
+  );
+}
+
 export function CarSprite({
   color,
   variant = "sedan",
   size = 44,
   direction = "down",
+  ambient = false,
 }: {
   color: string;
   variant?: "sedan" | "suv" | "truck";
   size?: number;
   direction?: "up" | "down";
+  /** Continuous traffic loop — enables wheel spin + motion blur */
+  ambient?: boolean;
 }) {
   const flip = direction === "up" ? "scaleY(-1)" : undefined;
   const w = size * (variant === "truck" ? 0.7 : 0.62);
   const h = size;
+  const motionCls = ambient ? "cr-car-ambient-motion" : "";
+  const wheelCls = ambient ? "cr-car-wheel-spin" : "";
 
   if (variant === "truck") {
     return (
-      <svg viewBox="0 0 44 72" width={w} height={h} style={{ transform: flip }} className="drop-shadow-md">
+      <svg viewBox="0 0 44 72" width={w} height={h} style={{ transform: flip }} className={`drop-shadow-lg ${motionCls}`}>
+        <CarShadow w={44} h={72} />
         <rect x="6" y="4" width="32" height="36" rx="4" fill={color} />
-        <rect x="8" y="8" width="28" height="14" rx="2" fill="#1a1a2e" opacity="0.45" />
-        <rect x="4" y="38" width="36" height="18" rx="3" fill={color} filter="brightness(0.85)" />
+        <rect x="8" y="8" width="28" height="14" rx="2" fill="#1a1a2e" opacity="0.5" />
+        <rect x="10" y="10" width="10" height="8" rx="1" fill="#fff" opacity="0.12" />
+        <rect x="4" y="38" width="36" height="18" rx="3" fill={color} style={{ filter: "brightness(0.88)" }} />
         <rect x="2" y="52" width="40" height="8" rx="2" fill="#2d3748" />
-        <circle cx="12" cy="62" r="5" fill="#1a1a1a" />
-        <circle cx="32" cy="62" r="5" fill="#1a1a1a" />
-        <circle cx="12" cy="62" r="2" fill="#718096" />
-        <circle cx="32" cy="62" r="2" fill="#718096" />
+        <g className={wheelCls}>
+          <circle cx="12" cy="62" r="5" fill="#1a1a1a" />
+          <circle cx="32" cy="62" r="5" fill="#1a1a1a" />
+          <circle cx="12" cy="62" r="2" fill="#718096" />
+          <circle cx="32" cy="62" r="2" fill="#718096" />
+        </g>
+        <CarHeadlights x={14} y={direction === "down" ? 2 : 66} facing={direction} />
         <rect x="38" y="44" width="4" height="6" rx="1" fill="#F6E05E" />
       </svg>
     );
@@ -54,27 +82,39 @@ export function CarSprite({
 
   if (variant === "suv") {
     return (
-      <svg viewBox="0 0 40 68" width={w} height={h} style={{ transform: flip }} className="drop-shadow-md">
+      <svg viewBox="0 0 40 68" width={w} height={h} style={{ transform: flip }} className={`drop-shadow-lg ${motionCls}`}>
+        <CarShadow w={40} h={68} />
         <rect x="4" y="10" width="32" height="38" rx="8" fill={color} />
-        <rect x="8" y="14" width="24" height="14" rx="3" fill="#1a1a2e" opacity="0.4" />
+        <rect x="8" y="14" width="24" height="14" rx="3" fill="#1a1a2e" opacity="0.45" />
+        <rect x="10" y="16" width="8" height="8" rx="1" fill="#fff" opacity="0.1" />
         <rect x="6" y="44" width="28" height="10" rx="2" fill="#2d3748" />
-        <circle cx="11" cy="56" r="5" fill="#1a1a1a" />
-        <circle cx="29" cy="56" r="5" fill="#1a1a1a" />
+        <g className={wheelCls}>
+          <circle cx="11" cy="56" r="5" fill="#1a1a1a" />
+          <circle cx="29" cy="56" r="5" fill="#1a1a1a" />
+          <circle cx="11" cy="56" r="2" fill="#A0AEC0" />
+          <circle cx="29" cy="56" r="2" fill="#A0AEC0" />
+        </g>
+        <CarHeadlights x={12} y={direction === "down" ? 8 : 58} facing={direction} />
         <rect x="34" y="30" width="3" height="5" rx="1" fill="#F6E05E" opacity="0.9" />
       </svg>
     );
   }
 
   return (
-    <svg viewBox="0 0 36 64" width={w} height={h} style={{ transform: flip }} className="drop-shadow-md">
+    <svg viewBox="0 0 36 64" width={w} height={h} style={{ transform: flip }} className={`drop-shadow-lg ${motionCls}`}>
+      <CarShadow w={36} h={64} />
       <rect x="4" y="8" width="28" height="36" rx="7" fill={color} />
-      <rect x="8" y="12" width="20" height="12" rx="2" fill="#1a1a2e" opacity="0.45" />
-      <path d="M6 40 H30" stroke="#000" opacity="0.15" strokeWidth="1" />
+      <rect x="8" y="12" width="20" height="12" rx="2" fill="#1a1a2e" opacity="0.5" />
+      <rect x="10" y="14" width="7" height="6" rx="1" fill="#fff" opacity="0.12" />
+      <path d="M6 40 H30" stroke="#000" opacity="0.12" strokeWidth="1" />
       <rect x="6" y="42" width="24" height="8" rx="2" fill="#2d3748" />
-      <circle cx="10" cy="54" r="5" fill="#1a1a1a" />
-      <circle cx="26" cy="54" r="5" fill="#1a1a1a" />
-      <circle cx="10" cy="54" r="2" fill="#A0AEC0" />
-      <circle cx="26" cy="54" r="2" fill="#A0AEC0" />
+      <g className={wheelCls}>
+        <circle cx="10" cy="54" r="5" fill="#1a1a1a" />
+        <circle cx="26" cy="54" r="5" fill="#1a1a1a" />
+        <circle cx="10" cy="54" r="2" fill="#A0AEC0" />
+        <circle cx="26" cy="54" r="2" fill="#A0AEC0" />
+      </g>
+      <CarHeadlights x={10} y={direction === "down" ? 6 : 56} facing={direction} />
       <rect x="30" y="22" width="3" height="4" rx="1" fill="#F6E05E" />
     </svg>
   );
@@ -98,17 +138,30 @@ export function BarrierSprite({ size = 48 }: { size?: number }) {
 export function ManholeCover({
   multiplier,
   state,
+  showAmbientFire = true,
 }: {
   multiplier: number;
   state: "idle" | "past" | "current" | "future" | "bust";
+  /** Stake-style: manholes always glow with ember even before you cross */
+  showAmbientFire?: boolean;
 }) {
   const lit = state === "past" || state === "current";
   const isCurrent = state === "current";
+  const showEmber = showAmbientFire && (state === "idle" || state === "future" || lit);
 
   return (
     <div className="relative flex flex-col items-center">
-      {lit && (
-        <div className={`cr-manhole-fire absolute -top-3 left-1/2 -translate-x-1/2 w-14 h-8 rounded-full blur-md ${isCurrent ? "cr-fire-intense" : "opacity-70"}`} />
+      {showEmber && (
+        <div className={`absolute -top-3 left-1/2 -translate-x-1/2 rounded-full blur-md ${
+          isCurrent
+            ? "cr-manhole-fire cr-fire-intense w-16 h-10"
+            : lit
+              ? "cr-manhole-fire w-14 h-8 opacity-80"
+              : "cr-manhole-ember w-12 h-6"
+        }`} />
+      )}
+      {isCurrent && (
+        <div className="cr-manhole-sparks absolute -top-1 left-1/2 -translate-x-1/2 w-10 h-6 pointer-events-none" />
       )}
       <div className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center z-10 ${
         state === "bust" ? "bg-red-900/80 border-2 border-red-400" :
