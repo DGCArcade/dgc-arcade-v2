@@ -23,6 +23,12 @@ import {
   type CameraAngle,
   type RacerProgress,
 } from "@/components/games/derby/derby-track-views";
+import {
+  getAutoCamera,
+  getLeaderProgress,
+  getRacePhase,
+  type RacePhase,
+} from "@/components/games/derby/derby-broadcast";
 
 function getToken() { return typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null; }
 
@@ -63,11 +69,15 @@ export default function RacePage() {
   const [progress, setProgress] = useState<RacerProgress[]>(RACERS.map(r => ({ racerId: r.id, progress: 0, done: false })));
   const [camera, setCamera] = useState<CameraAngle>(() => (typeof window !== "undefined" && window.innerWidth < 768 ? "front" : "side"));
   const [cameraX, setCameraX] = useState(0);
+  const [racePhase, setRacePhase] = useState<RacePhase>("gate");
+  const [camFade, setCamFade] = useState(0);
   const animRef = useRef<number | null>(null);
   const startRef = useRef(0);
   const resultRef = useRef<RaceResult | null>(null);
   const gallopStarted = useRef(false);
   const cameraRef = useRef(0);
+  const manualCameraRef = useRef(false);
+  const lastAutoCamRef = useRef<CameraAngle | null>(null);
 
   const resetRace = useCallback(() => {
     setResult(null);
@@ -76,6 +86,9 @@ export default function RacePage() {
     setCameraX(0);
     cameraRef.current = 0;
     setCamera(isMobile ? "front" : "side");
+    setRacePhase("gate");
+    manualCameraRef.current = false;
+    lastAutoCamRef.current = null;
     gallopStarted.current = false;
     stopHorseGallopLoop();
     stopCrowdAmbience();
@@ -94,6 +107,8 @@ export default function RacePage() {
     if (isNaN(amt) || amt <= 0) { toast({ title: "Invalid bet", variant: "destructive" }); return; }
     resetRace();
     setRacing(true);
+    manualCameraRef.current = false;
+    lastAutoCamRef.current = null;
     if (isMobile) setCamera("front");
 
     const token = getToken();
@@ -120,9 +135,9 @@ export default function RacePage() {
     playRaceStartBugle();
     startCrowdAmbience();
 
-    const GATE_MS = 650;
+    const GATE_MS = 900;
     /** Staggered gate break — horses don't all leave at once */
-    const GATE_STAGGER_MS = [0, 55, 110, 40, 95, 70];
+    const GATE_STAGGER_MS = [0, 90, 180, 60, 150, 120];
 
     const tick = (now: number) => {
       const elapsed = now - startRef.current;
@@ -137,7 +152,7 @@ export default function RacePage() {
         const rank = finishRank[r.id];
         const stagger = GATE_STAGGER_MS[r.id - 1] ?? 0;
         const horseElapsed = Math.max(0, raceElapsed - stagger);
-        const finishMs = 4200 + rank * 520 + (r.id % 4) * 110;
+        const finishMs = 5200 + rank * 680 + (r.id % 4) * 140;
         const t = horseElapsed <= 0 ? 0 : Math.min(1, horseElapsed / finishMs);
         // Ease-out with slight burst at start (realistic acceleration from gate)
         const eased = t < 0.08 ? t * 3.2 : 1 - Math.pow(1 - t, 3.1);
@@ -145,9 +160,23 @@ export default function RacePage() {
       });
       setProgress(next);
 
-      const leader = next.reduce((a, b) => a.progress > b.progress ? a : b);
-      const targetCam = Math.min(leader.progress * 0.52, TRACK_LEN * 0.52);
-      cameraRef.current += (targetCam - cameraRef.current) * 0.11;
+      const leader = next.reduce((a, b) => (a.progress > b.progress ? a : b));
+      const leaderProg = leader.progress;
+      const allDone = next.every(p => p.done);
+      const phase = getRacePhase(leaderProg, true, allDone);
+      setRacePhase(phase);
+
+      if (!manualCameraRef.current) {
+        const autoCam = getAutoCamera(phase, isMobile);
+        if (autoCam !== lastAutoCamRef.current) {
+          lastAutoCamRef.current = autoCam;
+          setCamFade(f => f + 1);
+          setCamera(autoCam);
+        }
+      }
+
+      const targetCam = Math.min(leaderProg * 0.48, TRACK_LEN * 0.48);
+      cameraRef.current += (targetCam - cameraRef.current) * 0.09;
       setCameraX(cameraRef.current);
 
       if (next.every(p => p.done)) {
@@ -156,6 +185,8 @@ export default function RacePage() {
         playRaceFinishCheer();
         setResult(resultRef.current);
         setRacing(false);
+        setRacePhase("finish");
+        setCamFade(f => f + 1);
         setCamera("finish");
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         return;
@@ -177,21 +208,32 @@ export default function RacePage() {
     racing,
     selectedRacer,
     compact: isMobile,
+    phase: racePhase,
+    camera,
   };
 
-  function renderCamera() {
-    if (camera === "aerial") return <DerbyAerialView {...viewProps} />;
-    if (camera === "front") return <DerbyFrontChaseView {...viewProps} />;
-    if (camera === "finish") {
+  function renderCameraView(angle: CameraAngle) {
+    if (angle === "aerial") return <DerbyAerialView {...viewProps} camera={angle} />;
+    if (angle === "front") return <DerbyFrontChaseView {...viewProps} camera={angle} />;
+    if (angle === "finish") {
       return <DerbyFinishView racers={RACERS} progress={progress} winnerId={result?.winnerRacerId} />;
     }
     return (
       <DerbySideView
         {...viewProps}
+        camera={angle}
         cameraX={cameraX}
         winnerId={result?.winnerRacerId}
         showResult={!!result}
       />
+    );
+  }
+
+  function renderCamera() {
+    return (
+      <div key={camFade} className="absolute inset-0 derby-cam-cut">
+        {renderCameraView(camera)}
+      </div>
     );
   }
 
@@ -204,7 +246,11 @@ export default function RacePage() {
         <div className="flex gap-1 flex-wrap justify-end">
           {visibleCameras.map(c => (
             <button key={c.id} type="button"
-              onClick={() => setCamera(c.id)}
+              onClick={() => {
+                manualCameraRef.current = true;
+                setCamFade(f => f + 1);
+                setCamera(c.id);
+              }}
               disabled={c.id === "finish" && !result && !racing}
               className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-all ${camera === c.id ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary/60 text-muted-foreground hover:text-foreground"} disabled:opacity-40`}>
               {isMobile ? (c.mobileLabel ?? c.label) : c.label}
@@ -214,17 +260,28 @@ export default function RacePage() {
       </div>
       <div className="relative flex-1 min-h-[200px] derby-track-scene">
         <div className="absolute inset-0 overflow-hidden">
-          {!racing && !result && camera !== "side" && camera !== "aerial" ? (
-            <DerbySideView {...viewProps} cameraX={0} winnerId={undefined} showResult={false} />
+          {!racing && !result ? (
+            <DerbySideView
+              {...viewProps}
+              camera="side"
+              cameraX={0}
+              winnerId={undefined}
+              showResult={false}
+            />
           ) : (
             renderCamera()
           )}
         </div>
       </div>
       {racing && (
-        <div className="px-2 py-1.5 border-t border-border/30 bg-primary/5 flex items-center justify-center gap-2 shrink-0">
-          <span className="live-dot w-2 h-2 rounded-full bg-green-400" />
-          <span className="text-[9px] font-bold uppercase tracking-widest text-green-400">Live Race</span>
+        <div className="px-2 py-1 border-t border-border/30 bg-black/40 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="live-dot w-2 h-2 rounded-full bg-green-400" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-green-400">Live</span>
+          </div>
+          <span className="text-[8px] font-mono text-white/50 truncate">
+            {Math.round(getLeaderProgress(progress))}m · Auto cam
+          </span>
         </div>
       )}
     </Card>
