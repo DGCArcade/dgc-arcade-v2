@@ -178,30 +178,37 @@ export async function deductBalance(userId: number, amount: number, txn?: any, p
  * If no currency (or USD), it credits to the static bonus balance.
  */
 export async function creditBalance(userId: number, amount: number, currency?: string, txn?: any): Promise<number> {
-  const database = txn || db;
-  
-  if (currency && currency !== "USD") {
-    const price = await getCryptoPrice(currency);
-    const cryptoAmount = amount / price;
-    
-    await database.insert(userBalancesTable)
-      .values({
-        userId,
-        currency,
-        amount: String(cryptoAmount),
-      })
-      .onConflictDoUpdate({
-        target: [userBalancesTable.userId, userBalancesTable.currency],
-        set: { amount: sql`user_balances.amount + ${String(cryptoAmount)}` },
-      });
-  } else {
-    await database.update(usersTable)
-      .set({ balance: sql`balance + ${amount}` })
-      .where(eq(usersTable.id, userId));
-  }
+  const doCredit = async (database: any) => {
+    await database.execute(sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`);
+    if (currency && currency !== "USD") {
+      await database.execute(sql`SELECT id FROM user_balances WHERE user_id = ${userId} FOR UPDATE`);
+      const price = await getCryptoPrice(currency);
+      const cryptoAmount = amount / price;
 
-  const { totalBalance } = await getUserBalance(userId);
-  return totalBalance;
+      await database.insert(userBalancesTable)
+        .values({
+          userId,
+          currency,
+          amount: String(cryptoAmount),
+        })
+        .onConflictDoUpdate({
+          target: [userBalancesTable.userId, userBalancesTable.currency],
+          set: { amount: sql`user_balances.amount + ${String(cryptoAmount)}` },
+        });
+    } else {
+      await database.update(usersTable)
+        .set({ balance: sql`balance + ${amount}` })
+        .where(eq(usersTable.id, userId));
+    }
+
+    const { totalBalance } = await getUserBalance(userId);
+    return totalBalance;
+  };
+
+  if (txn) {
+    return doCredit(txn);
+  }
+  return db.transaction(doCredit);
 }
 
 /**

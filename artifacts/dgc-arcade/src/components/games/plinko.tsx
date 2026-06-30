@@ -208,9 +208,9 @@ export function Plinko({ game }: PlinkoProps) {
     <div className="plinko-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start", boxSizing: "border-box" }}>
       <style>{`
         @media (max-width: 1024px) {
-          .plinko-root { flex-direction: column-reverse !important; padding: 8px !important; gap: 10px !important; }
-          .plinko-board-area { order: 2; width: 100% !important; min-height: auto !important; }
-          .plinko-bet-panel { order: 1; width: 100% !important; position: static !important; }
+          .plinko-root { flex-direction: column !important; padding: 8px !important; gap: 10px !important; }
+          .plinko-board-area { order: 1; width: 100% !important; min-height: auto !important; }
+          .plinko-bet-panel { order: 2; width: 100% !important; position: static !important; }
         }
         @media (min-width: 1025px) {
           .plinko-board-area { flex: 1; min-width: 0; }

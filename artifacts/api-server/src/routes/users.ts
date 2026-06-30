@@ -381,22 +381,48 @@ usersRouter.patch("/me/password", requireAuth, async (req, res) => {
 
 usersRouter.post("/me/rakeback/claim", requireAuth, async (req, res) => {
   try {
-    const [user] = await db.select({ totalWageredAmount: usersTable.totalWageredAmount, rakebackClaimed: usersTable.rakebackClaimed }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-    if (!user) { res.status(404).json({ error: "User not found" }); return; }
-    const wagered = parseFloat(user.totalWageredAmount ?? "0");
-    const tier = getVipTier(wagered);
-    const rakebackRate = tier.rakebackPct / 100;
-    const totalRakeback = wagered * rakebackRate;
-    const claimed = parseFloat(user.rakebackClaimed ?? "0");
-    const available = Math.max(0, totalRakeback - claimed);
-    if (available < 0.01) { res.status(400).json({ error: "No rakeback available to claim" }); return; }
-    const newClaimed = (claimed + available).toFixed(8);
-    await db.update(usersTable).set({ 
-      balance: sql`balance + ${available.toFixed(8)}`, 
-      rakebackClaimed: newClaimed 
-    }).where(eq(usersTable.id, req.user!.userId));
-    res.json({ success: true, claimedAmount: available, tier: tier.id });
-  } catch (err) { req.log.error({ err }, "Rakeback claim error"); res.status(500).json({ error: "Internal server error" }); }
+    const userId = req.user!.userId;
+    const result = await db.transaction(async (txn) => {
+      await txn.execute(sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`);
+
+      const [user] = await txn
+        .select({ totalWageredAmount: usersTable.totalWageredAmount, rakebackClaimed: usersTable.rakebackClaimed })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId))
+        .limit(1);
+      if (!user) throw new Error("USER_NOT_FOUND");
+
+      const wagered = parseFloat(user.totalWageredAmount ?? "0");
+      const tier = getVipTier(wagered);
+      const rakebackRate = tier.rakebackPct / 100;
+      const totalRakeback = wagered * rakebackRate;
+      const claimed = parseFloat(user.rakebackClaimed ?? "0");
+      const available = Math.max(0, totalRakeback - claimed);
+      if (available < 0.01) throw new Error("NO_RAKEBACK");
+
+      const newClaimed = (claimed + available).toFixed(8);
+      await txn.update(usersTable).set({
+        balance: sql`balance + ${available.toFixed(8)}`,
+        rakebackClaimed: newClaimed,
+      }).where(eq(usersTable.id, userId));
+
+      return { claimedAmount: available, tier: tier.id };
+    });
+
+    res.json({ success: true, ...result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg === "NO_RAKEBACK") {
+      res.status(400).json({ error: "No rakeback available to claim" });
+      return;
+    }
+    if (msg === "USER_NOT_FOUND") {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    req.log.error({ err }, "Rakeback claim error");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 // POST /api/users/tip — authenticated players send real-money tips (not admin-only)

@@ -288,6 +288,11 @@ export function normalizePlisioCallbackBody(body: unknown): PlisioCallbackBody |
 transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type: "*/*" }), async (req, res) => {
   try {
     const clientIp = (req.ip ?? "").replace(/^::ffff:/, "").trim();
+    if (PLISIO_IPS.size > 0 && clientIp && !PLISIO_IPS.has(clientIp)) {
+      req.log.warn({ clientIp }, "Plisio IPN rejected: IP not in allowlist");
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
     const callbackBody = normalizePlisioCallbackBody(req.body);
     if (!callbackBody) {
       req.log.warn(
