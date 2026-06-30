@@ -1,52 +1,57 @@
-import { createHmac } from "crypto";
+import { createHmac, createHash } from "crypto";
 
 /**
- * Advanced Cryptographic Engine for Chicken Road
- * Uses HMAC-SHA512 to generate deterministic grid matrices.
+ * Chicken Road provably fair engine
+ * - Server seed hash: SHA-256(serverSeed) shown before play
+ * - Lane hazards: HMAC-SHA512(serverSeed, clientSeed:nonce) → car positions per lane
+ * Reference: industry-standard chicken-cross / mines-style byte derivation
  */
 
-// Difficulty tiers
 export const TIER_CONFIGS = {
-  easy: { cars: 1, safe: 4, label: "Easy (1 Car)" },
-  medium: { cars: 2, safe: 3, label: "Medium (2 Cars)" },
-  hard: { cars: 3, safe: 2, label: "Hard (3 Cars)" },
-  extreme: { cars: 4, safe: 1, label: "Extreme (4 Cars)" },
+  easy: { cars: 1, safe: 4, label: "Low" },
+  medium: { cars: 2, safe: 3, label: "Medium" },
+  hard: { cars: 3, safe: 2, label: "High" },
+  extreme: { cars: 4, safe: 1, label: "Max" },
 } as const;
 
 export type DifficultyTier = keyof typeof TIER_CONFIGS;
 
-export const LANES = 10;
+/** Stake-style 15-step crossing */
+export const LANES = 15;
 export const TILES_PER_LANE = 5;
+/** Fixed crosswalk row — chicken always crosses here (Stake-style single path) */
+export const CROSS_TILE_INDEX = 2;
 
-/**
- * Calculates the multiplier for a given difficulty tier and step (lane index).
- * Step is 0-indexed (0 to 9).
- * Formula: Multiplier_Step(n) = (Prev_Multiplier * (5 / safe_tiles)) * 0.99
- */
+const TIER_ALIASES: Record<string, DifficultyTier> = {
+  low: "easy",
+  easy: "easy",
+  medium: "medium",
+  high: "hard",
+  hard: "hard",
+  max: "extreme",
+  extreme: "extreme",
+};
+
+export function normalizeTier(tier: string): DifficultyTier {
+  const key = TIER_ALIASES[tier.toLowerCase()];
+  if (!key) throw new Error("Invalid difficulty tier");
+  return key;
+}
+
+export function sha256Hex(input: string): string {
+  return createHash("sha256").update(input).digest("hex");
+}
+
 export function calculateMultiplier(tier: DifficultyTier, step: number): number {
   if (step < 0) return 1.0;
-  
   const safeTiles = TIER_CONFIGS[tier].safe;
   let multiplier = 1.0;
-  
   for (let i = 0; i <= step; i++) {
     multiplier = (multiplier * (TILES_PER_LANE / safeTiles)) * 0.99;
   }
-  
   return multiplier;
 }
 
-/**
- * Generates the deterministic matrix of cars (hazards) for the game.
- * 
- * Algorithm:
- * 1. Hash string = HMAC_SHA512(Key = Server_Seed, Message = Client_Seed + ":" + Nonce).
- * 2. Divide the 128-character hex string into distinct 4-byte segments (8 hex characters each).
- * 3. Convert each segment to an integer and apply modulo operation matching the tile count (5)
- *    to place the 'Cars' (Hazards).
- * 
- * Returns an array of length 10 (lanes), where each element is an array of car positions (0-4).
- */
 export function generateChickenRoadMatrix(
   serverSeed: string,
   clientSeed: string,
@@ -54,54 +59,50 @@ export function generateChickenRoadMatrix(
   tier: DifficultyTier
 ): number[][] {
   const carsPerLane = TIER_CONFIGS[tier].cars;
-  const message = `${clientSeed}:${nonce}`;
-  
-  // 1. Generate HMAC-SHA512 hash
+  const message = `${clientSeed}:${nonce}:chicken-road`;
   const hash = createHmac("sha512", serverSeed).update(message).digest("hex");
-  
+
   const matrix: number[][] = [];
-  
-  // 2 & 3. Parse bytes to generate grid
   let hashIndex = 0;
-  
+
   for (let lane = 0; lane < LANES; lane++) {
     const laneCars: number[] = [];
-    
-    // Keep generating car positions until we have the required amount for this tier
     while (laneCars.length < carsPerLane) {
-      // If we run out of hash characters (unlikely but possible), append a salt and rehash
       if (hashIndex + 8 > hash.length) {
         const rehash = createHmac("sha512", serverSeed)
-          .update(message + ":" + lane + ":" + laneCars.length)
+          .update(`${message}:${lane}:${laneCars.length}`)
           .digest("hex");
-        
-        // We just need a few more bytes, so we can use the start of the new hash
-        const segment = rehash.substring(0, 8);
-        const intValue = parseInt(segment, 16);
+        const intValue = parseInt(rehash.substring(0, 8), 16);
         const pos = intValue % TILES_PER_LANE;
-        
-        if (!laneCars.includes(pos)) {
-          laneCars.push(pos);
-        }
-        break; // Break to avoid infinite loops if something goes wrong, though rehash should fix it
+        if (!laneCars.includes(pos)) laneCars.push(pos);
+        break;
       }
-      
       const segment = hash.substring(hashIndex, hashIndex + 8);
       hashIndex += 8;
-      
-      const intValue = parseInt(segment, 16);
-      const pos = intValue % TILES_PER_LANE;
-      
-      // Ensure unique car positions within the lane
-      if (!laneCars.includes(pos)) {
-        laneCars.push(pos);
-      }
+      const pos = parseInt(segment, 16) % TILES_PER_LANE;
+      if (!laneCars.includes(pos)) laneCars.push(pos);
     }
-    
-    // Sort for consistency
     laneCars.sort((a, b) => a - b);
     matrix.push(laneCars);
   }
-  
   return matrix;
+}
+
+export function verifyChickenRoadSession(
+  serverSeed: string,
+  clientSeed: string,
+  nonce: number,
+  tier: DifficultyTier
+) {
+  const serverSeedHash = sha256Hex(serverSeed);
+  const matrix = generateChickenRoadMatrix(serverSeed, clientSeed, nonce, tier);
+  return {
+    valid: true,
+    serverSeedHash,
+    algorithm: "HMAC-SHA512(serverSeed, clientSeed:nonce:chicken-road) → lane hazards; SHA-256(serverSeed) for commit",
+    matrix,
+    crossTileIndex: CROSS_TILE_INDEX,
+    lanes: LANES,
+    tier,
+  };
 }

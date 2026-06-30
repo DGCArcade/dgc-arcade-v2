@@ -11,23 +11,29 @@ import {
   generateChickenRoadMatrix, 
   calculateMultiplier, 
   TIER_CONFIGS, 
-  type DifficultyTier,
+  normalizeTier,
+  CROSS_TILE_INDEX,
   LANES,
-  TILES_PER_LANE
+  TILES_PER_LANE,
+  verifyChickenRoadSession,
+  type DifficultyTier,
 } from "../lib/chicken-road-engine.js";
 
 export const chickenRoadRouter = Router();
 
 // POST /api/chicken-road/initialize
 chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, async (req, res) => {
-  const { gameId, amount, tier = "medium", clientSeed: rawClientSeed } = req.body;
+  const { gameId, amount, tier: rawTier = "medium", clientSeed: rawClientSeed } = req.body;
 
   if (!gameId || !amount || amount <= 0) {
     res.status(400).json({ error: "gameId and amount required" });
     return;
   }
 
-  if (!Object.keys(TIER_CONFIGS).includes(tier)) {
+  let tier: DifficultyTier;
+  try {
+    tier = normalizeTier(String(rawTier));
+  } catch {
     res.status(400).json({ error: "Invalid difficulty tier" });
     return;
   }
@@ -63,7 +69,7 @@ chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, asyn
     const nonce = 1;
 
     // Deterministic Byte-to-Grid Mapping
-    const matrix = generateChickenRoadMatrix(serverSeed, clientSeed, nonce, tier as DifficultyTier);
+    const matrix = generateChickenRoadMatrix(serverSeed, clientSeed, nonce, tier);
 
     const [session] = await db.insert(chickenRoadSessionsTable).values({
       userId: user.id,
@@ -89,8 +95,12 @@ chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, asyn
       clientSeed,
       nonce,
       tier,
+      tierLabel: TIER_CONFIGS[tier].label,
+      lanes: LANES,
+      crossTileIndex: CROSS_TILE_INDEX,
       status: "active",
-      currentMultiplier: 1
+      currentMultiplier: 1,
+      multipliers: Array.from({ length: LANES }, (_, i) => calculateMultiplier(tier, i)),
     });
 
   } catch (err) {
@@ -101,10 +111,11 @@ chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, asyn
 
 // POST /api/chicken-road/progress
 chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async (req, res) => {
-  const { sessionId, laneIndex, tileIndex } = req.body;
+  const { sessionId, laneIndex, tileIndex: rawTile } = req.body;
+  const tileIndex = rawTile !== undefined ? Number(rawTile) : CROSS_TILE_INDEX;
 
-  if (!sessionId || laneIndex === undefined || tileIndex === undefined) {
-    res.status(400).json({ error: "sessionId, laneIndex, and tileIndex required" });
+  if (!sessionId || laneIndex === undefined) {
+    res.status(400).json({ error: "sessionId and laneIndex required" });
     return;
   }
 
@@ -308,6 +319,41 @@ chickenRoadRouter.post("/settle", requireAuth, requireLocationVerified, async (r
 
   } catch (err) {
     req.log.error({ err }, "Chicken Road settle error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/chicken-road/verify/:sessionId — provably fair verification
+chickenRoadRouter.get("/verify/:sessionId", async (req, res) => {
+  try {
+    const sessionId = parseInt(req.params.sessionId, 10);
+    if (isNaN(sessionId)) {
+      res.status(400).json({ error: "Invalid session ID" });
+      return;
+    }
+    const [session] = await db.select().from(chickenRoadSessionsTable)
+      .where(eq(chickenRoadSessionsTable.id, sessionId))
+      .limit(1);
+    if (!session) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+    if (session.status === "active") {
+      res.status(400).json({ error: "Session still active — seed revealed after game ends" });
+      return;
+    }
+    const tier = normalizeTier(session.tier);
+    const result = verifyChickenRoadSession(session.serverSeed, session.clientSeed ?? "chicken-road", session.nonce, tier);
+    const storedMatrix: number[][] = JSON.parse(session.matrix);
+    const matrixMatch = JSON.stringify(result.matrix) === JSON.stringify(storedMatrix);
+    res.json({
+      ...result,
+      matrixMatch,
+      storedMatrix,
+      revealed: JSON.parse(session.revealed),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Chicken Road verify error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

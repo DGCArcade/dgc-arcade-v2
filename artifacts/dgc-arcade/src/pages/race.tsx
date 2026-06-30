@@ -11,6 +11,7 @@ import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { formatCurrency } from "@/lib/format";
 import { ChevronLeft, Trophy, Zap, Video } from "lucide-react";
 import { ProvablyFairPanel } from "@/components/games/provably-fair-panel";
+import { startHorseGallopLoop, stopHorseGallopLoop, playRaceStartBugle, playRaceFinishCheer } from "@/lib/horse-gallop-sound";
 import { DerbyHorse } from "@/components/games/derby/derby-horse";
 import {
   DerbySideView,
@@ -61,6 +62,7 @@ export default function RacePage() {
   const animRef = useRef<number | null>(null);
   const startRef = useRef(0);
   const resultRef = useRef<RaceResult | null>(null);
+  const gallopStarted = useRef(false);
 
   const resetRace = useCallback(() => {
     setResult(null);
@@ -68,6 +70,8 @@ export default function RacePage() {
     setProgress(RACERS.map(r => ({ racerId: r.id, progress: 0, done: false })));
     setCameraX(0);
     setCamera("side");
+    gallopStarted.current = false;
+    stopHorseGallopLoop();
   }, []);
 
   async function runRace() {
@@ -99,13 +103,22 @@ export default function RacePage() {
     res.finishOrder.forEach((id, i) => { finishRank[id] = i; });
 
     startRef.current = performance.now();
+    playRaceStartBugle();
+
+    const GATE_MS = 400;
 
     const tick = (now: number) => {
       const elapsed = now - startRef.current;
+      if (elapsed > GATE_MS && !gallopStarted.current) {
+        gallopStarted.current = true;
+        startHorseGallopLoop();
+      }
+
+      const raceElapsed = Math.max(0, elapsed - GATE_MS);
       const next = RACERS.map(r => {
         const rank = finishRank[r.id];
-        const finishMs = 3400 + rank * 520 + (r.id % 4) * 100;
-        const t = Math.min(1, elapsed / finishMs);
+        const finishMs = 3600 + rank * 500 + (r.id % 4) * 90;
+        const t = raceElapsed <= 0 ? 0 : Math.min(1, raceElapsed / finishMs);
         const eased = 1 - Math.pow(1 - t, 2.8);
         return { racerId: r.id, progress: eased * TRACK_LEN, done: t >= 1 };
       });
@@ -115,6 +128,8 @@ export default function RacePage() {
       setCameraX(Math.min(leader.progress * 0.5, TRACK_LEN * 0.5));
 
       if (next.every(p => p.done)) {
+        stopHorseGallopLoop();
+        playRaceFinishCheer();
         setResult(resultRef.current);
         setRacing(false);
         setCamera("finish");
@@ -126,7 +141,10 @@ export default function RacePage() {
     animRef.current = requestAnimationFrame(tick);
   }
 
-  useEffect(() => () => { if (animRef.current) cancelAnimationFrame(animRef.current); }, []);
+  useEffect(() => () => {
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+    stopHorseGallopLoop();
+  }, []);
 
   const viewProps = {
     racers: RACERS,
@@ -188,7 +206,7 @@ export default function RacePage() {
   );
 
   return (
-    <div className="space-y-4 max-w-5xl mx-auto px-2 md:px-0 pb-4">
+    <div className="space-y-4 max-w-7xl mx-auto px-2 md:px-4 pb-4">
       <div className="flex items-center gap-3">
         <Link href="/games">
           <button type="button" className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
@@ -221,7 +239,7 @@ export default function RacePage() {
                 ))}
               </div>
             </div>
-            <div className="relative h-56 sm:h-72 md:h-80 derby-track-scene">
+            <div className="relative h-60 sm:h-80 md:h-[22rem] derby-track-scene">
               {!racing && !result && camera !== "side" && camera !== "aerial" ? (
                 <DerbySideView {...viewProps} cameraX={0} winnerId={undefined} showResult={false} />
               ) : (

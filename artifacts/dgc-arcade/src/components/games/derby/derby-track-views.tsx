@@ -78,6 +78,18 @@ export function DerbySideView({
           <span className="text-[10px] font-black text-white uppercase tracking-widest drop-shadow mt-1">Finish</span>
         </div>
 
+        {/* Starting gate */}
+        {!racing && progress.every(p => p.progress < 1) && (
+          <div className="absolute left-[1%] bottom-0 flex flex-col items-center z-5 opacity-90">
+            <div className="flex gap-0.5">
+              {[0, 1, 2, 3, 4, 5].map(i => (
+                <div key={i} className="w-3 h-14 bg-gradient-to-b from-[#8B4513] to-[#5C3317] border border-[#FFD700]/40 rounded-t-sm" />
+              ))}
+            </div>
+            <span className="text-[8px] font-black text-white/80 uppercase tracking-widest mt-0.5">Gate</span>
+          </div>
+        )}
+
         {racers.map((r, lane) => {
           const p = progress.find(x => x.racerId === r.id);
           const x = p?.progress ?? 0;
@@ -86,7 +98,7 @@ export function DerbySideView({
           const isMyPick = r.id === selectedRacer;
           return (
             <div key={r.id} className="absolute flex items-end gap-0.5"
-              style={{ left: `${2 + x}%`, bottom: `${lane * 12 + 1}%`, zIndex: isMyPick ? 30 : 20 - lane }}>
+              style={{ left: `${1.5 + x}%`, bottom: `${lane * 12 + 1}%`, zIndex: isMyPick ? 30 : 20 - lane }}>
               {isMyPick && (
                 <span className="text-[8px] font-black uppercase text-yellow-300 drop-shadow-[0_1px_2px_#000] mb-12 whitespace-nowrap">YOU</span>
               )}
@@ -115,16 +127,9 @@ export function DerbyFrontChaseView({
   racing: boolean;
   selectedRacer: number | null;
 }) {
-  const sorted = [...racers].sort((a, b) => {
-    const pa = progress.find(x => x.racerId === a.id)?.progress ?? 0;
-    const pb = progress.find(x => x.racerId === b.id)?.progress ?? 0;
-    return pb - pa;
-  });
-
   return (
     <div className="relative h-full w-full overflow-hidden derby-front-scene">
       <SkyAndHorizon />
-      {/* Perspective track */}
       <div className="absolute inset-x-[10%] bottom-0 top-[35%]"
         style={{
           background: "linear-gradient(180deg, #8B6914 0%, #6B4E2E 40%, #5C4033 100%)",
@@ -133,30 +138,39 @@ export function DerbyFrontChaseView({
       />
       <div className="absolute inset-x-[22%] bottom-0 top-[42%] border-l border-r border-white/20"
         style={{ clipPath: "polygon(15% 0%, 85% 0%, 100% 100%, 0% 100%)" }} />
-      {/* Lane dashes */}
+
+      {/* Starting gate at far end when not racing far */}
+      <div className="absolute top-[36%] left-[22%] right-[22%] flex justify-between px-[2%] opacity-80">
+        {racers.map(r => (
+          <div key={r.id} className="w-1 h-8 bg-[#8B4513] border border-[#FFD700]/30 rounded-t-sm" />
+        ))}
+      </div>
+
       {[0, 1, 2, 3, 4].map(i => (
         <div key={i} className="absolute left-0 right-0 h-px bg-white/15 derby-lane-dash"
           style={{ bottom: `${12 + i * 14}%`, animationDelay: `${i * 0.15}s` }} />
       ))}
 
-      <div className="absolute inset-0 flex items-end justify-center pb-[8%] gap-1 px-2">
-        {sorted.map((r, rank) => {
+      <div className="absolute inset-0">
+        {racers.map((r, laneIdx) => {
           const p = progress.find(x => x.racerId === r.id);
           const prog = (p?.progress ?? 0) / TRACK_LEN;
-          const scale = 0.55 + prog * 0.85;
-          const bottom = 4 + (1 - prog) * 28 + rank * 2;
           const gallop = racing && !p?.done;
           const isMyPick = r.id === selectedRacer;
+          const atGate = prog < 0.03;
+          const scale = atGate ? 0.62 : 0.62 + prog * 0.88;
+          const bottom = atGate ? 10 : 10 + prog * 30;
+          const left = 10 + laneIdx * 13.5;
           return (
             <div key={r.id} className="absolute flex flex-col items-center transition-none"
               style={{
                 bottom: `${bottom}%`,
-                left: `${18 + rank * 11 + (r.id % 3) * 2}%`,
+                left: `${left}%`,
                 transform: `scale(${scale})`,
-                zIndex: Math.round(prog * 100) + (isMyPick ? 50 : 0),
-                opacity: 0.75 + prog * 0.25,
+                zIndex: Math.round(prog * 100) + laneIdx + (isMyPick ? 50 : 0),
+                opacity: atGate ? 1 : 0.8 + prog * 0.2,
               }}>
-              {isMyPick && <span className="text-[7px] font-black text-yellow-300 mb-0.5">YOU</span>}
+              {isMyPick && <span className="text-[7px] font-black text-yellow-300 mb-0.5 drop-shadow">YOU</span>}
               <DerbyHorse r={r} gallop={gallop} view="front-chase" scale={1} />
               <span className="text-[8px] font-mono font-bold text-white/80 mt-0.5">#{r.num}</span>
             </div>
