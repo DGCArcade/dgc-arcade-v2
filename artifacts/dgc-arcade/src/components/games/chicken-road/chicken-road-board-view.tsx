@@ -14,6 +14,9 @@ interface ChickenRoadBoardProps {
   bustHazard?: HazardType;
   crossAnim: CrossAnim;
   previewMode?: boolean;
+  onCrossNext?: () => void;
+  canCross?: boolean;
+  crossLoading?: boolean;
 }
 
 /**
@@ -32,6 +35,9 @@ export function ChickenRoadBoard(props: ChickenRoadBoardProps) {
       bustLane={props.bustLane}
       bustHazard={props.bustHazard}
       crossAnim={props.crossAnim}
+      onCrossNext={props.onCrossNext}
+      canCross={props.canCross}
+      crossLoading={props.crossLoading}
     />
   );
 }

@@ -144,6 +144,9 @@ export function DerbySideView({
 
         {/* Finish post */}
         <div className="absolute right-[3%] bottom-0 flex flex-col items-center z-10">
+          {racing && progress.some(p => p.progress > TRACK_LEN * 0.82) && (
+            <div className="absolute inset-0 -left-6 -right-6 derby-finish-flash rounded-sm" />
+          )}
           <div className="w-2 h-24 bg-white shadow-lg rounded-sm" />
           <div className="flex flex-col w-5 -ml-1">
             {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => (
@@ -156,6 +159,9 @@ export function DerbySideView({
         {/* Starting gate — stall doors at leg height; horses render in front */}
         {(atGate || gateOpening) && (
           <div className={`absolute left-[0.5%] bottom-0 flex flex-col items-start z-[8] pointer-events-none ${gateOpening ? "derby-gate-open" : ""}`}>
+            {gateOpening && (
+              <div className="absolute -right-2 bottom-[20%] w-28 h-10 derby-gate-dust" />
+            )}
             <div className="flex gap-px">
               {Array.from({ length: LANE_COUNT }, (_, i) => (
                 <div
@@ -191,9 +197,16 @@ export function DerbySideView({
             >
               <div className="relative flex flex-col items-center">
                 <HorseRacerLabel r={r} isMyPick={isMyPick} compact={compact} />
-                <div className={`relative ${isMyPick ? "derby-pick-ring" : ""} ${isWinner ? "brightness-110" : ""} ${gallop ? "derby-horse-bob" : ""}`}>
+                <div className={`relative derby-horse-rig ${isMyPick ? "derby-pick-ring" : ""} ${isWinner ? "brightness-110" : ""} ${
+                  gallop ? "derby-horse-bob derby-horse-lean derby-horse-stride" : ""
+                }`}>
                   <DerbyHorse r={r} gallop={gallop} scale={horseScale} showBadge={false} />
-                  {gallop && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-2 derby-dust-puff rounded-full" />}
+                  {gallop && (
+                    <>
+                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-2.5 derby-dust-puff rounded-full" />
+                      <div className="absolute top-1/2 -left-3 w-6 h-4 derby-horse-trail rounded-full opacity-60" />
+                    </>
+                  )}
                 </div>
                 {isWinner && (
                   <Trophy className="absolute -top-1 -right-3 w-4 h-4 text-yellow-400 animate-bounce shrink-0 drop-shadow" />
@@ -300,11 +313,14 @@ export function DerbyFrontChaseView({
               <div className="relative">
                 {racing && rank > 0 && <DerbyLaneRankBadge rank={rank} isLeader={isLeader} />}
                 <HorseRacerLabel r={r} isMyPick={isMyPick} compact />
-                <div className={`${gallop ? "derby-horse-bob" : ""} ${isMyPick ? "derby-pick-ring rounded-md" : ""}`}>
+                <div className={`derby-horse-rig ${gallop ? "derby-horse-bob derby-horse-lean derby-horse-stride" : ""} ${isMyPick ? "derby-pick-ring rounded-md" : ""}`}>
                   <DerbyHorse r={r} gallop={gallop} view="front-chase" scale={horseScale} />
                 </div>
                 {gallop && (
-                  <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-6 h-1.5 derby-dust-puff rounded-full" />
+                  <>
+                    <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-8 h-2 derby-dust-puff rounded-full" />
+                    <div className="absolute top-1/2 -left-2 w-5 h-3 derby-horse-trail rounded-full opacity-50" />
+                  </>
                 )}
               </div>
             </div>

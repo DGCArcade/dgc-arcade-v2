@@ -487,27 +487,28 @@ body {
 
 /* ── Horse gallop (DGC Derby) ────────────────────────────────────── */
 @keyframes horse-leg-swing {
-  0%, 100% { transform: rotate(-18deg); }
-  50% { transform: rotate(22deg); }
+  0%, 100% { transform: rotate(-28deg) translateY(0); }
+  50% { transform: rotate(32deg) translateY(-1px); }
 }
 @keyframes horse-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  35% { transform: translateY(-3px) scaleY(1.02); }
+  65% { transform: translateY(-1px) scaleY(0.99); }
 }
 @keyframes horse-dust-puff {
   0%, 100% { opacity: 0.2; transform: scaleX(1); }
   50% { opacity: 0.5; transform: scaleX(1.3); }
 }
 .horse-gallop {
-  animation: horse-bob 0.42s ease-in-out infinite;
+  animation: horse-bob 0.19s ease-in-out infinite;
 }
 .horse-gallop .horse-leg-front {
   transform-origin: center top;
-  animation: horse-leg-swing 0.21s ease-in-out infinite;
+  animation: horse-leg-swing 0.19s ease-in-out infinite;
 }
 .horse-gallop .horse-leg-back {
   transform-origin: center top;
-  animation: horse-leg-swing 0.21s ease-in-out infinite reverse;
+  animation: horse-leg-swing 0.19s ease-in-out infinite reverse;
 }
 .horse-dust {
   animation: horse-dust-puff 0.35s ease-in-out infinite;
@@ -542,20 +543,68 @@ body {
 .derby-crowd-wave {
   animation: derby-crowd-wave-anim 0.8s ease-in-out infinite;
 }
+@keyframes derby-horse-bob-anim {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  35% { transform: translateY(-5px) scaleY(1.03); }
+  65% { transform: translateY(-2px) scaleY(0.98); }
+}
+.derby-horse-bob {
+  animation: derby-horse-bob-anim 0.19s ease-in-out infinite;
+}
+@keyframes derby-horse-lean-anim {
+  0%, 100% { transform: rotate(-2deg) translateX(0); }
+  50% { transform: rotate(4deg) translateX(2px); }
+}
+.derby-horse-lean {
+  transform-origin: center bottom;
+  animation: derby-horse-lean-anim 0.19s ease-in-out infinite;
+}
+@keyframes derby-horse-stride-anim {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(3px); }
+}
+.derby-horse-stride {
+  animation: derby-horse-stride-anim 0.19s ease-in-out infinite;
+}
+.derby-horse-rig {
+  will-change: transform;
+}
+@keyframes derby-gate-dust-burst {
+  0% { opacity: 0; transform: scaleX(0.4) scaleY(0.6); }
+  25% { opacity: 0.85; transform: scaleX(1.2) scaleY(1); }
+  100% { opacity: 0; transform: scaleX(2.2) scaleY(0.4) translateX(40px); }
+}
+.derby-gate-dust {
+  background: radial-gradient(ellipse, rgba(210,180,140,0.75) 0%, rgba(139,105,20,0.45) 40%, transparent 72%);
+  animation: derby-gate-dust-burst 0.9s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes derby-finish-flash-anim {
+  0%, 100% { opacity: 0.15; filter: brightness(1); }
+  50% { opacity: 0.55; filter: brightness(1.4); }
+}
+.derby-finish-flash {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+  animation: derby-finish-flash-anim 0.35s ease-in-out infinite;
+  pointer-events: none;
+}
 @keyframes derby-gate-door-open {
-  0% { transform: rotateX(0deg); opacity: 1; }
-  100% { transform: rotateX(75deg) translateY(-8px); opacity: 0.15; }
+  0% { transform: perspective(120px) rotateX(0deg) translateY(0); opacity: 1; }
+  60% { transform: perspective(120px) rotateX(-55deg) translateY(-6px); opacity: 0.6; }
+  100% { transform: perspective(120px) rotateX(-82deg) translateY(-14px); opacity: 0.05; }
 }
 .derby-gate-open .derby-gate-door {
   transform-origin: bottom center;
-  animation: derby-gate-door-open 0.45s ease-in forwards;
+  animation: derby-gate-door-open 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
-@keyframes derby-horse-bob-anim {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
+@keyframes derby-horse-trail-anim {
+  0% { opacity: 0.35; transform: scaleX(0.6); }
+  100% { opacity: 0; transform: scaleX(1.4) translateX(-8px); }
 }
-.derby-horse-bob {
-  animation: derby-horse-bob-anim 0.21s ease-in-out infinite;
+.derby-horse-trail {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+  animation: derby-horse-trail-anim 0.28s ease-out infinite;
+  pointer-events: none;
 }
 @keyframes derby-dust-puff-anim {
   0% { transform: translateX(-50%) scale(0.6); opacity: 0.5; }
@@ -599,6 +648,58 @@ body {
 }
 .cr-chicken-hop {
   animation: cr-chicken-hop-anim 0.45s ease-out;
+}
+@keyframes cr-chicken-run-anim {
+  0% { transform: translateX(0) translateY(0) rotate(0deg); }
+  20% { transform: translateX(4px) translateY(-5px) rotate(4deg); }
+  40% { transform: translateX(10px) translateY(-1px) rotate(1deg); }
+  60% { transform: translateX(16px) translateY(-4px) rotate(-2deg); }
+  80% { transform: translateX(22px) translateY(0) rotate(2deg); }
+  100% { transform: translateX(28px) translateY(-2px) rotate(0deg); }
+}
+.cr-chicken-run {
+  animation: cr-chicken-run-anim 0.38s ease-in-out infinite;
+}
+@keyframes cr-chicken-leg-left-anim {
+  0%, 100% { transform: rotate(-22deg); }
+  50% { transform: rotate(28deg); }
+}
+@keyframes cr-chicken-leg-right-anim {
+  0%, 100% { transform: rotate(28deg); }
+  50% { transform: rotate(-22deg); }
+}
+.cr-chicken-run .cr-chicken-leg-left {
+  transform-origin: 20px 48px;
+  animation: cr-chicken-leg-left-anim 0.19s ease-in-out infinite;
+}
+.cr-chicken-run .cr-chicken-leg-right {
+  transform-origin: 36px 48px;
+  animation: cr-chicken-leg-right-anim 0.19s ease-in-out infinite;
+}
+@keyframes cr-manhole-tap-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.55));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(96, 165, 250, 0.95)) drop-shadow(0 0 24px rgba(59, 130, 246, 0.45));
+    transform: scale(1.08);
+  }
+}
+.cr-manhole-tap-target {
+  animation: cr-manhole-tap-pulse 1.1s ease-in-out infinite;
+  z-index: 25;
+  touch-action: manipulation;
+}
+.cr-manhole-tap-target:active {
+  transform: scale(0.96);
+}
+@keyframes cr-manhole-tap-hint-anim {
+  0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.85; }
+  50% { transform: translateX(-50%) translateY(-3px); opacity: 1; }
+}
+.cr-manhole-tap-hint {
+  animation: cr-manhole-tap-hint-anim 0.75s ease-in-out infinite;
 }
 @keyframes cr-chicken-spawn-anim {
   0% { transform: scale(0.2) translateY(12px); opacity: 0; }

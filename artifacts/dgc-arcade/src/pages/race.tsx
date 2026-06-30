@@ -67,12 +67,14 @@ export default function RacePage() {
   const startRef = useRef(0);
   const resultRef = useRef<RaceResult | null>(null);
   const gallopStarted = useRef(false);
+  const cameraRef = useRef(0);
 
   const resetRace = useCallback(() => {
     setResult(null);
     resultRef.current = null;
     setProgress(RACERS.map(r => ({ racerId: r.id, progress: 0, done: false })));
     setCameraX(0);
+    cameraRef.current = 0;
     setCamera(isMobile ? "front" : "side");
     gallopStarted.current = false;
     stopHorseGallopLoop();
@@ -118,7 +120,9 @@ export default function RacePage() {
     playRaceStartBugle();
     startCrowdAmbience();
 
-    const GATE_MS = 500;
+    const GATE_MS = 650;
+    /** Staggered gate break — horses don't all leave at once */
+    const GATE_STAGGER_MS = [0, 55, 110, 40, 95, 70];
 
     const tick = (now: number) => {
       const elapsed = now - startRef.current;
@@ -131,15 +135,20 @@ export default function RacePage() {
       const raceElapsed = Math.max(0, elapsed - GATE_MS);
       const next = RACERS.map(r => {
         const rank = finishRank[r.id];
-        const finishMs = 3600 + rank * 500 + (r.id % 4) * 90;
-        const t = raceElapsed <= 0 ? 0 : Math.min(1, raceElapsed / finishMs);
-        const eased = 1 - Math.pow(1 - t, 2.8);
+        const stagger = GATE_STAGGER_MS[r.id - 1] ?? 0;
+        const horseElapsed = Math.max(0, raceElapsed - stagger);
+        const finishMs = 4200 + rank * 520 + (r.id % 4) * 110;
+        const t = horseElapsed <= 0 ? 0 : Math.min(1, horseElapsed / finishMs);
+        // Ease-out with slight burst at start (realistic acceleration from gate)
+        const eased = t < 0.08 ? t * 3.2 : 1 - Math.pow(1 - t, 3.1);
         return { racerId: r.id, progress: eased * TRACK_LEN, done: t >= 1 };
       });
       setProgress(next);
 
       const leader = next.reduce((a, b) => a.progress > b.progress ? a : b);
-      setCameraX(Math.min(leader.progress * 0.5, TRACK_LEN * 0.5));
+      const targetCam = Math.min(leader.progress * 0.52, TRACK_LEN * 0.52);
+      cameraRef.current += (targetCam - cameraRef.current) * 0.11;
+      setCameraX(cameraRef.current);
 
       if (next.every(p => p.done)) {
         stopHorseGallopLoop();

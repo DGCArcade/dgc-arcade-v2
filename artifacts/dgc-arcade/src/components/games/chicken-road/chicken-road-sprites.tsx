@@ -1,10 +1,32 @@
 /** Top-down chicken — Stake-style cartoon */
-export function ChickenSprite({ hopping, size = 52, facing = "right" }: { hopping?: boolean; size?: number; facing?: "left" | "right" }) {
+export function ChickenSprite({
+  hopping,
+  running,
+  size = 52,
+  facing = "right",
+}: {
+  hopping?: boolean;
+  running?: boolean;
+  size?: number;
+  facing?: "left" | "right";
+}) {
   const flip = facing === "left" ? "scaleX(-1)" : undefined;
+  const animClass = running ? "cr-chicken-run" : hopping ? "cr-chicken-hop" : "";
   return (
-    <svg viewBox="0 0 56 64" width={size} height={size * 1.14} className={hopping ? "cr-chicken-hop" : ""} style={{ transform: flip }}>
+    <svg viewBox="0 0 56 64" width={size} height={size * 1.14} className={animClass} style={{ transform: flip }}>
       <ellipse cx="28" cy="58" rx="12" ry="3" fill="#000" opacity="0.25" />
-      <path d="M20 48 L18 58 M36 48 L38 58" stroke="#E8A020" strokeWidth="3" strokeLinecap="round" />
+      {running ? (
+        <>
+          <g className="cr-chicken-leg-left">
+            <path d="M20 48 L18 58" stroke="#E8A020" strokeWidth="3" strokeLinecap="round" />
+          </g>
+          <g className="cr-chicken-leg-right">
+            <path d="M36 48 L38 58" stroke="#E8A020" strokeWidth="3" strokeLinecap="round" />
+          </g>
+        </>
+      ) : (
+        <path d="M20 48 L18 58 M36 48 L38 58" stroke="#E8A020" strokeWidth="3" strokeLinecap="round" />
+      )}
       <ellipse cx="28" cy="40" rx="16" ry="14" fill="#F8F8F2" />
       <ellipse cx="34" cy="38" rx="8" ry="10" fill="#ECECE4" />
       <circle cx="28" cy="24" r="13" fill="#F8F8F2" />
@@ -189,18 +211,35 @@ export function ManholeCover({
   multiplier,
   state,
   showAmbientFire = true,
+  tappable = false,
+  onTap,
 }: {
   multiplier: number;
   state: "idle" | "past" | "current" | "future" | "bust";
   /** Stake-style: manholes always glow with ember even before you cross */
   showAmbientFire?: boolean;
+  tappable?: boolean;
+  onTap?: () => void;
 }) {
   const lit = state === "past" || state === "current";
   const isCurrent = state === "current";
   const showEmber = showAmbientFire && (state === "idle" || state === "future" || lit);
 
   return (
-    <div className="relative flex flex-col items-center">
+    <button
+      type="button"
+      disabled={!tappable}
+      onClick={tappable ? onTap : undefined}
+      className={`relative flex flex-col items-center bg-transparent border-0 p-0 ${
+        tappable ? "cr-manhole-tap-target cursor-pointer" : "pointer-events-none"
+      }`}
+      aria-label={tappable ? `Cross lane for ${multiplier.toFixed(2)}×` : undefined}
+    >
+      {tappable && (
+        <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[7px] font-black uppercase tracking-wider text-blue-300 cr-manhole-tap-hint whitespace-nowrap pointer-events-none">
+          Tap
+        </span>
+      )}
       {showEmber && (
         <div className={`absolute -top-3 left-1/2 -translate-x-1/2 rounded-full blur-md ${
           isCurrent
@@ -234,7 +273,7 @@ export function ManholeCover({
           {multiplier.toFixed(2)}×
         </span>
       </div>
-    </div>
+    </button>
   );
 }
 

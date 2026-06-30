@@ -427,6 +427,9 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
           bustHazard={bustHazard}
           crossAnim={crossAnim}
           previewMode={status === "idle"}
+          onCrossNext={crossLane}
+          canCross={status === "active" && !loading}
+          crossLoading={loading}
         />
       </div>
     </div>
