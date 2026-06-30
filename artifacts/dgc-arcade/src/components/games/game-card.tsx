@@ -207,33 +207,87 @@ function CoverRoulette() {
   const ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
   const RED_NUMS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
   const segments = 37;
-  const r = 80, cx = 160, cy = 100;
+  const r = 78, cx = 160, cy = 100;
+  const ballR = 72;
   const paths = ORDER.map((num, i) => {
     const s = (i/segments)*2*Math.PI - Math.PI/2, e = ((i+1)/segments)*2*Math.PI - Math.PI/2;
     const x1=cx+r*Math.cos(s),y1=cy+r*Math.sin(s),x2=cx+r*Math.cos(e),y2=cy+r*Math.sin(e);
-    const fill = num === 0 ? "#00AA44" : RED_NUMS.has(num) ? "#CC1111" : "#1a1a1a";
-    return <path key={i} d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z`} fill={fill} stroke="#333" strokeWidth="0.5"/>;
+    const fill = num === 0 ? "#00AA44" : RED_NUMS.has(num) ? "#CC1111" : "#141414";
+    const mid = (s + e) / 2;
+    const tx = cx + (r - 18) * Math.cos(mid), ty = cy + (r - 18) * Math.sin(mid);
+    const rot = (mid * 180) / Math.PI + 90;
+    return (
+      <g key={i}>
+        <path d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z`} fill={fill} stroke="#2a2a2a" strokeWidth="0.4"/>
+        {i % 3 === 0 && (
+          <text x={tx} y={ty} textAnchor="middle" dominantBaseline="middle"
+            fontSize="7" fontWeight="700" fill="white" opacity="0.85"
+            transform={`rotate(${rot},${tx},${ty})`}>{num}</text>
+        )}
+      </g>
+    );
   });
   return (
     <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
       <defs>
-        <clipPath id="cover-roulette-clip">
-          <circle cx={cx} cy={cy} r="88" />
-        </clipPath>
+        <radialGradient id="rl-bg" cx="50%" cy="45%" r="75%">
+          <stop offset="0%" stopColor="#1a2a1a"/>
+          <stop offset="55%" stopColor="#0a120a"/>
+          <stop offset="100%" stopColor="#030503"/>
+        </radialGradient>
+        <radialGradient id="rl-hub" cx="38%" cy="32%" r="65%">
+          <stop offset="0%" stopColor="#FFE566"/>
+          <stop offset="45%" stopColor="#CC8800"/>
+          <stop offset="100%" stopColor="#8B5A00"/>
+        </radialGradient>
+        <radialGradient id="rl-ball" cx="35%" cy="30%" r="65%">
+          <stop offset="0%" stopColor="#ffffff"/>
+          <stop offset="70%" stopColor="#e8e8e8"/>
+          <stop offset="100%" stopColor="#b0b0b0"/>
+        </radialGradient>
+        <filter id="rl-glow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="2.5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="rl-ball-glow" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur stdDeviation="1.5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
       </defs>
-      <rect width="320" height="200" fill="#0a0a0a"/>
-      <circle cx={cx} cy={cy} r="95" fill="#1a0a00" stroke="#CC8800" strokeWidth="3.5"/>
-      <g clipPath="url(#cover-roulette-clip)">
-        <g className="cover-wheel-spin">
-          {paths}
-          <circle cx={cx} cy={cy} r="26" fill="#CC8800" stroke="#FFD700" strokeWidth="2.5"/>
-          <circle cx={cx} cy={cy} r="11" fill="#111"/>
-        </g>
+
+      <rect width="320" height="200" fill="url(#rl-bg)"/>
+      <ellipse cx={cx} cy={cy + 8} rx="92" ry="14" fill="#000" opacity="0.35"/>
+
+      {/* Outer rim — static */}
+      <circle cx={cx} cy={cy} r="94" fill="#1a0a00" stroke="#8B6914" strokeWidth="1.5"/>
+      <circle cx={cx} cy={cy} r="90" fill="none" stroke="#FFD700" strokeWidth="2.5" opacity="0.9"/>
+      <circle cx={cx} cy={cy} r="86" fill="none" stroke="#CC8800" strokeWidth="0.8" opacity="0.5"/>
+
+      {/* Wheel — SVG-native rotation avoids fill-box clipping bugs */}
+      <g>
+        <animateTransform attributeName="transform" type="rotate"
+          from={`0 ${cx} ${cy}`} to={`360 ${cx} ${cy}`}
+          dur="18s" repeatCount="indefinite"/>
+        {paths}
+        <circle cx={cx} cy={cy} r="24" fill="url(#rl-hub)" stroke="#FFD700" strokeWidth="2"/>
+        <circle cx={cx} cy={cy} r="10" fill="#111" stroke="#333" strokeWidth="1"/>
+        <circle cx={cx} cy={cy} r="86" fill="none" stroke="#000" strokeWidth="3" opacity="0.25"/>
       </g>
-      <g className="cover-ball-orbit">
-        <circle cx={cx} cy={cy - 72} r="7" fill="white" stroke="#ccc" strokeWidth="1.5"/>
+
+      {/* Ball — counter-rotates faster on the track */}
+      <g filter="url(#rl-ball-glow)">
+        <animateTransform attributeName="transform" type="rotate"
+          from={`0 ${cx} ${cy}`} to={`-360 ${cx} ${cy}`}
+          dur="4.2s" repeatCount="indefinite"/>
+        <circle cx={cx} cy={cy - ballR} r="5.5" fill="url(#rl-ball)" stroke="#ddd" strokeWidth="0.8"/>
+        <ellipse cx={cx - 1.5} cy={cy - ballR - 1.5} rx="1.8" ry="1.2" fill="white" opacity="0.7"/>
       </g>
-      <polygon points={`${cx},${cy - 95} ${cx - 6},${cy - 82} ${cx + 6},${cy - 82}`} fill="#FFD700"/>
+
+      {/* Pointer — static */}
+      <g filter="url(#rl-glow)">
+        <polygon points={`${cx},${cy - 96} ${cx - 7},${cy - 80} ${cx + 7},${cy - 80}`} fill="#FFD700" stroke="#CC8800" strokeWidth="0.8"/>
+        <polygon points={`${cx},${cy - 93} ${cx - 4},${cy - 82} ${cx + 4},${cy - 82}`} fill="#FFE566" opacity="0.6"/>
+      </g>
     </svg>
   );
 }
