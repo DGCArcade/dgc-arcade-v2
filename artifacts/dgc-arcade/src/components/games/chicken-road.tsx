@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,6 +7,8 @@ import type { Game } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { ChickenRoadBoard } from "./chicken-road/chicken-road-board";
+import type { TileCell } from "./chicken-road/chicken-road-board";
 
 function getToken() { return localStorage.getItem("dgc_token"); }
 function authHeaders() { return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }; }
@@ -114,10 +116,14 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
   );
   const [revealedMatrix, setRevealedMatrix] = useState<number[][] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [lastSafeRow, setLastSafeRow] = useState<number | null>(null);
+
+  const laneMultipliers = Array.from({ length: LANES }, (_, i) => getMultiplier(tier, i));
 
   const resetGrid = useCallback(() => {
     setGrid(Array.from({ length: LANES }, () => Array.from({ length: TILES }, () => ({ status: "hidden" as const }))));
     setRevealedMatrix(null);
+    setLastSafeRow(null);
   }, []);
 
   const startGame = () => {
@@ -142,6 +148,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         setCurrentLane(0);
         setMultiplier(1);
         setPayout(0);
+        setLastSafeRow(2);
         setStatus("active");
         resetGrid();
         playSound("start");
@@ -171,6 +178,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
       if (data.isCar) {
         // Bust
         newGrid[laneIndex][tileIndex] = { status: "car" };
+        setLastSafeRow(tileIndex);
         // Reveal all cars from the matrix
         if (data.matrix) {
           setRevealedMatrix(data.matrix);
@@ -192,6 +200,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         // Safe
         newGrid[laneIndex][tileIndex] = { status: "safe" };
         setGrid(newGrid);
+        setLastSafeRow(tileIndex);
         const newMultiplier = getMultiplier(tier, laneIndex);
         setMultiplier(newMultiplier);
 
@@ -316,21 +325,23 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
 
         {isIdle ? (
           <Button
-            className="w-full font-bold uppercase tracking-wider"
+            className="w-full font-display font-black uppercase tracking-widest h-12 text-base"
             onClick={startGame}
             disabled={loading}
           >
-            {loading ? "Starting..." : "🐔 Start Game"}
+            {loading ? "Starting..." : "Go"}
           </Button>
         ) : (
-          <Button
-            className="w-full font-bold uppercase tracking-wider"
-            variant="outline"
-            onClick={cashout}
-            disabled={loading || currentLane === 0}
-          >
-            {loading ? "Processing..." : `💰 Cashout ${multiplier.toFixed(3)}x`}
-          </Button>
+          <>
+            <Button
+              className="w-full font-display font-black uppercase tracking-widest h-11 bg-blue-600 hover:bg-blue-500 text-white"
+              onClick={cashout}
+              disabled={loading || currentLane === 0}
+            >
+              {loading ? "..." : `Cashout ${multiplier.toFixed(2)}×`}
+            </Button>
+            <p className="text-[10px] text-center text-muted-foreground">Tap a crossing row on the active lane to advance</p>
+          </>
         )}
 
         {/* Result */}
@@ -348,103 +359,33 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         )}
       </div>
 
-      {/* Game Grid */}
-      <div className="chicken-road-play-area flex-1 space-y-3 min-w-0">
-        {/* Provably Fair Hash Display */}
+      {/* Road board */}
+      <div className="chicken-road-play-area flex-1 min-w-0 space-y-3">
         {serverSeedHash && (
-          <div className="bg-secondary/50 border border-border rounded-lg p-3 text-xs font-mono break-all">
-            <span className="text-muted-foreground uppercase tracking-wider font-bold mr-2">Server Seed Hash (SHA-256):</span>
+          <div className="bg-secondary/50 border border-border rounded-lg p-2 text-[10px] font-mono break-all hidden sm:block">
+            <span className="text-muted-foreground uppercase font-bold mr-2">SHA-256:</span>
             <span className="text-primary">{serverSeedHash}</span>
           </div>
         )}
+
+        <ChickenRoadBoard
+          lanes={LANES}
+          tilesPerLane={TILES}
+          grid={grid as TileCell[][]}
+          currentLane={currentLane}
+          status={status}
+          multipliers={laneMultipliers}
+          loading={loading}
+          onPickTile={pickTile}
+          lastSafeRow={lastSafeRow}
+        />
+
         {serverSeed && (
-          <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 text-xs font-mono break-all">
-            <span className="text-green-400 uppercase tracking-wider font-bold mr-2">Revealed Server Seed:</span>
-            <span className="text-foreground">{serverSeed}</span>
+          <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-2 text-[10px] font-mono break-all">
+            <span className="text-green-400 uppercase font-bold mr-2">Server Seed:</span>
+            {serverSeed}
           </div>
         )}
-
-        {/* Lane Grid */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          {/* Header */}
-          <div className="grid grid-cols-[auto_1fr] gap-2 px-4 py-2 border-b border-border bg-secondary/30">
-            <div className="text-xs text-muted-foreground font-mono w-12">Lane</div>
-            <div className="grid grid-cols-5 gap-2 text-xs text-muted-foreground font-mono text-center">
-              {[0, 1, 2, 3, 4].map(i => <div key={i}>T{i + 1}</div>)}
-            </div>
-          </div>
-
-          {/* Lanes */}
-          <div className="divide-y divide-border/50">
-            {Array.from({ length: LANES }, (_, laneIdx) => {
-              const isCurrentLane = status === "active" && laneIdx === currentLane;
-              const isPastLane = currentLane > laneIdx;
-              const isFutureLane = status === "active" && laneIdx > currentLane;
-              const laneMultiplier = getMultiplier(tier, laneIdx);
-
-              return (
-                <div
-                  key={laneIdx}
-                  className={`grid grid-cols-[auto_1fr] gap-2 px-4 py-3 transition-colors ${
-                    isCurrentLane ? "bg-primary/5 border-l-2 border-l-primary" : ""
-                  } ${isFutureLane ? "opacity-50" : ""}`}
-                >
-                  <div className="flex flex-col justify-center w-12">
-                    <div className="text-xs font-mono text-muted-foreground">L{laneIdx + 1}</div>
-                    <div className="text-[10px] font-mono text-primary/70">{laneMultiplier.toFixed(2)}x</div>
-                  </div>
-                  <div className="grid grid-cols-5 gap-2">
-                    {Array.from({ length: TILES }, (_, tileIdx) => {
-                      const tile = grid[laneIdx][tileIdx];
-                      const isClickable = isCurrentLane && !loading;
-
-                      return (
-                        <button
-                          key={tileIdx}
-                          disabled={!isClickable}
-                          onClick={() => pickTile(laneIdx, tileIdx)}
-                          className={`
-                            aspect-square rounded-lg border text-lg font-bold transition-all
-                            ${tile.status === "hidden" && isClickable ? "bg-secondary border-border hover:bg-primary/20 hover:border-primary hover:scale-105 cursor-pointer" : ""}
-                            ${tile.status === "hidden" && !isClickable ? "bg-secondary/30 border-border/30 cursor-not-allowed" : ""}
-                            ${tile.status === "safe" ? "bg-green-500/20 border-green-500/50 text-green-400" : ""}
-                            ${tile.status === "car" ? "bg-red-500/30 border-red-500/60 text-red-400 animate-pulse" : ""}
-                            ${tile.status === "revealed-car" ? "bg-red-500/10 border-red-500/30 text-red-400/50" : ""}
-                          `}
-                        >
-                          {tile.status === "safe" && "✅"}
-                          {tile.status === "car" && "🚗"}
-                          {tile.status === "revealed-car" && "🚗"}
-                          {tile.status === "hidden" && isClickable && "?"}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Multiplier table */}
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Multiplier Progression ({TIER_LABELS[tier].label})</div>
-          <div className="grid grid-cols-5 gap-2 text-xs font-mono">
-            {Array.from({ length: LANES }, (_, i) => (
-              <div
-                key={i}
-                className={`text-center p-2 rounded border ${
-                  i < currentLane && status === "active" ? "bg-green-500/10 border-green-500/30 text-green-400" :
-                  i === currentLane && status === "active" ? "bg-primary/10 border-primary/50 text-primary" :
-                  "bg-secondary/30 border-border/30 text-muted-foreground"
-                }`}
-              >
-                <div className="text-[10px] text-muted-foreground">L{i + 1}</div>
-                <div className="font-bold">{getMultiplier(tier, i).toFixed(2)}x</div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );
