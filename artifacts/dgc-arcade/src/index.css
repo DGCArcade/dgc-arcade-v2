@@ -516,6 +516,48 @@ body {
   image-rendering: auto;
 }
 
+@keyframes derby-speed-line {
+  from { background-position: 0 0; }
+  to { background-position: 80px 0; }
+}
+.derby-speed-lines {
+  background: repeating-linear-gradient(90deg, transparent 0, transparent 40px, rgba(255,255,255,0.08) 40px, rgba(255,255,255,0.08) 42px);
+  animation: derby-speed-line 0.4s linear infinite;
+}
+@keyframes derby-lane-dash-move {
+  from { transform: translateY(0); }
+  to { transform: translateY(8px); }
+}
+.derby-lane-dash {
+  animation: derby-lane-dash-move 0.5s linear infinite;
+}
+
+/* ── Chicken Road visual board ───────────────────────────────────── */
+@keyframes cr-chicken-hop-anim {
+  0%, 100% { transform: translateY(0); }
+  35% { transform: translateY(-8px); }
+  55% { transform: translateY(-4px); }
+}
+.cr-chicken-hop {
+  animation: cr-chicken-hop-anim 0.45s ease-out;
+}
+@keyframes cr-car-drive-anim {
+  from { transform: translateY(-120%); }
+  to { transform: translateY(220%); }
+}
+.cr-car-lane {
+  animation: cr-car-drive-anim 2.8s linear infinite;
+  z-index: 5;
+  pointer-events: none;
+}
+.cr-lanes-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.2) transparent;
+}
+.cr-lane-active {
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.15);
+}
+
 /* ── Cover art: race horses ──────────────────────────────────────── */
 @keyframes cover-race-gallop {
   0%, 100% { transform: translateY(0); }
@@ -1947,6 +1989,21 @@ body {
   .mobile-game-play-area .chicken-road-bet-panel button,
   .mobile-game-play-area .chicken-road-bet-panel .text-2xl {
     font-size: 10px !important;
+  }
+
+  .mobile-game-play-area .cr-board-root {
+    max-height: 100% !important;
+    min-height: 0 !important;
+  }
+
+  .mobile-game-play-area .cr-board-root > div {
+    height: 100% !important;
+    max-height: 240px !important;
+  }
+
+  .mobile-game-play-area .cr-lane-col {
+    min-width: 44px !important;
+    max-width: 56px !important;
   }
 
   /* ── Global compact controls — readable touch targets in bet panels */
