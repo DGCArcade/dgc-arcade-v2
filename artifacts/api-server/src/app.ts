@@ -352,8 +352,14 @@ ensureCoreGamesSeeded()
       ALTER TABLE users ADD COLUMN IF NOT EXISTS owner_stepup_code TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS owner_stepup_expires_at TIMESTAMPTZ;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS owner_stepup_sent_at TIMESTAMPTZ;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS deposit_limit_daily NUMERIC(18,2);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS deposit_limit_weekly NUMERIC(18,2);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS deposit_limit_monthly NUMERIC(18,2);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS loss_limit_daily NUMERIC(18,2);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS session_limit_minutes INTEGER;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS session_started_at TIMESTAMPTZ;
     `);
-    logger.info("Users migration: withdraw OTP columns ensured");
+    logger.info("Users migration: withdraw OTP + gambling limit columns ensured");
   } catch (err) {
     logger.error({ err }, "Users migration: withdraw OTP columns failed");
   }

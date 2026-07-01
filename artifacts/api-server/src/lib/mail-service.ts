@@ -587,6 +587,99 @@ export async function sendDepositEmail(
 // ║ 5. WITHDRAWAL CONFIRMATION — 3 variations                                 ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
 
+export async function sendWithdrawalRequestedEmail(
+  email: string,
+  username: string,
+  amount: string,
+  address: string,
+): Promise<void> {
+  const accent = ACCENTS.gold;
+  const body = `
+    ${h("Withdrawal Requested", accent)}
+    ${p(`Hey ${hl(username, accent)}, we received your cashout request and it's in the queue.`)}
+    ${dataRows([["💵 Amount:", hl(amount, accent)], ["📬 Destination:", address.slice(0, 24) + (address.length > 24 ? "…" : "")], ["📋 Status:", "REQUESTED"]], accent)}
+    ${infoBox("You'll get another email when we start processing and when funds are sent.", accent.glow)}
+    ${btn(`${SITE_URL}/profile`, "Track Withdrawal", accent)}
+  `;
+  const html = shell({
+    accentName: "gold",
+    header: iconHeader(LOGOS.dGoldSpace, accent, "Cashout Requested"),
+    body,
+    preheader: `Withdrawal of ${amount} requested`,
+  });
+  if (resend) {
+    await resend.emails.send({
+      from: SENDER_EMAIL,
+      to: email,
+      subject: `📤 Withdrawal Requested — ${amount} • DGC Arcade`,
+      html,
+    });
+  }
+}
+
+export async function sendWithdrawalProcessingEmail(
+  email: string,
+  username: string,
+  amount: string,
+  reference: string,
+): Promise<void> {
+  const accent = ACCENTS.ocean;
+  const body = `
+    ${h("Withdrawal Processing", accent)}
+    ${p(`${hl(username, accent)}, your payout is being processed on-chain right now.`)}
+    ${dataRows([["💵 Amount:", hl(amount, accent)], ["🔗 Reference:", reference], ["⏳ Status:", "PROCESSING"]], accent)}
+    ${infoBox("Most withdrawals complete within a few minutes. Track progress in your profile.", accent.glow)}
+    ${btn(`${SITE_URL}/profile`, "View Status", accent)}
+  `;
+  const html = shell({
+    accentName: "ocean",
+    header: iconHeader(LOGOS.dOcean, accent, "Processing"),
+    body,
+    preheader: `${amount} is being processed`,
+  });
+  if (resend) {
+    await resend.emails.send({
+      from: SENDER_EMAIL,
+      to: email,
+      subject: `⏳ Withdrawal Processing — ${amount} • DGC Arcade`,
+      html,
+    });
+  }
+}
+
+export async function sendWithdrawalFailedEmail(
+  email: string,
+  username: string,
+  amount: string,
+  reason: "failed" | "needs_review",
+): Promise<void> {
+  const accent = ACCENTS.blood;
+  const statusLabel = reason === "needs_review" ? "UNDER REVIEW" : "NEEDS ATTENTION";
+  const body = `
+    ${h("Withdrawal Update", accent)}
+    ${p(`Hey ${hl(username, accent)}, your withdrawal of ${hl(amount, accent)} requires attention.`)}
+    ${dataRows([["💵 Amount:", amount], ["📋 Status:", statusLabel]], accent)}
+    ${infoBox(reason === "needs_review"
+      ? "Our team is reviewing this payout. Funds remain secured — contact support if you have questions."
+      : "The payout could not be completed automatically. Check your profile or contact support.", accent.glow)}
+    ${btn(`${SITE_URL}/profile`, "View Profile", accent)}
+  `;
+  const html = shell({
+    accentName: "blood",
+    header: iconHeader(LOGOS.dBlood, accent, "Withdrawal Update"),
+    body,
+    preheader: `Withdrawal ${statusLabel.toLowerCase()}`,
+  });
+  if (resend) {
+    await resend.emails.send({
+      from: SENDER_EMAIL,
+      to: email,
+      subject: `⚠️ Withdrawal Update — ${amount} • DGC Arcade`,
+      html,
+    });
+  }
+}
+
 const withdrawalVariants: Array<
   (username: string, amount: string, txHash: string) => { subject: string; html: string }
 > = [

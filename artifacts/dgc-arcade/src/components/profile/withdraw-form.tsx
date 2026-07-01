@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { CoinIcon, CURRENCIES } from "@/components/wallet/coin-icon";
 import { formatCurrency } from "@/lib/format";
 import { RefreshCw, ShieldAlert, CheckCircle2, Mail } from "lucide-react";
+import { WithdrawalTracker } from "@/components/profile/withdrawal-tracker";
 
 const withdrawSchema = z.object({
   amount: z.coerce.number().min(1, "Minimum withdrawal is $1"),
@@ -52,6 +53,12 @@ export function WithdrawForm() {
   });
   const [coinBalancesLoading, setCoinBalancesLoading] = useState(true);
   const [otpSent, setOtpSent] = useState(false);
+  const [activeWithdrawal, setActiveWithdrawal] = useState<{
+    id: number;
+    status: string;
+    amount: number;
+    currency: string;
+  } | null>(null);
   const [sendingOtp, setSendingOtp] = useState(false);
   const [otpCooldown, setOtpCooldown] = useState(0);
 
@@ -178,8 +185,17 @@ export function WithdrawForm() {
     requestWithdrawal.mutate(
       { data: { ...values, otpCode: values.otpCode || undefined } },
       {
-        onSuccess: () => {
+        onSuccess: (data) => {
+          const res = data as { transactionId?: number; status?: string };
           toast({ title: "Withdrawal Requested", description: "Your withdrawal is being processed." });
+          if (res?.transactionId) {
+            setActiveWithdrawal({
+              id: res.transactionId,
+              status: res.status ?? "pending",
+              amount: values.amount,
+              currency: values.currency,
+            });
+          }
           form.reset({ amount: 1, currency: firstAvailable, address: "", otpCode: "" });
           setOtpSent(false);
           queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
@@ -208,6 +224,15 @@ export function WithdrawForm() {
 
   return (
     <div className="space-y-6">
+      {activeWithdrawal && (
+        <WithdrawalTracker
+          transactionId={activeWithdrawal.id}
+          initialStatus={activeWithdrawal.status}
+          amount={activeWithdrawal.amount}
+          currency={activeWithdrawal.currency}
+          onComplete={() => setActiveWithdrawal(null)}
+        />
+      )}
       {/* Wagering Requirement Status Card */}
       <div className={`rounded-xl border p-5 space-y-4 transition-all ${isWagerMet ? "border-green-500/30 bg-green-500/5" : "border-amber-500/30 bg-amber-500/5"}`}>
         <div className="flex items-start justify-between">

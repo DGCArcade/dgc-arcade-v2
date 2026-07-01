@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { formatCurrency } from "@/lib/format";
 import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
+import { ProvablyFairPanel } from "./provably-fair-panel";
 
 interface Card { suit: string; rank: string }
 type Status = "idle" | "active" | "player_blackjack" | "player_wins" | "dealer_wins" | "push" | "player_bust" | "split_complete";
@@ -912,40 +913,16 @@ export function Blackjack({ game }: BlackjackProps) {
           <span>Max: {formatCurrency(maxBet)}</span>
         </div>
 
-        {/* Provably Fair Info */}
-        {serverSeedHash && clientSeed !== null && nonce !== null && (
-          <div className="bj-pf-panel" style={{
-            marginTop: 12, padding: 10, background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 8, fontSize: 8, color: "rgba(255,255,255,0.6)", fontFamily: "monospace", wordBreak: "break-all"
-          }}>
-            <div style={{ fontWeight: 900, color: "rgba(255,255,255,0.8)", marginBottom: 4 }}>PROVABLY FAIR</div>
-            <div style={{ marginBottom: 2 }}>Server Hash: {serverSeedHash.slice(0, 16)}...</div>
-            <div style={{ marginBottom: 2 }}>Client Seed: {clientSeed}</div>
-            <div>Nonce: {nonce}</div>
-            <div style={{ marginTop: 6, fontSize: 7, color: "rgba(255,255,255,0.4)" }}>
-              After game completes, verify at:
-              <a 
-                href={`/api/blackjack/verify/${handId}`} 
-                target="_blank" 
-                rel="noreferrer"
-                style={{ color: accent, marginLeft: 4, textDecoration: "underline" }}
-              >
-                /api/blackjack/verify/{handId}
-              </a>
-            </div>
-            {isDone && (
-              <button
-                onClick={() => window.open(`/api/blackjack/verify/${handId}`, '_blank')}
-                style={{
-                  marginTop: 8, width: "100%", padding: "4px 8px", background: "rgba(255,255,255,0.1)",
-                  border: "1px solid rgba(255,255,255,0.2)", borderRadius: 4, color: "#fff",
-                  fontSize: 8, fontWeight: 900, cursor: "pointer"
-                }}
-              >
-                VERIFY OUTCOME
-              </button>
-            )}
-          </div>
+        {/* Provably Fair */}
+        {serverSeedHash && clientSeed !== null && nonce !== null && handId && (
+          <ProvablyFairPanel
+            serverSeedHash={serverSeedHash}
+            clientSeed={clientSeed}
+            nonce={nonce}
+            verifyPath={`/api/blackjack/verify/${handId}`}
+            variant={isDone ? "full" : "compact"}
+            gameName="blackjack"
+          />
         )}
       </div>
     </div>

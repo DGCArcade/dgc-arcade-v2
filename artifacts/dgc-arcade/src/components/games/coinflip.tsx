@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
 import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
+import { ProvablyFairPanel } from "./provably-fair-panel";
 
 // ─── Theme hook ──────────────────────────────────────────────────────────────
 
@@ -151,7 +152,6 @@ export function Coinflip({ game }: CoinflipProps) {
   const [serverSeedHash, setServerSeedHash] = useState<string | null>(null);
   const [clientSeed, setClientSeed] = useState<string | null>(null);
   const [nonce, setNonce] = useState<number | null>(null);
-  const [showPF, setShowPF] = useState(false);
 
   const handleAmountChange = (val: string) => {
     setAmountStr(val);
@@ -511,90 +511,16 @@ export function Coinflip({ game }: CoinflipProps) {
           {isFlipping ? "Flipping…" : "Flip Coin"}
         </button>
 
-        {/* ── Provably Fair section ── */}
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 10 }}>
-          {/* Toggle header */}
-          <button
-            className="cf-pf-toggle"
-            onClick={() => setShowPF(v => !v)}
-            style={{
-              width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-              background: "none", border: "none", cursor: "pointer", padding: 0,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {/* Shield icon */}
-              <svg width="13" height="14" viewBox="0 0 13 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M6.5 1L1 3.5V7C1 9.76 3.48 12.35 6.5 13C9.52 12.35 12 9.76 12 7V3.5L6.5 1Z" stroke={accent} strokeWidth="1.4" fill="none"/>
-                <path d="M4 7l1.8 1.8L9 5" stroke={accent} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 2.5, color: accent, textTransform: "uppercase" }}>
-                Provably Fair
-              </span>
-            </div>
-            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", transform: showPF ? "rotate(180deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>▼</span>
-          </button>
-
-          {/* Expanded details */}
-          {showPF && (
-            <div style={{
-              marginTop: 8, padding: 10,
-              background: "rgba(0,0,0,0.55)",
-              border: "1px solid rgba(255,255,255,0.09)",
-              borderRadius: 8,
-              fontSize: 8, color: "rgba(255,255,255,0.55)", fontFamily: "monospace",
-              wordBreak: "break-all",
-            }}>
-              {serverSeedHash ? (
-                <>
-                  <div style={{ marginBottom: 6 }}>
-                    <span style={{ color: "rgba(255,255,255,0.35)", display: "block", marginBottom: 2, letterSpacing: 1.5, textTransform: "uppercase" }}>Server Seed Hash (SHA-256)</span>
-                    <span style={{ color: "rgba(255,255,255,0.80)", fontSize: 7.5 }}>{serverSeedHash}</span>
-                  </div>
-                  {clientSeed && (
-                    <div style={{ marginBottom: 6 }}>
-                      <span style={{ color: "rgba(255,255,255,0.35)", display: "block", marginBottom: 2, letterSpacing: 1.5, textTransform: "uppercase" }}>Client Seed</span>
-                      <span style={{ color: "rgba(255,255,255,0.80)" }}>{clientSeed}</span>
-                    </div>
-                  )}
-                  {nonce !== null && (
-                    <div style={{ marginBottom: 6 }}>
-                      <span style={{ color: "rgba(255,255,255,0.35)", display: "block", marginBottom: 2, letterSpacing: 1.5, textTransform: "uppercase" }}>Nonce</span>
-                      <span style={{ color: "rgba(255,255,255,0.80)" }}>{nonce}</span>
-                    </div>
-                  )}
-                  {betId !== null && (
-                    <a
-                      href={`/api/bets/verify/${betId}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        display: "block", marginTop: 8, padding: "5px 8px",
-                        background: `${accent}18`,
-                        border: `1px solid ${accent}44`,
-                        borderRadius: 5,
-                        color: accent, textAlign: "center",
-                        fontSize: 8, fontWeight: 900, letterSpacing: 1.5, textTransform: "uppercase",
-                        textDecoration: "none",
-                      }}
-                    >
-                      Verify Outcome →
-                    </a>
-                  )}
-                </>
-              ) : (
-                <div style={{ color: "rgba(255,255,255,0.35)", textAlign: "center", padding: "6px 0", letterSpacing: 1.5, textTransform: "uppercase" }}>
-                  Place a bet to see seed info
-                </div>
-              )}
-
-              {/* How it works */}
-              <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.07)", fontSize: 7, color: "rgba(255,255,255,0.30)", lineHeight: 1.6 }}>
-                Before each flip the server generates a secret seed and commits its SHA-256 hash. After the flip the full seed is revealed so you can verify the result was not manipulated.
-              </div>
-            </div>
-          )}
-        </div>
+        {(serverSeedHash || betId) && (
+          <ProvablyFairPanel
+            betId={betId ?? undefined}
+            serverSeedHash={serverSeedHash}
+            clientSeed={clientSeed ?? undefined}
+            nonce={nonce ?? undefined}
+            variant={betId ? "full" : "compact"}
+            gameName="coinflip"
+          />
+        )}
 
       </div>
     </div>

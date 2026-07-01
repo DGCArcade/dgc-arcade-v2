@@ -186,8 +186,8 @@ authRouter.post("/login", async (req, res) => {
     // We update it AFTER building the response, so the client sees "last time you logged in", not "right now".
     const responseUser = await formatUser(user);
 
-    // Update lastLoginAt to NOW (fire-and-forget)
-    db.update(usersTable).set({ lastLoginAt: new Date() }).where(eq(usersTable.id, user.id))
+    // Update lastLoginAt + session clock (fire-and-forget)
+    db.update(usersTable).set({ lastLoginAt: new Date(), sessionStartedAt: new Date() }).where(eq(usersTable.id, user.id))
       .catch((e) => logger.warn({ e }, "lastLoginAt update failed"));
 
     // Record device history (fire-and-forget — never block the login response)
