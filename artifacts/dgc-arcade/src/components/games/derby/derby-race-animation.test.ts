@@ -28,4 +28,18 @@ describe("computeRaceProgress", () => {
       }
     }
   });
+
+  it("winnerDone before allDone — no wait for last place", () => {
+    const finishOrder = [2, 6, 1, 4, 3, 5];
+    let winnerDoneAt = 0;
+    let allDoneAt = 0;
+    for (let ms = 7000; ms <= 16000; ms += 50) {
+      const { winnerDone, allDone } = computeRaceProgress(ms, finishOrder);
+      if (winnerDone && !winnerDoneAt) winnerDoneAt = ms;
+      if (allDone && !allDoneAt) allDoneAt = ms;
+    }
+    expect(winnerDoneAt).toBeGreaterThan(0);
+    expect(allDoneAt).toBeGreaterThan(winnerDoneAt);
+    expect(allDoneAt - winnerDoneAt).toBeGreaterThan(2000);
+  });
 });

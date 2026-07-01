@@ -85,12 +85,14 @@ export function DerbyFinishView({
   finishOrder,
   winnerId,
   compact = false,
+  liveSequential = false,
 }: {
   racers: RacerDef[];
   progress: RacerProgress[];
   finishOrder?: number[];
   winnerId?: number;
   compact?: boolean;
+  liveSequential?: boolean;
 }) {
   const orderedIds =
     finishOrder && finishOrder.length === racers.length
@@ -99,16 +101,22 @@ export function DerbyFinishView({
           .sort((a, b) => a.rank - b.rank)
           .map(s => s.r.id);
 
-  const lineup = [...orderedIds].reverse();
+  const crossedIds = liveSequential
+    ? orderedIds.filter(id => progress.find(p => p.racerId === id)?.done)
+    : orderedIds;
+
+  const lineup = [...crossedIds].reverse();
   const winner = racers.find(r => r.id === winnerId);
   const winnerSlotIdx = lineup.findIndex(id => id === winnerId);
-  const winnerLeftPct = winnerSlotIdx >= 0 ? (winnerSlotIdx + 0.5) * (100 / 6) : 92;
+  const winnerLeftPct = winnerSlotIdx >= 0 ? (winnerSlotIdx + 0.5) * (100 / Math.max(crossedIds.length, 1)) : 92;
+  const showFullReveal = !liveSequential || crossedIds.length === racers.length;
+  const showWinnerStamp = showFullReveal && winner;
 
   return (
     <div className="relative h-full w-full overflow-hidden derby-finish-scene">
-      <FinishCameraFlash />
+      {showFullReveal && <FinishCameraFlash />}
       <FinishSky />
-      <FinishConfetti winnerLeftPct={winnerLeftPct} />
+      {showFullReveal && <FinishConfetti winnerLeftPct={winnerLeftPct} />}
 
       {/* Track surface */}
       <div className="absolute bottom-0 left-0 right-0 h-[50%] bg-gradient-to-b from-[#c9a66b] via-[#a8844e] to-[#5c4028]" />
@@ -136,19 +144,42 @@ export function DerbyFinishView({
 
       {/* Header */}
       <div className="absolute top-2 sm:top-3 left-0 right-0 text-center z-20 px-2">
-        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/50 border border-white/15 mb-1 derby-finish-captured-badge">
-          <Camera className="w-3 h-3 text-white/80" />
-          <span className="text-[7px] sm:text-[8px] font-bold uppercase tracking-widest text-white/90">Photo captured</span>
-        </div>
-        <span className="derby-finish-title block">Photo Finish</span>
-        <p className="text-[8px] sm:text-[9px] text-white/60 font-bold uppercase tracking-widest mt-0.5">Official results</p>
+        {showFullReveal ? (
+          <>
+            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/50 border border-white/15 mb-1 derby-finish-captured-badge">
+              <Camera className="w-3 h-3 text-white/80" />
+              <span className="text-[7px] sm:text-[8px] font-bold uppercase tracking-widest text-white/90">Photo captured</span>
+            </div>
+            <span className="derby-finish-title block">Photo Finish</span>
+            <p className="text-[8px] sm:text-[9px] text-white/60 font-bold uppercase tracking-widest mt-0.5">Official results</p>
+          </>
+        ) : (
+          <>
+            <span className="derby-finish-title block text-base sm:text-lg">Live Wire</span>
+            <p className="text-[8px] sm:text-[9px] text-yellow-300/90 font-bold uppercase tracking-widest mt-0.5">
+              {crossedIds.length} of {racers.length} across
+            </p>
+          </>
+        )}
       </div>
 
+      {/* Winner stamp — after winner crosses */}
+      {showWinnerStamp && winner && (
+        <div className="absolute top-[38%] left-1/2 -translate-x-1/2 z-[35] pointer-events-none derby-finish-winner-stamp">
+          <span className="block text-center font-black uppercase tracking-[0.2em] text-yellow-300 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] text-lg sm:text-2xl">
+            Winner!
+          </span>
+          <span className="block text-center font-black text-white text-xs sm:text-sm mt-0.5 drop-shadow-lg">
+            #{winner.num} {winner.name}
+          </span>
+        </div>
+      )}
+
       {/* Winner callout banner */}
-      {winner && (
+      {showWinnerStamp && winner && (
         <div
           className="absolute top-[22%] left-1/2 -translate-x-1/2 z-25 derby-finish-winner-banner"
-          style={{ animationDelay: "0.85s" }}
+          style={{ animationDelay: showFullReveal ? "0.85s" : "0.28s" }}
         >
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-yellow-500/90 to-amber-400/90 border border-yellow-200/60 shadow-xl backdrop-blur-sm">
             <Trophy className="w-4 h-4 text-yellow-900 shrink-0 derby-finish-trophy-spin" />
@@ -177,15 +208,20 @@ export function DerbyFinishView({
           const gapBehind = standing?.gapBehind ?? (place - 1) * 2.8;
           const isWinner = winnerId === r.id;
           const mood: HorseMood = isWinner ? "happy" : "sad";
-          const slotWidth = 100 / 6;
+          const slotCount = Math.max(crossedIds.length, 1);
+          const slotWidth = 100 / slotCount;
           const left = visualIdx * slotWidth + slotWidth * 0.5;
           const horseScale = isWinner
             ? compact ? 1.0 : 1.18
             : compact
               ? Math.max(0.58, 0.72 - (place - 2) * 0.04)
               : Math.max(0.62, 0.88 - (place - 2) * 0.05);
-          const enterDelay = 0.15 + visualIdx * 0.12;
-          const faceDelay = enterDelay + 0.35;
+          const enterDelay = liveSequential
+            ? 0.05
+            : isWinner
+              ? 0.08
+              : 0.15 + visualIdx * 0.12;
+          const faceDelay = enterDelay + (liveSequential ? 0.18 : 0.35);
 
           return (
             <div
@@ -195,7 +231,7 @@ export function DerbyFinishView({
             >
               <div
                 className={`flex flex-col items-center derby-finish-horse-inner ${
-                  isWinner ? "derby-finish-winner-cross" : "derby-finish-horse-slide"
+                  isWinner ? "derby-finish-winner-cross" : liveSequential ? "derby-wire-horse-cross" : "derby-finish-horse-slide"
                 }`}
                 style={{ animationDelay: `${enterDelay}s` }}
               >

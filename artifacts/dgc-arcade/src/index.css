@@ -917,6 +917,14 @@ body {
   animation: derby-finish-winner-banner-in 0.65s cubic-bezier(0.34, 1.4, 0.64, 1) both;
   z-index: 25;
 }
+@keyframes derby-finish-winner-stamp-in {
+  0% { opacity: 0; transform: translateX(-50%) scale(1.8); filter: blur(4px); }
+  55% { opacity: 1; transform: translateX(-50%) scale(0.92); filter: blur(0); }
+  100% { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+.derby-finish-winner-stamp {
+  animation: derby-finish-winner-stamp-in 0.5s cubic-bezier(0.22, 1.3, 0.36, 1) both;
+}
 @keyframes derby-finish-captured-badge-in {
   0% { opacity: 0; transform: scale(0.8); }
   100% { opacity: 1; transform: scale(1); }
@@ -1053,6 +1061,56 @@ body {
 .derby-finish-loser {
   opacity: 0.92;
 }
+
+/* ── Live wire runout (track cam) ───────────────────────────────── */
+@keyframes derby-wire-cross-spark {
+  0% { transform: scale(0.4); opacity: 0; filter: brightness(2); }
+  35% { transform: scale(1.15); opacity: 1; filter: brightness(1.4); }
+  100% { transform: scale(1); opacity: 1; filter: brightness(1); }
+}
+.derby-wire-cross-spark {
+  animation: derby-wire-cross-spark 0.55s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+}
+@keyframes derby-wire-horse-surge {
+  0% { transform: translateX(-50%) scale(0.92); filter: brightness(1); }
+  40% { transform: translateX(-50%) scale(1.06); filter: brightness(1.25); }
+  100% { transform: translateX(-50%) scale(1); filter: brightness(1); }
+}
+.derby-wire-horse-cross {
+  animation: derby-wire-horse-surge 0.5s cubic-bezier(0.22, 1.1, 0.36, 1) both;
+}
+.derby-wire-place-badge {
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+}
+@keyframes derby-wire-cam-label-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.derby-wire-cam-label {
+  animation: derby-wire-cam-label-in 0.4s ease-out both;
+}
+@keyframes derby-wire-status-pulse {
+  0%, 100% { opacity: 0.85; transform: translateX(-50%) scale(1); }
+  50% { opacity: 1; transform: translateX(-50%) scale(1.02); }
+}
+.derby-wire-status-banner {
+  animation: derby-wire-status-pulse 1.6s ease-in-out infinite;
+}
+.derby-wire-cam-vignette {
+  background: radial-gradient(ellipse 55% 80% at 88% 50%, transparent 30%, rgba(0,0,0,0.35) 100%);
+}
+@keyframes derby-jumbotron-glow-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.65; }
+}
+.derby-jumbotron-glow {
+  animation: derby-jumbotron-glow-pulse 2s ease-in-out infinite;
+}
+.derby-grandstand {
+  box-shadow: inset 0 -4px 12px rgba(0,0,0,0.4);
+}
+
 .derby-face-emoji {
   animation: derby-face-pop 0.5s cubic-bezier(0.34, 1.5, 0.64, 1) both;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
