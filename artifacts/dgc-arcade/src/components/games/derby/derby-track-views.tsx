@@ -20,7 +20,7 @@ export type CameraAngle = "side" | "front" | "aerial" | "finish";
 const TRACK_LEN = 100;
 const LANE_COUNT = 6;
 /** Shared horizontal track — all horses use same X so ahead/behind is obvious */
-const TRACK_START_PCT = 5;
+const TRACK_START_PCT = 8;
 const TRACK_END_PCT = 92;
 
 function horseTrackLeft(progM: number): number {
@@ -212,7 +212,10 @@ export function DerbySideView({
       {/* Scrolling track + lane grid */}
       <div
         className="absolute bottom-0 left-0 right-0 h-[46%] derby-track-scroll overflow-hidden"
-        style={{ transform: `translateX(-${racing ? cameraX : 0}%)`, width: "260%" }}
+        style={{
+          transform: racing ? `translateX(-${cameraX}%)` : "none",
+          width: racing ? "260%" : "100%",
+        }}
       >
         {racing && <div className="absolute inset-0 derby-track-motion z-0 pointer-events-none" />}
 
@@ -257,8 +260,40 @@ export function DerbySideView({
           </span>
         )}
 
-        {/* Six clearly separated lane rows */}
+        {/* Six clearly separated lane rows (backgrounds + rails) */}
         <div className="absolute inset-0 flex flex-col pt-6 pb-1 z-10">
+          {racers.map((r, lane) => {
+            const p = progress.find(x => x.racerId === r.id);
+            const progM = p?.progress ?? 0;
+            const standing = rankMap.get(r.id);
+            const rank = standing?.rank ?? 0;
+            const isMyPick = r.id === selectedRacer;
+
+            return (
+              <div
+                key={`lane-${r.id}`}
+                className={`derby-lane-row flex-1 min-h-0 flex items-stretch border-b border-white/12 ${
+                  lane % 2 === 0 ? "bg-black/[0.06]" : "bg-white/[0.03]"
+                } ${isMyPick ? "derby-lane-row-pick" : ""} ${rank === 1 && racing ? "derby-lane-row-leading" : ""}`}
+              >
+                <DerbyLaneNumber lane={lane + 1} compact={compact} highlight={isMyPick} />
+                <div className="relative flex-1 min-w-0">
+                  {racing && (
+                    <div className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-white/10 left-0 right-0 mx-1 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${rank === 1 ? "bg-yellow-400" : "bg-white/35"}`}
+                        style={{ width: `${(progM / TRACK_LEN) * 100}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Horses + gates — same horizontal coords as distance markers */}
+        <div className="absolute inset-0 flex flex-col pt-6 pb-1 z-20 pointer-events-none">
           {racers.map((r, lane) => {
             const p = progress.find(x => x.racerId === r.id);
             const progM = p?.progress ?? 0;
@@ -272,69 +307,49 @@ export function DerbySideView({
             const isMyPick = r.id === selectedRacer;
 
             return (
-              <div
-                key={r.id}
-                className={`derby-lane-row flex-1 min-h-0 flex items-stretch border-b border-white/12 ${
-                  lane % 2 === 0 ? "bg-black/[0.06]" : "bg-white/[0.03]"
-                } ${isMyPick ? "derby-lane-row-pick" : ""} ${rank === 1 && racing ? "derby-lane-row-leading" : ""}`}
-              >
-                <DerbyLaneNumber lane={lane + 1} compact={compact} highlight={isMyPick} />
-                <div className="relative flex-1 min-w-0">
-                  {/* Low stall gate — behind horse, never blocks the sprite */}
-                  {(atGate || (gateOpening && progM < 4)) && (
-                    <div
-                      className={`absolute bottom-0 z-[5] pointer-events-none ${gateOpening ? "derby-gate-open" : ""}`}
-                      style={{ left: `${TRACK_START_PCT}%`, transform: "translateX(-120%)" }}
-                    >
-                      {gateOpening && lane === 0 && (
-                        <div className="absolute left-0 bottom-full mb-1 w-24 h-8 derby-gate-dust" />
-                      )}
-                      <div
-                        className={`${compact ? "w-5 h-6" : "w-7 h-8"} bg-gradient-to-b from-[#a0522d] to-[#5c3317] border border-[#ffd700]/45 rounded-t-sm shadow-inner derby-gate-door opacity-75`}
-                        style={{ animationDelay: `${lane * 0.06}s` }}
-                      />
-                    </div>
-                  )}
-                  {/* Progress rail — shows how far this horse has run */}
-                  {racing && (
-                    <div
-                      className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-white/10 left-0 right-0 mx-1 overflow-hidden"
-                    >
-                      <div
-                        className={`h-full rounded-full ${rank === 1 ? "bg-yellow-400" : "bg-white/35"}`}
-                        style={{ width: `${(progM / TRACK_LEN) * 100}%` }}
-                      />
-                    </div>
-                  )}
+              <div key={`horse-${r.id}`} className="relative flex-1 min-h-0">
+                {(atGate || (gateOpening && progM < 4)) && (
                   <div
-                    className="absolute bottom-0 flex flex-col items-center transition-none z-20 derby-horse-on-track"
-                    style={{
-                      left: `${trackLeft}%`,
-                      transform: "translateX(-50%)",
-                      zIndex: 20 + Math.round(progM) + (isMyPick ? 30 : 0),
-                      opacity: racing ? 0.8 + (progM / TRACK_LEN) * 0.2 : 1,
-                    }}
+                    className={`absolute bottom-0 z-[5] ${gateOpening ? "derby-gate-open" : ""}`}
+                    style={{ left: `${TRACK_START_PCT}%`, transform: "translateX(-120%)" }}
                   >
-                    {!compact && <HorseRacerLabel r={r} isMyPick={isMyPick} compact={compact} showName={!compact} />}
-                    {racing && rank > 0 && !compact && (
-                      <DerbyAheadBehindTag rank={rank} gapBehind={gapBehind} compact={compact} />
+                    {gateOpening && lane === 0 && (
+                      <div className="absolute left-0 bottom-full mb-1 w-24 h-8 derby-gate-dust" />
                     )}
-                    <HorseRig
-                      r={r}
-                      gallop={gallop}
-                      scale={horseScale * (rank === 1 && racing ? 1.08 : rank && rank > 3 && racing ? 0.92 : 1)}
-                      isMyPick={isMyPick}
-                      isWinner={isWinner}
-                      rank={rank}
-                      gapBehind={gapBehind}
-                      racing={racing}
-                      compact={compact}
-                      showRankBadge={!compact}
+                    <div
+                      className={`${compact ? "w-5 h-6" : "w-7 h-8"} bg-gradient-to-b from-[#a0522d] to-[#5c3317] border border-[#ffd700]/45 rounded-t-sm shadow-inner derby-gate-door opacity-75`}
+                      style={{ animationDelay: `${lane * 0.06}s` }}
                     />
-                    {isWinner && (
-                      <Trophy className="absolute -top-1 -right-4 w-4 h-4 text-yellow-400 animate-bounce drop-shadow" />
-                    )}
                   </div>
+                )}
+                <div
+                  className="absolute bottom-0 flex flex-col items-center transition-none derby-horse-on-track"
+                  style={{
+                    left: `${trackLeft}%`,
+                    transform: "translateX(-50%)",
+                    zIndex: 20 + Math.round(progM) + (isMyPick ? 30 : 0),
+                    opacity: racing ? 0.8 + (progM / TRACK_LEN) * 0.2 : 1,
+                  }}
+                >
+                  {!compact && <HorseRacerLabel r={r} isMyPick={isMyPick} compact={compact} showName={!compact} />}
+                  {racing && rank > 0 && !compact && (
+                    <DerbyAheadBehindTag rank={rank} gapBehind={gapBehind} compact={compact} />
+                  )}
+                  <HorseRig
+                    r={r}
+                    gallop={gallop}
+                    scale={horseScale * (rank === 1 && racing ? 1.08 : rank && rank > 3 && racing ? 0.92 : 1)}
+                    isMyPick={isMyPick}
+                    isWinner={isWinner}
+                    rank={rank}
+                    gapBehind={gapBehind}
+                    racing={racing}
+                    compact={compact}
+                    showRankBadge={!compact}
+                  />
+                  {isWinner && (
+                    <Trophy className="absolute -top-1 -right-4 w-4 h-4 text-yellow-400 animate-bounce drop-shadow" />
+                  )}
                 </div>
               </div>
             );
