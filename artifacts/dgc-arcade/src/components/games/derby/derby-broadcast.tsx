@@ -68,6 +68,13 @@ const CAM_LABELS: Record<CameraAngle, string> = {
   finish: "FINISH CAM",
 };
 
+const PREVIEW_COPY: Record<CameraAngle, { title: string; subtitle: string }> = {
+  side: { title: "Track View", subtitle: "Six lanes — positions read left to right" },
+  front: { title: "Chase View", subtitle: "See who's ahead in each lane" },
+  aerial: { title: "Aerial Map", subtitle: "Bird's-eye pack positions on the oval" },
+  finish: { title: "Finish Line", subtitle: "Photo finish results" },
+};
+
 export function DerbyBroadcastOverlay({
   phase,
   camera,
@@ -76,6 +83,7 @@ export function DerbyBroadcastOverlay({
   leaderNum,
   leaderSilk,
   compact,
+  preview = false,
 }: {
   phase: RacePhase;
   camera: CameraAngle;
@@ -84,9 +92,10 @@ export function DerbyBroadcastOverlay({
   leaderNum?: string;
   leaderSilk?: string;
   compact?: boolean;
+  preview?: boolean;
 }) {
-  const copy = PHASE_COPY[phase];
-  const camLabel = racing ? copy.camLabel : CAM_LABELS[camera];
+  const copy = preview ? PREVIEW_COPY[camera] : PHASE_COPY[phase];
+  const camLabel = preview || !racing ? CAM_LABELS[camera] : PHASE_COPY[phase].camLabel;
 
   return (
     <div className="absolute inset-0 pointer-events-none z-50 flex flex-col justify-between p-2 sm:p-3">

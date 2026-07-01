@@ -78,6 +78,13 @@ export default function RacePage() {
   const cameraRef = useRef(0);
   const manualCameraRef = useRef(false);
   const lastAutoCamRef = useRef<CameraAngle | null>(null);
+  const [liveFair, setLiveFair] = useState<{
+    betId: number;
+    serverSeedHash: string;
+    clientSeed: string;
+    nonce: number;
+    serverSeed?: string;
+  } | null>(null);
 
   const resetRace = useCallback(() => {
     setResult(null);
@@ -89,6 +96,7 @@ export default function RacePage() {
     setRacePhase("gate");
     manualCameraRef.current = false;
     lastAutoCamRef.current = null;
+    setLiveFair(null);
     gallopStarted.current = false;
     stopHorseGallopLoop();
     stopCrowdAmbience();
@@ -122,6 +130,12 @@ export default function RacePage() {
       if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Race failed"); }
       res = await r.json();
       resultRef.current = res;
+      setLiveFair({
+        betId: res.betId,
+        serverSeedHash: res.serverSeedHash,
+        clientSeed: res.clientSeed,
+        nonce: res.nonce,
+      });
     } catch (e: unknown) {
       setRacing(false);
       toast({ title: "Error", description: (e as Error).message, variant: "destructive" });
@@ -186,6 +200,7 @@ export default function RacePage() {
         setResult(resultRef.current);
         setRacing(false);
         setRacePhase("finish");
+        setLiveFair(prev => prev ? { ...prev, serverSeed: resultRef.current?.serverSeed } : null);
         setCamFade(f => f + 1);
         setCamera("finish");
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
@@ -237,6 +252,9 @@ export default function RacePage() {
     );
   }
 
+  const previewCamera: CameraAngle =
+    !racing && !result && camera === "finish" ? "side" : camera;
+
   const trackCard = (
     <Card className="race-track-card bg-card border-border p-0 overflow-hidden flex flex-col min-h-0 h-full">
       <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/40 bg-secondary/30 shrink-0">
@@ -261,18 +279,26 @@ export default function RacePage() {
       <div className="relative flex-1 min-h-[200px] derby-track-scene">
         <div className="absolute inset-0 overflow-hidden">
           {!racing && !result ? (
-            <DerbySideView
-              {...viewProps}
-              camera="side"
-              cameraX={0}
-              winnerId={undefined}
-              showResult={false}
-            />
+            <div className="absolute inset-0 derby-cam-cut">
+              {renderCameraView(previewCamera)}
+            </div>
           ) : (
             renderCamera()
           )}
         </div>
       </div>
+      {(racing || result) && liveFair && (
+        <div className="px-2 py-1.5 border-t border-border/30 bg-secondary/20 shrink-0">
+          <ProvablyFairPanel
+            betId={liveFair.betId}
+            serverSeedHash={liveFair.serverSeedHash}
+            serverSeed={liveFair.serverSeed ?? result?.serverSeed}
+            clientSeed={liveFair.clientSeed}
+            nonce={liveFair.nonce}
+            verifyPath={`/api/race/verify/${liveFair.betId}`}
+          />
+        </div>
+      )}
       {racing && (
         <div className="px-2 py-1 border-t border-border/30 bg-black/40 flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2">
@@ -309,8 +335,8 @@ export default function RacePage() {
           <div className="text-[9px] text-muted-foreground uppercase">Balance</div>
         </div>
       </div>
-      {!isMobile && (
-        <div className="mt-3 pt-3 border-t border-border/40">
+      {isMobile && result && (
+        <div className="mt-2 pt-2 border-t border-border/40">
           <ProvablyFairPanel
             betId={result.betId}
             serverSeedHash={result.serverSeedHash}
