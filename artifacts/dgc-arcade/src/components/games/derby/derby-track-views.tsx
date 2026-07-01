@@ -10,7 +10,7 @@ import {
   getRacePhase,
   type RacePhase,
 } from "./derby-broadcast";
-import { buildStandings, getRankMap, relativeBehind } from "./derby-race-utils";
+import { buildStandings, getRankMap, relativeBehind, chaseVisualPosition } from "./derby-race-utils";
 import { DerbyAheadBehindTag, DerbyRankPill } from "./derby-position-badge";
 import type { HorseMood } from "./derby-horse";
 
@@ -108,7 +108,7 @@ function HorseRig({
 }) {
   return (
     <div
-      className={`relative derby-horse-rig ${isMyPick ? "derby-pick-ring" : ""} ${isWinner ? "brightness-115 derby-winner-glow" : ""} ${
+      className={`relative derby-horse-rig ${isMyPick && !racing ? "derby-pick-glow" : isMyPick && racing ? "derby-pick-glow-subtle" : ""} ${isWinner ? "brightness-115 derby-winner-glow" : ""} ${
         gallop ? "derby-horse-bob derby-horse-lean derby-horse-stride" : ""
       } ${rank === 1 && racing ? "derby-horse-leading" : ""} ${rank && rank > 3 && racing ? "derby-horse-trailing" : ""}`}
     >
@@ -261,7 +261,7 @@ export function DerbySideView({
         )}
 
         {/* Six clearly separated lane rows (backgrounds + rails) */}
-        <div className="absolute inset-0 flex flex-col pt-6 pb-1 z-10">
+        <div className="absolute inset-0 flex flex-col pt-5 pb-2 z-10 gap-[3px] sm:gap-1.5">
           {racers.map((r, lane) => {
             const p = progress.find(x => x.racerId === r.id);
             const progM = p?.progress ?? 0;
@@ -272,9 +272,9 @@ export function DerbySideView({
             return (
               <div
                 key={`lane-${r.id}`}
-                className={`derby-lane-row flex-1 min-h-0 flex items-stretch border-b border-white/12 ${
+                className={`derby-lane-row flex-1 min-h-[12px] sm:min-h-[16px] flex items-stretch border-b border-white/12 ${
                   lane % 2 === 0 ? "bg-black/[0.06]" : "bg-white/[0.03]"
-                } ${isMyPick ? "derby-lane-row-pick" : ""} ${rank === 1 && racing ? "derby-lane-row-leading" : ""}`}
+                } ${rank === 1 && racing ? "derby-lane-row-leading" : ""}`}
               >
                 <DerbyLaneNumber lane={lane + 1} compact={compact} highlight={isMyPick} />
                 <div className="relative flex-1 min-w-0">
@@ -293,7 +293,7 @@ export function DerbySideView({
         </div>
 
         {/* Horses + gates — same horizontal coords as distance markers */}
-        <div className="absolute inset-0 flex flex-col pt-6 pb-1 z-20 pointer-events-none">
+        <div className="absolute inset-0 flex flex-col pt-5 pb-2 z-20 pointer-events-none gap-[3px] sm:gap-1.5">
           {racers.map((r, lane) => {
             const p = progress.find(x => x.racerId === r.id);
             const progM = p?.progress ?? 0;
@@ -307,7 +307,7 @@ export function DerbySideView({
             const isMyPick = r.id === selectedRacer;
 
             return (
-              <div key={`horse-${r.id}`} className="relative flex-1 min-h-0">
+              <div key={`horse-${r.id}`} className="relative flex-1 min-h-[12px] sm:min-h-[16px]">
                 {(atGate || (gateOpening && progM < 4)) && (
                   <div
                     className={`absolute bottom-0 z-[5] ${gateOpening ? "derby-gate-open" : ""}`}
@@ -378,7 +378,6 @@ export function DerbyFrontChaseView({
   const standings = buildStandings(racers, progress);
   const rankMap = getRankMap(standings);
 
-  const gateBottom = 2;
   const horseScale = compact ? 0.65 : 0.82;
 
   return (
@@ -424,7 +423,6 @@ export function DerbyFrontChaseView({
         {racers.map((r, laneIdx) => {
           const p = progress.find(x => x.racerId === r.id);
           const progM = p?.progress ?? 0;
-          const prog = progM / TRACK_LEN;
           const standing = rankMap.get(r.id);
           const rank = standing?.rank ?? 0;
           const gapBehind = standing?.gapBehind ?? 0;
@@ -432,28 +430,27 @@ export function DerbyFrontChaseView({
           const isMyPick = r.id === selectedRacer;
           const isLeader = rank === 1 && racing;
           const behind = relativeBehind(progM, leaderProg);
-
-          // Real position: leader furthest up-track (highest bottom%), trailers lower & smaller
-          const bottom = gateBottom + prog * (compact ? 76 : 68);
-          const scale = 0.48 + prog * (compact ? 0.72 : 0.82);
-          const opacity = racing ? 0.5 + prog * 0.5 : 1;
-          // Leaders drift slightly toward track center so pack spread is obvious
-          const centerPull = (2.5 - laneIdx) * behind * (compact ? 2.5 : 3.5);
+          const chasePos = chaseVisualPosition(progM, gapBehind, racing, !!compact);
+          const bottom = chasePos.bottomPct;
+          const rankMul = isLeader ? 1.08 : rank > 3 && racing ? 0.9 : 1;
+          const visualScale = chasePos.scaleMul * horseScale * rankMul;
+          const opacity = racing ? 0.55 + (progM / TRACK_LEN) * 0.45 : 1;
+          const centerPull = racing ? (2.5 - laneIdx) * behind * (compact ? 4 : 5) : 0;
 
           return (
             <div
               key={r.id}
               className={`relative derby-chase-column border-x border-white/10 ${
-                isMyPick ? "derby-chase-column-pick" : ""
-              } ${isLeader ? "derby-chase-column-leading" : ""} ${
+                isLeader ? "derby-chase-column-leading" : ""
+              } ${
                 laneIdx % 2 === 0 ? "bg-black/[0.04]" : "bg-white/[0.02]"
               }`}
             >
               <div className="absolute top-1 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-0.5">
                 <HorseSilkBadge r={r} size="xs" highlight={isMyPick} />
-                {racing && rank > 0 && !compact && (
-                  <span className="text-[7px] font-mono font-bold text-white/70 bg-black/50 px-0.5 rounded">
-                    {Math.round(progM)}m
+                {racing && rank > 0 && (
+                  <span className="text-[6px] sm:text-[7px] font-mono font-bold text-white/80 bg-black/60 px-0.5 rounded whitespace-nowrap">
+                    {rank === 1 ? "LEAD" : `−${Math.round(gapBehind)}m`}
                   </span>
                 )}
               </div>
@@ -464,8 +461,8 @@ export function DerbyFrontChaseView({
                 style={{
                   bottom: `${bottom}%`,
                   left: `calc(50% + ${centerPull}%)`,
-                  transform: `translateX(-50%) scale(${scale})`,
-                  zIndex: Math.round(progM * 2) + laneIdx + (isMyPick ? 80 : 0),
+                  transform: `translateX(-50%) scale(${visualScale})`,
+                  zIndex: Math.round(progM * 3) + laneIdx + (isMyPick ? 80 : 0) + (isLeader ? 40 : 0),
                   opacity,
                 }}
               >
@@ -479,7 +476,7 @@ export function DerbyFrontChaseView({
                 <HorseRig
                   r={r}
                   gallop={gallop}
-                  scale={horseScale * (isLeader ? 1.06 : rank > 3 ? 0.9 : 1)}
+                  scale={1}
                   view="front-chase"
                   isMyPick={isMyPick}
                   isWinner={false}
@@ -643,7 +640,7 @@ export function DerbyAerialView({
                 <DerbyRankPill rank={rank} gapBehind={gapBehind} compact isLeader={rank === 1} />
               )}
               <HorseSilkBadge r={r} size="xs" highlight={isMyPick} />
-              <div className={isMyPick ? "derby-pick-ring rounded-full" : ""}>
+              <div className={isMyPick && !racing ? "derby-pick-glow rounded-full" : isMyPick ? "derby-pick-glow-subtle rounded-full" : ""}>
                 <HorseRig
                   r={r}
                   gallop={gallop}

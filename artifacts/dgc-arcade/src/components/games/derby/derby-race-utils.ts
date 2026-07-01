@@ -51,3 +51,22 @@ export function relativeBehind(prog: number, leaderProg: number): number {
   if (leaderProg <= 0) return 0;
   return Math.min(1, Math.max(0, (leaderProg - prog) / Math.max(leaderProg, 12)));
 }
+
+/** Amplify meter gaps for chase cam — small leads must read clearly on screen */
+export function chaseVisualPosition(
+  progM: number,
+  gapBehind: number,
+  racing: boolean,
+  compact: boolean,
+): { bottomPct: number; scaleMul: number } {
+  const gateBottom = 2;
+  const spreadMax = compact ? 94 : 86;
+  if (!racing) {
+    return { bottomPct: gateBottom, scaleMul: 1 };
+  }
+  const base = (progM / TRACK_LEN) * spreadMax;
+  const gapSep = gapBehind * (compact ? 0.58 : 0.45);
+  const bottomPct = gateBottom + base - gapSep;
+  const scaleMul = 0.82 + (progM / TRACK_LEN) * 0.55 - (gapBehind / TRACK_LEN) * 0.2;
+  return { bottomPct, scaleMul: Math.max(0.72, Math.min(1.12, scaleMul)) };
+}
