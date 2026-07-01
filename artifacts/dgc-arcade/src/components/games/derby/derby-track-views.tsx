@@ -58,10 +58,29 @@ function HorseRacerLabel({
 function SkyAndHorizon() {
   return (
     <>
-      <div className="absolute inset-0 bg-gradient-to-b from-[#3d7ab5] via-[#6eb5d8] 28% to-[#d4b896] 58%" />
-      <div className="absolute top-[10%] left-0 right-0 h-12 bg-gradient-to-b from-white/30 to-transparent" />
-      <div className="absolute top-[18%] left-[10%] w-16 h-5 rounded-full bg-white/20 blur-md" />
-      <div className="absolute top-[14%] right-[18%] w-24 h-7 rounded-full bg-white/15 blur-md" />
+      <div className="absolute inset-0 bg-gradient-to-b from-[#2d6a9f] via-[#5ba3cc] 22% to-[#8ec4e8] 38% via-[#c9b896] 58% to-[#d4b896] 100%" />
+      <div className="absolute top-[8%] left-0 right-0 h-14 bg-gradient-to-b from-white/35 to-transparent" />
+      {/* Clouds */}
+      <div className="absolute top-[12%] left-[8%] w-20 h-6 rounded-full bg-white/25 blur-md derby-cloud-drift" />
+      <div className="absolute top-[16%] right-[12%] w-28 h-8 rounded-full bg-white/20 blur-md derby-cloud-drift-slow" />
+      <div className="absolute top-[22%] left-[45%] w-16 h-5 rounded-full bg-white/15 blur-sm derby-cloud-drift" style={{ animationDelay: "-4s" }} />
+      {/* Birds */}
+      <svg className="absolute top-[14%] left-[20%] w-8 h-4 opacity-50 derby-bird-fly" viewBox="0 0 32 16" fill="none">
+        <path d="M4 8 Q8 4 12 8 Q16 12 20 8 Q24 4 28 8" stroke="#1a2a3a" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+      </svg>
+      <svg className="absolute top-[20%] right-[25%] w-6 h-3 opacity-40 derby-bird-fly" style={{ animationDelay: "-6s", animationDuration: "18s" }} viewBox="0 0 32 16" fill="none">
+        <path d="M4 8 Q8 4 12 8 Q16 12 20 8 Q24 4 28 8" stroke="#1a2a3a" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+      </svg>
+      <svg className="absolute top-[11%] left-[60%] w-5 h-2.5 opacity-35 derby-bird-fly" style={{ animationDelay: "-2s", animationDuration: "22s" }} viewBox="0 0 32 16" fill="none">
+        <path d="M4 8 Q8 4 12 8 Q16 12 20 8" stroke="#1a2a3a" strokeWidth="1" fill="none" strokeLinecap="round" />
+      </svg>
+      {/* Distant treeline */}
+      <div className="absolute bottom-[42%] left-0 right-0 h-10 opacity-60 pointer-events-none"
+        style={{
+          background: "linear-gradient(180deg, transparent, #3d6b35 40%, #2d5a28)",
+          clipPath: "polygon(0 100%, 5% 40%, 12% 70%, 20% 30%, 30% 60%, 42% 25%, 55% 55%, 68% 20%, 80% 50%, 92% 35%, 100% 65%, 100% 100%)",
+        }}
+      />
     </>
   );
 }
@@ -108,7 +127,7 @@ function HorseRig({
 }) {
   return (
     <div
-      className={`relative derby-horse-rig ${isMyPick && !racing ? "derby-pick-glow" : isMyPick && racing ? "derby-pick-glow-subtle" : ""} ${isWinner ? "brightness-115 derby-winner-glow" : ""} ${
+      className={`relative derby-horse-rig ${isMyPick ? "derby-pick-glow" : ""} ${isWinner ? "brightness-115 derby-winner-glow" : ""} ${
         gallop ? "derby-horse-bob derby-horse-lean derby-horse-stride" : ""
       } ${rank === 1 && racing ? "derby-horse-leading" : ""} ${rank && rank > 3 && racing ? "derby-horse-trailing" : ""}`}
     >
@@ -640,7 +659,7 @@ export function DerbyAerialView({
                 <DerbyRankPill rank={rank} gapBehind={gapBehind} compact isLeader={rank === 1} />
               )}
               <HorseSilkBadge r={r} size="xs" highlight={isMyPick} />
-              <div className={isMyPick && !racing ? "derby-pick-glow rounded-full" : isMyPick ? "derby-pick-glow-subtle rounded-full" : ""}>
+              <div className={isMyPick ? "derby-pick-glow rounded-full" : ""}>
                 <HorseRig
                   r={r}
                   gallop={gallop}
@@ -667,17 +686,23 @@ export function DerbyAerialView({
 export function DerbyFinishView({
   racers,
   progress,
+  finishOrder,
   winnerId,
   compact = false,
 }: {
   racers: RacerDef[];
   progress: RacerProgress[];
+  /** Provably-fair finish order [1st, 2nd, … 6th] — drives photo finish lineup */
+  finishOrder?: number[];
   winnerId?: number;
   compact?: boolean;
 }) {
-  const standings = buildStandings(racers, progress);
-  // Photo finish: display 6th → 1st left to right, winner at the wire (right)
-  const lineup = [...standings].reverse();
+  const orderedIds =
+    finishOrder && finishOrder.length === racers.length
+      ? finishOrder
+      : buildStandings(racers, progress).sort((a, b) => a.rank - b.rank).map(s => s.r.id);
+  // Photo finish: 6th → 1st left to right, winner at the wire (right)
+  const lineup = [...orderedIds].reverse();
 
   return (
     <div className="relative h-full w-full overflow-hidden derby-finish-scene">
@@ -708,17 +733,20 @@ export function DerbyFinishView({
           Finish line →
         </span>
 
-        {lineup.map((s, visualIdx) => {
-          const isWinner = winnerId === s.r.id;
+        {lineup.map((racerId, visualIdx) => {
+          const r = racers.find(x => x.id === racerId)!;
+          const place = orderedIds.indexOf(racerId) + 1;
+          const standing = buildStandings(racers, progress).find(s => s.r.id === racerId);
+          const gapBehind = standing?.gapBehind ?? (place - 1) * 2.8;
+          const isWinner = winnerId === r.id;
           const mood: HorseMood = isWinner ? "happy" : "sad";
-          const place = s.rank;
           const slotWidth = 100 / 6;
           const left = visualIdx * slotWidth + slotWidth * 0.5;
           const horseScale = isWinner ? (compact ? 0.95 : 1.15) : compact ? 0.7 - (place - 2) * 0.04 : 0.85 - (place - 2) * 0.05;
 
           return (
             <div
-              key={s.r.id}
+              key={r.id}
               className={`absolute bottom-0 flex flex-col items-center derby-finish-horse ${
                 isWinner ? "derby-finish-winner" : "derby-finish-loser"
               }`}
@@ -742,17 +770,17 @@ export function DerbyFinishView({
               >
                 #{place}
               </span>
-              <HorseSilkBadge r={s.r} size={compact ? "xs" : "sm"} highlight={isWinner} />
-              <DerbyHorse r={s.r} gallop={false} scale={Math.max(0.55, horseScale)} mood={mood} />
+              <HorseSilkBadge r={r} size={compact ? "xs" : "sm"} highlight={isWinner} />
+              <DerbyHorse r={r} gallop={false} scale={Math.max(0.55, horseScale)} mood={mood} />
               <span
                 className={`font-bold text-white/95 mt-1 truncate text-center ${
                   compact ? "text-[8px] max-w-[48px]" : "text-[10px] max-w-[64px]"
                 }`}
               >
-                {s.r.name}
+                {r.name}
               </span>
               {!isWinner && (
-                <span className="text-[7px] text-red-200/80 font-mono mt-0.5">+{Math.round(s.gapBehind)}m</span>
+                <span className="text-[7px] text-red-200/80 font-mono mt-0.5">+{Math.round(gapBehind)}m</span>
               )}
             </div>
           );

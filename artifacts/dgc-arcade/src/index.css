@@ -487,13 +487,13 @@ body {
 
 /* ── Horse gallop (DGC Derby) ────────────────────────────────────── */
 @keyframes horse-leg-swing {
-  0%, 100% { transform: rotate(-28deg) translateY(0); }
-  50% { transform: rotate(32deg) translateY(-1px); }
+  0%, 100% { transform: rotate(-32deg) translateY(0); }
+  50% { transform: rotate(36deg) translateY(-2px); }
 }
 @keyframes horse-bob {
   0%, 100% { transform: translateY(0) scaleY(1); }
-  35% { transform: translateY(-3px) scaleY(1.02); }
-  65% { transform: translateY(-1px) scaleY(0.99); }
+  35% { transform: translateY(-4px) scaleY(1.03); }
+  65% { transform: translateY(-1px) scaleY(0.98); }
 }
 @keyframes horse-dust-puff {
   0%, 100% { opacity: 0.2; transform: scaleX(1); }
@@ -517,18 +517,18 @@ body {
   image-rendering: auto;
 }
 .derby-pick-glow {
-  filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.85)) brightness(1.18);
-  animation: derby-pick-pulse 1.6s ease-in-out infinite;
+  filter: drop-shadow(0 0 14px rgba(250, 204, 21, 1)) drop-shadow(0 0 24px rgba(255, 160, 0, 0.65)) brightness(1.28);
+  animation: derby-pick-pulse 1.4s ease-in-out infinite;
 }
 .derby-pick-glow-subtle {
-  filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.65)) brightness(1.08);
+  filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.85)) brightness(1.14);
 }
 @keyframes derby-pick-pulse {
   0%, 100% {
-    filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.7)) brightness(1.12);
+    filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.85)) drop-shadow(0 0 18px rgba(255, 160, 0, 0.45)) brightness(1.18);
   }
   50% {
-    filter: drop-shadow(0 0 14px rgba(250, 204, 21, 1)) brightness(1.22);
+    filter: drop-shadow(0 0 18px rgba(250, 230, 80, 1)) drop-shadow(0 0 28px rgba(255, 140, 0, 0.75)) brightness(1.32);
   }
 }
 /* legacy — no border box */
@@ -642,6 +642,29 @@ body {
 }
 .derby-chase-track {
   box-shadow: inset 0 4px 20px rgba(0,0,0,0.15);
+}
+@keyframes derby-cloud-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(24px); }
+}
+@keyframes derby-cloud-drift-slow {
+  from { transform: translateX(0); }
+  to { transform: translateX(-18px); }
+}
+.derby-cloud-drift {
+  animation: derby-cloud-drift 28s ease-in-out infinite alternate;
+}
+.derby-cloud-drift-slow {
+  animation: derby-cloud-drift-slow 36s ease-in-out infinite alternate;
+}
+@keyframes derby-bird-fly {
+  from { transform: translateX(-10vw) translateY(0); }
+  50% { transform: translateX(50vw) translateY(-4px); }
+  to { transform: translateX(110vw) translateY(2px); }
+}
+.derby-bird-fly {
+  animation: derby-bird-fly 24s linear infinite;
+  pointer-events: none;
 }
 @keyframes derby-lane-dash-move {
   from { transform: translateY(0); }
