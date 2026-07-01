@@ -186,7 +186,12 @@ export function DerbyHorse({
         <defs>
           <linearGradient id={`coat-${r.id}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={r.coat} />
-            <stop offset="100%" stopColor={r.body} />
+            <stop offset="55%" stopColor={r.body} />
+            <stop offset="100%" stopColor={r.mane} />
+          </linearGradient>
+          <linearGradient id={`silk-shine-${r.id}`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#fff" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#fff" stopOpacity="0" />
           </linearGradient>
         </defs>
         {/* Ground shadow */}
@@ -199,10 +204,13 @@ export function DerbyHorse({
         <path d="M18 30 Q8 26 10 38 Q14 34 20 32" fill={r.mane} />
         {/* Body */}
         <ellipse cx="44" cy="32" rx="24" ry="11" fill={`url(#coat-${r.id})`} />
-        <ellipse cx="44" cy="34" rx="18" ry="6" fill={r.body} opacity="0.3" />
+        <ellipse cx="44" cy="34" rx="18" ry="6" fill={r.body} opacity="0.35" />
+        <ellipse cx="50" cy="30" rx="10" ry="4" fill="#fff" opacity="0.08" />
         {/* Front legs */}
         <path d="M54 40 L50 52 L54 52 L58 40 Z" fill={r.coat} className="horse-leg-front" />
         <path d="M62 40 L58 52 L62 52 L66 40 Z" fill={r.coat} className="horse-leg-front" />
+        <rect x="49" y="50" width="5" height="2" rx="0.5" fill="#e2e8f0" opacity="0.7" />
+        <rect x="57" y="50" width="5" height="2" rx="0.5" fill="#e2e8f0" opacity="0.7" />
         {/* Neck */}
         <path d="M58 26 Q68 16 74 14 Q78 22 72 30 Q64 34 58 30 Z" fill={r.coat} />
         {/* Head */}
@@ -221,6 +229,7 @@ export function DerbyHorse({
         <path d="M56 22 Q48 18 50 28 Q54 26 58 24" fill={r.mane} opacity="0.85" />
         {/* Silk / saddle cloth */}
         <rect x="36" y="20" width="16" height="12" rx="2" fill={r.silk} stroke="#fff" strokeWidth="0.7" />
+        <rect x="36" y="20" width="16" height="5" rx="2" fill={`url(#silk-shine-${r.id})`} />
         <text x="44" y="28.5" textAnchor="middle" fontSize="7" fontWeight="900" fill="#111">{r.num}</text>
         {/* Bridle hint */}
         <path d="M80 20 Q84 24 82 28" stroke="#333" strokeWidth="0.8" fill="none" opacity="0.5" />

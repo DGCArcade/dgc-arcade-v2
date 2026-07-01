@@ -147,7 +147,7 @@ export function DerbySideView({
 }) {
   const atGate = !racing && progress.every(p => p.progress < 1);
   const gateOpening = racing && progress.every(p => p.progress < 2);
-  const horseScale = compact ? 0.68 : 0.88;
+  const horseScale = compact ? 0.72 : 0.92;
   const leaderProg = getLeaderProgress(progress);
   const racePhase = phase ?? getRacePhase(leaderProg, racing, progress.every(p => p.done));
   const leader = racers.find(r => {
@@ -171,6 +171,7 @@ export function DerbySideView({
         leaderNum={leader?.num}
         leaderSilk={leader?.silk}
         compact={compact}
+        preview={!racing}
       />
       <DerbyRaceHUD
         racers={racers}
@@ -223,23 +224,11 @@ export function DerbySideView({
           <span className="text-[9px] font-black text-white uppercase tracking-widest drop-shadow mt-0.5">Finish</span>
         </div>
 
-        {/* Gate */}
+        {/* Gate — removed global vertical bars; per-lane gates sit behind horses */}
         {(atGate || gateOpening) && (
-          <div
-            className={`absolute left-[1%] top-0 bottom-0 flex flex-col justify-end z-[15] pointer-events-none pb-1 ${gateOpening ? "derby-gate-open" : ""}`}
-          >
-            {gateOpening && <div className="absolute left-8 bottom-[30%] w-32 h-12 derby-gate-dust" />}
-            <div className="flex gap-0.5 items-end h-[88%]">
-              {Array.from({ length: LANE_COUNT }, (_, i) => (
-                <div
-                  key={i}
-                  className={`${compact ? "w-2.5" : "w-3.5"} flex-1 max-w-[14px] bg-gradient-to-b from-[#a0522d] to-[#5c3317] border border-[#ffd700]/50 rounded-t-sm shadow-inner derby-gate-door opacity-90`}
-                  style={{ height: `${72 - i * 4}%`, animationDelay: `${i * 0.05}s` }}
-                />
-              ))}
-            </div>
-            <span className="text-[7px] font-black text-white/85 uppercase tracking-widest mt-0.5 ml-1 drop-shadow">Start</span>
-          </div>
+          <span className="absolute left-[3%] bottom-1 text-[8px] font-black text-white/75 uppercase tracking-widest z-[4] drop-shadow">
+            Start →
+          </span>
         )}
 
         {/* Six clearly separated lane rows */}
@@ -253,8 +242,8 @@ export function DerbySideView({
             const gallop = racing && !p?.done;
             const isWinner = showResult && winnerId === r.id;
             const isMyPick = r.id === selectedRacer;
-            const gateX = 4;
-            const left = atGate ? gateX : gateX + (progM / TRACK_LEN) * 88;
+            const gateX = compact ? 18 : 16;
+            const left = atGate ? gateX : gateX + (progM / TRACK_LEN) * 78;
 
             return (
               <div
@@ -265,6 +254,20 @@ export function DerbySideView({
               >
                 <DerbyLaneNumber lane={lane + 1} compact={compact} highlight={isMyPick} />
                 <div className="relative flex-1 min-w-0">
+                  {/* Low stall gate — behind horse, never blocks the sprite */}
+                  {(atGate || (gateOpening && progM < 4)) && (
+                    <div
+                      className={`absolute bottom-0 left-1 z-[5] pointer-events-none ${gateOpening ? "derby-gate-open" : ""}`}
+                    >
+                      {gateOpening && lane === 0 && (
+                        <div className="absolute left-0 bottom-full mb-1 w-24 h-8 derby-gate-dust" />
+                      )}
+                      <div
+                        className={`${compact ? "w-5 h-6" : "w-7 h-8"} bg-gradient-to-b from-[#a0522d] to-[#5c3317] border border-[#ffd700]/45 rounded-t-sm shadow-inner derby-gate-door opacity-75`}
+                        style={{ animationDelay: `${lane * 0.06}s` }}
+                      />
+                    </div>
+                  )}
                   {/* Progress rail — shows how far this horse has run */}
                   {racing && (
                     <div
@@ -277,12 +280,12 @@ export function DerbySideView({
                     </div>
                   )}
                   <div
-                    className="absolute bottom-0 flex flex-col items-center transition-none"
+                    className="absolute bottom-0 flex flex-col items-center transition-none z-20"
                     style={{
                       left: `${left}%`,
                       transform: "translateX(-50%)",
-                      zIndex: Math.round(progM) + lane + (isMyPick ? 100 : 0),
-                      opacity: racing ? 0.7 + (progM / TRACK_LEN) * 0.3 : 1,
+                      zIndex: 20 + Math.round(progM) + (isMyPick ? 30 : 0),
+                      opacity: racing ? 0.75 + (progM / TRACK_LEN) * 0.25 : 1,
                     }}
                   >
                     <HorseRacerLabel r={r} isMyPick={isMyPick} compact={compact} showName={!compact} />
@@ -345,6 +348,7 @@ export function DerbyFrontChaseView({
         leaderNum={leader?.num}
         leaderSilk={leader?.silk}
         compact={compact}
+        preview={!racing}
       />
       <DerbyRaceHUD
         racers={racers}
@@ -500,6 +504,7 @@ export function DerbyAerialView({
         leaderNum={leader?.num}
         leaderSilk={leader?.silk}
         compact={compact}
+        preview={!racing}
       />
       <DerbyRaceHUD
         racers={racers}
@@ -548,6 +553,13 @@ export function DerbyAerialView({
         ))}
         <text x="5" y="46" fontSize="2.8" fill="#fff" fontWeight="bold" opacity="0.85">
           START
+        </text>
+        <rect x="88" y="46" width="3" height="8" fill="#fff" opacity="0.9" />
+        {[0, 1, 2, 3].map(i => (
+          <rect key={`fin-${i}`} x="88" y={46 + i * 2} width="3" height="1" fill={i % 2 === 0 ? "#111" : "#fff"} />
+        ))}
+        <text x="86" y="44" fontSize="2.5" fill="#fff" fontWeight="bold" opacity="0.85">
+          FINISH
         </text>
         <rect x="64" y="16" width="26" height="11" rx="1" fill="#555" opacity="0.55" />
       </svg>

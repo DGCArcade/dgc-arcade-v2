@@ -160,17 +160,25 @@ raceRouter.get("/verify/:betId", async (req, res) => {
   if (!bet || !bet.serverSeed) return res.status(404).json({ error: "Bet not found" });
 
   const meta = bet.meta as Record<string, unknown>;
+  const finishOrder = meta.finishOrder as number[] | undefined;
   const recomputed = generateRacePositions(bet.serverSeed, bet.clientSeed ?? "", bet.nonce ?? 1);
+  const hashValid =
+    !!bet.serverSeedHash &&
+    createHash("sha256").update(bet.serverSeed).digest("hex") === bet.serverSeedHash;
+  const orderValid =
+    Array.isArray(finishOrder) && JSON.stringify(recomputed) === JSON.stringify(finishOrder);
 
   return res.json({
-    verified: JSON.stringify(recomputed) === JSON.stringify(meta.finishOrder),
+    verified: hashValid && orderValid,
+    hashValid,
+    orderValid,
     betId: bet.id,
     serverSeedHash: bet.serverSeedHash,
     serverSeed: bet.serverSeed,
     clientSeed: bet.clientSeed,
     nonce: bet.nonce,
-    finishOrder: meta.finishOrder,
+    finishOrder,
     recomputedOrder: recomputed,
-    algorithm: "SHA256(serverSeed:clientSeed:nonce:race)",
+    algorithm: "SHA256(serverSeed) → commit hash; SHA256(serverSeed:clientSeed:nonce+i:race) → finish order",
   });
 });

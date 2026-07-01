@@ -20,7 +20,12 @@ export function ProvablyFairPanel({
 
   return (
     <div className="rounded-lg border border-border/50 bg-secondary/40 p-3 space-y-2 text-xs font-mono">
-      <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Provably Fair · SHA-256</div>
+      <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">
+        Provably Fair · SHA-256
+      </div>
+      <p className="text-[9px] text-muted-foreground leading-relaxed">
+        Commit hash is published before the reveal. After the race, verify the seed matches the hash and reproduces finish order.
+      </p>
       {serverSeedHash && (
         <div>
           <span className="text-muted-foreground">Hash </span>
