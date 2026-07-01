@@ -18,6 +18,7 @@
 
 import { Router } from "express";
 import { requireAdmin, requireOwner } from "../middlewares/auth.js";
+import { requireOwnerStepUp } from "../middlewares/owner-stepup.js";
 import {
   db,
   usersTable,
@@ -36,6 +37,7 @@ import { execSync } from "child_process";
 export const ownerAiRouter = Router();
 ownerAiRouter.use(requireAdmin);
 ownerAiRouter.use(requireOwner);
+ownerAiRouter.use(requireOwnerStepUp);
 
 const OWNER_USERNAME = "fanodgc";
 const REPO_PATH = process.env.REPO_PATH || "/app";

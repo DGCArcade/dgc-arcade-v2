@@ -500,7 +500,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex gap-2 items-start">
               <span className="text-yellow-400 mt-0.5 flex-shrink-0">⚠</span>
-              <span>Betting uses <strong className="text-foreground">server IP verification</strong> — Chrome DevTools location overrides cannot unlock play</span>
+              <span>Betting uses <strong className="text-foreground">server IP verification</strong> for licensed regions — VPN, Starlink, and mobile networks are allowed in permitted areas</span>
             </div>
             <div className="flex gap-2 items-start">
               <span className="text-yellow-400 mt-0.5 flex-shrink-0">⚠</span>

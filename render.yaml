@@ -10,8 +10,13 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      # Optional Neon pooler URL — only if Neon gives you a separate pooled string
       - key: DATABASE_POOL_URL
         sync: false
+      - key: PG_POOL_MAX
+        value: "25"
+      - key: PG_POOL_MIN
+        value: "3"
       - key: JWT_SECRET
         sync: false
       - key: PLISIO_SECRET_KEY

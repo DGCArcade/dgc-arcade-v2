@@ -3,13 +3,14 @@ import bcrypt from "bcryptjs";
 import { db, usersTable, deviceHistoryTable, userBalancesTable } from "@workspace/db";
 import { eq, ilike, and, or } from "drizzle-orm";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
-import { requireAuth, signToken } from "../middlewares/auth.js";
+import { requireAuth, signToken, requireOwner } from "../middlewares/auth.js";
 import { logger } from "../lib/logger.js";
 import { getUserBalance } from "../lib/balance-service.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
 import crypto from "crypto";
 import { logActivity, linkVisitorToUser } from "../services/activity-log.js";
 import { getRequestContext } from "../lib/request-context.js";
+import { issueOwnerStepUpOtp, verifyOwnerStepUpOtp, verifyOwnerStepUpToken } from "../services/owner-stepup.js";
 
 export const authRouter = Router();
 
@@ -247,6 +248,64 @@ authRouter.post("/login", async (req, res) => {
     });
     res.json({ user: responseUser, token });
   } catch (err) { req.log.error({ err }, "Login error"); res.status(500).json({ error: "Internal server error" }); }
+});
+
+// POST /api/auth/owner/stepup/send — email code for owner profile tools only
+authRouter.post("/owner/stepup/send", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const result = await issueOwnerStepUpOtp(req.user!);
+    if (!result.ok) {
+      res.status(result.code === "OTP_COOLDOWN" ? 429 : 400).json({
+        error: result.error,
+        code: result.code,
+        retryAfterSec: result.retryAfterSec,
+      });
+      return;
+    }
+    res.json({
+      success: true,
+      message: "Owner code sent to your email.",
+    });
+  } catch (err) {
+    req.log.error({ err }, "Owner step-up send error");
+    res.status(500).json({ error: "Failed to send owner code" });
+  }
+});
+
+// POST /api/auth/owner/stepup/verify
+authRouter.post("/owner/stepup/verify", requireAuth, requireOwner, async (req, res) => {
+  const code = typeof req.body?.code === "string" ? req.body.code : "";
+  if (!code) {
+    res.status(400).json({ error: "Verification code required" });
+    return;
+  }
+  try {
+    const result = await verifyOwnerStepUpOtp(req.user!, code);
+    if (!result.ok) {
+      res.status(result.code === "OTP_LOCKED" ? 429 : 400).json({ error: result.error, code: result.code });
+      return;
+    }
+    res.json({
+      success: true,
+      stepUpToken: result.stepUpToken,
+      expiresInMinutes: 45,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Owner step-up verify error");
+    res.status(500).json({ error: "Verification failed" });
+  }
+});
+
+// GET /api/auth/owner/stepup/status — whether current step-up header would pass
+authRouter.get("/owner/stepup/status", requireAuth, requireOwner, (req, res) => {
+  if (process.env.OWNER_STEPUP_DISABLED === "true") {
+    res.json({ verified: true, disabled: true });
+    return;
+  }
+  const token = req.headers["x-owner-step-up"]?.toString();
+  res.json({
+    verified: !!(token && verifyOwnerStepUpToken(token, req.user!.userId)),
+  });
 });
 
 // POST /api/auth/logout
