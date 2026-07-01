@@ -84,6 +84,7 @@ export default function RacePage() {
   const resultRef = useRef<RaceResult | null>(null);
   const finishOrderRef = useRef<number[]>([]);
   const finishHoldRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finishTriggeredRef = useRef(false);
   const gallopStarted = useRef(false);
   const cameraRef = useRef(0);
   const manualCameraRef = useRef(false);
@@ -110,6 +111,7 @@ export default function RacePage() {
     setFinishOrder(null);
     setShowFinishReveal(false);
     finishOrderRef.current = [];
+    finishTriggeredRef.current = false;
     if (finishHoldRef.current) {
       clearTimeout(finishHoldRef.current);
       finishHoldRef.current = null;
@@ -161,6 +163,7 @@ export default function RacePage() {
 
     finishOrderRef.current = res.finishOrder;
     setFinishOrder(res.finishOrder);
+    finishTriggeredRef.current = false;
 
     startRef.current = performance.now();
     playRaceStartBugle();
@@ -174,7 +177,7 @@ export default function RacePage() {
         startHorseGallopLoop();
       }
 
-      const { progress: next, allDone } = computeRaceProgress(
+      const { progress: next, winnerDone } = computeRaceProgress(
         elapsed,
         finishOrderRef.current,
         TRACK_LEN,
@@ -182,7 +185,7 @@ export default function RacePage() {
       setProgress(next);
 
       const leaderProg = getLeaderProgress(next);
-      const phase = getRacePhase(leaderProg, true, allDone);
+      const phase = getRacePhase(leaderProg, true, winnerDone);
       setRacePhase(phase);
 
       if (!manualCameraRef.current) {
@@ -198,7 +201,8 @@ export default function RacePage() {
       cameraRef.current += (targetCam - cameraRef.current) * 0.09;
       setCameraX(cameraRef.current);
 
-      if (allDone) {
+      if (winnerDone && !finishTriggeredRef.current) {
+        finishTriggeredRef.current = true;
         stopHorseGallopLoop();
         stopCrowdAmbience();
         playRaceFinishCheer();
@@ -208,11 +212,13 @@ export default function RacePage() {
         setCamFade(f => f + 1);
         setCamera("finish");
         manualCameraRef.current = true;
+        setLiveFair(prev =>
+          prev ? { ...prev, serverSeed: resultRef.current?.serverSeed } : null,
+        );
 
         finishHoldRef.current = setTimeout(() => {
           setResult(resultRef.current);
           setRacing(false);
-          setLiveFair(prev => prev ? { ...prev, serverSeed: resultRef.current?.serverSeed } : null);
           queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
           finishHoldRef.current = null;
         }, FINISH_HOLD_MS);
@@ -308,7 +314,7 @@ export default function RacePage() {
           )}
         </div>
       </div>
-      {(racing || (result && !isMobile)) && liveFair && (
+      {(racing || showFinishReveal || (result && !isMobile)) && liveFair && (
         <div className="px-2 py-1 border-t border-border/30 bg-secondary/15 shrink-0">
           <ProvablyFairPanel
             betId={liveFair.betId}
@@ -317,7 +323,7 @@ export default function RacePage() {
             clientSeed={liveFair.clientSeed}
             nonce={liveFair.nonce}
             verifyPath={`/api/race/verify/${liveFair.betId}`}
-            variant={isMobile ? (racing ? "inline" : "compact") : racing ? "inline" : "full"}
+            variant={isMobile ? (racing || showFinishReveal ? "inline" : "compact") : racing || showFinishReveal ? "inline" : "full"}
           />
         </div>
       )}

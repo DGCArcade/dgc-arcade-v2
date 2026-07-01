@@ -144,11 +144,23 @@ export function DerbyFinishView({
         <p className="text-[8px] sm:text-[9px] text-white/60 font-bold uppercase tracking-widest mt-0.5">Official results</p>
       </div>
 
+      {/* Winner stamp — instant read for the naked eye */}
+      {winner && (
+        <div className="absolute top-[38%] left-1/2 -translate-x-1/2 z-[35] pointer-events-none derby-finish-winner-stamp">
+          <span className="block text-center font-black uppercase tracking-[0.2em] text-yellow-300 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] text-lg sm:text-2xl">
+            Winner!
+          </span>
+          <span className="block text-center font-black text-white text-xs sm:text-sm mt-0.5 drop-shadow-lg">
+            #{winner.num} {winner.name}
+          </span>
+        </div>
+      )}
+
       {/* Winner callout banner */}
       {winner && (
         <div
           className="absolute top-[22%] left-1/2 -translate-x-1/2 z-25 derby-finish-winner-banner"
-          style={{ animationDelay: "0.85s" }}
+          style={{ animationDelay: "0.28s" }}
         >
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-yellow-500/90 to-amber-400/90 border border-yellow-200/60 shadow-xl backdrop-blur-sm">
             <Trophy className="w-4 h-4 text-yellow-900 shrink-0 derby-finish-trophy-spin" />
@@ -184,8 +196,8 @@ export function DerbyFinishView({
             : compact
               ? Math.max(0.58, 0.72 - (place - 2) * 0.04)
               : Math.max(0.62, 0.88 - (place - 2) * 0.05);
-          const enterDelay = 0.15 + visualIdx * 0.12;
-          const faceDelay = enterDelay + 0.35;
+          const enterDelay = isWinner ? 0.08 : 0.04 + visualIdx * 0.055;
+          const faceDelay = enterDelay + 0.18;
 
           return (
             <div

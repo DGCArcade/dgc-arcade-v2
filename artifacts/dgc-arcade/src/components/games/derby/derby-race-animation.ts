@@ -5,15 +5,15 @@ export type RacerProgress = { racerId: number; progress: number; done: boolean }
 const GATE_MS = 900;
 /** Staggered gate break — horses don't all leave at once */
 const GATE_STAGGER_MS = [0, 90, 180, 60, 150, 120];
-/** Winner crosses ~8s after gate; each place +950ms so order never flips */
-const BASE_FINISH_MS = 7600;
+/** Winner crosses ~6.8s after gate; each place +950ms so order never flips */
+const BASE_FINISH_MS = 6800;
 const RANK_GAP_MS = 950;
 /** Tiny per-id jitter — must stay well under RANK_GAP_MS */
 const JITTER_MS = 35;
 
 export const RACE_GATE_MS = GATE_MS;
-/** Hold photo-finish cam before showing payout card */
-export const FINISH_HOLD_MS = 3200;
+/** Brief photo-finish beat before payout + Race button unlock */
+export const FINISH_HOLD_MS = 900;
 
 export function buildFinishRankMap(finishOrder: number[]): Record<number, number> {
   const map: Record<number, number> = {};
@@ -31,9 +31,10 @@ export function computeRaceProgress(
   elapsedMs: number,
   finishOrder: number[],
   trackLen: number = TRACK_LEN,
-): { progress: RacerProgress[]; allDone: boolean } {
+): { progress: RacerProgress[]; allDone: boolean; winnerDone: boolean } {
   const finishRank = buildFinishRankMap(finishOrder);
   const raceElapsed = Math.max(0, elapsedMs - GATE_MS);
+  const winnerId = finishOrder[0];
 
   const progress = finishOrder.map(racerId => {
     const rank = finishRank[racerId] ?? 5;
@@ -46,7 +47,8 @@ export function computeRaceProgress(
     return { racerId, progress: eased * trackLen, done: t >= 1 };
   });
 
-  return { progress, allDone: progress.every(p => p.done) };
+  const winnerDone = progress.find(p => p.racerId === winnerId)?.done ?? false;
+  return { progress, allDone: progress.every(p => p.done), winnerDone };
 }
 
 /** Snap positions at the wire for photo finish — winner at the line, others behind */
