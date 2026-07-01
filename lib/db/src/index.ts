@@ -24,11 +24,12 @@ const ssl =
 const poolConfig: pg.PoolConfig = {
   connectionString,
   ssl,
-  max: Number(process.env.PG_POOL_MAX ?? 20),
-  min: Number(process.env.PG_POOL_MIN ?? 2),
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 10_000,
+  max: Number(process.env.PG_POOL_MAX ?? 25),
+  min: Number(process.env.PG_POOL_MIN ?? 3),
+  idleTimeoutMillis: 60_000,
+  connectionTimeoutMillis: 12_000,
   keepAlive: true,
+  keepAliveInitialDelayMillis: 10_000,
   application_name: "dgc-arcade-api",
 };
 
@@ -36,7 +37,8 @@ export const pool = new Pool(poolConfig);
 
 // statement_timeout must be set per-connection — not a valid Pool option
 pool.on("connect", (client) => {
-  client.query("SET statement_timeout = 30000").catch(() => {});
+  client.query("SET statement_timeout = 25000").catch(() => {});
+  client.query("SET idle_in_transaction_session_timeout = 30000").catch(() => {});
 });
 
 pool.on("error", (err) => {

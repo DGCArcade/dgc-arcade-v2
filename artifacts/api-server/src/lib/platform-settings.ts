@@ -36,7 +36,12 @@ const STRING_KEYS = new Set([
 
 const JSON_ARRAY_KEYS = new Set(["disabledGameSlugs"]);
 
+import { cached, invalidateCache } from "./response-cache.js";
+
+const SETTINGS_CACHE_MS = 30_000;
+
 export async function getPlatformSettings(): Promise<PlatformSettings> {
+  return cached("platform-settings", SETTINGS_CACHE_MS, async () => {
   const rows = await db.select().from(platformSettingsTable);
   const settings: Record<string, unknown> = { ...DEFAULT_SETTINGS };
 
@@ -61,6 +66,11 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
     }
   }
   return settings as PlatformSettings;
+  });
+}
+
+export function invalidatePlatformSettingsCache() {
+  invalidateCache("platform-settings");
 }
 
 export function isGameSlugEnabled(settings: PlatformSettings, slug: string): boolean {

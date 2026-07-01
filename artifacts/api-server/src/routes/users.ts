@@ -123,9 +123,13 @@ usersRouter.post("/geo", requireAuth, async (req, res) => {
       deviceOs: str(deviceOs),
       deviceBrowser: str(deviceBrowser),
       deviceType: str(deviceType),
-      vpnProvider: access.vpn ? str(vpnProvider) ?? serverGeo.org : access.datacenter ? "Datacenter" : access.tor ? "Tor" : str(vpnProvider),
+      vpnProvider: access.stateActor
+        ? "State network"
+        : access.vpn
+          ? str(vpnProvider) ?? serverGeo.org
+          : str(vpnProvider),
       deviceFingerprint: str(fingerprint),
-      vpnDetected: access.vpn || access.datacenter || access.tor,
+      vpnDetected: access.vpn || access.datacenter || access.tor || access.stateActor,
       locationVerified,
     };
     if (Object.values(updates).some((v) => v !== undefined)) {

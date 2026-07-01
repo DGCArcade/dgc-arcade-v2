@@ -385,6 +385,36 @@ export async function sendEmailVerificationEmail(
   if (resend) await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
 }
 
+export async function sendOwnerStepUpEmail(
+  email: string,
+  username: string,
+  code: string,
+): Promise<void> {
+  const accent = ACCENTS.purple;
+  const body = `
+    ${h("Owner Profile Lock", accent)}
+    ${p(`${hl(username, accent)}, enter this code to unlock owner tools on your profile. Valid 10 minutes.`)}
+    <div style="text-align:center;margin:24px 0;">
+      <div style="display:inline-block;font-family:monospace;font-size:32px;font-weight:900;letter-spacing:0.35em;padding:16px 24px;border-radius:12px;border:2px solid ${accent.glow};color:${accent.text};background:rgba(180,79,255,0.08);">${code}</div>
+    </div>
+    ${infoBox("Login is still open from anywhere — this code only protects owner AI & bank controls.", accent.glow)}
+  `;
+  const html = shell({
+    accentName: "purple",
+    header: iconHeader(LOGOS.dFuturistic, accent, "Owner Step-Up"),
+    body,
+    preheader: "Owner profile verification code",
+  });
+  if (resend) {
+    await resend.emails.send({
+      from: SENDER_EMAIL,
+      to: email,
+      subject: "🔐 DGC Arcade — Owner Profile Code",
+      html,
+    });
+  }
+}
+
 export async function sendWithdrawalOtpEmail(
   email: string,
   username: string,

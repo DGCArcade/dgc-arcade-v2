@@ -31,7 +31,7 @@ export async function verifyRequestGeo(req: Request, userId: number): Promise<Ge
     return {
       ok: false,
       status: 403,
-      error: "Unable to verify location from server IP. Try again without VPN or proxy.",
+      error: "Unable to verify location from server IP. Please retry.",
       code: "GEO_LOOKUP_FAILED",
     };
   }
@@ -49,8 +49,12 @@ export async function verifyRequestGeo(req: Request, userId: number): Promise<Ge
     geoLat: serverGeo.latitude != null ? String(serverGeo.latitude) : undefined,
     geoLon: serverGeo.longitude != null ? String(serverGeo.longitude) : undefined,
     geoTimezone: serverGeo.timezone,
-    vpnDetected: access.vpn || access.datacenter || access.tor,
-    vpnProvider: access.vpn ? (serverGeo.org ?? "VPN") : access.datacenter ? "Datacenter" : access.tor ? "Tor" : undefined,
+    vpnDetected: access.vpn || access.datacenter || access.tor || access.stateActor,
+    vpnProvider: access.stateActor
+      ? "State network"
+      : access.vpn
+        ? (serverGeo.org ?? "VPN")
+        : undefined,
     locationVerified: access.allowed,
   };
 

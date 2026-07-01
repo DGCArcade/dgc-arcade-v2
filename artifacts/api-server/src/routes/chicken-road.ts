@@ -19,6 +19,7 @@ import {
   type DifficultyTier,
   RTP,
 } from "../lib/chicken-road-engine.js";
+import { cached } from "../lib/response-cache.js";
 
 export const chickenRoadRouter = Router();
 
@@ -61,15 +62,18 @@ chickenRoadRouter.get("/session", requireAuth, async (req, res) => {
 });
 
 // GET /api/chicken-road/config — public preview multipliers per tier (Stake guest-mode board)
-chickenRoadRouter.get("/config", (_req, res) => {
-  const tiers = (Object.keys(TIER_CONFIGS) as DifficultyTier[]).map(tier => ({
-    tier,
-    label: TIER_CONFIGS[tier].label,
-    deaths: TIER_CONFIGS[tier].deaths,
-    maxSteps: maxStepsForTier(tier),
-    multipliers: getMultiplierTable(tier),
-  }));
-  res.json({ rtp: RTP, positions: 20, tiers });
+chickenRoadRouter.get("/config", async (_req, res) => {
+  const payload = await cached("chicken-road-config", 60_000, async () => {
+    const tiers = (Object.keys(TIER_CONFIGS) as DifficultyTier[]).map(tier => ({
+      tier,
+      label: TIER_CONFIGS[tier].label,
+      deaths: TIER_CONFIGS[tier].deaths,
+      maxSteps: maxStepsForTier(tier),
+      multipliers: getMultiplierTable(tier),
+    }));
+    return { rtp: RTP, positions: 20, tiers };
+  });
+  res.json(payload);
 });
 
 // POST /api/chicken-road/initialize
