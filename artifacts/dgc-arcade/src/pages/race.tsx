@@ -287,7 +287,7 @@ export default function RacePage() {
           )}
         </div>
       </div>
-      {(racing || result) && liveFair && (
+      {(racing || (result && !isMobile)) && liveFair && (
         <div className="px-2 py-1 border-t border-border/30 bg-secondary/15 shrink-0">
           <ProvablyFairPanel
             betId={liveFair.betId}
