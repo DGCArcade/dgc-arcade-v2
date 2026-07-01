@@ -3,13 +3,13 @@ import { DerbyHorse, HorseSilkBadge, type RacerDef } from "./derby-horse";
 import { DerbyRaceHUD, DerbyLaneRankBadge, DerbyMobileLeaderChip } from "./derby-race-hud";
 import {
   DerbyBroadcastOverlay,
-  DerbyConfetti,
   DerbyLaneNumber,
   DerbyYourPickBanner,
   getLeaderProgress,
   getRacePhase,
   type RacePhase,
 } from "./derby-broadcast";
+import { DerbyFinishView } from "./derby-finish-view";
 import { buildStandings, getRankMap, relativeBehind, chaseVisualPosition } from "./derby-race-utils";
 import { DerbyAheadBehindTag, DerbyRankPill } from "./derby-position-badge";
 import type { HorseMood } from "./derby-horse";
@@ -683,111 +683,5 @@ export function DerbyAerialView({
   );
 }
 
-export function DerbyFinishView({
-  racers,
-  progress,
-  finishOrder,
-  winnerId,
-  compact = false,
-}: {
-  racers: RacerDef[];
-  progress: RacerProgress[];
-  /** Provably-fair finish order [1st, 2nd, … 6th] — drives photo finish lineup */
-  finishOrder?: number[];
-  winnerId?: number;
-  compact?: boolean;
-}) {
-  const orderedIds =
-    finishOrder && finishOrder.length === racers.length
-      ? finishOrder
-      : buildStandings(racers, progress).sort((a, b) => a.rank - b.rank).map(s => s.r.id);
-  // Photo finish: 6th → 1st left to right, winner at the wire (right)
-  const lineup = [...orderedIds].reverse();
-
-  return (
-    <div className="relative h-full w-full overflow-hidden derby-finish-scene">
-      <DerbyConfetti />
-      <SkyAndHorizon />
-      <div className="absolute bottom-0 left-0 right-0 h-[48%] bg-gradient-to-b from-[#b8956a] to-[#5c4033]" />
-
-      {/* Finish wire */}
-      <div className="absolute bottom-[30%] right-[6%] top-[20%] w-1 bg-white/90 shadow-lg z-20 derby-finish-wire" />
-      <div className="absolute bottom-[30%] right-[4%] flex flex-col z-20">
-        <div className="w-2 h-28 sm:h-32 bg-white shadow-xl derby-finish-post" />
-        <div className="flex flex-col w-5 -ml-1.5">
-          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => (
-            <div key={i} className="h-2.5" style={{ background: i % 2 === 0 ? "#111" : "#fff" }} />
-          ))}
-        </div>
-      </div>
-
-      <div className="absolute top-3 left-0 right-0 text-center z-20">
-        <span className="derby-finish-title">Photo Finish</span>
-        <p className="text-[9px] text-white/60 font-bold uppercase tracking-widest mt-1">Official results</p>
-      </div>
-
-      {/* Horses lined up at the wire — place order visible left (last) to right (winner) */}
-      <div className="absolute bottom-[6%] left-[2%] right-[8%] h-[38%] z-10">
-        <div className="absolute bottom-[18%] left-0 right-0 h-px bg-white/25" />
-        <span className="absolute bottom-[20%] right-0 text-[8px] font-black text-white/70 uppercase tracking-widest">
-          Finish line →
-        </span>
-
-        {lineup.map((racerId, visualIdx) => {
-          const r = racers.find(x => x.id === racerId)!;
-          const place = orderedIds.indexOf(racerId) + 1;
-          const standing = buildStandings(racers, progress).find(s => s.r.id === racerId);
-          const gapBehind = standing?.gapBehind ?? (place - 1) * 2.8;
-          const isWinner = winnerId === r.id;
-          const mood: HorseMood = isWinner ? "happy" : "sad";
-          const slotWidth = 100 / 6;
-          const left = visualIdx * slotWidth + slotWidth * 0.5;
-          const horseScale = isWinner ? (compact ? 0.95 : 1.15) : compact ? 0.7 - (place - 2) * 0.04 : 0.85 - (place - 2) * 0.05;
-
-          return (
-            <div
-              key={r.id}
-              className={`absolute bottom-0 flex flex-col items-center derby-finish-horse ${
-                isWinner ? "derby-finish-winner" : "derby-finish-loser"
-              }`}
-              style={{
-                left: `${left}%`,
-                transform: "translateX(-50%)",
-                animationDelay: `${visualIdx * 0.1}s`,
-                zIndex: isWinner ? 30 : 20 - place,
-              }}
-            >
-              <span className="text-2xl sm:text-3xl mb-0.5 derby-face-emoji" role="img" aria-hidden>
-                {isWinner ? "😄" : "😢"}
-              </span>
-              {isWinner && (
-                <Trophy className="w-5 h-5 sm:w-7 sm:h-7 text-yellow-400 mb-0.5 animate-bounce drop-shadow-lg" />
-              )}
-              <span
-                className={`font-black mb-1 ${
-                  compact ? "text-[9px]" : "text-xs"
-                } ${place === 1 ? "text-yellow-400" : place === 2 ? "text-gray-300" : "text-white/75"}`}
-              >
-                #{place}
-              </span>
-              <HorseSilkBadge r={r} size={compact ? "xs" : "sm"} highlight={isWinner} />
-              <DerbyHorse r={r} gallop={false} scale={Math.max(0.55, horseScale)} mood={mood} />
-              <span
-                className={`font-bold text-white/95 mt-1 truncate text-center ${
-                  compact ? "text-[8px] max-w-[48px]" : "text-[10px] max-w-[64px]"
-                }`}
-              >
-                {r.name}
-              </span>
-              {!isWinner && (
-                <span className="text-[7px] text-red-200/80 font-mono mt-0.5">+{Math.round(gapBehind)}m</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
+export { DerbyFinishView };
 export { TRACK_LEN };
