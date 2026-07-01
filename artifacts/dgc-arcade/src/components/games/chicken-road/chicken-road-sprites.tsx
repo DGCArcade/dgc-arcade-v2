@@ -57,23 +57,26 @@ function CarShadow({ w, h }: { w: number; h: number }) {
   );
 }
 
-function CarLights({ direction, variant }: { direction: "up" | "down"; variant: string }) {
+function CarLights({ direction, variant, filterId }: { direction: "up" | "down"; variant: string; filterId?: string }) {
+  const fl = filterId ? `url(#${filterId})` : undefined;
   if (direction === "down") {
     return (
       <>
-        <ellipse cx="14" cy="6" rx="4" ry="2.5" fill="#FFFDE7" opacity="0.9" />
-        <ellipse cx="22" cy="6" rx="4" ry="2.5" fill="#FFFDE7" opacity="0.9" />
-        <ellipse cx="14" cy="8" rx="6" ry="3" fill="#F6E05E" opacity="0.25" className="cr-car-headlight-glow" />
-        <ellipse cx="22" cy="8" rx="6" ry="3" fill="#F6E05E" opacity="0.25" className="cr-car-headlight-glow" />
+        <ellipse cx="14" cy="6" rx="4" ry="2.5" fill="#FFFDE7" opacity="0.95" />
+        <ellipse cx="22" cy="6" rx="4" ry="2.5" fill="#FFFDE7" opacity="0.95" />
+        <ellipse cx="14" cy="8" rx="7" ry="4" fill="#F6E05E" opacity="0.35" filter={fl} className="cr-car-headlight-glow" />
+        <ellipse cx="22" cy="8" rx="7" ry="4" fill="#F6E05E" opacity="0.35" filter={fl} className="cr-car-headlight-glow" />
+        <ellipse cx="14" cy="9" rx="10" ry="5" fill="#FFF9C4" opacity="0.12" filter={fl} />
+        <ellipse cx="22" cy="9" rx="10" ry="5" fill="#FFF9C4" opacity="0.12" filter={fl} />
       </>
     );
   }
   return (
     <>
-      <rect x="12" y={variant === "truck" ? 62 : 56} width="5" height="3" rx="1" fill="#FF4444" opacity="0.9" />
-      <rect x="19" y={variant === "truck" ? 62 : 56} width="5" height="3" rx="1" fill="#FF4444" opacity="0.9" />
-      <ellipse cx="14.5" cy={variant === "truck" ? 64 : 58} rx="4" ry="2" fill="#FF0000" opacity="0.2" />
-      <ellipse cx="21.5" cy={variant === "truck" ? 64 : 58} rx="4" ry="2" fill="#FF0000" opacity="0.2" />
+      <rect x="12" y={variant === "truck" ? 62 : 56} width="5" height="3" rx="1" fill="#FF4444" opacity="0.95" />
+      <rect x="19" y={variant === "truck" ? 62 : 56} width="5" height="3" rx="1" fill="#FF4444" opacity="0.95" />
+      <ellipse cx="14.5" cy={variant === "truck" ? 64 : 58} rx="5" ry="2.5" fill="#FF0000" opacity="0.35" filter={fl} />
+      <ellipse cx="21.5" cy={variant === "truck" ? 64 : 58} rx="5" ry="2.5" fill="#FF0000" opacity="0.35" filter={fl} />
     </>
   );
 }
@@ -110,11 +113,19 @@ export function CarSprite({
   const h = size;
   const motionCls = ambient ? "cr-car-ambient-motion" : "";
   const wheelCls = ambient ? "cr-car-wheel-spin" : "";
+  const hlFilter = `cr-hl-bloom-${direction}`;
 
   if (variant === "truck") {
     return (
       <svg viewBox="0 0 36 68" width={w} height={h} style={{ transform: flip }} className={`drop-shadow-lg ${motionCls}`}>
         <defs>
+          <filter id={hlFilter} x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2.8" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
           <linearGradient id={`truck-body-${color}`} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor={darken(color)} />
             <stop offset="40%" stopColor={color} />
@@ -130,7 +141,7 @@ export function CarSprite({
         <rect x="30" y="42" width="3" height="5" rx="1" fill="#CBD5E0" opacity="0.7" />
         <rect x="3" y="42" width="3" height="5" rx="1" fill="#CBD5E0" opacity="0.7" />
         <CarWheels cy={60} wheelCls={wheelCls} />
-        <CarLights direction={direction} variant="truck" />
+        <CarLights direction={direction} variant="truck" filterId={hlFilter} />
       </svg>
     );
   }
@@ -139,6 +150,13 @@ export function CarSprite({
     return (
       <svg viewBox="0 0 36 64" width={w} height={h} style={{ transform: flip }} className={`drop-shadow-lg ${motionCls}`}>
         <defs>
+          <filter id={hlFilter} x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2.8" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
           <linearGradient id={`suv-body-${color}`} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor={darken(color)} />
             <stop offset="45%" stopColor={color} />
@@ -158,7 +176,7 @@ export function CarSprite({
         <rect x="4.5" y="28" width="2.5" height="4" rx="0.5" fill="#CBD5E0" />
         <ellipse cx="18" cy="12" rx="8" ry="2" fill="#fff" opacity="0.08" />
         <CarWheels cy={54} wheelCls={wheelCls} />
-        <CarLights direction={direction} variant="suv" />
+        <CarLights direction={direction} variant="suv" filterId={hlFilter} />
       </svg>
     );
   }
@@ -166,6 +184,13 @@ export function CarSprite({
   return (
     <svg viewBox="0 0 36 64" width={w} height={h} style={{ transform: flip }} className={`drop-shadow-lg ${motionCls}`}>
       <defs>
+        <filter id={hlFilter} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2.8" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
         <linearGradient id={`sedan-body-${color}`} x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor={darken(color, 0.12)} />
           <stop offset="35%" stopColor={color} />
@@ -187,7 +212,7 @@ export function CarSprite({
       <ellipse cx="18" cy="10" rx="7" ry="1.8" fill="#fff" opacity="0.1" />
       <rect x="12" y="44" width="12" height="2" rx="0.5" fill="#1a202c" opacity="0.5" />
       <CarWheels cy={52} wheelCls={wheelCls} />
-      <CarLights direction={direction} variant="sedan" />
+      <CarLights direction={direction} variant="sedan" filterId={hlFilter} />
     </svg>
   );
 }

@@ -9,6 +9,9 @@ import {
 import { AmbientLaneTraffic } from "./ambient-traffic";
 import { CarCrashEffect, BarrierDropEffect } from "./crash-effects";
 import { getSurvivalChancePercent, type StakeTier } from "@/lib/chicken-road-stake-math";
+import { useChickenMotor } from "./use-chicken-motor";
+import { useScreenShake } from "./use-screen-shake";
+import { PhysicsBurstLayer } from "./physics-burst-layer";
 
 export type LaneState = "idle" | "past" | "current" | "future" | "bust";
 export type HazardType = "car" | "manhole";
@@ -258,8 +261,11 @@ export function StakeChickenBoard({
   const laneWidth = LANE_W;
   const scrollRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
+  const playAreaRef = useRef<HTMLDivElement>(null);
   const [hoveredLane, setHoveredLane] = useState<number | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [burstId, setBurstId] = useState(0);
+  const [burstOrigin, setBurstOrigin] = useState({ x: 200, y: 300 });
 
   const onSidewalk = isActive && currentLane === 0;
   const targetLane = isActive
@@ -270,9 +276,31 @@ export function StakeChickenBoard({
       ? Math.max(0, currentLane - 1)
       : -1;
 
-  const chickenLeft = targetLane < 0
+  const targetLeft = targetLane < 0
     ? SIDEWALK_W / 2
     : SIDEWALK_W + targetLane * laneWidth + laneWidth / 2;
+
+  const motor = useChickenMotor(targetLeft, hopping, laneWidth, chickenVisible);
+  const shakeIntensity = status === "lost" ? 25 : crossAnim?.phase === "car-impact" ? 16 : crossAnim?.phase === "manhole-fire" ? 12 : 0;
+  const shake = useScreenShake(burstId, shakeIntensity);
+
+  useEffect(() => {
+    if (status !== "lost") return;
+    const area = playAreaRef.current;
+    setBurstOrigin({ x: targetLeft, y: area ? area.clientHeight - 52 : 300 });
+    setBurstId(id => id + 1);
+  }, [status, targetLeft]);
+
+  useEffect(() => {
+    if (crossAnim?.phase !== "car-impact" && crossAnim?.phase !== "manhole-fire") return;
+    const area = playAreaRef.current;
+    const laneCenter = SIDEWALK_W + (crossAnim.lane * laneWidth) + laneWidth / 2;
+    setBurstOrigin({
+      x: laneCenter,
+      y: area ? area.clientHeight * (crossAnim.phase === "manhole-fire" ? 0.72 : 0.42) : 300,
+    });
+    setBurstId(id => id + 1);
+  }, [crossAnim?.lane, crossAnim?.phase, laneWidth]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -306,10 +334,16 @@ export function StakeChickenBoard({
   return (
     <div
       ref={boardRef}
-      className={`cr-stake-board relative rounded-xl overflow-hidden border border-white/10 bg-[#141a28] shadow-2xl ${
-        status === "lost" ? "cr-board-shake" : ""
-      }`}
+      className="cr-stake-board relative rounded-xl overflow-hidden border border-white/10 bg-[#141a28] shadow-2xl"
     >
+      <div
+        ref={playAreaRef}
+        className="relative"
+        style={{
+          transform: `translate(${shake.x}px, ${shake.y}px)`,
+          willChange: shake.x || shake.y ? "transform" : undefined,
+        }}
+      >
       <CitySkyline />
       <div className="relative flex h-[min(500px,64vh)] min-h-[340px]">
         <div className="relative z-10 w-[80px] sm:w-[88px] shrink-0 bg-[#5a6578] border-r border-white/10 flex flex-col items-center pt-3 pb-2">
@@ -354,18 +388,16 @@ export function StakeChickenBoard({
 
         {chickenVisible && (
           <div
-            className="absolute z-30 pointer-events-none cr-chicken-track"
+            className="absolute z-30 pointer-events-none"
             style={{
-              left: `${chickenLeft}px`,
-              bottom: "28px",
-              transform: "translateX(-50%)",
+              left: `${motor.left}px`,
+              bottom: `${28 + motor.liftY}px`,
+              transform: `translateX(-50%) scale(${motor.scaleX}, ${motor.scaleY})`,
+              transformOrigin: "center bottom",
+              willChange: "left, bottom, transform",
             }}
           >
-            <div
-              className={`relative flex flex-col items-center ${
-                hopping ? "cr-chicken-glide-inner cr-chicken-hop cr-chicken-run" : ""
-              } ${status === "lost" ? "cr-chicken-bust" : ""}`}
-            >
+            <div className={`relative flex flex-col items-center ${hopping ? "cr-chicken-run" : ""}`}>
               <ChickenSprite hopping={hopping} running={hopping} size={48} />
               {hopping && (
                 <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-2 cr-chicken-dust rounded-full" />
@@ -374,6 +406,13 @@ export function StakeChickenBoard({
           </div>
         )}
       </div>
+
+      <PhysicsBurstLayer
+        burstId={burstId}
+        originX={burstOrigin.x}
+        originY={burstOrigin.y}
+        intensity={status === "lost" ? 1.2 : 1}
+      />
 
       {showHoverDeck && hoveredLane !== null && (
         <ManholeHoverDeck
@@ -388,6 +427,7 @@ export function StakeChickenBoard({
       )}
 
       {status === "won" && <WinCelebration />}
+      </div>
 
       <div className="relative z-10 px-3 py-2 border-t border-white/10 bg-black/50 flex items-center justify-between gap-2">
         <span className="text-[10px] font-bold uppercase tracking-widest text-white/45">
