@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChickenSprite,
   CarSprite,
@@ -8,6 +8,7 @@ import {
 } from "./chicken-road-sprites";
 import { AmbientLaneTraffic } from "./ambient-traffic";
 import { CarCrashEffect, BarrierDropEffect } from "./crash-effects";
+import { getSurvivalChancePercent, type StakeTier } from "@/lib/chicken-road-stake-math";
 
 export type LaneState = "idle" | "past" | "current" | "future" | "bust";
 export type HazardType = "car" | "manhole";
@@ -28,11 +29,15 @@ interface StakeChickenBoardProps {
   bustLane?: number;
   bustHazard?: HazardType;
   crossAnim: CrossAnim;
-  /** Tap the glowing next manhole to cross (same as Go button) */
   onCrossNext?: () => void;
   canCross?: boolean;
   crossLoading?: boolean;
+  betAmount?: number;
+  tier?: StakeTier;
 }
+
+const SIDEWALK_W = 88;
+const LANE_W = 80;
 
 function CitySkyline() {
   return (
@@ -47,6 +52,79 @@ function CitySkyline() {
             opacity: 0.6 + (i % 2) * 0.15,
           }} />
       ))}
+      <div className="absolute bottom-0 left-[12%] w-[20%] h-[18%] bg-[#1e2840]/80 rounded-t border border-white/5">
+        <div className="absolute inset-x-2 top-1 h-1.5 bg-primary/30 rounded-sm cr-city-window-flicker" />
+      </div>
+    </div>
+  );
+}
+
+function ManholeHoverDeck({
+  laneIndex,
+  currentLane,
+  betAmount,
+  tier,
+  multiplier,
+  mouseX,
+  mouseY,
+}: {
+  laneIndex: number;
+  currentLane: number;
+  betAmount: number;
+  tier: StakeTier;
+  multiplier: number;
+  mouseX: number;
+  mouseY: number;
+}) {
+  const chance = getSurvivalChancePercent(tier, currentLane, laneIndex + 1);
+  const payout = betAmount * multiplier;
+
+  return (
+    <div
+      className="absolute z-50 pointer-events-none bg-card/95 border border-primary/40 p-2.5 rounded-lg shadow-2xl flex flex-col gap-1 text-[11px] font-mono tracking-tight w-48 backdrop-blur-md"
+      style={{ left: mouseX + 14, top: mouseY - 72 }}
+    >
+      <div className="flex justify-between border-b border-border pb-1">
+        <span className="text-muted-foreground font-sans text-[10px]">Sewer step</span>
+        <span className="text-primary font-bold">#{laneIndex + 1}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted-foreground font-sans text-[10px]">Success chance</span>
+        <span className="text-green-400 font-bold">{chance.toFixed(6)}%</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted-foreground font-sans text-[10px]">At step payout</span>
+        <span className="text-yellow-400 font-bold">${payout.toFixed(2)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted-foreground font-sans text-[10px]">Multiplier</span>
+        <span className="text-foreground font-bold">{multiplier.toFixed(2)}×</span>
+      </div>
+    </div>
+  );
+}
+
+function WinCelebration() {
+  return (
+    <div className="absolute inset-0 z-40 pointer-events-none cr-win-celebration overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-t from-green-500/20 via-transparent to-primary/10" />
+      {Array.from({ length: 24 }).map((_, i) => (
+        <span
+          key={i}
+          className="cr-win-confetti absolute w-1.5 h-1.5 rounded-sm"
+          style={{
+            left: `${(i * 17 + 5) % 100}%`,
+            backgroundColor: ["#68D391", "#63B3ED", "#F6E05E", "#FC8181", "#B794F6"][i % 5],
+            animationDelay: `${(i % 8) * 0.08}s`,
+          }}
+        />
+      ))}
+      <div className="absolute top-[18%] left-1/2 -translate-x-1/2 text-center cr-win-title-pop">
+        <span className="block text-2xl sm:text-3xl font-black uppercase tracking-widest text-green-400 drop-shadow-lg">
+          Cleared!
+        </span>
+        <span className="block text-[10px] font-bold uppercase text-white/70 mt-1">All sewers crossed</span>
+      </div>
     </div>
   );
 }
@@ -62,6 +140,7 @@ function LaneStrip({
   isNextTarget,
   onManholeClick,
   crossLoading,
+  onManholeHover,
 }: {
   laneIndex: number;
   state: LaneState;
@@ -73,6 +152,7 @@ function LaneStrip({
   isNextTarget?: boolean;
   onManholeClick?: () => void;
   crossLoading?: boolean;
+  onManholeHover?: (lane: number | null) => void;
 }) {
   const variants = ["sedan", "suv", "truck"] as const;
   const variant = variants[laneIndex % 3];
@@ -86,6 +166,7 @@ function LaneStrip({
   const hideAmbient = isCrossing && (
     crossAnim.phase === "car-down" || crossAnim.phase === "car-up" || crossAnim.phase === "car-impact"
   );
+  const justCleared = state === "past" && crossAnim === null;
 
   return (
     <div className={`cr-stake-lane relative flex-shrink-0 w-[72px] sm:w-[80px] h-full ${
@@ -93,8 +174,9 @@ function LaneStrip({
     }`}>
       <div className={`absolute inset-x-0 top-0 bottom-[72px] bg-[#4a5568] border-x border-[#5a6578] overflow-hidden ${
         state === "current" ? "cr-lane-active" : ""
-      }`}>
+      } ${justCleared ? "cr-lane-cleared-flash" : ""}`}>
         <div className="absolute left-1/2 top-3 bottom-3 w-0 border-l border-dashed border-white/12" />
+        <div className="absolute inset-0 cr-lane-asphalt-shimmer pointer-events-none opacity-30" />
 
         <AmbientLaneTraffic
           laneIndex={laneIndex}
@@ -104,11 +186,13 @@ function LaneStrip({
 
         {showCar && (
           <div className="absolute left-1/2 -translate-x-1/2 cr-car-pass-once z-10">
+            <div className="cr-car-speed-trail absolute inset-0 -z-10" />
             <CarSprite color={getCarColor(laneIndex)} variant={variant} size={42} direction="down" />
           </div>
         )}
         {showCarUp && (
           <div className="absolute left-1/2 -translate-x-1/2 cr-car-pass-once-reverse z-10">
+            <div className="cr-car-speed-trail absolute inset-0 -z-10" />
             <CarSprite color={getCarColor(laneIndex + 1)} variant={variants[(laneIndex + 1) % 3]} size={38} direction="up" />
           </div>
         )}
@@ -119,6 +203,7 @@ function LaneStrip({
         {showManholeBurst && (
           <div className="absolute left-1/2 bottom-[20%] -translate-x-1/2 z-20">
             <div className="cr-manhole-burst w-16 h-12 rounded-full" />
+            <div className="cr-manhole-burst-ring absolute inset-0 rounded-full" />
           </div>
         )}
 
@@ -130,11 +215,16 @@ function LaneStrip({
         {isBust && bustHazard === "manhole" && (
           <div className="absolute left-1/2 bottom-[18%] -translate-x-1/2 z-20">
             <div className="cr-manhole-burst w-20 h-14 rounded-full" />
+            <div className="cr-manhole-burst-ring absolute inset-0 rounded-full" />
           </div>
         )}
       </div>
 
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20">
+      <div
+        className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20"
+        onMouseEnter={() => onManholeHover?.(laneIndex)}
+        onMouseLeave={() => onManholeHover?.(null)}
+      >
         <ManholeCover
           multiplier={multiplier}
           state={state}
@@ -160,19 +250,29 @@ export function StakeChickenBoard({
   onCrossNext,
   canCross = false,
   crossLoading = false,
+  betAmount = 0,
+  tier = "medium",
 }: StakeChickenBoardProps) {
   const isActive = status === "active";
   const trafficActive = status === "idle" || status === "active";
-  const laneWidth = 80;
+  const laneWidth = LANE_W;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [hoveredLane, setHoveredLane] = useState<number | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-  /** After Play: chicken on sidewalk. After each safe Go: stands on cleared manhole. */
   const onSidewalk = isActive && currentLane === 0;
-  const chickenLane = isActive && currentLane > 0
-    ? currentLane - 1
+  const targetLane = isActive
+    ? currentLane === 0
+      ? -1
+      : currentLane - 1
     : status === "won" || status === "lost"
       ? Math.max(0, currentLane - 1)
       : -1;
+
+  const chickenLeft = targetLane < 0
+    ? SIDEWALK_W / 2
+    : SIDEWALK_W + targetLane * laneWidth + laneWidth / 2;
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -181,16 +281,37 @@ export function StakeChickenBoard({
       el.scrollTo({ left: 0, behavior: "smooth" });
       return;
     }
-    if (chickenLane < 0) return;
-    const target = Math.max(0, chickenLane * laneWidth - el.clientWidth / 2 + laneWidth / 2);
+    if (targetLane < 0) return;
+    const target = Math.max(0, targetLane * laneWidth - el.clientWidth / 2 + laneWidth / 2);
     el.scrollTo({ left: target, behavior: "smooth" });
-  }, [chickenLane, laneWidth, chickenVisible, onSidewalk]);
+  }, [targetLane, laneWidth, chickenVisible, onSidewalk]);
+
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+    const onMove = (e: MouseEvent) => {
+      const rect = board.getBoundingClientRect();
+      setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    };
+    board.addEventListener("mousemove", onMove);
+    return () => board.removeEventListener("mousemove", onMove);
+  }, []);
+
+  const showHoverDeck =
+    hoveredLane !== null &&
+    isActive &&
+    hoveredLane >= currentLane &&
+    betAmount > 0;
 
   return (
-    <div className="cr-stake-board relative rounded-xl overflow-hidden border border-white/10 bg-[#141a28] shadow-2xl">
+    <div
+      ref={boardRef}
+      className={`cr-stake-board relative rounded-xl overflow-hidden border border-white/10 bg-[#141a28] shadow-2xl ${
+        status === "lost" ? "cr-board-shake" : ""
+      }`}
+    >
       <CitySkyline />
       <div className="relative flex h-[min(500px,64vh)] min-h-[340px]">
-        {/* Sidewalk — Stake-style start pad with crosswalk, no chicken until Play */}
         <div className="relative z-10 w-[80px] sm:w-[88px] shrink-0 bg-[#5a6578] border-r border-white/10 flex flex-col items-center pt-3 pb-2">
           <TrafficLight active={isActive ? "green" : status === "lost" ? "red" : "yellow"} />
           <div className="w-12 h-12 mt-2 rounded-full bg-[#276749] border-2 border-[#22543D] shadow-inner" />
@@ -199,12 +320,7 @@ export function StakeChickenBoard({
               <div key={i} className="h-1 bg-white/95 rounded-sm" />
             ))}
           </div>
-          {chickenVisible && onSidewalk && (
-            <div className={`mb-1 cr-chicken-spawn ${hopping ? "cr-chicken-run" : ""}`}>
-              <ChickenSprite hopping={hopping} running={hopping} size={48} />
-            </div>
-          )}
-          <span className="text-[8px] font-bold uppercase text-white/35 tracking-widest">Start</span>
+          <span className="text-[8px] font-bold uppercase text-white/35 tracking-widest mb-2">Start</span>
         </div>
 
         <div ref={scrollRef} className="flex-1 relative overflow-x-auto overflow-y-hidden cr-lanes-scroll">
@@ -229,41 +345,63 @@ export function StakeChickenBoard({
                   isNextTarget={isActive && i === currentLane && canCross}
                   onManholeClick={onCrossNext}
                   crossLoading={crossLoading}
+                  onManholeHover={setHoveredLane}
                 />
               );
             })}
-
-            {chickenVisible && !onSidewalk && chickenLane >= 0 && (
-              <div
-                className={`absolute z-30 pointer-events-none cr-chicken-on-manhole transition-all duration-500 ease-out ${
-                  hopping ? "cr-chicken-hop cr-chicken-run" : ""
-                }`}
-                style={{
-                  left: `${chickenLane * laneWidth + laneWidth / 2}px`,
-                  bottom: "28px",
-                  transform: "translateX(-50%)",
-                }}
-              >
-                <ChickenSprite hopping={hopping} running={hopping} size={48} />
-              </div>
-            )}
           </div>
         </div>
+
+        {chickenVisible && (
+          <div
+            className="absolute z-30 pointer-events-none cr-chicken-track"
+            style={{
+              left: `${chickenLeft}px`,
+              bottom: "28px",
+              transform: "translateX(-50%)",
+            }}
+          >
+            <div
+              className={`relative flex flex-col items-center ${
+                hopping ? "cr-chicken-glide-inner cr-chicken-hop cr-chicken-run" : ""
+              } ${status === "lost" ? "cr-chicken-bust" : ""}`}
+            >
+              <ChickenSprite hopping={hopping} running={hopping} size={48} />
+              {hopping && (
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-2 cr-chicken-dust rounded-full" />
+              )}
+            </div>
+          </div>
+        )}
       </div>
+
+      {showHoverDeck && hoveredLane !== null && (
+        <ManholeHoverDeck
+          laneIndex={hoveredLane}
+          currentLane={currentLane}
+          betAmount={betAmount}
+          tier={tier}
+          multiplier={multipliers[hoveredLane] ?? 1}
+          mouseX={mousePos.x}
+          mouseY={mousePos.y}
+        />
+      )}
+
+      {status === "won" && <WinCelebration />}
 
       <div className="relative z-10 px-3 py-2 border-t border-white/10 bg-black/50 flex items-center justify-between gap-2">
         <span className="text-[10px] font-bold uppercase tracking-widest text-white/45">
           {status === "idle"
             ? "Select difficulty & amount, then Play"
             : isActive
-              ? "Tap the glowing manhole or Go to cross — cash out anytime"
+              ? "Tap the glowing sewer or Go to cross — cash out anytime"
               : status === "won"
                 ? "Round complete"
                 : "Busted"}
         </span>
         {(isActive || status === "idle") && (
           <span className="text-[10px] font-mono font-bold text-primary shrink-0">
-            {status === "idle" ? `${lanes} lanes` : `Lane ${currentLane + 1} / ${lanes}`}
+            {status === "idle" ? `${lanes} sewers` : `Step ${currentLane + 1} / ${lanes}`}
           </span>
         )}
       </div>

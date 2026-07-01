@@ -1138,12 +1138,42 @@ body {
 
 /* ── Chicken Road visual board ───────────────────────────────────── */
 @keyframes cr-chicken-hop-anim {
-  0%, 100% { transform: translateY(0); }
-  35% { transform: translateY(-8px); }
-  55% { transform: translateY(-4px); }
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  25% { transform: translateY(-4px) scale(1.05, 0.95); }
+  45% { transform: translateY(-14px) scale(0.95, 1.08); }
+  65% { transform: translateY(-6px) scale(1.02, 0.98); }
+  85% { transform: translateY(-2px) scale(1, 1); }
 }
 .cr-chicken-hop {
-  animation: cr-chicken-hop-anim 0.45s ease-out;
+  animation: cr-chicken-hop-anim 0.55s cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+.cr-chicken-track {
+  transition: left 0.58s cubic-bezier(0.22, 1.05, 0.36, 1);
+  will-change: left;
+}
+.cr-chicken-glide.cr-chicken-track {
+  transition-timing-function: cubic-bezier(0.22, 1.15, 0.36, 1);
+}
+.cr-chicken-glide-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+@keyframes cr-chicken-dust-anim {
+  0% { opacity: 0.5; transform: translateX(-50%) scale(0.5); }
+  100% { opacity: 0; transform: translateX(-50%) scale(1.6); }
+}
+.cr-chicken-dust {
+  background: radial-gradient(ellipse, rgba(139,105,20,0.55) 0%, transparent 70%);
+  animation: cr-chicken-dust-anim 0.45s ease-out forwards;
+}
+@keyframes cr-chicken-bust-anim {
+  0% { transform: translateX(-50%) rotate(0deg); }
+  30% { transform: translateX(-50%) rotate(-15deg) translateY(-8px); }
+  100% { transform: translateX(-50%) rotate(75deg) translateY(12px) scale(0.85); opacity: 0.35; }
+}
+.cr-chicken-bust {
+  animation: cr-chicken-bust-anim 0.65s ease-out forwards;
 }
 @keyframes cr-chicken-run-anim {
   0% { transform: translateX(0) translateY(0) rotate(0deg); }
@@ -1413,6 +1443,91 @@ body {
 .cr-lane-active {
   box-shadow: inset 0 0 24px rgba(74, 158, 255, 0.15);
   background: linear-gradient(180deg, #4a5568 0%, #526178 50%, #4a5568 100%) !important;
+}
+@keyframes cr-lane-cleared-flash-anim {
+  0% { box-shadow: inset 0 0 30px rgba(104, 211, 145, 0.45); }
+  100% { box-shadow: inset 0 0 0 transparent; }
+}
+.cr-lane-cleared-flash {
+  animation: cr-lane-cleared-flash-anim 0.7s ease-out forwards;
+}
+@keyframes cr-lane-asphalt-shimmer-anim {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 40px; }
+}
+.cr-lane-asphalt-shimmer {
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 8px,
+    rgba(255,255,255,0.03) 8px,
+    rgba(255,255,255,0.03) 10px
+  );
+  animation: cr-lane-asphalt-shimmer-anim 1.2s linear infinite;
+}
+@keyframes cr-car-speed-trail-anim {
+  0%, 100% { opacity: 0.15; transform: scaleY(0.8); }
+  50% { opacity: 0.35; transform: scaleY(1.1); }
+}
+.cr-car-speed-trail {
+  background: linear-gradient(180deg, transparent, rgba(255,255,255,0.2), transparent);
+  animation: cr-car-speed-trail-anim 0.4s ease-in-out infinite;
+}
+@keyframes cr-manhole-burst-ring-anim {
+  0% { transform: scale(0.6); opacity: 0.8; border-width: 3px; }
+  100% { transform: scale(2.2); opacity: 0; border-width: 1px; }
+}
+.cr-manhole-burst-ring {
+  border: 2px solid rgba(255, 140, 0, 0.7);
+  animation: cr-manhole-burst-ring-anim 0.55s ease-out forwards;
+}
+@keyframes cr-board-shake-anim {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-4px) rotate(-0.3deg); }
+  30% { transform: translateX(4px) rotate(0.3deg); }
+  45% { transform: translateX(-3px); }
+  60% { transform: translateX(3px); }
+}
+.cr-board-shake {
+  animation: cr-board-shake-anim 0.45s ease-out;
+}
+@keyframes cr-win-confetti-fall {
+  0% { transform: translateY(-10%) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(120vh) rotate(720deg); opacity: 0; }
+}
+.cr-win-confetti {
+  animation: cr-win-confetti-fall 2.2s ease-in forwards;
+  top: -4%;
+}
+@keyframes cr-win-title-pop-anim {
+  0% { transform: translateX(-50%) scale(0.5); opacity: 0; }
+  60% { transform: translateX(-50%) scale(1.08); opacity: 1; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+.cr-win-title-pop {
+  animation: cr-win-title-pop-anim 0.65s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+}
+.cr-win-celebration {
+  animation: cr-win-celebration-fade 3s ease-out forwards;
+}
+@keyframes cr-win-celebration-fade {
+  0%, 75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes cr-city-window-flicker-anim {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.75; }
+}
+.cr-city-window-flicker {
+  animation: cr-city-window-flicker-anim 2.4s ease-in-out infinite;
+}
+@keyframes cr-impact-spark-anim {
+  0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0.9; }
+  100% { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+}
+.cr-impact-spark {
+  background: radial-gradient(circle, rgba(255,255,200,0.6) 0%, rgba(255,80,0,0.3) 40%, transparent 70%);
+  animation: cr-impact-spark-anim 0.4s ease-out forwards;
 }
 
 /* ── Cover art: race horses ──────────────────────────────────────── */

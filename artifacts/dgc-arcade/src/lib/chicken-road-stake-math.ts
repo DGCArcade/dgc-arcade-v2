@@ -40,3 +40,15 @@ export function getStakeMultiplierTable(tier: StakeTier): number[] {
   const steps = STAKE_TIERS[tier].maxSteps;
   return Array.from({ length: steps }, (_, i) => calculateStakeMultiplier(tier, i));
 }
+
+/** Cumulative survival % from `fromLane` through crossing `toLane` (exclusive end step index). */
+export function getSurvivalChancePercent(tier: StakeTier, fromLane: number, toLane: number): number {
+  if (toLane <= fromLane) return 100;
+  const deaths = STAKE_TIERS[tier].deaths;
+  const safe = POSITIONS - deaths;
+  let survival = 1;
+  for (let step = fromLane; step < toLane; step++) {
+    survival *= (safe - step) / (POSITIONS - step);
+  }
+  return survival * 100;
+}
