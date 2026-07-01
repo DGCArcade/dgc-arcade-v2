@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { MapPin, Globe, ShieldAlert, X, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { savePendingGeo } from "@/lib/geo-sync";
+import { gpsConsistentWithIpGeo } from "@/lib/geo-guard";
 
 // Uses sessionStorage — shows on every new browser session, not cached forever
 const SESSION_KEY = "dgc_geo_session_v2";
@@ -173,9 +174,11 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
     if (didFetch.current) return;
     didFetch.current = true;
 
-    // Check session — shows every new browser session
     const session = sessionStorage.getItem(SESSION_KEY);
-    if (session === "accepted") { setState("accepted"); return; }
+    if (session === "accepted") {
+      setState("accepted");
+      return;
+    }
     if (session === "declined") { setState("blocked_declined"); return; }
     if (session === "blocked_country") { setState("blocked_country"); return; }
     if (session === "blocked_state") { setState("blocked_state"); return; }
@@ -183,6 +186,42 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
     setState("asking");
     doGeoFetch();
   }, []);
+
+  /** Re-check IP jurisdiction on focus — DevTools cannot override server-side IP verification for bets. */
+  useEffect(() => {
+    if (state !== "accepted") return;
+
+    async function recheckGeo() {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 9000);
+        const res = await fetch("https://ipapi.co/json/", { signal: controller.signal });
+        clearTimeout(timeout);
+        if (!res.ok) return;
+        const data: GeoData = await res.json();
+        if (!data.country_code) return;
+        if (BLOCKED_COUNTRIES.includes(data.country_code)) {
+          sessionStorage.setItem(SESSION_KEY, "blocked_country");
+          setGeoData(data);
+          setState("blocked_country");
+        }
+      } catch {
+        /* non-blocking */
+      }
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") recheckGeo();
+    };
+    window.addEventListener("focus", recheckGeo);
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = window.setInterval(recheckGeo, 5 * 60 * 1000);
+    return () => {
+      window.removeEventListener("focus", recheckGeo);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(interval);
+    };
+  }, [state]);
 
   async function doGeoFetch() {
     try {
@@ -202,27 +241,24 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
   }
 
   async function handleAccept() {
-    // Try to get precise GPS location if available
+    // Optional GPS — never used for jurisdiction (server uses request IP). Reject DevTools sensor spoofing.
     if (navigator.geolocation) {
       setState("verifying");
       navigator.geolocation.getCurrentPosition(
         async (position) => {
-          // Got precise location
           const { latitude, longitude } = position.coords;
-          if (geoData) {
-            setGeoData({
-              ...geoData,
-              latitude,
-              longitude,
-            });
+          const ipLat = geoData?.latitude;
+          const ipLon = geoData?.longitude;
+          if (gpsConsistentWithIpGeo(latitude, longitude, ipLat, ipLon)) {
+            await processAccept(latitude, longitude);
+          } else {
+            await processAccept();
           }
-          await processAccept(latitude, longitude);
         },
         async () => {
-          // Declined or error — proceed with IP geo
           await processAccept();
         },
-        { timeout: 5000 }
+        { timeout: 5000, maximumAge: 0 },
       );
     } else {
       await processAccept();
@@ -461,6 +497,10 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             <div className="flex gap-2 items-start">
               <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
               <span>Access is denied in jurisdictions where gambling is prohibited</span>
+            </div>
+            <div className="flex gap-2 items-start">
+              <span className="text-yellow-400 mt-0.5 flex-shrink-0">⚠</span>
+              <span>Betting uses <strong className="text-foreground">server IP verification</strong> — Chrome DevTools location overrides cannot unlock play</span>
             </div>
             <div className="flex gap-2 items-start">
               <span className="text-yellow-400 mt-0.5 flex-shrink-0">⚠</span>

@@ -12,6 +12,7 @@ import { ProvablyFairPanel } from "./provably-fair-panel";
 import {
   STAKE_TIERS,
   getStakeMultiplierTable,
+  normalizeStakeTier,
   type StakeTier,
 } from "@/lib/chicken-road-stake-math";
 import {
@@ -80,6 +81,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
   const [bustLane, setBustLane] = useState<number | undefined>();
   const [bustHazard, setBustHazard] = useState<HazardType | undefined>();
   const [crossAnim, setCrossAnim] = useState<CrossAnim>(null);
+  const [hopStripIndex, setHopStripIndex] = useState<number | undefined>();
   const [laneMultipliers, setLaneMultipliers] = useState(() => getStakeMultiplierTable("medium"));
 
   useEffect(() => {
@@ -129,12 +131,14 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         setSessionId(s.sessionId);
         setServerSeedHash(s.serverSeedHash ?? "");
         setServerSeed("");
+        setClientSeed(s.clientSeed ?? "chicken-road");
         setNonce(s.nonce ?? 1);
         setCurrentLane(s.currentLane ?? 0);
         setMultiplier(s.currentMultiplier ?? 1);
-        setTier((s.tier as StakeTier) ?? "medium");
-        setMaxLanes(s.maxSteps ?? STAKE_TIERS.medium.maxSteps);
-        setLaneMultipliers(s.multipliers ?? getStakeMultiplierTable(s.tier ?? "medium"));
+        const resumedTier = normalizeStakeTier(s.tier ?? "medium");
+        setTier(resumedTier);
+        setMaxLanes(s.maxSteps ?? STAKE_TIERS[resumedTier].maxSteps);
+        setLaneMultipliers(s.multipliers ?? getStakeMultiplierTable(resumedTier));
         setStatus("active");
         setChickenVisible(true);
       })
@@ -239,8 +243,8 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         }
 
         setHopping(true);
+        setHopStripIndex(lane);
         playCrossSuccess();
-        playManholeIgnite();
         playChickenCluck();
 
         const newMult = data.multiplier ?? 1;
@@ -249,6 +253,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
 
         if (data.status === "won") {
           setCurrentLane(maxLanes);
+          setHopStripIndex(maxLanes - 1);
           await delay(CHICKEN_GLIDE_MS);
           setStatus("won");
           setPayout(data.payout);
@@ -265,10 +270,14 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
       qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
     } catch (err: unknown) {
       setCrossAnim(null);
+      setHopStripIndex(undefined);
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
-      setTimeout(() => setHopping(false), CHICKEN_GLIDE_MS + 80);
+      setTimeout(() => {
+        setHopping(false);
+        setHopStripIndex(undefined);
+      }, CHICKEN_GLIDE_MS + 80);
       animLock.current = false;
     }
   }, [status, loading, sessionId, currentLane, maxLanes, toast, qc]);
@@ -310,6 +319,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
     setBustLane(undefined);
     setBustHazard(undefined);
     setCrossAnim(null);
+    setHopStripIndex(undefined);
   };
 
   const isIdle = status === "idle";
@@ -404,6 +414,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
             clientSeed={clientSeed}
             nonce={nonce}
             verifyPath={`/api/chicken-road/verify/${sessionId}`}
+            gameName="Chicken Road"
           />
         )}
 
@@ -412,12 +423,16 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         </p>
       </div>
 
-      <div className="chicken-road-play-area order-1 lg:order-none flex-1 min-w-0 min-h-[360px]">
-        {serverSeedHash && !serverSeed && (
-          <div className="chicken-road-seed-hash mb-2 text-[10px] font-mono text-muted-foreground break-all hidden sm:block">
-            <span className="uppercase font-bold mr-1">SHA-256 commit:</span>
-            <span className="text-primary">{serverSeedHash}</span>
-          </div>
+      <div className="chicken-road-play-area order-1 lg:order-none flex-1 min-w-0 min-h-[360px] space-y-2">
+        {serverSeedHash && !serverSeed && sessionId && (
+          <ProvablyFairPanel
+            variant="compact"
+            serverSeedHash={serverSeedHash}
+            clientSeed={clientSeed}
+            nonce={nonce}
+            verifyPath={`/api/chicken-road/verify/${sessionId}`}
+            gameName="Chicken Road"
+          />
         )}
         <ChickenRoadBoard
           lanes={maxLanes}
@@ -435,6 +450,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
           crossLoading={loading}
           betAmount={amount}
           tier={tier}
+          chickenStripIndex={hopStripIndex}
         />
       </div>
     </div>

@@ -36,7 +36,6 @@ export function useChickenMotor(
     let raf = 0;
     const fromLeft = displayLeftRef.current;
     const start = performance.now();
-    const span = Math.max(Math.abs(targetLeft - fromLeft), laneWidth * 0.45);
     glidingRef.current = true;
 
     const tick = (now: number) => {
@@ -45,13 +44,14 @@ export function useChickenMotor(
       const left = fromLeft + (targetLeft - fromLeft) * eased;
       displayLeftRef.current = left;
 
-      const jumpProgress = Math.min(1, Math.abs(targetLeft - left) / span);
+      // Progress through the hop arc (0 = launch, 1 = land) — not remaining distance.
+      const hopArc = rawT;
       let scaleX: number;
       let scaleY: number;
       let liftY = 0;
 
       if (hopping && rawT < 1) {
-        const squish = squishStretch(jumpProgress);
+        const squish = squishStretch(hopArc);
         scaleX = squish.scaleX;
         scaleY = squish.scaleY;
         liftY = -Math.sin(rawT * Math.PI) * 20;
