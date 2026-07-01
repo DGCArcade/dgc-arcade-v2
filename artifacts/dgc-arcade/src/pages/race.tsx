@@ -31,9 +31,8 @@ import {
 } from "@/components/games/derby/derby-broadcast";
 import {
   computeRaceProgress,
-  buildPhotoFinishProgress,
-  FINISH_HOLD_MS,
   RACE_GATE_MS,
+  TRACK_SCROLL_PCT,
 } from "@/components/games/derby/derby-race-animation";
 
 function getToken() { return typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null; }
@@ -78,13 +77,13 @@ export default function RacePage() {
   const [racePhase, setRacePhase] = useState<RacePhase>("gate");
   const [camFade, setCamFade] = useState(0);
   const [finishOrder, setFinishOrder] = useState<number[] | null>(null);
-  const [showFinishReveal, setShowFinishReveal] = useState(false);
+  const [liveWireFinish, setLiveWireFinish] = useState(false);
   const animRef = useRef<number | null>(null);
   const startRef = useRef(0);
   const resultRef = useRef<RaceResult | null>(null);
   const finishOrderRef = useRef<number[]>([]);
-  const finishHoldRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishTriggeredRef = useRef(false);
+  const liveWireFinishRef = useRef(false);
   const gallopStarted = useRef(false);
   const cameraRef = useRef(0);
   const manualCameraRef = useRef(false);
@@ -109,13 +108,10 @@ export default function RacePage() {
     lastAutoCamRef.current = null;
     setLiveFair(null);
     setFinishOrder(null);
-    setShowFinishReveal(false);
+    setLiveWireFinish(false);
+    liveWireFinishRef.current = false;
     finishOrderRef.current = [];
     finishTriggeredRef.current = false;
-    if (finishHoldRef.current) {
-      clearTimeout(finishHoldRef.current);
-      finishHoldRef.current = null;
-    }
     gallopStarted.current = false;
     stopHorseGallopLoop();
     stopCrowdAmbience();
@@ -177,7 +173,7 @@ export default function RacePage() {
         startHorseGallopLoop();
       }
 
-      const { progress: next, winnerDone } = computeRaceProgress(
+      const { progress: next, winnerDone, allDone } = computeRaceProgress(
         elapsed,
         finishOrderRef.current,
         TRACK_LEN,
@@ -185,11 +181,11 @@ export default function RacePage() {
       setProgress(next);
 
       const leaderProg = getLeaderProgress(next);
-      const phase = getRacePhase(leaderProg, true, winnerDone);
+      const phase = getRacePhase(leaderProg, true, allDone, liveWireFinishRef.current);
       setRacePhase(phase);
 
       if (!manualCameraRef.current) {
-        const autoCam = getAutoCamera(phase, isMobile);
+        const autoCam = getAutoCamera(phase, isMobile, liveWireFinishRef.current);
         if (autoCam !== lastAutoCamRef.current) {
           lastAutoCamRef.current = autoCam;
           setCamFade(f => f + 1);
@@ -197,33 +193,42 @@ export default function RacePage() {
         }
       }
 
-      const targetCam = Math.min(leaderProg * 0.48, TRACK_LEN * 0.48);
-      cameraRef.current += (targetCam - cameraRef.current) * 0.09;
+      const finishPan = TRACK_SCROLL_PCT * 0.58;
+      const targetCam = liveWireFinishRef.current
+        ? finishPan + (leaderProg / TRACK_LEN) * 6
+        : Math.min(leaderProg * 0.52, TRACK_LEN * 0.52);
+      cameraRef.current += (targetCam - cameraRef.current) * (liveWireFinishRef.current ? 0.14 : 0.09);
       setCameraX(cameraRef.current);
 
       if (winnerDone && !finishTriggeredRef.current) {
         finishTriggeredRef.current = true;
-        stopHorseGallopLoop();
+        liveWireFinishRef.current = true;
+        setLiveWireFinish(true);
         stopCrowdAmbience();
         playRaceFinishCheer();
-        setProgress(buildPhotoFinishProgress(finishOrderRef.current, TRACK_LEN));
-        setShowFinishReveal(true);
-        setRacePhase("finish");
-        setCamFade(f => f + 1);
-        setCamera("finish");
-        manualCameraRef.current = true;
+        setRacing(false);
+        setResult(resultRef.current);
+        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         setLiveFair(prev =>
           prev ? { ...prev, serverSeed: resultRef.current?.serverSeed } : null,
         );
+        if (!manualCameraRef.current) {
+          lastAutoCamRef.current = "side";
+          setCamFade(f => f + 1);
+          setCamera("side");
+        }
+      }
 
-        finishHoldRef.current = setTimeout(() => {
-          setResult(resultRef.current);
-          setRacing(false);
-          queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-          finishHoldRef.current = null;
-        }, FINISH_HOLD_MS);
+      if (allDone) {
+        stopHorseGallopLoop();
+        stopCrowdAmbience();
+        if (liveWireFinishRef.current) {
+          liveWireFinishRef.current = false;
+          setLiveWireFinish(false);
+        }
         return;
       }
+
       animRef.current = requestAnimationFrame(tick);
     };
     animRef.current = requestAnimationFrame(tick);
@@ -231,15 +236,19 @@ export default function RacePage() {
 
   useEffect(() => () => {
     if (animRef.current) cancelAnimationFrame(animRef.current);
-    if (finishHoldRef.current) clearTimeout(finishHoldRef.current);
     stopHorseGallopLoop();
     stopCrowdAmbience();
   }, []);
 
+  const isAnimating = racing || liveWireFinish;
+
   const viewProps = {
     racers: RACERS,
     progress,
-    racing,
+    racing: isAnimating,
+    liveWireFinish,
+    finishOrder: finishOrder ?? result?.finishOrder ?? undefined,
+    winnerId: result?.winnerRacerId ?? finishOrder?.[0],
     selectedRacer,
     compact: isMobile,
     phase: racePhase,
@@ -257,6 +266,7 @@ export default function RacePage() {
           finishOrder={finishOrder ?? result?.finishOrder}
           winnerId={result?.winnerRacerId ?? finishOrder?.[0]}
           compact={isMobile}
+          liveSequential={liveWireFinish}
         />
       );
     }
@@ -265,8 +275,8 @@ export default function RacePage() {
         {...viewProps}
         camera={angle}
         cameraX={cameraX}
-        winnerId={result?.winnerRacerId}
-        showResult={!!result}
+        winnerId={result?.winnerRacerId ?? finishOrder?.[0]}
+        showResult={!!result || liveWireFinish}
       />
     );
   }
@@ -280,7 +290,7 @@ export default function RacePage() {
   }
 
   const previewCamera: CameraAngle =
-    !racing && !result && camera === "finish" ? "side" : camera;
+    !isAnimating && !result && camera === "finish" ? "side" : camera;
 
   const trackCard = (
     <Card className="race-track-card bg-card border-border p-0 overflow-hidden flex flex-col min-h-0 h-full">
@@ -296,7 +306,7 @@ export default function RacePage() {
                 setCamFade(f => f + 1);
                 setCamera(c.id);
               }}
-              disabled={c.id === "finish" && !result && !racing && !showFinishReveal}
+              disabled={c.id === "finish" && !result && !isAnimating}
               className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-all ${camera === c.id ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary/60 text-muted-foreground hover:text-foreground"} disabled:opacity-40`}>
               {isMobile ? (c.mobileLabel ?? c.label) : c.label}
             </button>
@@ -305,7 +315,7 @@ export default function RacePage() {
       </div>
       <div className="relative flex-1 min-h-[200px] derby-track-scene">
         <div className="absolute inset-0 overflow-hidden">
-          {!racing && !result && !showFinishReveal ? (
+          {!isAnimating && !result ? (
             <div className="absolute inset-0 derby-cam-cut">
               {renderCameraView(previewCamera)}
             </div>
@@ -314,7 +324,7 @@ export default function RacePage() {
           )}
         </div>
       </div>
-      {(racing || showFinishReveal || (result && !isMobile)) && liveFair && (
+      {(isAnimating || (result && !isMobile)) && liveFair && (
         <div className="px-2 py-1 border-t border-border/30 bg-secondary/15 shrink-0">
           <ProvablyFairPanel
             betId={liveFair.betId}
@@ -323,18 +333,22 @@ export default function RacePage() {
             clientSeed={liveFair.clientSeed}
             nonce={liveFair.nonce}
             verifyPath={`/api/race/verify/${liveFair.betId}`}
-            variant={isMobile ? (racing || showFinishReveal ? "inline" : "compact") : racing || showFinishReveal ? "inline" : "full"}
+            variant={isMobile ? (isAnimating ? "inline" : "compact") : isAnimating ? "inline" : "full"}
           />
         </div>
       )}
-      {racing && (
+      {isAnimating && (
         <div className="px-2 py-1 border-t border-border/30 bg-black/40 flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2">
             <span className="live-dot w-2 h-2 rounded-full bg-green-400" />
-            <span className="text-[9px] font-bold uppercase tracking-widest text-green-400">Live</span>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-green-400">
+              {liveWireFinish ? "Wire" : "Live"}
+            </span>
           </div>
           <span className="text-[8px] font-mono text-white/50 truncate">
-            {Math.round(getLeaderProgress(progress))}m · Auto cam
+            {liveWireFinish
+              ? "Horses crossing — Race unlocked"
+              : `${Math.round(getLeaderProgress(progress))}m · Auto cam`}
           </span>
         </div>
       )}

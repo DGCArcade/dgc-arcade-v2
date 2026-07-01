@@ -13,6 +13,7 @@ import { DerbyFinishView } from "./derby-finish-view";
 import { buildStandings, getRankMap, relativeBehind, chaseVisualPosition } from "./derby-race-utils";
 import { DerbyAheadBehindTag, DerbyRankPill } from "./derby-position-badge";
 import type { HorseMood } from "./derby-horse";
+import { TRACK_SCROLL_PCT } from "./derby-race-animation";
 
 export type RacerProgress = { racerId: number; progress: number; done: boolean };
 export type CameraAngle = "side" | "front" | "aerial" | "finish";
@@ -20,11 +21,38 @@ export type CameraAngle = "side" | "front" | "aerial" | "finish";
 const TRACK_LEN = 100;
 const LANE_COUNT = 6;
 /** Shared horizontal track — all horses use same X so ahead/behind is obvious */
-const TRACK_START_PCT = 8;
-const TRACK_END_PCT = 92;
+const TRACK_START_PCT = 3;
+const TRACK_END_PCT = 96;
 
 function horseTrackLeft(progM: number): number {
   return TRACK_START_PCT + (progM / TRACK_LEN) * (TRACK_END_PCT - TRACK_START_PCT);
+}
+
+function getFinishPlace(racerId: number, finishOrder?: number[]): number | null {
+  if (!finishOrder?.length) return null;
+  const idx = finishOrder.indexOf(racerId);
+  return idx >= 0 ? idx + 1 : null;
+}
+
+function WirePlaceBadge({ place, compact }: { place: number; compact?: boolean }) {
+  const label = place === 1 ? "1st" : place === 2 ? "2nd" : place === 3 ? "3rd" : `${place}th`;
+  const cls =
+    place === 1
+      ? "bg-gradient-to-r from-yellow-500 to-amber-400 text-black border-yellow-200"
+      : place === 2
+        ? "bg-gradient-to-r from-gray-300 to-gray-100 text-black border-gray-200"
+        : place === 3
+          ? "bg-gradient-to-r from-amber-700 to-amber-500 text-white border-amber-400"
+          : "bg-black/75 text-white border-white/25";
+  return (
+    <span
+      className={`derby-wire-place-badge inline-flex items-center justify-center font-black uppercase border shadow-lg ${cls} ${
+        compact ? "text-[7px] px-1.5 py-0.5 min-w-[26px]" : "text-[8px] px-2 py-0.5 min-w-[30px]"
+      }`}
+    >
+      {label}
+    </span>
+  );
 }
 
 function HorseRacerLabel({
@@ -155,6 +183,9 @@ type ViewBaseProps = {
   compact?: boolean;
   phase?: RacePhase;
   camera?: CameraAngle;
+  liveWireFinish?: boolean;
+  finishOrder?: number[];
+  winnerId?: number;
 };
 
 export function DerbySideView({
@@ -168,16 +199,18 @@ export function DerbySideView({
   compact = false,
   phase,
   camera = "side",
+  liveWireFinish = false,
+  finishOrder,
 }: ViewBaseProps & {
   cameraX: number;
   winnerId?: number;
   showResult: boolean;
 }) {
   const atGate = !racing && progress.every(p => p.progress < 1);
-  const gateOpening = racing && progress.every(p => p.progress < 2);
+  const gateOpening = racing && !liveWireFinish && progress.every(p => p.progress < 2);
   const horseScale = compact ? 0.72 : 0.92;
   const leaderProg = getLeaderProgress(progress);
-  const racePhase = phase ?? getRacePhase(leaderProg, racing, progress.every(p => p.done));
+  const racePhase = phase ?? getRacePhase(leaderProg, racing, progress.every(p => p.done), liveWireFinish);
   const leader = racers.find(r => {
     const p = progress.find(x => x.racerId === r.id);
     return p && p.progress === leaderProg;
@@ -185,6 +218,8 @@ export function DerbySideView({
   const pick = selectedRacer ? racers.find(r => r.id === selectedRacer) : undefined;
   const standings = buildStandings(racers, progress);
   const rankMap = getRankMap(standings);
+  const scrollWidth = racing ? `${TRACK_SCROLL_PCT}%` : "100%";
+  const atWire = liveWireFinish || leaderProg > TRACK_LEN * 0.82;
 
   return (
     <div className="relative h-full w-full overflow-hidden derby-side-scene">
@@ -223,6 +258,11 @@ export function DerbySideView({
 
       <div className="absolute bottom-[38%] left-[3%] w-28 h-14 opacity-50 rounded-t-lg border border-white/10"
         style={{ background: "repeating-linear-gradient(90deg, #333 0 6px, #555 6px 12px)" }} />
+      <div className="absolute bottom-[36%] right-[4%] w-32 sm:w-40 h-16 opacity-55 rounded-t-xl border border-white/10 derby-grandstand"
+        style={{ background: "linear-gradient(180deg, #4a4a4a 0%, #2a2a2a 60%, #1a1a1a 100%)" }}>
+        <div className="absolute inset-x-2 top-1 h-2 rounded-sm bg-yellow-400/30 derby-jumbotron-glow" />
+        <div className="absolute bottom-0 inset-x-0 h-3 bg-black/40" />
+      </div>
 
       {/* Dirt track */}
       <div className="absolute bottom-0 left-0 right-0 h-[42%] bg-gradient-to-b from-[#c9a66b] via-[#a8844e] to-[#5c4028]" />
@@ -233,12 +273,13 @@ export function DerbySideView({
         className="absolute bottom-0 left-0 right-0 h-[46%] derby-track-scroll overflow-hidden"
         style={{
           transform: racing ? `translateX(-${cameraX}%)` : "none",
-          width: racing ? "260%" : "100%",
+          width: scrollWidth,
         }}
       >
         {racing && <div className="absolute inset-0 derby-track-motion z-0 pointer-events-none" />}
+        {liveWireFinish && <div className="absolute inset-0 derby-wire-cam-vignette z-[3] pointer-events-none" />}
 
-        {[0, 25, 50, 75, 100].map(d => (
+        {[0, 20, 40, 60, 80, 100].map(d => (
           <div
             key={d}
             className="absolute top-2 text-[8px] sm:text-[10px] font-black text-white/75 uppercase tracking-wider drop-shadow z-10"
@@ -257,8 +298,15 @@ export function DerbySideView({
         {/* Finish */}
         <div className="absolute right-[2%] top-0 bottom-0 flex flex-col items-center justify-end z-20 pb-1"
           style={{ left: `${TRACK_END_PCT}%`, right: "auto", transform: "translateX(-50%)" }}>
-          {racing && leaderProg > TRACK_LEN * 0.8 && (
-            <div className="absolute inset-0 -inset-x-4 derby-finish-flash rounded-sm" />
+          {atWire && (
+            <div className="absolute inset-0 -inset-x-6 derby-finish-flash rounded-sm" />
+          )}
+          {liveWireFinish && (
+            <div className="absolute -top-8 left-1/2 -translate-x-1/2 derby-wire-cam-label whitespace-nowrap">
+              <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-[0.2em] text-yellow-300 bg-black/70 px-2 py-0.5 rounded border border-yellow-400/40">
+                Wire Cam
+              </span>
+            </div>
           )}
           <div className="w-2 h-20 sm:h-24 bg-white shadow-lg rounded-sm" />
           <div className="flex flex-col w-4 -ml-0.5">
@@ -315,19 +363,22 @@ export function DerbySideView({
         <div className="absolute inset-0 flex flex-col pt-5 pb-2 z-20 pointer-events-none gap-[3px] sm:gap-1.5">
           {racers.map((r, lane) => {
             const p = progress.find(x => x.racerId === r.id);
-            const progM = p?.progress ?? 0;
+            const rawProg = p?.progress ?? 0;
+            const progM = p?.done ? TRACK_LEN : rawProg;
             const standing = rankMap.get(r.id);
             const rank = standing?.rank ?? 0;
             const gapBehind = standing?.gapBehind ?? 0;
-            const atStart = !racing || progM < 2;
+            const atStart = !racing || (rawProg < 2 && !p?.done);
             const trackLeft = horseTrackLeft(atStart ? 0 : progM);
             const gallop = racing && !p?.done;
-            const isWinner = showResult && winnerId === r.id;
+            const finishPlace = getFinishPlace(r.id, finishOrder);
+            const isWinner = !!(showResult && winnerId === r.id) || !!(p?.done && finishPlace === 1);
             const isMyPick = r.id === selectedRacer;
+            const justCrossed = p?.done && liveWireFinish;
 
             return (
               <div key={`horse-${r.id}`} className="relative flex-1 min-h-[12px] sm:min-h-[16px]">
-                {(atGate || (gateOpening && progM < 4)) && (
+                {(atGate || (gateOpening && rawProg < 4)) && (
                   <div
                     className={`absolute bottom-0 z-[5] ${gateOpening ? "derby-gate-open" : ""}`}
                     style={{ left: `${TRACK_START_PCT}%`, transform: "translateX(-120%)" }}
@@ -342,14 +393,21 @@ export function DerbySideView({
                   </div>
                 )}
                 <div
-                  className="absolute bottom-0 flex flex-col items-center transition-none derby-horse-on-track"
+                  className={`absolute bottom-0 flex flex-col items-center transition-none derby-horse-on-track ${
+                    justCrossed ? "derby-wire-horse-cross" : ""
+                  }`}
                   style={{
                     left: `${trackLeft}%`,
                     transform: "translateX(-50%)",
-                    zIndex: 20 + Math.round(progM) + (isMyPick ? 30 : 0),
+                    zIndex: 20 + Math.round(progM) + (isMyPick ? 30 : 0) + (justCrossed ? 15 : 0),
                     opacity: racing ? 0.8 + (progM / TRACK_LEN) * 0.2 : 1,
                   }}
                 >
+                  {justCrossed && finishPlace && (
+                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-0.5 derby-wire-cross-spark">
+                      <WirePlaceBadge place={finishPlace} compact={compact} />
+                    </div>
+                  )}
                   {!compact && <HorseRacerLabel r={r} isMyPick={isMyPick} compact={compact} showName={!compact} />}
                   {racing && rank > 0 && !compact && (
                     <DerbyAheadBehindTag rank={rank} gapBehind={gapBehind} compact={compact} />
@@ -378,6 +436,13 @@ export function DerbySideView({
 
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-black/30 via-transparent to-black/25" />
       {racing && <div className="absolute inset-0 pointer-events-none derby-speed-lines opacity-35" />}
+      {liveWireFinish && (
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-40 pointer-events-none derby-wire-status-banner">
+          <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-white bg-black/65 px-3 py-1 rounded-full border border-yellow-400/35">
+            Official order · horses still crossing
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -390,14 +455,18 @@ export function DerbyFrontChaseView({
   compact = false,
   phase,
   camera = "front",
+  liveWireFinish = false,
+  finishOrder,
+  winnerId,
 }: ViewBaseProps) {
   const leaderProg = getLeaderProgress(progress);
-  const racePhase = phase ?? getRacePhase(leaderProg, racing, progress.every(p => p.done));
+  const racePhase = phase ?? getRacePhase(leaderProg, racing, progress.every(p => p.done), liveWireFinish);
   const leader = racers.find(r => progress.find(p => p.racerId === r.id)?.progress === leaderProg);
   const standings = buildStandings(racers, progress);
   const rankMap = getRankMap(standings);
 
   const horseScale = compact ? 0.65 : 0.82;
+  const chaseStretch = liveWireFinish ? 1.18 : 1.08;
 
   return (
     <div className="relative h-full w-full overflow-hidden derby-front-scene">
@@ -417,18 +486,29 @@ export function DerbyFrontChaseView({
       )}
 
       <SkyAndHorizon />
+      <CrowdSilhouette animated={racing} />
 
-      {/* Perspective track */}
+      {/* Perspective track — taller during wire runout */}
       <div
-        className="absolute inset-x-[3%] bottom-0 top-[28%] derby-chase-track"
+        className="absolute inset-x-[2%] bottom-0 derby-chase-track"
         style={{
+          top: compact ? "24%" : "22%",
           background: "linear-gradient(180deg, #b89550 0%, #7a5a32 40%, #4a3520 100%)",
-          clipPath: "polygon(5% 0%, 95% 0%, 100% 100%, 0% 100%)",
+          clipPath: "polygon(4% 0%, 96% 0%, 100% 100%, 0% 100%)",
         }}
       />
 
+      {/* Finish ribbon at top of chase lanes */}
+      {liveWireFinish && (
+        <div className="absolute top-[24%] left-1/2 -translate-x-1/2 z-30 derby-wire-cam-label">
+          <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-[0.18em] text-yellow-300 bg-black/70 px-2 py-0.5 rounded border border-yellow-400/40">
+            Chase Cam · Wire approach
+          </span>
+        </div>
+      )}
+
       {/* Vanishing point lines */}
-      <div className="absolute top-[28%] left-1/2 -translate-x-1/2 w-px h-[72%] bg-white/8 pointer-events-none" />
+      <div className="absolute top-[26%] left-1/2 -translate-x-1/2 w-px h-[74%] bg-white/8 pointer-events-none" />
       {[0, 1, 2, 3, 4, 5].map(i => (
         <div
           key={i}
@@ -438,10 +518,11 @@ export function DerbyFrontChaseView({
       ))}
 
       {/* Six spaced lane columns */}
-      <div className="absolute inset-x-[2%] top-[28%] bottom-0 grid grid-cols-6 gap-1 sm:gap-2 px-0.5">
+      <div className="absolute inset-x-[1%] top-[26%] bottom-0 grid grid-cols-6 gap-1 sm:gap-2 px-0.5">
         {racers.map((r, laneIdx) => {
           const p = progress.find(x => x.racerId === r.id);
-          const progM = p?.progress ?? 0;
+          const rawProg = p?.progress ?? 0;
+          const progM = p?.done ? TRACK_LEN : rawProg;
           const standing = rankMap.get(r.id);
           const rank = standing?.rank ?? 0;
           const gapBehind = standing?.gapBehind ?? 0;
@@ -450,7 +531,10 @@ export function DerbyFrontChaseView({
           const isLeader = rank === 1 && racing;
           const behind = relativeBehind(progM, leaderProg);
           const chasePos = chaseVisualPosition(progM, gapBehind, racing, !!compact);
-          const bottom = chasePos.bottomPct;
+          const bottom = Math.min(92, chasePos.bottomPct * chaseStretch);
+          const finishPlace = getFinishPlace(r.id, finishOrder);
+          const isWinner = !!(p?.done && (winnerId === r.id || finishPlace === 1));
+          const justCrossed = p?.done && liveWireFinish;
           const rankMul = isLeader ? 1.08 : rank > 3 && racing ? 0.9 : 1;
           const visualScale = chasePos.scaleMul * horseScale * rankMul;
           const opacity = racing ? 0.55 + (progM / TRACK_LEN) * 0.45 : 1;
@@ -476,15 +560,22 @@ export function DerbyFrontChaseView({
               <div className="absolute top-6 left-1/2 -translate-x-1/2 w-0.5 h-6 bg-[#8b4513]/80 rounded-t-sm" />
 
               <div
-                className="absolute flex flex-col items-center transition-none derby-chase-horse"
+                className={`absolute flex flex-col items-center transition-none derby-chase-horse ${
+                  justCrossed ? "derby-wire-horse-cross" : ""
+                }`}
                 style={{
                   bottom: `${bottom}%`,
                   left: `calc(50% + ${centerPull}%)`,
                   transform: `translateX(-50%) scale(${visualScale})`,
-                  zIndex: Math.round(progM * 3) + laneIdx + (isMyPick ? 80 : 0) + (isLeader ? 40 : 0),
+                  zIndex: Math.round(progM * 3) + laneIdx + (isMyPick ? 80 : 0) + (isLeader ? 40 : 0) + (justCrossed ? 20 : 0),
                   opacity,
                 }}
               >
+                {justCrossed && finishPlace && (
+                  <div className="mb-1 derby-wire-cross-spark">
+                    <WirePlaceBadge place={finishPlace} compact={compact} />
+                  </div>
+                )}
                 {racing && rank > 0 && !compact && (
                   <DerbyLaneRankBadge rank={rank} isLeader={isLeader} compact={compact} />
                 )}
@@ -498,7 +589,7 @@ export function DerbyFrontChaseView({
                   scale={1}
                   view="front-chase"
                   isMyPick={isMyPick}
-                  isWinner={false}
+                  isWinner={isWinner}
                   rank={rank}
                   gapBehind={gapBehind}
                   racing={racing}
@@ -546,12 +637,16 @@ export function DerbyAerialView({
   compact = false,
   phase,
   camera = "aerial",
+  liveWireFinish = false,
+  finishOrder,
+  winnerId,
 }: ViewBaseProps) {
   const leaderProg = getLeaderProgress(progress);
-  const racePhase = phase ?? getRacePhase(leaderProg, racing, progress.every(p => p.done));
+  const racePhase = phase ?? getRacePhase(leaderProg, racing, progress.every(p => p.done), liveWireFinish);
   const leader = racers.find(r => progress.find(p => p.racerId === r.id)?.progress === leaderProg);
   const standings = buildStandings(racers, progress);
   const rankMap = getRankMap(standings);
+  const horseScale = compact ? 0.78 : 1.05;
 
   return (
     <div className="relative h-full w-full overflow-hidden derby-aerial-scene bg-[#3d6b35]">
@@ -593,8 +688,8 @@ export function DerbyAerialView({
         </defs>
         <rect width="100" height="100" fill="url(#derby-grass)" />
         {[0, 1, 2, 3, 4, 5].map(lane => {
-          const rx = 42 - lane * 3.4;
-          const ry = 30 - lane * 2.4;
+          const rx = 46 - lane * 3.6;
+          const ry = 33 - lane * 2.6;
           return (
             <ellipse
               key={lane}
@@ -610,31 +705,36 @@ export function DerbyAerialView({
             />
           );
         })}
-        <ellipse cx="50" cy="52" rx="40" ry="28" fill="url(#derby-dirt)" stroke="#6b4e2e" strokeWidth="0.6" />
-        <ellipse cx="50" cy="52" rx="20" ry="13" fill="url(#derby-grass)" />
-        <ellipse cx="50" cy="54" rx="7" ry="4.5" fill="#4a90a4" opacity="0.75" />
-        <rect x="8" y="48" width="3" height="8" fill="#fff" opacity="0.9" />
-        {[0, 1, 2, 3].map(i => (
-          <rect key={i} x="8" y={48 + i * 2} width="3" height="1" fill={i % 2 === 0 ? "#111" : "#fff"} />
+        <ellipse cx="50" cy="52" rx="44" ry="31" fill="url(#derby-dirt)" stroke="#6b4e2e" strokeWidth="0.7" />
+        <ellipse cx="50" cy="52" rx="22" ry="14" fill="url(#derby-grass)" />
+        <ellipse cx="50" cy="54" rx="8" ry="5" fill="#4a90a4" opacity="0.8" />
+        <text x="48" y="56" fontSize="2.2" fill="#fff" opacity="0.5" fontWeight="bold" textAnchor="middle">DGC</text>
+        <rect x="6" y="46" width="3.5" height="9" fill="#fff" opacity="0.95" />
+        {[0, 1, 2, 3, 4].map(i => (
+          <rect key={i} x="6" y={46 + i * 1.8} width="3.5" height="0.9" fill={i % 2 === 0 ? "#111" : "#fff"} />
         ))}
-        <text x="5" y="46" fontSize="2.8" fill="#fff" fontWeight="bold" opacity="0.85">
+        <text x="4" y="44" fontSize="3" fill="#fff" fontWeight="bold" opacity="0.9">
           START
         </text>
-        <rect x="88" y="46" width="3" height="8" fill="#fff" opacity="0.9" />
-        {[0, 1, 2, 3].map(i => (
-          <rect key={`fin-${i}`} x="88" y={46 + i * 2} width="3" height="1" fill={i % 2 === 0 ? "#111" : "#fff"} />
+        <rect x="90" y="44" width="3.5" height="9" fill="#fff" opacity="0.95" />
+        {[0, 1, 2, 3, 4].map(i => (
+          <rect key={`fin-${i}`} x="90" y={44 + i * 1.8} width="3.5" height="0.9" fill={i % 2 === 0 ? "#111" : "#fff"} />
         ))}
-        <text x="86" y="44" fontSize="2.5" fill="#fff" fontWeight="bold" opacity="0.85">
+        <text x="88" y="42" fontSize="2.8" fill="#fff" fontWeight="bold" opacity="0.9">
           FINISH
         </text>
-        <rect x="64" y="16" width="26" height="11" rx="1" fill="#555" opacity="0.55" />
+        <rect x="62" y="12" width="30" height="13" rx="1.5" fill="#444" opacity="0.65" />
+        <rect x="64" y="14" width="26" height="4" rx="0.5" fill="#fbbf24" opacity="0.45" />
+        <rect x="8" y="14" width="18" height="10" rx="1" fill="#555" opacity="0.5" />
+        <text x="17" y="21" fontSize="2" fill="#fff" opacity="0.7" textAnchor="middle">STANDS</text>
       </svg>
 
       {racing && <div className="absolute inset-0 derby-aerial-scan pointer-events-none opacity-30" />}
 
       {racers.map((r, lane) => {
         const p = progress.find(x => x.racerId === r.id);
-        const progM = p?.progress ?? 0;
+        const rawProg = p?.progress ?? 0;
+        const progM = p?.done ? TRACK_LEN : rawProg;
         const t = progM / TRACK_LEN;
         const pos = ovalPosition(t, lane);
         const gallop = racing && !p?.done;
@@ -642,32 +742,39 @@ export function DerbyAerialView({
         const standing = rankMap.get(r.id);
         const rank = standing?.rank ?? 0;
         const gapBehind = standing?.gapBehind ?? 0;
+        const finishPlace = getFinishPlace(r.id, finishOrder);
+        const justCrossed = p?.done && liveWireFinish;
         return (
           <div
             key={r.id}
-            className="absolute transition-none pointer-events-none"
+            className={`absolute transition-none pointer-events-none ${justCrossed ? "derby-wire-horse-cross" : ""}`}
             style={{
               left: `${pos.x}%`,
               top: `${pos.y}%`,
               transform: `translate(-50%, -50%) rotate(${pos.rot}deg)`,
-              zIndex: Math.round(progM * 2) + lane + (isMyPick ? 50 : 0),
+              zIndex: Math.round(progM * 2) + lane + (isMyPick ? 50 : 0) + (justCrossed ? 25 : 0),
               opacity: racing ? 0.65 + (progM / TRACK_LEN) * 0.35 : 1,
             }}
           >
             <div style={{ transform: `rotate(${-pos.rot}deg)` }} className="relative flex flex-col items-center gap-0.5">
+              {justCrossed && finishPlace && (
+                <div className="mb-0.5 derby-wire-cross-spark">
+                  <WirePlaceBadge place={finishPlace} compact={compact} />
+                </div>
+              )}
               {racing && rank > 0 && !compact && (
                 <DerbyRankPill rank={rank} gapBehind={gapBehind} compact isLeader={rank === 1} />
               )}
-              <HorseSilkBadge r={r} size="xs" highlight={isMyPick} />
+              <HorseSilkBadge r={r} size={compact ? "xs" : "sm"} highlight={isMyPick || (winnerId === r.id && p?.done)} />
               <div className={isMyPick ? "derby-pick-glow rounded-full" : ""}>
                 <HorseRig
                   r={r}
                   gallop={gallop}
-                  scale={compact ? 0.72 : 0.88}
+                  scale={horseScale}
                   view="top"
                   isMyPick={isMyPick}
-                  isWinner={false}
-                  racing={false}
+                  isWinner={winnerId === r.id && !!p?.done}
+                  racing={racing}
                 />
               </div>
               {!compact && (

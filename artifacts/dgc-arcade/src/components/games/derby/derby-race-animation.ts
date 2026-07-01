@@ -3,6 +3,7 @@ import { TRACK_LEN } from "./derby-race-utils";
 export type RacerProgress = { racerId: number; progress: number; done: boolean };
 
 const GATE_MS = 900;
+export const RACE_GATE_MS = GATE_MS;
 /** Staggered gate break — horses don't all leave at once */
 const GATE_STAGGER_MS = [0, 90, 180, 60, 150, 120];
 /** Winner crosses ~6.8s after gate; each place +950ms so order never flips */
@@ -11,7 +12,8 @@ const RANK_GAP_MS = 950;
 /** Tiny per-id jitter — must stay well under RANK_GAP_MS */
 const JITTER_MS = 35;
 
-export const RACE_GATE_MS = GATE_MS;
+/** Scroll width % of viewport for side track */
+export const TRACK_SCROLL_PCT = 340;
 /** Brief photo-finish beat before payout + Race button unlock */
 export const FINISH_HOLD_MS = 900;
 

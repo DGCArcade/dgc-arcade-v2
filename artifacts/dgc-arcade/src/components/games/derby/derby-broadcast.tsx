@@ -15,10 +15,13 @@ export function getRacePhase(
   leaderProgress: number,
   racing: boolean,
   allDone: boolean,
+  liveWireFinish = false,
 ): RacePhase {
-  if (!racing && allDone) return "finish";
-  if (!racing) return "gate";
+  const active = racing || liveWireFinish;
+  if (!active && allDone) return "finish";
+  if (!active) return "gate";
   const p = leaderProgress / TRACK_LEN;
+  if (liveWireFinish && !allDone) return "wire";
   if (p < 0.07) return "gate";
   if (p < 0.24) return "break";
   if (p < 0.48) return "mid";
@@ -29,7 +32,8 @@ export function getRacePhase(
 }
 
 /** Broadcast-style auto camera cuts — changes angle as the race unfolds */
-export function getAutoCamera(phase: RacePhase, isMobile: boolean): CameraAngle {
+export function getAutoCamera(phase: RacePhase, isMobile: boolean, liveWireFinish = false): CameraAngle {
+  if (liveWireFinish) return "side";
   switch (phase) {
     case "gate":
       return "front";
@@ -57,7 +61,7 @@ export const PHASE_COPY: Record<
   mid: { title: "Mid-Race", subtitle: "Pack spreads across the lanes", camLabel: "AERIAL CAM" },
   turn: { title: "Into the Backstretch", subtitle: "Positions shaking out", camLabel: "TRACK CAM" },
   stretch: { title: "Down the Stretch!", subtitle: "Leaders dig for the wire", camLabel: "CHASE CAM" },
-  wire: { title: "To the Wire!", subtitle: "Neck-and-neck at the finish", camLabel: "WIRE CAM" },
+  wire: { title: "At the Wire!", subtitle: "Horses cross one by one — official order", camLabel: "WIRE CAM" },
   finish: { title: "Photo Finish!", subtitle: "Official result", camLabel: "FINISH CAM" },
 };
 
