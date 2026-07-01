@@ -31,6 +31,7 @@ const CAR_ANIM_MS = 850;
 const BARRIER_MS = 500;
 const CAR_IMPACT_MS = 800;
 const MANHOLE_BUST_MS = 700;
+const CHICKEN_GLIDE_MS = 580;
 
 function getToken() { return localStorage.getItem("dgc_token"); }
 function authHeaders() { return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }; }
@@ -247,16 +248,18 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         setCrossAnim(null);
 
         if (data.status === "won") {
+          setCurrentLane(maxLanes);
+          await delay(CHICKEN_GLIDE_MS);
           setStatus("won");
           setPayout(data.payout);
           setServerSeed(data.serverSeed || "");
-          setCurrentLane(maxLanes);
           toast({
             title: `Cleared all ${maxLanes} lanes!`,
             description: `Payout: $${Number(data.payout).toFixed(2)}`,
           });
         } else {
           setCurrentLane(lane + 1);
+          await delay(CHICKEN_GLIDE_MS);
         }
       }
       qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
@@ -265,7 +268,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
-      setTimeout(() => setHopping(false), 450);
+      setTimeout(() => setHopping(false), CHICKEN_GLIDE_MS + 80);
       animLock.current = false;
     }
   }, [status, loading, sessionId, currentLane, maxLanes, toast, qc]);
@@ -430,6 +433,8 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
           onCrossNext={crossLane}
           canCross={status === "active" && !loading}
           crossLoading={loading}
+          betAmount={amount}
+          tier={tier}
         />
       </div>
     </div>

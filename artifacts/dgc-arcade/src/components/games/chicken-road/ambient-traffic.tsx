@@ -2,25 +2,22 @@ import { CarSprite, getCarColor } from "./chicken-road-sprites";
 
 const VARIANTS = ["sedan", "suv", "truck"] as const;
 
-/** Stake-style continuous lane traffic — cars always passing up/down alternating lanes */
-export function AmbientLaneTraffic({
+function AmbientCar({
   laneIndex,
-  active,
-  hideDuringCross,
+  direction,
+  duration,
+  delay,
+  size,
+  offset = 0,
 }: {
   laneIndex: number;
-  active: boolean;
-  /** Hide ambient car when a scripted cross-animation car is on this lane */
-  hideDuringCross?: boolean;
+  direction: "up" | "down";
+  duration: number;
+  delay: number;
+  size: number;
+  offset?: number;
 }) {
-  if (!active || hideDuringCross) return null;
-
-  const direction: "up" | "down" = laneIndex % 2 === 0 ? "down" : "up";
-  const variant = VARIANTS[laneIndex % 3];
-  const duration = 2.4 + (laneIndex % 5) * 0.35;
-  const delay = (laneIndex * 0.42) % duration;
-  const size = variant === "truck" ? 40 : variant === "suv" ? 38 : 36;
-
+  const variant = VARIANTS[(laneIndex + offset) % 3];
   return (
     <div
       className={`absolute left-1/2 -translate-x-1/2 z-[5] pointer-events-none ${
@@ -32,12 +29,44 @@ export function AmbientLaneTraffic({
       }}
     >
       <CarSprite
-        color={getCarColor(laneIndex + 1)}
+        color={getCarColor(laneIndex + offset + 1)}
         variant={variant}
         size={size}
         direction={direction}
         ambient
       />
     </div>
+  );
+}
+
+/** Stake-style continuous lane traffic — dual cars per lane for density */
+export function AmbientLaneTraffic({
+  laneIndex,
+  active,
+  hideDuringCross,
+}: {
+  laneIndex: number;
+  active: boolean;
+  hideDuringCross?: boolean;
+}) {
+  if (!active || hideDuringCross) return null;
+
+  const direction: "up" | "down" = laneIndex % 2 === 0 ? "down" : "up";
+  const duration = 2.2 + (laneIndex % 5) * 0.32;
+  const delay = (laneIndex * 0.42) % duration;
+  const size = laneIndex % 3 === 2 ? 40 : laneIndex % 3 === 1 ? 38 : 36;
+
+  return (
+    <>
+      <AmbientCar laneIndex={laneIndex} direction={direction} duration={duration} delay={delay} size={size} />
+      <AmbientCar
+        laneIndex={laneIndex}
+        direction={direction}
+        duration={duration * 1.35}
+        delay={(delay + duration * 0.55) % duration}
+        size={size - 4}
+        offset={2}
+      />
+    </>
   );
 }

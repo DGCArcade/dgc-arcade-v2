@@ -1,5 +1,6 @@
 import { StakeChickenBoard } from "./stake-chicken-board";
 import type { CrossAnim, HazardType } from "./stake-chicken-board";
+import type { StakeTier } from "@/lib/chicken-road-stake-math";
 
 export type { CrossAnim, HazardType };
 
@@ -17,6 +18,8 @@ interface ChickenRoadBoardProps {
   onCrossNext?: () => void;
   canCross?: boolean;
   crossLoading?: boolean;
+  betAmount?: number;
+  tier?: StakeTier;
 }
 
 /**
@@ -38,6 +41,8 @@ export function ChickenRoadBoard(props: ChickenRoadBoardProps) {
       onCrossNext={props.onCrossNext}
       canCross={props.canCross}
       crossLoading={props.crossLoading}
+      betAmount={props.betAmount}
+      tier={props.tier}
     />
   );
 }
