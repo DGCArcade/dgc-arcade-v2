@@ -27,7 +27,7 @@ export function requireOwnerStepUp(req: Request, res: Response, next: NextFuncti
   }
 
   res.status(403).json({
-    error: "Owner profile verification required. Confirm via email or SMS code.",
+    error: "Owner profile verification required. Confirm via email code.",
     code: "OWNER_STEPUP_REQUIRED",
   });
 }

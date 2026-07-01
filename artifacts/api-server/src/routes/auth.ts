@@ -250,7 +250,7 @@ authRouter.post("/login", async (req, res) => {
   } catch (err) { req.log.error({ err }, "Login error"); res.status(500).json({ error: "Internal server error" }); }
 });
 
-// POST /api/auth/owner/stepup/send — email + optional SMS code for owner profile tools only
+// POST /api/auth/owner/stepup/send — email code for owner profile tools only
 authRouter.post("/owner/stepup/send", requireAuth, requireOwner, async (req, res) => {
   try {
     const result = await issueOwnerStepUpOtp(req.user!);
@@ -264,10 +264,7 @@ authRouter.post("/owner/stepup/send", requireAuth, requireOwner, async (req, res
     }
     res.json({
       success: true,
-      message: result.smsSent
-        ? "Owner code sent to your email and phone."
-        : "Owner code sent to your email.",
-      smsSent: result.smsSent,
+      message: "Owner code sent to your email.",
     });
   } catch (err) {
     req.log.error({ err }, "Owner step-up send error");

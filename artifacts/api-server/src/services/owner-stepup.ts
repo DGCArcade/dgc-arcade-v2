@@ -34,34 +34,8 @@ export function verifyOwnerStepUpToken(token: string, userId: number): boolean {
   }
 }
 
-async function sendOwnerSms(code: string): Promise<boolean> {
-  const phone = process.env.OWNER_PHONE?.trim();
-  const sid = process.env.TWILIO_ACCOUNT_SID?.trim();
-  const token = process.env.TWILIO_AUTH_TOKEN?.trim();
-  const from = process.env.TWILIO_FROM?.trim();
-  if (!phone || !sid || !token || !from) return false;
-
-  const body = new URLSearchParams({
-    To: phone,
-    From: from,
-    Body: `DGC Arcade owner code: ${code} (expires in 10 min)`,
-  });
-
-  const auth = Buffer.from(`${sid}:${token}`).toString("base64");
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body,
-    signal: AbortSignal.timeout(12_000),
-  });
-  return res.ok;
-}
-
 export async function issueOwnerStepUpOtp(user: AuthPayload): Promise<
-  | { ok: true; smsSent: boolean }
+  | { ok: true }
   | { ok: false; error: string; code: string; retryAfterSec?: number }
 > {
   if (!isOwnerUser(user)) {
@@ -78,7 +52,7 @@ export async function issueOwnerStepUpOtp(user: AuthPayload): Promise<
         ownerStepupSentAt: new Date(),
       })
       .where(eq(usersTable.id, user.userId));
-    return { ok: true, smsSent: false };
+    return { ok: true };
   }
 
   const [row] = await db
@@ -122,9 +96,8 @@ export async function issueOwnerStepUpOtp(user: AuthPayload): Promise<
   otpAttempts.delete(user.userId);
 
   await sendOwnerStepUpEmail(row.email, user.username, code);
-  const smsSent = await sendOwnerSms(code).catch(() => false);
 
-  return { ok: true, smsSent };
+  return { ok: true };
 }
 
 export async function verifyOwnerStepUpOtp(

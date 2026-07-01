@@ -4,8 +4,9 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-// Prefer Neon's pooled endpoint (DATABASE_POOL_URL) when set — keeps warm
-// connections to Singapore and cuts Oregon↔Singapore handshake latency.
+// Uses DATABASE_URL from Render (your Neon connection string).
+// Optionally set DATABASE_POOL_URL to Neon's pooled endpoint (-pooler in hostname) for slightly
+// faster reconnects under load — not required if you only have one DATABASE_URL.
 const connectionString =
   process.env.DATABASE_POOL_URL ?? process.env.DATABASE_URL;
 

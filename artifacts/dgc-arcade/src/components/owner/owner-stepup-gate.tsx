@@ -81,9 +81,7 @@ export function OwnerStepUpGate({ children }: OwnerStepUpGateProps) {
       setCooldown(45);
       toast({
         title: "Owner code sent",
-        description: data.smsSent
-          ? "Check your email and phone."
-          : "Check your email for the 6-digit code.",
+        description: "Check your email for the 6-digit code.",
       });
     } catch (err: unknown) {
       toast({ title: "Could not send code", description: (err as Error).message, variant: "destructive" });
