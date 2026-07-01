@@ -28,6 +28,10 @@ interface StakeChickenBoardProps {
   bustLane?: number;
   bustHazard?: HazardType;
   crossAnim: CrossAnim;
+  /** Tap the glowing next manhole to cross (same as Go button) */
+  onCrossNext?: () => void;
+  canCross?: boolean;
+  crossLoading?: boolean;
 }
 
 function CitySkyline() {
@@ -55,6 +59,9 @@ function LaneStrip({
   bustLane,
   bustHazard,
   trafficActive,
+  isNextTarget,
+  onManholeClick,
+  crossLoading,
 }: {
   laneIndex: number;
   state: LaneState;
@@ -63,6 +70,9 @@ function LaneStrip({
   bustLane?: number;
   bustHazard?: HazardType;
   trafficActive: boolean;
+  isNextTarget?: boolean;
+  onManholeClick?: () => void;
+  crossLoading?: boolean;
 }) {
   const variants = ["sedan", "suv", "truck"] as const;
   const variant = variants[laneIndex % 3];
@@ -125,7 +135,13 @@ function LaneStrip({
       </div>
 
       <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20">
-        <ManholeCover multiplier={multiplier} state={state} showAmbientFire={trafficActive} />
+        <ManholeCover
+          multiplier={multiplier}
+          state={state}
+          showAmbientFire={trafficActive}
+          tappable={isNextTarget && !crossLoading}
+          onTap={isNextTarget && !crossLoading ? onManholeClick : undefined}
+        />
       </div>
     </div>
   );
@@ -141,6 +157,9 @@ export function StakeChickenBoard({
   bustLane,
   bustHazard,
   crossAnim,
+  onCrossNext,
+  canCross = false,
+  crossLoading = false,
 }: StakeChickenBoardProps) {
   const isActive = status === "active";
   const trafficActive = status === "idle" || status === "active";
@@ -181,8 +200,8 @@ export function StakeChickenBoard({
             ))}
           </div>
           {chickenVisible && onSidewalk && (
-            <div className="mb-1 cr-chicken-spawn">
-              <ChickenSprite hopping={hopping} size={48} />
+            <div className={`mb-1 cr-chicken-spawn ${hopping ? "cr-chicken-run" : ""}`}>
+              <ChickenSprite hopping={hopping} running={hopping} size={48} />
             </div>
           )}
           <span className="text-[8px] font-bold uppercase text-white/35 tracking-widest">Start</span>
@@ -207,6 +226,9 @@ export function StakeChickenBoard({
                   bustLane={bustLane}
                   bustHazard={bustHazard}
                   trafficActive={trafficActive}
+                  isNextTarget={isActive && i === currentLane && canCross}
+                  onManholeClick={onCrossNext}
+                  crossLoading={crossLoading}
                 />
               );
             })}
@@ -214,7 +236,7 @@ export function StakeChickenBoard({
             {chickenVisible && !onSidewalk && chickenLane >= 0 && (
               <div
                 className={`absolute z-30 pointer-events-none cr-chicken-on-manhole transition-all duration-500 ease-out ${
-                  hopping ? "cr-chicken-hop" : ""
+                  hopping ? "cr-chicken-hop cr-chicken-run" : ""
                 }`}
                 style={{
                   left: `${chickenLane * laneWidth + laneWidth / 2}px`,
@@ -222,7 +244,7 @@ export function StakeChickenBoard({
                   transform: "translateX(-50%)",
                 }}
               >
-                <ChickenSprite size={48} />
+                <ChickenSprite hopping={hopping} running={hopping} size={48} />
               </div>
             )}
           </div>
@@ -234,7 +256,7 @@ export function StakeChickenBoard({
           {status === "idle"
             ? "Select difficulty & amount, then Play"
             : isActive
-              ? "Go to cross next lane — cash out anytime"
+              ? "Tap the glowing manhole or Go to cross — cash out anytime"
               : status === "won"
                 ? "Round complete"
                 : "Busted"}

@@ -9,6 +9,65 @@ export type RacerDef = {
 };
 
 type HorseView = "side" | "top" | "front-chase";
+export type HorseMood = "neutral" | "happy" | "sad";
+
+function HorseFaceOverlay({
+  mood,
+  view,
+}: {
+  mood: HorseMood;
+  view: HorseView;
+}) {
+  if (mood === "neutral") return null;
+
+  if (view === "front-chase") {
+    return (
+      <g className="derby-horse-face">
+        {mood === "happy" ? (
+          <>
+            <path d="M24 18 Q32 24 40 18" stroke="#1a1a1a" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+            <path d="M22 10 Q24 6 26 10" stroke="#1a1a1a" strokeWidth="1.2" fill="none" />
+            <path d="M38 10 Q40 6 42 10" stroke="#1a1a1a" strokeWidth="1.2" fill="none" />
+          </>
+        ) : (
+          <>
+            <path d="M24 22 Q32 16 40 22" stroke="#1a1a1a" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+            <line x1="24" y1="9" x2="28" y2="12" stroke="#1a1a1a" strokeWidth="1.3" strokeLinecap="round" />
+            <line x1="40" y1="9" x2="36" y2="12" stroke="#1a1a1a" strokeWidth="1.3" strokeLinecap="round" />
+          </>
+        )}
+      </g>
+    );
+  }
+
+  if (view === "top") {
+    return (
+      <text x="28" y="12" textAnchor="middle" fontSize="10" className="derby-horse-face-emoji">
+        {mood === "happy" ? "😄" : "😢"}
+      </text>
+    );
+  }
+
+  // side profile
+  return (
+    <g className="derby-horse-face">
+      {mood === "happy" ? (
+        <>
+          <path d="M78 22 Q84 28 90 22" stroke="#1a1a1a" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+          <path d="M82 12 Q84 8 86 12" stroke="#1a1a1a" strokeWidth="1" fill="none" />
+          <circle cx="92" cy="10" r="2.5" fill="none" stroke="#fbbf24" strokeWidth="0.8" className="derby-winner-star" />
+        </>
+      ) : (
+        <>
+          <path d="M78 24 Q84 18 90 24" stroke="#1a1a1a" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+          <path d="M82 14 L84 11" stroke="#1a1a1a" strokeWidth="1.2" strokeLinecap="round" />
+          <path d="M88 14 L86 11" stroke="#1a1a1a" strokeWidth="1.2" strokeLinecap="round" />
+          <ellipse cx="84" cy="28" rx="2" ry="1.2" fill="#6b8cce" opacity="0.7" className="derby-sad-tear" />
+        </>
+      )}
+    </g>
+  );
+}
 
 /** Silk number badge — always visible so players know which horse is which */
 export function HorseSilkBadge({
@@ -40,6 +99,7 @@ export function DerbyHorse({
   view = "side",
   facing = "right",
   showBadge = false,
+  mood = "neutral",
 }: {
   r: RacerDef;
   gallop: boolean;
@@ -47,6 +107,7 @@ export function DerbyHorse({
   view?: HorseView;
   facing?: "left" | "right";
   showBadge?: boolean;
+  mood?: HorseMood;
 }) {
   const flip = facing === "left" ? "scaleX(-1)" : undefined;
   const cls = gallop ? "horse-gallop" : "";
@@ -64,6 +125,7 @@ export function DerbyHorse({
           <path d="M34 30 L32 38 M38 30 L40 38" stroke={r.mane} strokeWidth="2.5" strokeLinecap="round" />
           <rect x="24" y="16" width="12" height="8" rx="1.5" fill={r.silk} stroke="#fff" strokeWidth="0.5" />
           <text x="30" y="22" textAnchor="middle" fontSize="5" fontWeight="900" fill="#111">{r.num}</text>
+          <HorseFaceOverlay mood={mood} view="top" />
           {gallop && (
             <>
               <ellipse cx="22" cy="32" rx="3.5" ry="2" fill={r.mane} opacity="0.85" className="horse-leg-front" />
@@ -94,10 +156,14 @@ export function DerbyHorse({
           {/* Neck + head */}
           <path d="M32 34 Q28 22 32 14 Q36 22 32 34" fill={r.coat} />
           <ellipse cx="32" cy="14" rx="10" ry="9" fill={r.coat} />
-          <ellipse cx="26" cy="12" rx="2.2" ry="2.8" fill="#1a1a1a" />
-          <ellipse cx="38" cy="12" rx="2.2" ry="2.8" fill="#1a1a1a" />
-          <circle cx="27" cy="11" r="0.7" fill="#fff" opacity="0.8" />
-          <circle cx="39" cy="11" r="0.7" fill="#fff" opacity="0.8" />
+          {mood === "neutral" && (
+            <>
+              <ellipse cx="26" cy="12" rx="2.2" ry="2.8" fill="#1a1a1a" />
+              <ellipse cx="38" cy="12" rx="2.2" ry="2.8" fill="#1a1a1a" />
+              <circle cx="27" cy="11" r="0.7" fill="#fff" opacity="0.8" />
+              <circle cx="39" cy="11" r="0.7" fill="#fff" opacity="0.8" />
+            </>
+          )}
           <ellipse cx="32" cy="16" rx="4" ry="3" fill="#F5D0A0" />
           <path d="M24 8 Q22 2 28 4 Q30 10 26 12" fill={r.mane} />
           <path d="M40 8 Q42 2 36 4 Q34 10 38 12" fill={r.mane} />
@@ -106,6 +172,7 @@ export function DerbyHorse({
           <text x="32" y="39" textAnchor="middle" fontSize="7" fontWeight="900" fill="#111">{r.num}</text>
           <path d="M28 18 Q24 8 20 6" stroke={r.mane} strokeWidth="2.5" fill="none" strokeLinecap="round" />
           <path d="M36 18 Q40 8 44 6" stroke={r.mane} strokeWidth="2.5" fill="none" strokeLinecap="round" />
+          <HorseFaceOverlay mood={mood} view="front-chase" />
         </svg>
       </div>
     );
@@ -140,8 +207,12 @@ export function DerbyHorse({
         <path d="M58 26 Q68 16 74 14 Q78 22 72 30 Q64 34 58 30 Z" fill={r.coat} />
         {/* Head */}
         <ellipse cx="80" cy="18" rx="12" ry="9" fill={r.coat} />
-        <ellipse cx="86" cy="16" rx="2.5" ry="2" fill="#111" />
-        <circle cx="87" cy="15.5" r="0.8" fill="#fff" opacity="0.7" />
+        {mood === "neutral" && (
+          <>
+            <ellipse cx="86" cy="16" rx="2.5" ry="2" fill="#111" />
+            <circle cx="87" cy="15.5" r="0.8" fill="#fff" opacity="0.7" />
+          </>
+        )}
         <path d="M88 18 L92 16 L90 20 Z" fill={r.coat} />
         {/* Ears */}
         <path d="M74 8 L76 2 L78 10 Z" fill={r.coat} />
@@ -155,6 +226,7 @@ export function DerbyHorse({
         <path d="M80 20 Q84 24 82 28" stroke="#333" strokeWidth="0.8" fill="none" opacity="0.5" />
         {/* Nostril */}
         <ellipse cx="90" cy="20" rx="1.5" ry="1" fill={r.body} opacity="0.6" />
+        <HorseFaceOverlay mood={mood} view="side" />
       </svg>
     </div>
   );

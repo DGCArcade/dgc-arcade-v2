@@ -19,6 +19,7 @@ const Profile = lazy(() => import("@/pages/profile"));
 const Admin = lazy(() => import("@/pages/admin"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const RacePage = lazy(() => import("@/pages/race"));
+const RaceDisabled = lazy(() => import("@/pages/race-disabled"));
 const TermsPage = lazy(() => import("@/pages/terms"));
 const PrivacyPage = lazy(() => import("@/pages/privacy"));
 const ResponsibleGamblingPage = lazy(() => import("@/pages/responsible-gambling"));
@@ -165,7 +166,7 @@ function Router() {
           </Route>
           
           <Route path="/race">
-            {settings.raceEnabled ? <EmailVerifiedGate><RacePage /></EmailVerifiedGate> : <NotFound />}
+            {settings.raceEnabled ? <EmailVerifiedGate><RacePage /></EmailVerifiedGate> : <RaceDisabled />}
           </Route>
           
           <Route path="/leaderboard">
