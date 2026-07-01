@@ -1,6 +1,6 @@
 import { Trophy } from "lucide-react";
 import { DerbyHorse, HorseSilkBadge, type RacerDef } from "./derby-horse";
-import { DerbyRaceHUD, DerbyLaneRankBadge } from "./derby-race-hud";
+import { DerbyRaceHUD, DerbyLaneRankBadge, DerbyMobileLeaderChip } from "./derby-race-hud";
 import {
   DerbyBroadcastOverlay,
   DerbyConfetti,
@@ -19,6 +19,13 @@ export type CameraAngle = "side" | "front" | "aerial" | "finish";
 
 const TRACK_LEN = 100;
 const LANE_COUNT = 6;
+/** Shared horizontal track — all horses use same X so ahead/behind is obvious */
+const TRACK_START_PCT = 5;
+const TRACK_END_PCT = 92;
+
+function horseTrackLeft(progM: number): number {
+  return TRACK_START_PCT + (progM / TRACK_LEN) * (TRACK_END_PCT - TRACK_START_PCT);
+}
 
 function HorseRacerLabel({
   r,
@@ -84,6 +91,7 @@ function HorseRig({
   gapBehind,
   racing,
   compact,
+  showRankBadge = true,
 }: {
   r: RacerDef;
   gallop: boolean;
@@ -96,6 +104,7 @@ function HorseRig({
   gapBehind?: number;
   racing?: boolean;
   compact?: boolean;
+  showRankBadge?: boolean;
 }) {
   return (
     <div
@@ -103,7 +112,7 @@ function HorseRig({
         gallop ? "derby-horse-bob derby-horse-lean derby-horse-stride" : ""
       } ${rank === 1 && racing ? "derby-horse-leading" : ""} ${rank && rank > 3 && racing ? "derby-horse-trailing" : ""}`}
     >
-      {racing && rank != null && view !== "front-chase" && (
+      {racing && rank != null && showRankBadge && view !== "front-chase" && (
         <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-30 whitespace-nowrap">
           <DerbyRankPill rank={rank} gapBehind={gapBehind ?? 0} compact={compact} isLeader={rank === 1} />
         </div>
@@ -180,8 +189,15 @@ export function DerbySideView({
         racing={racing}
         compact={compact}
       />
+      {racing && compact && (
+        <DerbyMobileLeaderChip
+          leaderName={leader?.name}
+          leaderNum={leader?.num}
+          leaderSilk={leader?.silk}
+        />
+      )}
 
-      {pick && atGate && <DerbyYourPickBanner pick={pick} compact={compact} />}
+      {pick && atGate && !racing && <DerbyYourPickBanner pick={pick} compact={compact} />}
 
       <div className="absolute bottom-[40%] left-0 right-0 h-16 bg-[#5A8F45] opacity-50"
         style={{ clipPath: "polygon(0 100%, 15% 40%, 35% 70%, 55% 30%, 75% 60%, 100% 25%, 100% 100%)" }} />
@@ -196,22 +212,29 @@ export function DerbySideView({
       {/* Scrolling track + lane grid */}
       <div
         className="absolute bottom-0 left-0 right-0 h-[46%] derby-track-scroll overflow-hidden"
-        style={{ transform: `translateX(-${cameraX}%)`, width: "260%" }}
+        style={{ transform: `translateX(-${racing ? cameraX : 0}%)`, width: "260%" }}
       >
         {racing && <div className="absolute inset-0 derby-track-motion z-0 pointer-events-none" />}
 
-        {[25, 50, 75, 100].map(d => (
+        {[0, 25, 50, 75, 100].map(d => (
           <div
             key={d}
-            className="absolute top-2 text-[9px] sm:text-[10px] font-black text-white/80 uppercase tracking-wider drop-shadow z-10"
-            style={{ left: `${d}%` }}
+            className="absolute top-2 text-[8px] sm:text-[10px] font-black text-white/75 uppercase tracking-wider drop-shadow z-10"
+            style={{ left: `${horseTrackLeft(d)}%`, transform: "translateX(-50%)" }}
           >
-            {d}m
+            {d === 0 ? "Start" : `${d}m`}
           </div>
         ))}
 
+        {/* Start line */}
+        <div
+          className="absolute top-0 bottom-0 w-0.5 bg-white/50 z-[6] pointer-events-none derby-start-line"
+          style={{ left: `${TRACK_START_PCT}%` }}
+        />
+
         {/* Finish */}
-        <div className="absolute right-[2%] top-0 bottom-0 flex flex-col items-center justify-end z-20 pb-1">
+        <div className="absolute right-[2%] top-0 bottom-0 flex flex-col items-center justify-end z-20 pb-1"
+          style={{ left: `${TRACK_END_PCT}%`, right: "auto", transform: "translateX(-50%)" }}>
           {racing && leaderProg > TRACK_LEN * 0.8 && (
             <div className="absolute inset-0 -inset-x-4 derby-finish-flash rounded-sm" />
           )}
@@ -226,8 +249,11 @@ export function DerbySideView({
 
         {/* Gate — removed global vertical bars; per-lane gates sit behind horses */}
         {(atGate || gateOpening) && (
-          <span className="absolute left-[3%] bottom-1 text-[8px] font-black text-white/75 uppercase tracking-widest z-[4] drop-shadow">
-            Start →
+          <span
+            className="absolute bottom-1 text-[8px] font-black text-white/75 uppercase tracking-widest z-[4] drop-shadow"
+            style={{ left: `${TRACK_START_PCT - 1}%`, transform: "translateX(-50%)" }}
+          >
+            START
           </span>
         )}
 
@@ -239,11 +265,11 @@ export function DerbySideView({
             const standing = rankMap.get(r.id);
             const rank = standing?.rank ?? 0;
             const gapBehind = standing?.gapBehind ?? 0;
+            const atStart = !racing || progM < 2;
+            const trackLeft = horseTrackLeft(atStart ? 0 : progM);
             const gallop = racing && !p?.done;
             const isWinner = showResult && winnerId === r.id;
             const isMyPick = r.id === selectedRacer;
-            const gateX = compact ? 18 : 16;
-            const left = atGate ? gateX : gateX + (progM / TRACK_LEN) * 78;
 
             return (
               <div
@@ -257,7 +283,8 @@ export function DerbySideView({
                   {/* Low stall gate — behind horse, never blocks the sprite */}
                   {(atGate || (gateOpening && progM < 4)) && (
                     <div
-                      className={`absolute bottom-0 left-1 z-[5] pointer-events-none ${gateOpening ? "derby-gate-open" : ""}`}
+                      className={`absolute bottom-0 z-[5] pointer-events-none ${gateOpening ? "derby-gate-open" : ""}`}
+                      style={{ left: `${TRACK_START_PCT}%`, transform: "translateX(-120%)" }}
                     >
                       {gateOpening && lane === 0 && (
                         <div className="absolute left-0 bottom-full mb-1 w-24 h-8 derby-gate-dust" />
@@ -280,28 +307,29 @@ export function DerbySideView({
                     </div>
                   )}
                   <div
-                    className="absolute bottom-0 flex flex-col items-center transition-none z-20"
+                    className="absolute bottom-0 flex flex-col items-center transition-none z-20 derby-horse-on-track"
                     style={{
-                      left: `${left}%`,
+                      left: `${trackLeft}%`,
                       transform: "translateX(-50%)",
                       zIndex: 20 + Math.round(progM) + (isMyPick ? 30 : 0),
-                      opacity: racing ? 0.75 + (progM / TRACK_LEN) * 0.25 : 1,
+                      opacity: racing ? 0.8 + (progM / TRACK_LEN) * 0.2 : 1,
                     }}
                   >
-                    <HorseRacerLabel r={r} isMyPick={isMyPick} compact={compact} showName={!compact} />
-                    {racing && rank > 0 && (
+                    {!compact && <HorseRacerLabel r={r} isMyPick={isMyPick} compact={compact} showName={!compact} />}
+                    {racing && rank > 0 && !compact && (
                       <DerbyAheadBehindTag rank={rank} gapBehind={gapBehind} compact={compact} />
                     )}
                     <HorseRig
                       r={r}
                       gallop={gallop}
-                      scale={horseScale * (rank === 1 && racing ? 1.06 : 1)}
+                      scale={horseScale * (rank === 1 && racing ? 1.08 : rank && rank > 3 && racing ? 0.92 : 1)}
                       isMyPick={isMyPick}
                       isWinner={isWinner}
                       rank={rank}
                       gapBehind={gapBehind}
                       racing={racing}
                       compact={compact}
+                      showRankBadge={!compact}
                     />
                     {isWinner && (
                       <Trophy className="absolute -top-1 -right-4 w-4 h-4 text-yellow-400 animate-bounce drop-shadow" />
@@ -350,13 +378,10 @@ export function DerbyFrontChaseView({
         compact={compact}
         preview={!racing}
       />
-      <DerbyRaceHUD
-        racers={racers}
-        progress={progress}
-        selectedRacer={selectedRacer}
-        racing={racing}
-        compact={compact}
-      />
+      <DerbyRaceHUD racers={racers} progress={progress} selectedRacer={selectedRacer} racing={racing} compact={compact} />
+      {racing && compact && (
+        <DerbyMobileLeaderChip leaderName={leader?.name} leaderNum={leader?.num} leaderSilk={leader?.silk} />
+      )}
 
       <SkyAndHorizon />
 
@@ -411,7 +436,7 @@ export function DerbyFrontChaseView({
             >
               <div className="absolute top-1 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-0.5">
                 <HorseSilkBadge r={r} size="xs" highlight={isMyPick} />
-                {racing && rank > 0 && (
+                {racing && rank > 0 && !compact && (
                   <span className="text-[7px] font-mono font-bold text-white/70 bg-black/50 px-0.5 rounded">
                     {Math.round(progM)}m
                   </span>
@@ -429,22 +454,25 @@ export function DerbyFrontChaseView({
                   opacity,
                 }}
               >
-                {racing && rank > 0 && <DerbyLaneRankBadge rank={rank} isLeader={isLeader} />}
-                <HorseRacerLabel r={r} isMyPick={isMyPick} compact showName={false} />
-                {racing && rank > 0 && (
+                {racing && rank > 0 && !compact && (
+                  <DerbyLaneRankBadge rank={rank} isLeader={isLeader} compact={compact} />
+                )}
+                {!compact && <HorseRacerLabel r={r} isMyPick={isMyPick} compact showName={false} />}
+                {racing && rank > 0 && !compact && (
                   <DerbyAheadBehindTag rank={rank} gapBehind={gapBehind} compact />
                 )}
                 <HorseRig
                   r={r}
                   gallop={gallop}
-                  scale={horseScale}
+                  scale={horseScale * (isLeader ? 1.06 : rank > 3 ? 0.9 : 1)}
                   view="front-chase"
                   isMyPick={isMyPick}
                   isWinner={false}
                   rank={rank}
                   gapBehind={gapBehind}
                   racing={racing}
-                  compact
+                  compact={compact}
+                  showRankBadge={false}
                 />
               </div>
 
@@ -513,6 +541,13 @@ export function DerbyAerialView({
         racing={racing}
         compact={compact}
       />
+      {racing && compact && (
+        <DerbyMobileLeaderChip
+          leaderName={leader?.name}
+          leaderNum={leader?.num}
+          leaderSilk={leader?.silk}
+        />
+      )}
 
       <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
         <defs>
@@ -589,7 +624,7 @@ export function DerbyAerialView({
             }}
           >
             <div style={{ transform: `rotate(${-pos.rot}deg)` }} className="relative flex flex-col items-center gap-0.5">
-              {racing && rank > 0 && (
+              {racing && rank > 0 && !compact && (
                 <DerbyRankPill rank={rank} gapBehind={gapBehind} compact isLeader={rank === 1} />
               )}
               <HorseSilkBadge r={r} size="xs" highlight={isMyPick} />
@@ -604,9 +639,11 @@ export function DerbyAerialView({
                   racing={false}
                 />
               </div>
-              <span className="text-[7px] font-bold text-white drop-shadow bg-black/50 px-1 rounded">
-                {r.num} · {Math.round(progM)}m
-              </span>
+              {!compact && (
+                <span className="text-[7px] font-bold text-white drop-shadow bg-black/50 px-1 rounded">
+                  {r.num} · {Math.round(progM)}m
+                </span>
+              )}
             </div>
           </div>
         );

@@ -288,7 +288,7 @@ export default function RacePage() {
         </div>
       </div>
       {(racing || result) && liveFair && (
-        <div className="px-2 py-1.5 border-t border-border/30 bg-secondary/20 shrink-0">
+        <div className="px-2 py-1 border-t border-border/30 bg-secondary/15 shrink-0">
           <ProvablyFairPanel
             betId={liveFair.betId}
             serverSeedHash={liveFair.serverSeedHash}
@@ -296,6 +296,7 @@ export default function RacePage() {
             clientSeed={liveFair.clientSeed}
             nonce={liveFair.nonce}
             verifyPath={`/api/race/verify/${liveFair.betId}`}
+            variant={isMobile ? (racing ? "inline" : "compact") : racing ? "inline" : "full"}
           />
         </div>
       )}
@@ -314,29 +315,29 @@ export default function RacePage() {
   );
 
   const resultCard = result ? (
-    <Card className={`race-result-card border-2 p-3 shrink-0 ${result.won ? "border-green-500/60 bg-green-500/5" : "border-destructive/40 bg-destructive/5"}`}>
-      <div className="flex items-center justify-between mb-2 gap-2">
-        <h3 className="font-display font-black uppercase tracking-widest text-sm flex items-center gap-2">
-          {result.won ? <><Trophy className="w-4 h-4 text-yellow-400" /> Winner!</> : `Finished #${result.playerPlace}`}
+    <Card className={`race-result-card border p-2 sm:p-3 shrink-0 ${result.won ? "border-green-500/60 bg-green-500/5" : "border-destructive/40 bg-destructive/5"}`}>
+      <div className="flex items-center justify-between mb-1.5 sm:mb-2 gap-2">
+        <h3 className="font-display font-black uppercase tracking-widest text-xs sm:text-sm flex items-center gap-1.5">
+          {result.won ? <><Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400" /> Winner!</> : `Finished #${result.playerPlace}`}
         </h3>
-        <Button variant="outline" size="sm" className="h-7 text-[10px]" onClick={resetRace} disabled={racing}>Again</Button>
+        <Button variant="outline" size="sm" className="h-6 sm:h-7 text-[9px] sm:text-[10px] px-2" onClick={resetRace} disabled={racing}>Again</Button>
       </div>
-      <div className="grid grid-cols-3 gap-1.5 text-center">
-        <div className="bg-secondary/50 rounded-lg p-1.5">
-          <div className={`font-mono font-black text-sm ${result.profit >= 0 ? "text-green-400" : "text-destructive"}`}>{result.profit >= 0 ? "+" : ""}{formatCurrency(result.profit)}</div>
-          <div className="text-[9px] text-muted-foreground uppercase">Profit</div>
+      <div className="grid grid-cols-3 gap-1 text-center">
+        <div className="bg-secondary/50 rounded-lg p-1 sm:p-1.5">
+          <div className={`font-mono font-black text-xs sm:text-sm ${result.profit >= 0 ? "text-green-400" : "text-destructive"}`}>{result.profit >= 0 ? "+" : ""}{formatCurrency(result.profit)}</div>
+          <div className="text-[8px] sm:text-[9px] text-muted-foreground uppercase">Profit</div>
         </div>
-        <div className="bg-secondary/50 rounded-lg p-1.5">
-          <div className="font-mono font-black text-sm text-primary">{result.multiplier.toFixed(2)}×</div>
-          <div className="text-[9px] text-muted-foreground uppercase">Mult</div>
+        <div className="bg-secondary/50 rounded-lg p-1 sm:p-1.5">
+          <div className="font-mono font-black text-xs sm:text-sm text-primary">{result.multiplier.toFixed(2)}×</div>
+          <div className="text-[8px] sm:text-[9px] text-muted-foreground uppercase">Mult</div>
         </div>
-        <div className="bg-secondary/50 rounded-lg p-1.5">
-          <div className="font-mono font-black text-sm">{formatCurrency(result.newBalance)}</div>
-          <div className="text-[9px] text-muted-foreground uppercase">Balance</div>
+        <div className="bg-secondary/50 rounded-lg p-1 sm:p-1.5">
+          <div className="font-mono font-black text-xs sm:text-sm">{formatCurrency(result.newBalance)}</div>
+          <div className="text-[8px] sm:text-[9px] text-muted-foreground uppercase">Balance</div>
         </div>
       </div>
-      {isMobile && result && (
-        <div className="mt-2 pt-2 border-t border-border/40">
+      {isMobile && (
+        <div className="mt-2 pt-2 border-t border-border/30">
           <ProvablyFairPanel
             betId={result.betId}
             serverSeedHash={result.serverSeedHash}
@@ -344,6 +345,20 @@ export default function RacePage() {
             clientSeed={result.clientSeed}
             nonce={result.nonce}
             verifyPath={`/api/race/verify/${result.betId}`}
+            variant="compact"
+          />
+        </div>
+      )}
+      {result && !isMobile && (
+        <div className="mt-3 pt-3 border-t border-border/40">
+          <ProvablyFairPanel
+            betId={result.betId}
+            serverSeedHash={result.serverSeedHash}
+            serverSeed={result.serverSeed}
+            clientSeed={result.clientSeed}
+            nonce={result.nonce}
+            verifyPath={`/api/race/verify/${result.betId}`}
+            variant="full"
           />
         </div>
       )}
