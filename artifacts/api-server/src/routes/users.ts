@@ -12,6 +12,11 @@ import { sendEmailVerificationEmail } from "../lib/mail-service.js";
 import { recordLedgerStandalone } from "../services/ledger.js";
 import { logFinancialActivity, logActivity, linkVisitorToUser } from "../services/activity-log.js";
 import { getRequestContext } from "../lib/request-context.js";
+import {
+  getGamblingLimitsState,
+  updateGamblingLimits,
+  type GamblingLimits,
+} from "../services/gambling-limits.js";
 export const usersRouter = Router();
 
 const verifyResendAttempts = new Map<number, number[]>();
@@ -560,4 +565,50 @@ usersRouter.get("/me", requireAuth, async (req, res) => {
       bonusWagered: user.bonusWagered,
     });
   } catch (err) { req.log.error({ err }, "Get me error"); res.status(500).json({ error: "Internal server error" }); }
+});
+
+usersRouter.get("/me/limits", requireAuth, async (req, res) => {
+  try {
+    const state = await getGamblingLimitsState(req.user!.userId);
+    if (!state) { res.status(404).json({ error: "User not found" }); return; }
+    res.json({ success: true, limits: state });
+  } catch (err) {
+    req.log.error({ err }, "Get limits error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+usersRouter.patch("/me/limits", requireAuth, async (req, res) => {
+  const body = req.body as Partial<GamblingLimits> & {
+    depositLimitDaily?: number | null;
+    depositLimitWeekly?: number | null;
+    depositLimitMonthly?: number | null;
+    lossLimitDaily?: number | null;
+    sessionLimitMinutes?: number | null;
+  };
+
+  const parse = (v: unknown): number | null | undefined => {
+    if (v === undefined) return undefined;
+    if (v === null || v === "") return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) return undefined;
+    return n === 0 ? null : n;
+  };
+
+  try {
+    const input: Partial<GamblingLimits> = {
+      depositLimitDaily: parse(body.depositLimitDaily),
+      depositLimitWeekly: parse(body.depositLimitWeekly),
+      depositLimitMonthly: parse(body.depositLimitMonthly),
+      lossLimitDaily: parse(body.lossLimitDaily),
+      sessionLimitMinutes: parse(body.sessionLimitMinutes),
+    };
+
+    const state = await updateGamblingLimits(req.user!.userId, input);
+    if (!state) { res.status(404).json({ error: "User not found" }); return; }
+    res.json({ success: true, limits: state });
+  } catch (err) {
+    req.log.error({ err }, "Update limits error");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });

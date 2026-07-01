@@ -9,6 +9,7 @@ import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ProvablyFairPanel } from "./provably-fair-panel";
 
 const RED_NUMS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
 const ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
@@ -327,41 +328,14 @@ export function Roulette({ game }: RouletteProps) {
         </Button>
 
         {placeBet.data?.bet && (
-          <div className="roulette-pf-panel mt-4 pt-4 border-t border-border/50">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Provably Fair</span>
-              <a 
-                href={`/api/bets/verify/${placeBet.data.bet.id}`} 
-                target="_blank" 
-                rel="noreferrer"
-                className="text-[10px] text-primary hover:underline font-bold"
-              >
-                Verify SHA-256
-              </a>
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[9px] text-muted-foreground uppercase">Server Seed Hash</span>
-                <code className="text-[10px] bg-secondary p-1 rounded truncate block">
-                  {placeBet.data.bet.serverSeedHash}
-                </code>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] text-muted-foreground uppercase">Client Seed</span>
-                  <code className="text-[10px] bg-secondary p-1 rounded truncate block">
-                    {placeBet.data.bet.clientSeed}
-                  </code>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] text-muted-foreground uppercase">Nonce</span>
-                  <code className="text-[10px] bg-secondary p-1 rounded block">
-                    {placeBet.data.bet.nonce}
-                  </code>
-                </div>
-              </div>
-            </div>
-          </div>
+          <ProvablyFairPanel
+            betId={placeBet.data.bet.id}
+            serverSeedHash={placeBet.data.bet.serverSeedHash}
+            clientSeed={placeBet.data.bet.clientSeed}
+            nonce={placeBet.data.bet.nonce}
+            variant="full"
+            gameName="roulette"
+          />
         )}
       </div>
     </div>

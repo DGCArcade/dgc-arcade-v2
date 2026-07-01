@@ -63,6 +63,13 @@ export const usersTable = pgTable("users", {
   ownerStepupCode: text("owner_stepup_code"),
   ownerStepupExpiresAt: timestamp("owner_stepup_expires_at", { withTimezone: true }),
   ownerStepupSentAt: timestamp("owner_stepup_sent_at", { withTimezone: true }),
+  // Responsible gambling limits (null = no limit)
+  depositLimitDaily: numeric("deposit_limit_daily", { precision: 18, scale: 2 }),
+  depositLimitWeekly: numeric("deposit_limit_weekly", { precision: 18, scale: 2 }),
+  depositLimitMonthly: numeric("deposit_limit_monthly", { precision: 18, scale: 2 }),
+  lossLimitDaily: numeric("loss_limit_daily", { precision: 18, scale: 2 }),
+  sessionLimitMinutes: integer("session_limit_minutes"),
+  sessionStartedAt: timestamp("session_started_at", { withTimezone: true }),
   // Specialty Creator Fields
   commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }), // Override standard tier rate
   displayName: text("display_name"), // Custom display name for creators

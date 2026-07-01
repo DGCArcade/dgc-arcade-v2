@@ -13,6 +13,7 @@ import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-ser
 import { diceRoundManager } from "../lib/dice-round-manager.js";
 import { logBetActivity } from "../services/activity-log.js";
 import { getRequestContext } from "../lib/request-context.js";
+import { checkWagerLimits } from "../services/gambling-limits.js";
 
 export const betsRouter = Router();
 
@@ -324,6 +325,13 @@ betsRouter.post("/", requireAuth, requireLocationVerified, async (req, res) => {
       res.status(400).json({ error: `Bet must be between ${minBet} and ${maxBet}` });
       return;
     }
+
+    const limitCheck = await checkWagerLimits(user.id, amount);
+    if (!limitCheck.ok) {
+      res.status(403).json({ error: limitCheck.error, code: limitCheck.code });
+      return;
+    }
+
     // Standardized balance deduction (crypto-first, live prices)
     let newBalanceAfterDeduct: number;
     try {

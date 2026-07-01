@@ -1,5 +1,8 @@
+import { initSentry } from "./lib/sentry.js";
 import app from "./app";
 import { logger } from "./lib/logger";
+
+initSentry();
 
 const rawPort = process.env["PORT"];
 

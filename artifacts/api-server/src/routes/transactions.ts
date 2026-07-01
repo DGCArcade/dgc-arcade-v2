@@ -24,6 +24,8 @@ import { getCryptoPrice } from "../lib/price-service.js";
 import { getUserBalance, deductBalance, creditBalance, creditCryptoBalance } from "../lib/balance-service.js";
 import { logFinancialActivity } from "../services/activity-log.js";
 import { getRequestContext } from "../lib/request-context.js";
+import { checkDepositLimit } from "../services/gambling-limits.js";
+import { notifyWithdrawalStatus } from "../services/withdrawal-notify.js";
 
 export const transactionsRouter = Router();
 
@@ -128,6 +130,12 @@ transactionsRouter.post("/deposit/initiate", requireAuth, requireLocationVerifie
   const { amount, currency } = parsed.data;
   const orderId = uuidv4();
   try {
+    const depositLimit = await checkDepositLimit(req.user!.userId, amount);
+    if (!depositLimit.ok) {
+      res.status(403).json({ error: depositLimit.error, code: depositLimit.code });
+      return;
+    }
+
     if (!PLISIO_SECRET_KEY) {
       res.status(500).json({ error: "Payment gateway not configured" });
       return;
@@ -958,6 +966,8 @@ transactionsRouter.post("/withdraw", requireAuth, requireLocationVerified, async
       metadata: { address, fraudPending: true },
     });
 
+    notifyWithdrawalStatus(tx.id, "requested").catch(() => {});
+
     // Deduct balance immediately — funds are held while the payout is processed.
     // We pass the currency to ensure the deduction happens from the CORRECT coin.
     await deductBalance(user.id, amount, undefined, currency);
@@ -1082,6 +1092,41 @@ transactionsRouter.post("/withdraw", requireAuth, requireLocationVerified, async
     res.json({ success: true, transactionId: tx.id, status: tx.status });
   } catch (err) {
     req.log.error({ err }, "Withdrawal error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/transactions/:id — single transaction (withdrawal tracker; must be last)
+transactionsRouter.get("/:id", requireAuth, async (req, res) => {
+  const rawId = req.params.id;
+  const txId = parseInt(Array.isArray(rawId) ? rawId[0] : rawId, 10);
+  if (!Number.isFinite(txId)) {
+    res.status(400).json({ error: "Invalid transaction id" });
+    return;
+  }
+  try {
+    const [t] = await db
+      .select()
+      .from(transactionsTable)
+      .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.userId, req.user!.userId)))
+      .limit(1);
+    if (!t) {
+      res.status(404).json({ error: "Transaction not found" });
+      return;
+    }
+    res.json({
+      id: t.id,
+      type: t.type,
+      amount: parseFloat(t.amount),
+      currency: t.currency,
+      status: t.status,
+      txHash: t.txHash,
+      address: t.address,
+      createdAt: t.createdAt.toISOString(),
+      updatedAt: t.updatedAt.toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Get transaction error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

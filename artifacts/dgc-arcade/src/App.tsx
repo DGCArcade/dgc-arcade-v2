@@ -7,6 +7,7 @@ import { MobileGameProvider } from "@/hooks/use-mobile-game";
 import { useEffect, Suspense, lazy, useMemo, useRef, type ReactNode } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { usePlatformSettings } from "@/hooks/use-platform-settings";
+import { useSessionLimit } from "@/hooks/use-session-limit";
 
 // Lazy load heavy pages for better initial load
 const Home = lazy(() => import("@/pages/home"));
@@ -30,6 +31,11 @@ const Maintenance = lazy(() => import("@/pages/maintenance"));
 const ProvablyFairPage = lazy(() => import("./pages/provably-fair"));
 const InstantPayoutsPage = lazy(() => import("./pages/instant-payouts"));
 const CryptoNativePage = lazy(() => import("./pages/crypto-native"));
+
+function SessionLimitWatcher() {
+  useSessionLimit();
+  return null;
+}
 
 // Gate: if user is logged in but email not verified, block game access and force verification
 function EmailVerifiedGate({ children }: { children: ReactNode }) {
@@ -201,6 +207,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <SessionLimitWatcher />
         <MobileGameProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <Router />

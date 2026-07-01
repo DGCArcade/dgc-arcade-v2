@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import { recordTournamentWager } from "../lib/tournament-tracker.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
+import { checkWagerLimits } from "../services/gambling-limits.js";
 import {
   generateChickenRoadLayout,
   calculateMultiplier,
@@ -100,6 +101,12 @@ chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, asyn
     const { totalBalance } = await getUserBalance(user.id);
     if (totalBalance < amount) {
       res.status(400).json({ error: "Insufficient balance" });
+      return;
+    }
+
+    const limitCheck = await checkWagerLimits(user.id, amount);
+    if (!limitCheck.ok) {
+      res.status(403).json({ error: limitCheck.error, code: limitCheck.code });
       return;
     }
 

@@ -4,6 +4,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 import { requireLocationVerified } from "../middlewares/location.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
+import { checkWagerLimits } from "../services/gambling-limits.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash, createHmac } from "crypto";
 
@@ -141,6 +142,12 @@ blackjackRouter.post("/deal", requireAuth, requireLocationVerified, async (req, 
     const { totalBalance } = await getUserBalance(user.id);
     if (totalBalance < amount) {
       res.status(400).json({ error: "Insufficient balance" });
+      return;
+    }
+
+    const limitCheck = await checkWagerLimits(user.id, amount);
+    if (!limitCheck.ok) {
+      res.status(403).json({ error: limitCheck.error, code: limitCheck.code });
       return;
     }
 
