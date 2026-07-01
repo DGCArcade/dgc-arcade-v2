@@ -191,6 +191,16 @@ const geoLimiter = rateLimit({
   skip: (req) => isOwnerRequest(req),
 });
 
+// Withdraw OTP: 5 per 15 minutes per IP
+const withdrawOtpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many verification code requests. Please wait." },
+  skip: (req) => isOwnerRequest(req),
+});
+
 // Body parser with size limits for performance
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
@@ -216,6 +226,7 @@ app.use("/api/transactions/withdraw", withdrawLimiter);
 app.use("/api/transactions/deposit/initiate", depositLimiter);
 app.use("/api/users/tip", tipLimiter);
 app.use("/api/users/geo", geoLimiter);
+app.use("/api/transactions/withdraw/otp", withdrawOtpLimiter);
 app.use("/api/blackjack", betLimiter);
 app.use("/api/mines", betLimiter);
 app.use("/api/chicken-road", betLimiter);
@@ -306,6 +317,20 @@ ensureCoreGamesSeeded()
     logger.info("Activity logs migration: table ensured");
   } catch (err) {
     logger.error({ err }, "Activity logs migration failed");
+  }
+})();
+
+// ── Withdraw OTP columns (idempotent) ─────────────────────────────────────────
+(async () => {
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS withdraw_otp_code TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS withdraw_otp_expires_at TIMESTAMPTZ;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS withdraw_otp_sent_at TIMESTAMPTZ;
+    `);
+    logger.info("Users migration: withdraw OTP columns ensured");
+  } catch (err) {
+    logger.error({ err }, "Users migration: withdraw OTP columns failed");
   }
 })();
 

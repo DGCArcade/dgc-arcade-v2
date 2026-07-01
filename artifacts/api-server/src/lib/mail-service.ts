@@ -385,6 +385,36 @@ export async function sendEmailVerificationEmail(
   if (resend) await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
 }
 
+export async function sendWithdrawalOtpEmail(
+  email: string,
+  username: string,
+  code: string,
+): Promise<void> {
+  const accent = ACCENTS.gold;
+  const body = `
+    ${h("Withdrawal Verification", accent)}
+    ${p(`Hey ${hl(username, accent)}, use this one-time code to confirm your withdrawal. It expires in 10 minutes.`)}
+    <div style="text-align:center;margin:24px 0;">
+      <div style="display:inline-block;font-family:monospace;font-size:32px;font-weight:900;letter-spacing:0.35em;padding:16px 24px;border-radius:12px;border:2px solid ${accent.glow};color:${accent.text};background:rgba(255,215,0,0.08);">${code}</div>
+    </div>
+    ${infoBox("Never share this code. DGC staff will never ask for it.", accent.glow)}
+  `;
+  const html = shell({
+    accentName: "gold",
+    header: wordmarkHeader(LOGOS.wordmarkGold, accent),
+    body,
+    preheader: "Your withdrawal verification code",
+  });
+  if (resend) {
+    await resend.emails.send({
+      from: SENDER_EMAIL,
+      to: email,
+      subject: "🔐 DGC Arcade — Withdrawal Verification Code",
+      html,
+    });
+  }
+}
+
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║ 3. LOGIN SECURITY ALERT — 3 variations                                    ║
 // ╚══════════════════════════════════════════════════════════════════════════╝

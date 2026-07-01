@@ -6,7 +6,7 @@ import { getCryptoPrice } from "../lib/price-service.js";
 import { deductBalance, creditBalance, getUserBalance } from "../lib/balance-service.js";
 import { requireAuth, isOwnerUser, isProtectedAccount } from "../middlewares/auth.js";
 import { requireLocationVerified } from "../middlewares/location.js";
-import { isJurisdictionAllowed } from "../lib/geo-policy.js";
+import { evaluateIpAccess } from "../lib/geo-policy.js";
 import { lookupGeoByIp } from "../lib/geo-lookup.js";
 import { sendEmailVerificationEmail } from "../lib/mail-service.js";
 import { recordLedgerStandalone } from "../services/ledger.js";
@@ -105,8 +105,8 @@ usersRouter.post("/geo", requireAuth, async (req, res) => {
     }
 
     const cc = serverGeo.country_code.toUpperCase();
-    const jurisdictionAllowed = isJurisdictionAllowed(cc, serverGeo.region);
-    const locationVerified = jurisdictionAllowed;
+    const access = evaluateIpAccess(serverGeo);
+    const locationVerified = access.allowed;
 
     const updates = {
       geoCountry: serverGeo.country_name,
@@ -123,9 +123,9 @@ usersRouter.post("/geo", requireAuth, async (req, res) => {
       deviceOs: str(deviceOs),
       deviceBrowser: str(deviceBrowser),
       deviceType: str(deviceType),
-      vpnProvider: str(vpnProvider),
+      vpnProvider: access.vpn ? str(vpnProvider) ?? serverGeo.org : access.datacenter ? "Datacenter" : access.tor ? "Tor" : str(vpnProvider),
       deviceFingerprint: str(fingerprint),
-      vpnDetected: typeof vpnDetected === "boolean" ? vpnDetected : undefined,
+      vpnDetected: access.vpn || access.datacenter || access.tor,
       locationVerified,
     };
     if (Object.values(updates).some((v) => v !== undefined)) {
@@ -137,10 +137,15 @@ usersRouter.post("/geo", requireAuth, async (req, res) => {
       username: req.user!.username,
       action: locationVerified ? "geo_verified" : "geo_denied",
       ctx: getRequestContext(req),
-      metadata: { countryCode: cc, region: serverGeo.region, city: serverGeo.city },
+      metadata: { countryCode: cc, region: serverGeo.region, city: serverGeo.city, code: access.code, signals: access.signals },
     });
 
-    res.json({ success: true, locationVerified });
+    res.json({
+      success: locationVerified,
+      locationVerified,
+      code: access.code,
+      error: locationVerified ? undefined : access.reason,
+    });
   } catch (err) { req.log.error({ err }, "Save geo error"); res.status(500).json({ error: "Internal server error" }); }
 });
 

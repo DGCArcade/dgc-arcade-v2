@@ -1,9 +1,12 @@
 import { Request, Response, NextFunction } from "express";
-import { eq } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
 import { isOwnerUser } from "./auth.js";
+import { verifyRequestGeo } from "../lib/geo-verify.js";
 
-/** Blocks betting/withdrawals unless the user passed server-verified location. */
+/**
+ * Blocks betting/withdrawals unless the user's **current** server IP passes
+ * jurisdiction + VPN/datacenter policy. Re-checks on every request — not
+ * just the one-time DB flag from onboarding.
+ */
 export async function requireLocationVerified(req: Request, res: Response, next: NextFunction) {
   if (!req.user) {
     res.status(401).json({ error: "Authentication required" });
@@ -16,16 +19,12 @@ export async function requireLocationVerified(req: Request, res: Response, next:
   }
 
   try {
-    const [user] = await db
-      .select({ locationVerified: usersTable.locationVerified })
-      .from(usersTable)
-      .where(eq(usersTable.id, req.user.userId))
-      .limit(1);
-
-    if (!user?.locationVerified) {
-      res.status(403).json({
-        error: "Location verification required before playing or withdrawing.",
-        code: "LOCATION_REQUIRED",
+    const result = await verifyRequestGeo(req, req.user.userId);
+    if (!result.ok) {
+      res.status(result.status).json({
+        error: result.error,
+        code: result.code,
+        locationVerified: false,
       });
       return;
     }

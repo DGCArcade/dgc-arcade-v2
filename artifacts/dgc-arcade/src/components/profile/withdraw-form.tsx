@@ -11,12 +11,13 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { CoinIcon, CURRENCIES } from "@/components/wallet/coin-icon";
 import { formatCurrency } from "@/lib/format";
-import { RefreshCw, ShieldAlert, CheckCircle2 } from "lucide-react";
+import { RefreshCw, ShieldAlert, CheckCircle2, Mail } from "lucide-react";
 
 const withdrawSchema = z.object({
   amount: z.coerce.number().min(1, "Minimum withdrawal is $1"),
   currency: z.string().min(1, "Please select a currency"),
   address: z.string().min(10, "Please enter a valid wallet address"),
+  otpCode: z.string().length(6, "Enter the 6-digit email code").optional().or(z.literal("")),
 });
 
 interface CoinBalanceData {
@@ -50,6 +51,46 @@ export function WithdrawForm() {
     cryptoAmounts: {},
   });
   const [coinBalancesLoading, setCoinBalancesLoading] = useState(true);
+  const [otpSent, setOtpSent] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
+
+  const sendWithdrawOtp = async () => {
+    setSendingOtp(true);
+    try {
+      const token = localStorage.getItem("dgc_token");
+      const r = await fetch("/api/transactions/withdraw/otp", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const retry = data.retryAfterSec as number | undefined;
+        if (retry) setOtpCooldown(retry);
+        throw new Error(data.error || "Could not send verification code");
+      }
+      setOtpSent(true);
+      setOtpCooldown(60);
+      toast({
+        title: "Code sent",
+        description: "Check your verified email for a 6-digit withdrawal code (expires in 10 min).",
+      });
+    } catch (err: unknown) {
+      toast({
+        title: "Verification code failed",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const t = setInterval(() => setOtpCooldown(c => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [otpCooldown]);
 
   const fetchCoinBalances = useCallback(async () => {
     setCoinBalancesLoading(true);
@@ -86,7 +127,7 @@ export function WithdrawForm() {
 
   const form = useForm<z.infer<typeof withdrawSchema>>({
     resolver: zodResolver(withdrawSchema),
-    defaultValues: { amount: 1, currency: "", address: "" },
+    defaultValues: { amount: 1, currency: "", address: "", otpCode: "" },
   });
 
   useEffect(() => {
@@ -125,12 +166,22 @@ export function WithdrawForm() {
       }
     }
 
+    if (!otpSent && !values.otpCode) {
+      toast({
+        title: "Verification required",
+        description: "Send a withdrawal code to your email first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     requestWithdrawal.mutate(
-      { data: values },
+      { data: { ...values, otpCode: values.otpCode || undefined } },
       {
         onSuccess: () => {
           toast({ title: "Withdrawal Requested", description: "Your withdrawal is being processed." });
-          form.reset({ amount: 1, currency: firstAvailable, address: "" });
+          form.reset({ amount: 1, currency: firstAvailable, address: "", otpCode: "" });
+          setOtpSent(false);
           queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
           fetchCoinBalances();
@@ -302,10 +353,52 @@ export function WithdrawForm() {
             )}
           />
 
+          <div className="rounded-lg border border-border/60 bg-secondary/30 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Email verification</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Required for every withdrawal</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5 text-[10px] font-bold uppercase"
+                onClick={sendWithdrawOtp}
+                disabled={sendingOtp || otpCooldown > 0 || !user?.emailVerified}
+              >
+                <Mail className="w-3.5 h-3.5" />
+                {sendingOtp ? "Sending…" : otpCooldown > 0 ? `Wait ${otpCooldown}s` : otpSent ? "Resend code" : "Send code"}
+              </Button>
+            </div>
+            {!user?.emailVerified && (
+              <p className="text-[10px] text-amber-400">Verify your email in Settings before withdrawing.</p>
+            )}
+            <FormField
+              control={form.control}
+              name="otpCode"
+              render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="6-digit code"
+                      className="font-mono text-center tracking-[0.4em] text-lg"
+                      disabled={!user?.emailVerified}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
           <Button
             type="submit"
             className="w-full h-12 font-display font-black uppercase tracking-widest text-lg"
-            disabled={requestWithdrawal.isPending || !isWagerMet}
+            disabled={requestWithdrawal.isPending || !isWagerMet || !user?.emailVerified}
           >
             {requestWithdrawal.isPending ? "Processing..." : isWagerMet ? "Withdraw Funds" : "Requirement Not Met"}
           </Button>

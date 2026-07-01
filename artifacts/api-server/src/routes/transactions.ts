@@ -14,6 +14,12 @@ import { sendPlisioPayout } from "../lib/plisio-payout.js";
 import { v4 as uuidv4 } from "uuid";
 import { recordLedger } from "../services/ledger.js";
 import { evaluateWithdrawal } from "../services/fraud.js";
+import {
+  checkWithdrawVelocity,
+  issueWithdrawOtp,
+  verifyWithdrawOtp,
+} from "../services/withdraw-security.js";
+import { sendWithdrawalOtpEmail } from "../lib/mail-service.js";
 import { getCryptoPrice } from "../lib/price-service.js";
 import { getUserBalance, deductBalance, creditBalance, creditCryptoBalance } from "../lib/balance-service.js";
 import { logFinancialActivity } from "../services/activity-log.js";
@@ -786,6 +792,45 @@ function sendNtfy(topic: string | undefined, opts: { title: string; priority: st
   }).catch(() => {});
 }
 
+// POST /api/transactions/withdraw/otp — email step-up code before payout
+transactionsRouter.post("/withdraw/otp", requireAuth, requireLocationVerified, async (req, res) => {
+  if (req.user && isOwnerUser(req.user)) {
+    res.json({ success: true, message: "Owner account — OTP not required" });
+    return;
+  }
+
+  try {
+    const result = await issueWithdrawOtp(req.user!.userId);
+    if (!result.ok) {
+      res.status(result.code === "OTP_COOLDOWN" ? 429 : 400).json({
+        error: result.error,
+        code: result.code,
+        retryAfterSec: result.retryAfterSec,
+      });
+      return;
+    }
+
+    const [user] = await db
+      .select({ email: usersTable.email, username: usersTable.username, withdrawOtpCode: usersTable.withdrawOtpCode })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.user!.userId))
+      .limit(1);
+
+    if (user?.email && user.withdrawOtpCode) {
+      await sendWithdrawalOtpEmail(user.email, user.username, user.withdrawOtpCode);
+    }
+
+    res.json({
+      success: true,
+      message: "Verification code sent to your email.",
+      expiresAt: result.expiresAt.toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Withdraw OTP error");
+    res.status(500).json({ error: "Failed to send verification code" });
+  }
+});
+
 // POST /api/transactions/withdraw
 // ── Auto-withdrawal logic ──────────────────────────────────────────────────────
 // Withdrawals at or below INSTANT_WITHDRAWAL_CEILING ($10,000) are automatically
@@ -804,7 +849,7 @@ transactionsRouter.post("/withdraw", requireAuth, requireLocationVerified, async
     res.status(400).json({ error: "Invalid input" });
     return;
   }
-  const { amount, currency, address } = parsed.data;
+  const { amount, currency, address, otpCode } = parsed.data;
   try {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
@@ -812,6 +857,28 @@ transactionsRouter.post("/withdraw", requireAuth, requireLocationVerified, async
     if (!user.withdrawalsEnabled && req.user && !isOwnerUser(req.user)) {
       res.status(403).json({ error: "Withdrawals are disabled for this account.", code: "WITHDRAWALS_DISABLED" });
       return;
+    }
+
+    if (!isOwnerUser(req.user!)) {
+      const velocity = await checkWithdrawVelocity(user.id, amount);
+      if (!velocity.ok) {
+        res.status(429).json({ error: velocity.error, code: velocity.code });
+        return;
+      }
+
+      if (!otpCode) {
+        res.status(400).json({
+          error: "Withdrawal verification code required. Request a code first.",
+          code: "OTP_REQUIRED",
+        });
+        return;
+      }
+
+      const otp = await verifyWithdrawOtp(user.id, otpCode);
+      if (!otp.ok) {
+        res.status(otp.code === "OTP_LOCKED" ? 429 : 400).json({ error: otp.error, code: otp.code });
+        return;
+      }
     }
 
     // Must wager at least the greater of signup bonus or accumulated wager requirement (deposits).

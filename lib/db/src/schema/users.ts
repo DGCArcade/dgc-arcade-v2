@@ -57,6 +57,9 @@ export const usersTable = pgTable("users", {
   telegramUsername: text("telegram_username"),
   rakebackClaimed: numeric("rakeback_claimed", { precision: 18, scale: 8 }).notNull().default("0"),
   withdrawalAttempts: integer("withdrawal_attempts").notNull().default(0),
+  withdrawOtpCode: text("withdraw_otp_code"),
+  withdrawOtpExpiresAt: timestamp("withdraw_otp_expires_at", { withTimezone: true }),
+  withdrawOtpSentAt: timestamp("withdraw_otp_sent_at", { withTimezone: true }),
   // Specialty Creator Fields
   commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }), // Override standard tier rate
   displayName: text("display_name"), // Custom display name for creators
