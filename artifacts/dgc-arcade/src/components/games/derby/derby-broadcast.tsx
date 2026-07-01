@@ -118,8 +118,8 @@ export function DerbyBroadcastOverlay({
         )}
       </div>
 
-      {/* Leader ticker during race */}
-      {racing && leaderName && (
+      {/* Leader ticker — desktop only; mobile uses tiny bottom chip */}
+      {racing && leaderName && !compact && (
         <div className="self-center derby-leader-ticker">
           <span className="text-[8px] font-bold uppercase text-yellow-400/90 mr-1.5">Leader</span>
           {leaderSilk && (
