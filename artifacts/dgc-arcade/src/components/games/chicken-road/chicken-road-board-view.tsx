@@ -20,6 +20,7 @@ interface ChickenRoadBoardProps {
   crossLoading?: boolean;
   betAmount?: number;
   tier?: StakeTier;
+  chickenStripIndex?: number;
 }
 
 /**
@@ -43,6 +44,7 @@ export function ChickenRoadBoard(props: ChickenRoadBoardProps) {
       crossLoading={props.crossLoading}
       betAmount={props.betAmount}
       tier={props.tier}
+      chickenStripIndex={props.chickenStripIndex}
     />
   );
 }

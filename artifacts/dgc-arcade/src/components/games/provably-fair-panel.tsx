@@ -10,6 +10,7 @@ interface ProvablyFairPanelProps {
   verifyPath?: string;
   /** compact = small verify chip; inline = one-line under track */
   variant?: "full" | "compact" | "inline";
+  gameName?: string;
 }
 
 export function ProvablyFairPanel({
@@ -20,6 +21,7 @@ export function ProvablyFairPanel({
   nonce,
   verifyPath,
   variant = "full",
+  gameName = "this game",
 }: ProvablyFairPanelProps) {
   const [open, setOpen] = useState(false);
   if (!serverSeedHash && !betId) return null;
@@ -79,9 +81,16 @@ export function ProvablyFairPanel({
               </div>
             )}
             {href && (
-              <a href={href} target="_blank" rel="noopener noreferrer" className="inline-block text-primary hover:underline font-bold uppercase">
-                Verify result →
-              </a>
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                <a href={href} target="_blank" rel="noopener noreferrer" className="inline-block text-primary hover:underline font-bold uppercase">
+                  Verify result →
+                </a>
+                {href.includes("chicken-road") && (
+                  <a href="/chicken-road-verify.html" target="_blank" rel="noopener noreferrer" className="inline-block text-muted-foreground hover:text-primary hover:underline font-bold uppercase">
+                    Open verifier
+                  </a>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -102,7 +111,7 @@ export function ProvablyFairPanel({
         Provably Fair · SHA-256
       </div>
       <p className="text-[9px] text-muted-foreground leading-relaxed">
-        Commit hash is published before the reveal. After the race, verify the seed matches the hash and reproduces finish order.
+        SHA-256 commit is published before play. After {gameName}, verify the revealed seed matches the hash and reproduces death placement.
       </p>
       {serverSeedHash && (
         <div>

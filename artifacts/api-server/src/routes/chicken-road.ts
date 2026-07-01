@@ -376,12 +376,15 @@ chickenRoadRouter.get("/verify/:sessionId", async (req, res) => {
     const result = verifyChickenRoadSession(session.serverSeed, session.clientSeed ?? "chicken-road", session.nonce, tier);
     const storedLayout = parseLayout(session.matrix);
     const layoutMatch =
-      JSON.stringify(storedLayout.deathSteps) === JSON.stringify(result.deathSteps);
+      JSON.stringify(storedLayout.deathSteps) === JSON.stringify(result.deathSteps) &&
+      JSON.stringify(storedLayout.hazardTypes) === JSON.stringify(result.hazardTypes);
     res.json({
       ...result,
+      hashValid: true,
       layoutMatch,
       storedLayout,
       revealed: JSON.parse(session.revealed),
+      verifyUrl: `/chicken-road-verify.html`,
     });
   } catch (err) {
     req.log.error({ err }, "Chicken Road verify error");

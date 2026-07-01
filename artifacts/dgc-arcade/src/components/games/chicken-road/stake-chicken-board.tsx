@@ -12,6 +12,7 @@ import { getSurvivalChancePercent, type StakeTier } from "@/lib/chicken-road-sta
 import { useChickenMotor } from "./use-chicken-motor";
 import { useScreenShake } from "./use-screen-shake";
 import { PhysicsBurstLayer } from "./physics-burst-layer";
+import { useBoardLaneCenters } from "./use-board-lane-centers";
 
 export type LaneState = "idle" | "past" | "current" | "future" | "bust";
 export type HazardType = "car" | "manhole";
@@ -37,6 +38,8 @@ interface StakeChickenBoardProps {
   crossLoading?: boolean;
   betAmount?: number;
   tier?: StakeTier;
+  /** While hopping, chicken glides to this lane strip index (0-based sewer). */
+  chickenStripIndex?: number;
 }
 
 const SIDEWALK_W = 88;
@@ -144,6 +147,7 @@ function LaneStrip({
   onManholeClick,
   crossLoading,
   onManholeHover,
+  manholeRef,
 }: {
   laneIndex: number;
   state: LaneState;
@@ -156,6 +160,7 @@ function LaneStrip({
   onManholeClick?: () => void;
   crossLoading?: boolean;
   onManholeHover?: (lane: number | null) => void;
+  manholeRef?: (el: HTMLDivElement | null) => void;
 }) {
   const variants = ["sedan", "suv", "truck"] as const;
   const variant = variants[laneIndex % 3];
@@ -172,7 +177,7 @@ function LaneStrip({
   const justCleared = state === "past" && crossAnim === null;
 
   return (
-    <div className={`cr-stake-lane relative flex-shrink-0 w-[72px] sm:w-[80px] h-full ${
+    <div className={`cr-stake-lane relative flex-shrink-0 w-[80px] h-full ${
       state === "future" ? "opacity-55" : ""
     }`}>
       <div className={`absolute inset-x-0 top-0 bottom-[72px] bg-[#4a5568] border-x border-[#5a6578] overflow-hidden ${
@@ -224,6 +229,7 @@ function LaneStrip({
       </div>
 
       <div
+        ref={manholeRef}
         className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20"
         onMouseEnter={() => onManholeHover?.(laneIndex)}
         onMouseLeave={() => onManholeHover?.(null)}
@@ -255,6 +261,7 @@ export function StakeChickenBoard({
   crossLoading = false,
   betAmount = 0,
   tier = "medium",
+  chickenStripIndex,
 }: StakeChickenBoardProps) {
   const isActive = status === "active";
   const trafficActive = status === "idle" || status === "active";
@@ -262,13 +269,17 @@ export function StakeChickenBoard({
   const scrollRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const playAreaRef = useRef<HTMLDivElement>(null);
+  const playRowRef = useRef<HTMLDivElement>(null);
+  const sidewalkRef = useRef<HTMLDivElement>(null);
+  const laneRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [hoveredLane, setHoveredLane] = useState<number | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [burstId, setBurstId] = useState(0);
   const [burstOrigin, setBurstOrigin] = useState({ x: 200, y: 300 });
 
-  const onSidewalk = isActive && currentLane === 0;
-  const targetLane = isActive
+  const onSidewalk = isActive && currentLane === 0 && !hopping;
+
+  const settledStripIndex = isActive
     ? currentLane === 0
       ? -1
       : currentLane - 1
@@ -276,9 +287,32 @@ export function StakeChickenBoard({
       ? Math.max(0, currentLane - 1)
       : -1;
 
-  const targetLeft = targetLane < 0
-    ? SIDEWALK_W / 2
-    : SIDEWALK_W + targetLane * laneWidth + laneWidth / 2;
+  const positionStripIndex =
+    hopping && chickenStripIndex !== undefined
+      ? chickenStripIndex
+      : settledStripIndex;
+
+  const { centers: measuredCenters } = useBoardLaneCenters(
+    playRowRef,
+    sidewalkRef,
+    lanes,
+    laneRefs,
+    scrollRef,
+  );
+
+  const fallbackLeft =
+    positionStripIndex < 0
+      ? SIDEWALK_W / 2
+      : SIDEWALK_W + positionStripIndex * laneWidth + laneWidth / 2;
+
+  const targetLeft =
+    measuredCenters && positionStripIndex >= 0 && measuredCenters.lanes[positionStripIndex] != null
+      ? measuredCenters.lanes[positionStripIndex]
+      : measuredCenters && positionStripIndex < 0
+        ? measuredCenters.sidewalk
+        : fallbackLeft;
+
+  const scrollTargetLane = positionStripIndex;
 
   const motor = useChickenMotor(targetLeft, hopping, laneWidth, chickenVisible);
   const shakeIntensity = status === "lost" ? 25 : crossAnim?.phase === "car-impact" ? 16 : crossAnim?.phase === "manhole-fire" ? 12 : 0;
@@ -309,10 +343,14 @@ export function StakeChickenBoard({
       el.scrollTo({ left: 0, behavior: "smooth" });
       return;
     }
-    if (targetLane < 0) return;
-    const target = Math.max(0, targetLane * laneWidth - el.clientWidth / 2 + laneWidth / 2);
+    if (scrollTargetLane < 0) return;
+    const laneCenter =
+      measuredCenters?.lanes[scrollTargetLane] ??
+      SIDEWALK_W + scrollTargetLane * laneWidth + laneWidth / 2;
+    const sidewalkW = measuredCenters?.sidewalk != null ? measuredCenters.sidewalk * 2 : SIDEWALK_W;
+    const target = Math.max(0, laneCenter - sidewalkW - el.clientWidth / 2 + laneWidth / 2);
     el.scrollTo({ left: target, behavior: "smooth" });
-  }, [targetLane, laneWidth, chickenVisible, onSidewalk]);
+  }, [scrollTargetLane, laneWidth, chickenVisible, onSidewalk, measuredCenters]);
 
   useEffect(() => {
     const board = boardRef.current;
@@ -345,8 +383,8 @@ export function StakeChickenBoard({
         }}
       >
       <CitySkyline />
-      <div className="relative flex h-[min(500px,64vh)] min-h-[340px]">
-        <div className="relative z-10 w-[80px] sm:w-[88px] shrink-0 bg-[#5a6578] border-r border-white/10 flex flex-col items-center pt-3 pb-2">
+      <div ref={playRowRef} className="relative flex h-[min(500px,64vh)] min-h-[340px]">
+        <div ref={sidewalkRef} className="relative z-10 w-[88px] shrink-0 bg-[#5a6578] border-r border-white/10 flex flex-col items-center pt-3 pb-2">
           <TrafficLight active={isActive ? "green" : status === "lost" ? "red" : "yellow"} />
           <div className="w-12 h-12 mt-2 rounded-full bg-[#276749] border-2 border-[#22543D] shadow-inner" />
           <div className="flex-1 w-full flex flex-col justify-end gap-1 px-4 pb-3 mt-2">
@@ -380,6 +418,9 @@ export function StakeChickenBoard({
                   onManholeClick={onCrossNext}
                   crossLoading={crossLoading}
                   onManholeHover={setHoveredLane}
+                  manholeRef={el => {
+                    laneRefs.current[i] = el;
+                  }}
                 />
               );
             })}
