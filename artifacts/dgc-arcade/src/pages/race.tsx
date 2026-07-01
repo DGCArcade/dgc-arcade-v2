@@ -29,6 +29,12 @@ import {
   getRacePhase,
   type RacePhase,
 } from "@/components/games/derby/derby-broadcast";
+import {
+  computeRaceProgress,
+  buildPhotoFinishProgress,
+  FINISH_HOLD_MS,
+  RACE_GATE_MS,
+} from "@/components/games/derby/derby-race-animation";
 
 function getToken() { return typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null; }
 
@@ -71,9 +77,13 @@ export default function RacePage() {
   const [cameraX, setCameraX] = useState(0);
   const [racePhase, setRacePhase] = useState<RacePhase>("gate");
   const [camFade, setCamFade] = useState(0);
+  const [finishOrder, setFinishOrder] = useState<number[] | null>(null);
+  const [showFinishReveal, setShowFinishReveal] = useState(false);
   const animRef = useRef<number | null>(null);
   const startRef = useRef(0);
   const resultRef = useRef<RaceResult | null>(null);
+  const finishOrderRef = useRef<number[]>([]);
+  const finishHoldRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gallopStarted = useRef(false);
   const cameraRef = useRef(0);
   const manualCameraRef = useRef(false);
@@ -97,6 +107,13 @@ export default function RacePage() {
     manualCameraRef.current = false;
     lastAutoCamRef.current = null;
     setLiveFair(null);
+    setFinishOrder(null);
+    setShowFinishReveal(false);
+    finishOrderRef.current = [];
+    if (finishHoldRef.current) {
+      clearTimeout(finishHoldRef.current);
+      finishHoldRef.current = null;
+    }
     gallopStarted.current = false;
     stopHorseGallopLoop();
     stopCrowdAmbience();
@@ -142,41 +159,29 @@ export default function RacePage() {
       return;
     }
 
-    const finishRank: Record<number, number> = {};
-    res.finishOrder.forEach((id, i) => { finishRank[id] = i; });
+    finishOrderRef.current = res.finishOrder;
+    setFinishOrder(res.finishOrder);
 
     startRef.current = performance.now();
     playRaceStartBugle();
     startCrowdAmbience();
 
-    const GATE_MS = 900;
-    /** Staggered gate break — horses don't all leave at once */
-    const GATE_STAGGER_MS = [0, 90, 180, 60, 150, 120];
-
     const tick = (now: number) => {
       const elapsed = now - startRef.current;
-      if (elapsed > GATE_MS && !gallopStarted.current) {
+      if (elapsed > RACE_GATE_MS && !gallopStarted.current) {
         gallopStarted.current = true;
         playGateOpenClang();
         startHorseGallopLoop();
       }
 
-      const raceElapsed = Math.max(0, elapsed - GATE_MS);
-      const next = RACERS.map(r => {
-        const rank = finishRank[r.id];
-        const stagger = GATE_STAGGER_MS[r.id - 1] ?? 0;
-        const horseElapsed = Math.max(0, raceElapsed - stagger);
-        const finishMs = 5200 + rank * 680 + (r.id % 4) * 140;
-        const t = horseElapsed <= 0 ? 0 : Math.min(1, horseElapsed / finishMs);
-        // Ease-out with slight burst at start (realistic acceleration from gate)
-        const eased = t < 0.08 ? t * 3.2 : 1 - Math.pow(1 - t, 3.1);
-        return { racerId: r.id, progress: eased * TRACK_LEN, done: t >= 1 };
-      });
+      const { progress: next, allDone } = computeRaceProgress(
+        elapsed,
+        finishOrderRef.current,
+        TRACK_LEN,
+      );
       setProgress(next);
 
-      const leader = next.reduce((a, b) => (a.progress > b.progress ? a : b));
-      const leaderProg = leader.progress;
-      const allDone = next.every(p => p.done);
+      const leaderProg = getLeaderProgress(next);
       const phase = getRacePhase(leaderProg, true, allDone);
       setRacePhase(phase);
 
@@ -193,17 +198,24 @@ export default function RacePage() {
       cameraRef.current += (targetCam - cameraRef.current) * 0.09;
       setCameraX(cameraRef.current);
 
-      if (next.every(p => p.done)) {
+      if (allDone) {
         stopHorseGallopLoop();
         stopCrowdAmbience();
         playRaceFinishCheer();
-        setResult(resultRef.current);
-        setRacing(false);
+        setProgress(buildPhotoFinishProgress(finishOrderRef.current, TRACK_LEN));
+        setShowFinishReveal(true);
         setRacePhase("finish");
-        setLiveFair(prev => prev ? { ...prev, serverSeed: resultRef.current?.serverSeed } : null);
         setCamFade(f => f + 1);
         setCamera("finish");
-        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+        manualCameraRef.current = true;
+
+        finishHoldRef.current = setTimeout(() => {
+          setResult(resultRef.current);
+          setRacing(false);
+          setLiveFair(prev => prev ? { ...prev, serverSeed: resultRef.current?.serverSeed } : null);
+          queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+          finishHoldRef.current = null;
+        }, FINISH_HOLD_MS);
         return;
       }
       animRef.current = requestAnimationFrame(tick);
@@ -213,6 +225,7 @@ export default function RacePage() {
 
   useEffect(() => () => {
     if (animRef.current) cancelAnimationFrame(animRef.current);
+    if (finishHoldRef.current) clearTimeout(finishHoldRef.current);
     stopHorseGallopLoop();
     stopCrowdAmbience();
   }, []);
@@ -231,7 +244,15 @@ export default function RacePage() {
     if (angle === "aerial") return <DerbyAerialView {...viewProps} camera={angle} />;
     if (angle === "front") return <DerbyFrontChaseView {...viewProps} camera={angle} />;
     if (angle === "finish") {
-      return <DerbyFinishView racers={RACERS} progress={progress} winnerId={result?.winnerRacerId} compact={isMobile} />;
+      return (
+        <DerbyFinishView
+          racers={RACERS}
+          progress={progress}
+          finishOrder={finishOrder ?? result?.finishOrder}
+          winnerId={result?.winnerRacerId ?? finishOrder?.[0]}
+          compact={isMobile}
+        />
+      );
     }
     return (
       <DerbySideView
@@ -269,7 +290,7 @@ export default function RacePage() {
                 setCamFade(f => f + 1);
                 setCamera(c.id);
               }}
-              disabled={c.id === "finish" && !result && !racing}
+              disabled={c.id === "finish" && !result && !racing && !showFinishReveal}
               className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-all ${camera === c.id ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary/60 text-muted-foreground hover:text-foreground"} disabled:opacity-40`}>
               {isMobile ? (c.mobileLabel ?? c.label) : c.label}
             </button>
@@ -278,7 +299,7 @@ export default function RacePage() {
       </div>
       <div className="relative flex-1 min-h-[200px] derby-track-scene">
         <div className="absolute inset-0 overflow-hidden">
-          {!racing && !result ? (
+          {!racing && !result && !showFinishReveal ? (
             <div className="absolute inset-0 derby-cam-cut">
               {renderCameraView(previewCamera)}
             </div>

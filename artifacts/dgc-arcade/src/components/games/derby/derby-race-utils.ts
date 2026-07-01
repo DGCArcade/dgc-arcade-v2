@@ -25,7 +25,7 @@ export function buildStandings(racers: RacerDef[], progress: RacerProgress[]): S
         gapBehind: 0,
       };
     })
-    .sort((a, b) => b.prog - a.prog)
+    .sort((a, b) => b.prog - a.prog || a.r.id - b.r.id)
     .map((x, i) => ({
       ...x,
       rank: i + 1,
@@ -65,7 +65,7 @@ export function chaseVisualPosition(
     return { bottomPct: gateBottom, scaleMul: 1 };
   }
   const base = (progM / TRACK_LEN) * spreadMax;
-  const gapSep = gapBehind * (compact ? 0.58 : 0.45);
+  const gapSep = Math.min(gapBehind * (compact ? 0.5 : 0.38), base * 0.15);
   const bottomPct = gateBottom + base - gapSep;
   const scaleMul = 0.82 + (progM / TRACK_LEN) * 0.55 - (gapBehind / TRACK_LEN) * 0.2;
   return { bottomPct, scaleMul: Math.max(0.72, Math.min(1.12, scaleMul)) };
