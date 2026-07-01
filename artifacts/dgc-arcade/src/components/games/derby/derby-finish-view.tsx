@@ -179,7 +179,7 @@ export function DerbyFinishView({
       {showWinnerStamp && winner && (
         <div
           className="absolute top-[22%] left-1/2 -translate-x-1/2 z-25 derby-finish-winner-banner"
-          style={{ animationDelay: "0.28s" }}
+          style={{ animationDelay: showFullReveal ? "0.85s" : "0.28s" }}
         >
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-yellow-500/90 to-amber-400/90 border border-yellow-200/60 shadow-xl backdrop-blur-sm">
             <Trophy className="w-4 h-4 text-yellow-900 shrink-0 derby-finish-trophy-spin" />
@@ -216,8 +216,12 @@ export function DerbyFinishView({
             : compact
               ? Math.max(0.58, 0.72 - (place - 2) * 0.04)
               : Math.max(0.62, 0.88 - (place - 2) * 0.05);
-          const enterDelay = liveSequential ? 0.05 : isWinner ? 0.08 : 0.04 + visualIdx * 0.055;
-          const faceDelay = enterDelay + 0.18;
+          const enterDelay = liveSequential
+            ? 0.05
+            : isWinner
+              ? 0.08
+              : 0.15 + visualIdx * 0.12;
+          const faceDelay = enterDelay + (liveSequential ? 0.18 : 0.35);
 
           return (
             <div
