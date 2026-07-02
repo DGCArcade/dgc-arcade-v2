@@ -19,8 +19,8 @@ import { Resend } from "resend";
 // ──────────────────────────────────────────────────────────────────────────────
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const SENDER_EMAIL = process.env.SENDER_EMAIL || "noreply@differentgrindcrew.com";
-const SITE_URL = process.env.SITE_URL || "https://differentgrindcrew.com";
+const SENDER_EMAIL = process.env.SENDER_EMAIL || "noreply@dgcarcade.com";
+const SITE_URL = process.env.SITE_URL || "https://dgcarcade.com";
 
 // Where the hosted logo assets live. Defaults to the live site's /email-assets
 // folder (served from artifacts/dgc-arcade/public/email-assets). Override with

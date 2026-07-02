@@ -40,12 +40,34 @@ app.use(
     },
   }),
 );
-const ALLOWED_ORIGINS = [
+const STATIC_ORIGINS = [
   "https://differentgrindcrew.com",
   "https://www.differentgrindcrew.com",
+  "https://dgcarcade.com",
+  "https://www.dgcarcade.com",
   "https://dgcarcade.io",
   "https://www.dgcarcade.io",
   "https://dgc-arcade-frontend-cb8i.onrender.com",
+];
+
+function siteOrigins(): string[] {
+  const site = process.env.SITE_URL?.trim().replace(/\/$/, "");
+  if (!site) return [];
+  const origins = [site];
+  try {
+    const u = new URL(site);
+    if (!u.hostname.startsWith("www.")) {
+      origins.push(`${u.protocol}//www.${u.hostname}`);
+    }
+  } catch {
+    // ignore invalid SITE_URL
+  }
+  return origins;
+}
+
+const ALLOWED_ORIGINS = [
+  ...STATIC_ORIGINS,
+  ...siteOrigins(),
   ...(process.env.NODE_ENV !== "production"
     ? [
         "http://localhost:5000",

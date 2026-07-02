@@ -396,7 +396,7 @@ adminRouter.post("/test-email", async (req, res) => {
 
     const testUsername = "TestUser";
     const testToken = "test-token-" + Date.now();
-    const siteUrl = process.env.SITE_URL || "https://differentgrindcrew.com";
+    const siteUrl = process.env.SITE_URL || "https://dgcarcade.com";
 
     switch (emailType) {
       case "welcome":
