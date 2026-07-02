@@ -21,7 +21,7 @@ export function WithdrawPolicyNotice({ compact = false }: { compact?: boolean })
             <span>
               <strong className="text-foreground">Same-coin payouts:</strong> Withdraw only in cryptocurrencies you've deposited.
               BTC in → BTC out. You can't cash out ETH until you've deposited ETH.
-            </p>
+            </span>
           </p>
         </div>
       </div>
