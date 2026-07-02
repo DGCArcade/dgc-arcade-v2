@@ -19,7 +19,7 @@ function txsList(data: Record<string, unknown>): unknown[] {
 function sumFromTxs(data: Record<string, unknown>): number {
   const list = txsList(data);
   if (list.length === 0) return 0;
-  return list.reduce((sum: number, t: unknown) => {
+  return list.reduce<number>((sum, t) => {
     if (!t || typeof t !== "object") return sum;
     const row = t as Record<string, unknown>;
     return sum + parseNum(

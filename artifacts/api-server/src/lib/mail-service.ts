@@ -532,15 +532,9 @@ const depositVariants: Array<
   // V1 — Gold, celebratory
   (username, amount, txHash, receipt) => {
     const accent = ACCENTS.gold;
-    const receiptRows = receipt
+    const receiptRows: Array<[string, string]> = receipt
       ? [
           ["💵 Credited (sum actual):", hl(`$${receipt.creditedUsd.toFixed(2)}`, accent)],
-          ...(receipt.requestedUsd != null
-            ? [["📋 Invoice requested:", `$${receipt.requestedUsd.toFixed(2)}`]]
-            : []),
-          ...(receipt.receivedCrypto != null && receipt.currency
-            ? [["⛓️ Received on-chain:", `${receipt.receivedCrypto} ${receipt.currency}`]]
-            : []),
           ["🔗 Plisio ID:", txHash],
           ["✅ Status:", "CONFIRMED"],
         ]
@@ -549,11 +543,21 @@ const depositVariants: Array<
           ["🔗 Transaction:", txHash],
           ["✅ Status:", "CONFIRMED"],
         ];
+    if (receipt?.requestedUsd != null) {
+      receiptRows.splice(1, 0, ["📋 Invoice requested:", `$${receipt.requestedUsd.toFixed(2)}`]);
+    }
+    if (receipt?.receivedCrypto != null && receipt.currency) {
+      receiptRows.splice(
+        receipt?.requestedUsd != null ? 2 : 1,
+        0,
+        ["⛓️ Received on-chain:", `${receipt.receivedCrypto} ${receipt.currency}`],
+      );
+    }
     const body = `
       ${h("Deposit Confirmed 💰", accent)}
       ${p(`Yo ${hl(username, accent)}, your deposit cleared. We credited the <strong>actual sum received</strong> after network &amp; processor fees — not the invoice estimate.`)}
       ${infoBox(`✅ <strong>${amount}</strong> added to your balance.`, accent.glow)}
-      ${dataRows(receiptRows as [string, string][], accent)}
+      ${dataRows(receiptRows, accent)}
       ${btn(`${SITE_URL}/deposit/success${receipt?.orderId ? `?order=${receipt.orderId}` : ""}`, "View Receipt", accent)}
       ${btn(`${SITE_URL}/games`, "Start Playing", accent)}
       ${infoBox("💡 Your balance is live. Play smart, win big — the streets always win.", "#00D4FF")}
@@ -566,15 +570,18 @@ const depositVariants: Array<
   // V2 — Cyber, "funds loaded"
   (username, amount, txHash, receipt) => {
     const accent = ACCENTS.cyber;
+    const rows: Array<[string, string]> = [
+      ["💸 Credited:", hl(amount, accent)],
+      ["🔗 Plisio ID:", txHash],
+      ["🟢 Status:", "CONFIRMED ON-CHAIN"],
+    ];
+    if (receipt?.requestedUsd != null) {
+      rows.splice(1, 0, ["📋 Invoice:", `$${receipt.requestedUsd.toFixed(2)}`]);
+    }
     const body = `
       ${h("Funds Loaded ⚡", accent)}
       ${p(`${hl(username, accent)}, the chain confirmed it — we credited your <strong>sum actual</strong> (real received amount).`)}
-      ${dataRows([
-        ["💸 Credited:", hl(amount, accent)],
-        ...(receipt?.requestedUsd != null ? [["📋 Invoice:", `$${receipt.requestedUsd.toFixed(2)}`]] : []),
-        ["🔗 Plisio ID:", txHash],
-        ["🟢 Status:", "CONFIRMED ON-CHAIN"],
-      ], accent)}
+      ${dataRows(rows, accent)}
       ${p("No holds, no delays. Your credited balance is playable right now.")}
       ${btn(`${SITE_URL}/games`, "Hit the Tables", accent)}
     `;
