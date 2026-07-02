@@ -12,6 +12,12 @@ import { getUserBalance, creditBalance } from "../lib/balance-service.js";
 import { getPlisioPayoutReadiness, sendPlisioPayout } from "../lib/plisio-payout.js";
 import { getDailyWinLoss, getDailyWithdrawals, getDailyDeposits } from "../services/stats-service.js";
 import { getCryptoPrice } from "../lib/price-service.js";
+import {
+  canCreditFromPlisioData,
+  computePlisioCreditUsd,
+  extractPlisioReceivedCrypto,
+  extractPlisioSourceUsd,
+} from "../lib/plisio-amounts.js";
 
 // Rate limiting to prevent double-clicks and abuse
 const requestTimestamps = new Map<string, number[]>();
@@ -1701,37 +1707,19 @@ adminRouter.get("/bank/invoices", requireBankSession, async (req, res) => {
             );
             const data = await resp.json() as any;
             if (data.status !== "success" || !data.data) return;
-            const d = data.data;
-
-            // Exhaustive received_amount extraction (same logic as background-tasks)
-            let receivedCrypto = parseFloat(String(
-              d.received_amount || d.received_sum || d.paid_amount ||
-              d.amount_received || d.actual_amount || d.sum_received || "0"
-            ));
-            if (receivedCrypto <= 0) {
-              const rawTxs = d.txs ?? d.transactions ?? d.tx_list;
-              const txsList: any[] = Array.isArray(rawTxs) ? rawTxs
-                : (rawTxs && typeof rawTxs === "object" ? Object.values(rawTxs) : []);
-              if (txsList.length > 0) {
-                const ext = txsList.reduce((s: number, t: any) => s + parseFloat(String(
-                  t.amount || t.received || t.crypto_amount || t.source_amount || t.value || "0"
-                )), 0);
-                if (ext > 0) receivedCrypto = ext;
-              }
-            }
-
-            let receivedUsd = parseFloat(String(d.received_amount_usd || d.received_sum_usd || d.amount_usd || "0"));
-            const invoicedCrypto = parseFloat(String(d.invoice_total_sum || d.total_sum || "0"));
-            const sourceUsd = parseFloat(String(d.source_amount || d.source_amount_usd || "0"));
-
-            // Compute USD from ratio if Plisio didn't give us direct USD
-            if (!receivedUsd && receivedCrypto > 0 && invoicedCrypto > 0 && sourceUsd > 0) {
-              receivedUsd = Math.round(sourceUsd * (receivedCrypto / invoicedCrypto) * 1e4) / 1e4;
-            }
+            const d = data.data as Record<string, unknown>;
+            const cryptoReceived = extractPlisioReceivedCrypto(d);
+            const sourceUsd = extractPlisioSourceUsd(d, parseFloat(String(inv.amount)));
+            const creditCalc = await computePlisioCreditUsd(
+              d,
+              sourceUsd,
+              (c) => getCryptoPrice(c),
+              inv.currency ?? "ETH",
+            );
 
             enrichMap.set(inv.id, {
-              plisioReceivedCrypto: receivedCrypto > 0 ? receivedCrypto : null,
-              plisioReceivedUsd: receivedUsd > 0 ? receivedUsd : null,
+              plisioReceivedCrypto: cryptoReceived > 0 ? cryptoReceived : null,
+              plisioReceivedUsd: creditCalc.creditUsd > 0 ? creditCalc.creditUsd : null,
               plisioSourceUsd: sourceUsd > 0 ? sourceUsd : null,
             });
           } catch { /* enrichment is best-effort */ }
@@ -1862,21 +1850,31 @@ adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
         const creditStatuses = ["completed", "mismatch", "overpaid", "finished"];
         
         if (creditStatuses.includes(pStatus)) {
-          const receivedAmount = parseFloat(String(data.data.received_amount || "0"));
-          const invoicedAmount = parseFloat(String(data.data.invoice_total_sum || "0"));
-          const sourceUsd = parseFloat(String(data.data.source_amount || tx.amount));
-          // STRICT GUARD: Only credit when we have the actual received amount from Plisio.
-          // Never fall back to the invoice/source amount — that would over-credit users
-          // when the actual payment was less (e.g. network fees deducted).
-          if (receivedAmount <= 0) {
+          const plisioData = data.data as Record<string, unknown>;
+          if (!canCreditFromPlisioData(plisioData)) {
             req.log.warn(
-              { txId: tx.id, pStatus, sourceUsd },
-              "Reconcile: received_amount is 0 — skipping, will retry when Plisio provides real data"
+              { txId: tx.id, pStatus, sourceUsd: tx.amount },
+              "Reconcile: no actual_sum from Plisio — skipping, will retry when real data available",
             );
             continue;
           }
-          const ratio = (invoicedAmount > 0) ? (receivedAmount / invoicedAmount) : 1;
-          const creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
+
+          const cryptoCurrency = tx.currency || String(plisioData.currency ?? "ETH");
+          const sourceUsd = extractPlisioSourceUsd(plisioData, parseFloat(String(tx.amount)));
+          const creditCalc = await computePlisioCreditUsd(
+            plisioData,
+            sourceUsd,
+            (c) => getCryptoPrice(c),
+            cryptoCurrency,
+          );
+          const receivedAmount = creditCalc.cryptoReceived;
+          const invoicedAmount = creditCalc.cryptoInvoiced;
+          const creditAmount = creditCalc.creditUsd;
+
+          if (creditAmount <= 0) {
+            req.log.warn({ txId: tx.id, pStatus }, "Reconcile: could not compute credit from sum_actual");
+            continue;
+          }
 
           await db.transaction(async (txn) => {
             const flipped = await txn.update(transactionsTable)
@@ -1884,10 +1882,12 @@ adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
                 status: "completed", 
                 amount: String(creditAmount),
                 metadata: JSON.stringify({
-                  received_amount: String(receivedAmount),
-                  invoice_total_sum: String(invoicedAmount),
-                  source_amount: String(sourceUsd),
-                  ratio,
+                  invoice_amount_crypto: invoicedAmount,
+                  received_amount_crypto: receivedAmount,
+                  received_amount_usd: creditAmount,
+                  requested_amount_usd: sourceUsd,
+                  credit_amount_usd: creditAmount,
+                  credit_calc_method: creditCalc.creditMethod,
                   paid_at: data.data.updated_at || new Date().toISOString(),
                   reconciled_at: new Date().toISOString()
                 })
@@ -1897,9 +1897,12 @@ adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
 
             if (flipped.length === 0) return;
 
-            const cryptoCurrency = tx.currency || "ETH";
             const { creditCryptoBalance: creditCrypto } = await import("../lib/balance-service.js");
-            await creditCrypto(tx.userId, cryptoCurrency, receivedAmount, txn);
+            if (receivedAmount > 0) {
+              await creditCrypto(tx.userId, cryptoCurrency, receivedAmount, txn);
+            } else {
+              await txn.update(usersTable).set({ balance: sql`balance + ${creditAmount}` }).where(eq(usersTable.id, tx.userId));
+            }
 
             const [updatedUser] = await txn.update(usersTable).set({
               totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
@@ -2017,130 +2020,56 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
     req.log.info({ plisioData: data.data }, "Smart Sync: Deep Debug Plisio Data");
 
     const pStatus = String(data.data.status).toLowerCase();
-    
-    // ROBUST AMOUNT EXTRACTION: exhaustive field search across all Plisio API versions/coins.
-    // "Completed Auto" = Plisio auto-completed an underpaid invoice — credit ACTUAL, not invoice.
-    let receivedAmount = parseFloat(String(
-      data.data.received_amount ||
-      data.data.received_sum    ||
-      data.data.paid_amount     ||
-      data.data.amount_received ||
-      data.data.actual_amount   ||
-      data.data.sum_received    ||
-      "0"
-    ));
-    const invoicedAmount = parseFloat(String(
-      data.data.invoice_total_sum ||
-      data.data.total_sum         ||
-      data.data.invoice_amount    ||
-      data.data.sum_expected      ||
-      "0"
-    ));
-    const sourceUsd = parseFloat(String(data.data.source_amount || data.data.source_amount_usd || tx.amount));
-    let receivedUsdValue = parseFloat(String(
-      data.data.received_amount_usd ||
-      data.data.received_sum_usd    ||
-      data.data.amount_usd          ||
-      "0"
-    ));
+    const plisioData = data.data as Record<string, unknown>;
 
-    // ── FULL RAW RESPONSE LOG ────────────────────────────────────────────
     req.log.info({
       event: "plisio_smart_sync_raw",
-      plisioRaw: JSON.stringify(data.data).substring(0, 4000),
+      plisioRaw: JSON.stringify(plisioData).substring(0, 4000),
     }, "Smart Sync: raw Plisio API response");
 
-    // ── EXTRACT FROM txs ARRAY (exhaustive, handles array + object formats) ─
-    // Plisio "Completed Auto" = underpaid but auto-completed. txs has the real amount.
-    if (receivedAmount <= 0) {
-      const rawTxs = data.data.txs ?? data.data.transactions ?? data.data.tx_list;
-      const txsList: any[] = Array.isArray(rawTxs)
-        ? rawTxs
-        : (rawTxs && typeof rawTxs === "object" ? Object.values(rawTxs) : []);
+    const isPaid = ["completed", "mismatch", "overpaid", "finished", "overdue"].includes(pStatus);
 
-      if (txsList.length > 0) {
-        const extracted = txsList.reduce((sum: number, t: any) => {
-          const amt = parseFloat(String(
-            t.amount         ||
-            t.received       ||
-            t.crypto_amount  ||
-            t.source_amount  ||
-            t.value          ||
-            t.sum            ||
-            t.received_amount||
-            t.incoming       ||
-            "0"
-          ));
-          return sum + amt;
-        }, 0);
-        if (extracted > 0) {
-          receivedAmount = extracted;
-          req.log.info({ receivedAmount, txsCount: txsList.length }, "Smart Sync: extracted receivedAmount from txs array");
-        }
-      }
-    }
-
-    // Also try more top-level field name aliases
-    if (receivedAmount <= 0) {
-      receivedAmount = parseFloat(String(
-        data.data.amount_received ||
-        data.data.actual_amount   ||
-        data.data.sum_received    ||
-        "0"
-      ));
-    }
-    
-    // Logic to determine if we should credit
-    const isPaid = ["completed", "mismatch", "overpaid", "finished"].includes(pStatus);
-    
     if (!isPaid) {
-      res.json({ 
-        success: false, 
+      res.json({
+        success: false,
         message: `Plisio reports status: ${pStatus}. Not credited.`,
-        plisioData: data.data 
+        plisioData: data.data,
       });
       return;
     }
 
-    // REAL AMOUNT CALCULATION: Credit the real received amount after fees.
-    let ratioUsed: number;
-    let creditAmount: number;
-    
-    if (receivedUsdValue > 0) {
-      creditAmount = Math.round(receivedUsdValue * 1e8) / 1e8;
-      ratioUsed = sourceUsd > 0 ? (creditAmount / sourceUsd) : 1;
-      req.log.info({ receivedUsdValue, creditAmount, sourceUsd }, "Smart Sync: Crediting based on direct USD received value");
-    } else if (receivedAmount > 0 && invoicedAmount > 0 && sourceUsd > 0) {
-      ratioUsed = receivedAmount / invoicedAmount;
-      creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
-      req.log.info({ receivedAmount, invoicedAmount, sourceUsd, ratio: ratioUsed, creditAmount }, "Smart Sync: crediting with ratio method");
-    } else if (receivedAmount > 0 && sourceUsd > 0) {
-      // Have received crypto but no invoiced total — use live price
-      const { getCryptoPrice } = await import("../lib/price-service.js");
-      const cryptoCurrencyForPrice = tx.currency || data.data.currency || "ETH";
-      const livePrice = await getCryptoPrice(cryptoCurrencyForPrice);
-      creditAmount = Math.round(receivedAmount * livePrice * 1e8) / 1e8;
-      ratioUsed = sourceUsd > 0 ? (creditAmount / sourceUsd) : 1;
-      receivedUsdValue = creditAmount;
-      req.log.info({ receivedAmount, livePrice, creditAmount }, "Smart Sync: crediting with live price lookup");
-    } else if (pStatus === "completed" && sourceUsd > 0 && receivedAmount > 0) {
-      // If we have both status=completed AND a real receivedAmount, use it.
-      creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
-      ratioUsed = 1.0;
-      req.log.info({ pStatus, sourceUsd, creditAmount }, "Smart Sync: status=completed with received amount, crediting invoice amount");
-    } else {
-      req.log.warn(
-        { pStatus, receivedAmount, invoicedAmount, sourceUsd },
-        "Smart Sync: No received_amount data from Plisio — cannot determine credit amount"
-      );
+    if (!canCreditFromPlisioData(plisioData)) {
+      req.log.warn({ pStatus, plisioData }, "Smart Sync: no actual_sum from Plisio — cannot credit");
       res.status(400).json({
-        error: "Plisio has not provided the actual received amount yet. " +
-               "Please wait for the payment to fully confirm on-chain, then retry. " +
-               "(received_amount=0, invoice_total_sum=" + invoicedAmount + ", source_usd=" + sourceUsd + ")"
+        error:
+          "Plisio has not provided sum_actual (on-chain received amount) yet. " +
+          "Cannot credit without verified actual payment — retry after confirmation.",
       });
       return;
     }
-    
+
+    const cryptoCurrency = tx.currency || String(plisioData.currency ?? "ETH");
+    const sourceUsd = extractPlisioSourceUsd(plisioData, parseFloat(String(tx.amount)));
+    const creditCalc = await computePlisioCreditUsd(
+      plisioData,
+      sourceUsd,
+      (c) => getCryptoPrice(c),
+      cryptoCurrency,
+    );
+
+    const receivedAmount = creditCalc.cryptoReceived;
+    const invoicedAmount = creditCalc.cryptoInvoiced;
+    const creditAmount = creditCalc.creditUsd;
+    const ratioUsed = invoicedAmount > 0 && receivedAmount > 0 ? receivedAmount / invoicedAmount : 1;
+
+    req.log.info({
+      receivedAmount,
+      invoicedAmount,
+      sourceUsd,
+      creditAmount,
+      creditMethod: creditCalc.creditMethod,
+    }, "Smart Sync: crediting sum_actual");
+
     if (creditAmount <= 0) {
       res.status(400).json({ error: `Calculated credit is $${creditAmount}. Not crediting.` });
       return;
@@ -2158,14 +2087,16 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
           amount: String(creditAmount),
           plisioTrackId: trackId, // Update if we were searching by txId
           metadata: JSON.stringify({
-            received_amount: String(receivedAmount),
-            invoice_total_sum: String(invoicedAmount),
-            source_amount: String(sourceUsd),
-            ratio: ratioUsed,
+            invoice_amount_crypto: invoicedAmount,
+            received_amount_crypto: receivedAmount,
+            received_amount_usd: creditAmount,
+            requested_amount_usd: sourceUsd,
             credit_amount_usd: creditAmount,
+            credit_calc_method: creditCalc.creditMethod,
+            ratio: ratioUsed,
             paid_at: data.data.updated_at || new Date().toISOString(),
-            smart_synced_at: new Date().toISOString()
-          })
+            smart_synced_at: new Date().toISOString(),
+          }),
         })
         .where(and(eq(transactionsTable.id, tx.id), ne(transactionsTable.status, "completed")))
         .returning({ id: transactionsTable.id });
@@ -2651,21 +2582,83 @@ adminRouter.post("/transactions/:id/complete-deposit", requireBankSession, async
       res.status(400).json({ error: `Cannot complete a deposit with status "${tx.status}"` });
       return;
     }
-    const creditAmount = parseFloat(tx.amount);
+
+    const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY ?? "";
+    if (!tx.plisioTrackId || !PLISIO_KEY) {
+      res.status(400).json({
+        error: "Cannot complete without Plisio verification. Use Smart Sync or ensure plisioTrackId is set.",
+      });
+      return;
+    }
+
+    const verifyResp = await fetch(
+      `https://api.plisio.net/api/v1/operations/${tx.plisioTrackId}?api_key=${PLISIO_KEY}`,
+      { signal: AbortSignal.timeout(12_000) },
+    );
+    const verifyData = await verifyResp.json() as { status?: string; data?: Record<string, unknown> };
+    if (verifyData.status !== "success" || !verifyData.data) {
+      res.status(400).json({ error: "Could not verify deposit with Plisio. Use Smart Sync instead." });
+      return;
+    }
+
+    const plisioData = verifyData.data;
+    const pStatus = String(plisioData.status ?? "").toLowerCase();
+    if (!["completed", "mismatch", "overpaid", "finished", "overdue"].includes(pStatus)) {
+      res.status(400).json({ error: `Plisio status is "${pStatus}" — not paid yet.` });
+      return;
+    }
+    if (!canCreditFromPlisioData(plisioData)) {
+      res.status(400).json({ error: "Plisio has no sum_actual yet — cannot credit invoice amount." });
+      return;
+    }
+
+    const cryptoCurrency = tx.currency || String(plisioData.currency ?? "ETH");
+    const sourceUsd = extractPlisioSourceUsd(plisioData, parseFloat(String(tx.amount)));
+    const creditCalc = await computePlisioCreditUsd(
+      plisioData,
+      sourceUsd,
+      (c) => getCryptoPrice(c),
+      cryptoCurrency,
+    );
+    const creditAmount = creditCalc.creditUsd;
+    const receivedCrypto = creditCalc.cryptoReceived;
+
+    if (creditAmount <= 0) {
+      res.status(400).json({ error: "Could not compute credit from Plisio sum_actual." });
+      return;
+    }
+
     const WAGER_MULT = 1.0;
     await db.transaction(async (txn) => {
-      // Guarded flip — idempotent against concurrent calls
       const flipped = await txn
         .update(transactionsTable)
-        .set({ status: "completed" })
+        .set({
+          status: "completed",
+          amount: String(creditAmount),
+          metadata: JSON.stringify({
+            invoice_amount_crypto: creditCalc.cryptoInvoiced,
+            received_amount_crypto: receivedCrypto,
+            received_amount_usd: creditAmount,
+            requested_amount_usd: sourceUsd,
+            credit_amount_usd: creditAmount,
+            credit_calc_method: creditCalc.creditMethod,
+            manual_complete_at: new Date().toISOString(),
+          }),
+        })
         .where(and(eq(transactionsTable.id, tx.id), eq(transactionsTable.status, "pending")))
         .returning({ id: transactionsTable.id });
-      if (flipped.length === 0) return; // already completed by a concurrent call
+      if (flipped.length === 0) return;
+
+      if (receivedCrypto > 0) {
+        const { creditCryptoBalance } = await import("../lib/balance-service.js");
+        await creditCryptoBalance(tx.userId, cryptoCurrency, receivedCrypto, txn);
+      } else {
+        await txn.update(usersTable).set({ balance: sql`balance + ${creditAmount}` }).where(eq(usersTable.id, tx.userId));
+      }
+
       const [userAfter] = await txn.update(usersTable).set({
-        // Manual owner credit goes to static USD balance (bonus/correction)
-        balance: sql`balance + ${creditAmount}`,
         totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
-        wagerRequirement: sql`coalesce(wager_requirement, 0) + ${creditAmount}`,
+        wagerRequirement: sql`coalesce(wager_requirement, 0) + ${creditAmount * WAGER_MULT}`,
       }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
       if (userAfter) {
         await recordLedger(txn, {
@@ -2715,7 +2708,7 @@ adminRouter.post("/transactions/sync-plisio", requireBankSession, async (req, re
     return;
   }
   const WAGER_MULT = 1.0;
-  const creditStatuses = new Set(["completed", "mismatch"]);
+  const creditStatuses = new Set(["completed", "mismatch", "overpaid", "finished", "overdue"]);
 
   try {
     const pending = await db
@@ -2746,7 +2739,8 @@ adminRouter.post("/transactions/sync-plisio", requireBankSession, async (req, re
             invoice_total_sum?: string | number;
           };
         };
-        const plisioStatus = data.data?.status ?? null;
+        const plisioData = (data.data ?? {}) as Record<string, unknown>;
+        const plisioStatus = String(plisioData.status ?? "").toLowerCase() || null;
 
         if (!plisioStatus) {
           results.push({ id: tx.id, userId: tx.userId, plisioTrackId: tx.plisioTrackId, plisioStatus: null, action: "no_status_from_plisio" });
@@ -2757,40 +2751,57 @@ adminRouter.post("/transactions/sync-plisio", requireBankSession, async (req, re
           continue;
         }
 
-        // Plisio confirms this deposit was paid — compute credit amount
-        const requestedUsd   = parseFloat(tx.amount);
-        const sourceUsd      = data.data?.source_amount     != null ? parseFloat(String(data.data.source_amount))     : null;
-        const receivedCrypto = data.data?.received_amount   != null ? parseFloat(String(data.data.received_amount))   : null;
-        const invoicedCrypto = data.data?.invoice_total_sum != null ? parseFloat(String(data.data.invoice_total_sum)) : null;
-
-        let creditAmount: number;
-        if (receivedCrypto != null && invoicedCrypto != null && invoicedCrypto > 0 && sourceUsd != null) {
-          const ratio = Math.min(receivedCrypto / invoicedCrypto, 1.0);
-          creditAmount = Math.min(Math.round(sourceUsd * ratio * 1e8) / 1e8, requestedUsd);
-        } else if (sourceUsd != null) {
-          creditAmount = Math.min(sourceUsd, requestedUsd);
-        } else {
-          creditAmount = requestedUsd;
-        }
-
-        if (creditAmount < 0.01) {
-          results.push({ id: tx.id, userId: tx.userId, plisioTrackId: tx.plisioTrackId, plisioStatus, action: "credit_too_small", creditAmount });
+        if (!canCreditFromPlisioData(plisioData)) {
+          results.push({ id: tx.id, userId: tx.userId, plisioTrackId: tx.plisioTrackId, plisioStatus, action: "no_sum_actual" });
           continue;
         }
 
-        const finalCredit = creditAmount;
+        const cryptoCurrency = tx.currency || String(plisioData.currency ?? "ETH");
+        const sourceUsd = extractPlisioSourceUsd(plisioData, parseFloat(String(tx.amount)));
+        const creditCalc = await computePlisioCreditUsd(
+          plisioData,
+          sourceUsd,
+          (c) => getCryptoPrice(c),
+          cryptoCurrency,
+        );
+        const finalCredit = creditCalc.creditUsd;
+        const receivedCrypto = creditCalc.cryptoReceived;
+
+        if (finalCredit < 0.01) {
+          results.push({ id: tx.id, userId: tx.userId, plisioTrackId: tx.plisioTrackId, plisioStatus, action: "credit_too_small", creditAmount: finalCredit });
+          continue;
+        }
+
         await db.transaction(async (txn) => {
           const flipped = await txn
             .update(transactionsTable)
-            .set({ status: "completed", amount: String(finalCredit) })
+            .set({
+              status: "completed",
+              amount: String(finalCredit),
+              metadata: JSON.stringify({
+                invoice_amount_crypto: creditCalc.cryptoInvoiced,
+                received_amount_crypto: receivedCrypto,
+                received_amount_usd: finalCredit,
+                requested_amount_usd: sourceUsd,
+                credit_amount_usd: finalCredit,
+                credit_calc_method: creditCalc.creditMethod,
+                synced_at: new Date().toISOString(),
+              }),
+            })
             .where(and(eq(transactionsTable.id, tx.id), eq(transactionsTable.status, "pending")))
             .returning({ id: transactionsTable.id });
-          if (flipped.length === 0) return; // already credited by concurrent call
+          if (flipped.length === 0) return;
+
+          if (receivedCrypto > 0) {
+            const { creditCryptoBalance } = await import("../lib/balance-service.js");
+            await creditCryptoBalance(tx.userId, cryptoCurrency, receivedCrypto, txn);
+          } else {
+            await txn.update(usersTable).set({ balance: sql`balance + ${finalCredit}` }).where(eq(usersTable.id, tx.userId));
+          }
 
           const [userAfter] = await txn.update(usersTable).set({
-            balance: sql`balance + ${finalCredit}`,
             totalDeposited: sql`coalesce(total_deposited, 0) + ${finalCredit}`,
-            wagerRequirement: sql`(coalesce(total_deposited, 0) + ${finalCredit}) * ${WAGER_MULT}`,
+            wagerRequirement: sql`coalesce(wager_requirement, 0) + ${finalCredit * WAGER_MULT}`,
           }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
 
           if (userAfter) {

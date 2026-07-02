@@ -379,10 +379,10 @@ transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type:
         const verifyData = await verifyResp.json() as any;
         if (verifyData?.status === "success" && verifyData?.data) {
           const d = verifyData.data;
-          // actual_sum = real incoming crypto amount that landed on the blockchain (authoritative per Plisio docs)
-          const aa = parseFloat(String(d.actual_sum ?? d.actual_amount ?? d.received_amount ?? d.sum_received ?? "0"));
+          // actual_sum = real incoming crypto on-chain (authoritative). Never use received_amount here.
+          const aa = parseFloat(String(d.actual_sum ?? d.sum_actual ?? "0"));
           if (aa > 0) plisioVerifiedActualAmount = aa;
-          const aau = parseFloat(String(d.actual_sum_usd ?? d.actual_amount_usd ?? d.received_amount_usd ?? d.sum_received_usd ?? "0"));
+          const aau = parseFloat(String(d.actual_sum_usd ?? d.sum_actual_usd ?? "0"));
           if (aau > 0) plisioVerifiedActualAmountUsd = aau;
           plisioVerifiedStatus = String(d.status ?? "").toLowerCase();
           req.log.info({
@@ -451,12 +451,12 @@ transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type:
     }
     if (plisioVerifiedActualAmountUsd > 0) {
       mergedPlisio.sum_actual_usd = plisioVerifiedActualAmountUsd;
-      mergedPlisio.received_amount_usd = plisioVerifiedActualAmountUsd;
+      mergedPlisio.actual_sum_usd = plisioVerifiedActualAmountUsd;
     }
 
     const cryptoAmountReceived = extractPlisioReceivedCrypto(mergedPlisio);
     const cryptoAmountInvoiced = extractPlisioInvoicedCrypto(mergedPlisio);
-    const receivedUsdValue = extractPlisioReceivedUsd(mergedPlisio);
+    const receivedUsdFromPlisio = extractPlisioReceivedUsd(mergedPlisio);
     const sourceUsd = extractPlisioSourceUsd(mergedPlisio, parseFloat(String(tx.amount)));
 
     req.log.info({
@@ -468,7 +468,7 @@ transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type:
       currency: cryptoCurrency,
       invoice_amount_crypto: cryptoAmountInvoiced,
       received_amount_crypto: cryptoAmountReceived,
-      received_amount_usd: receivedUsdValue,
+      received_amount_usd: receivedUsdFromPlisio,
       requested_amount_usd: sourceUsd,
       wallet_address: tx.address ?? null,
     }, "Plisio IPN: crediting decision start");
@@ -485,7 +485,7 @@ transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type:
     let exchangeRate = creditCalc.exchangeRate;
     let creditCalcMethod = creditCalc.creditMethod;
 
-    if (creditAmountUsd <= 0 && effectiveCryptoReceived <= 0 && receivedUsdValue <= 0) {
+    if (creditAmountUsd <= 0 && effectiveCryptoReceived <= 0 && receivedUsdFromPlisio <= 0) {
       req.log.warn({
         event: "plisio_ipn_no_received_amount",
         txn_id, tx_db_id: tx.id, user_id: tx.userId, ipn_status: pStatus,
@@ -532,7 +532,7 @@ transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type:
           metadata: JSON.stringify({
             invoice_amount_crypto: cryptoAmountInvoiced,
             received_amount_crypto: effectiveCryptoReceived,
-            received_amount_usd: receivedUsdValue,
+            received_amount_usd: creditAmountUsd,
             requested_amount_usd: sourceUsd,
             credit_amount_usd: creditAmountUsd,
             exchange_rate: exchangeRate,

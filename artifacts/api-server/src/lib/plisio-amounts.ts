@@ -1,6 +1,9 @@
 /**
  * Extract the real received crypto/USD from Plisio IPN bodies or operations API
  * responses. Never prefer invoice / source amounts when sum_actual is present.
+ *
+ * Security: underpaid "Completed Auto" invoices must credit actual_sum only —
+ * never invoice_total_sum, amount, or received_amount_usd (those can reflect expected).
  */
 
 function parseNum(v: unknown): number {
@@ -22,55 +25,33 @@ function sumFromTxs(data: Record<string, unknown>): number {
   return list.reduce<number>((sum, t) => {
     if (!t || typeof t !== "object") return sum;
     const row = t as Record<string, unknown>;
-    return sum + parseNum(
-      row.amount ??
-        row.received ??
-        row.crypto_amount ??
-        row.source_amount ??
-        row.value ??
-        row.sum ??
-        row.received_amount ??
-        row.incoming,
+    return (
+      sum +
+      parseNum(
+        row.amount ?? row.received ?? row.crypto_amount ?? row.value ?? row.sum ?? row.incoming,
+      )
     );
   }, 0);
 }
 
-/** Crypto amount that actually landed (sum actual), not the invoice total. */
+/** Crypto amount that actually landed on-chain (sum actual), not the invoice total. */
 export function extractPlisioReceivedCrypto(data: Record<string, unknown>): number {
   const fromTxs = sumFromTxs(data);
   if (fromTxs > 0) return fromTxs;
 
-  return parseNum(
-    data.sum_actual ??
-      data.actual_sum ??
-      data.actual_commission_sum ??
-      data.received_amount ??
-      data.received_sum ??
-      data.sum_received ??
-      data.paid_amount ??
-      data.amount_received ??
-      data.actual_amount,
-  );
+  // Authoritative Plisio fields only — do NOT fall back to received_amount or amount.
+  return parseNum(data.sum_actual ?? data.actual_sum);
 }
 
 export function extractPlisioInvoicedCrypto(data: Record<string, unknown>): number {
   return parseNum(
-    data.invoice_total_sum ??
-      data.total_sum ??
-      data.invoice_amount ??
-      data.sum_expected ??
-      data.amount,
+    data.invoice_total_sum ?? data.total_sum ?? data.invoice_amount ?? data.sum_expected,
   );
 }
 
+/** USD value of sum actual — only trust Plisio's actual_sum_usd fields. */
 export function extractPlisioReceivedUsd(data: Record<string, unknown>): number {
-  return parseNum(
-    data.sum_actual_usd ??
-      data.actual_sum_usd ??
-      data.received_amount_usd ??
-      data.received_sum_usd ??
-      data.amount_usd,
-  );
+  return parseNum(data.sum_actual_usd ?? data.actual_sum_usd);
 }
 
 export function extractPlisioSourceUsd(data: Record<string, unknown>, fallback = 0): number {
@@ -85,6 +66,24 @@ export interface PlisioCreditAmounts {
   creditUsd: number;
   creditMethod: string;
   exchangeRate: number | null;
+}
+
+const UNDERPAY_EPSILON = 0.001;
+
+function isUnderpayment(cryptoReceived: number, cryptoInvoiced: number): boolean {
+  return cryptoInvoiced > 0 && cryptoReceived > 0 && cryptoReceived < cryptoInvoiced * (1 - UNDERPAY_EPSILON);
+}
+
+function capCreditToUnderpaymentRatio(
+  creditUsd: number,
+  cryptoReceived: number,
+  cryptoInvoiced: number,
+  sourceUsd: number,
+): number {
+  if (sourceUsd <= 0 || cryptoInvoiced <= 0 || cryptoReceived <= 0) return creditUsd;
+  if (!isUnderpayment(cryptoReceived, cryptoInvoiced)) return creditUsd;
+  const maxCredit = Math.round(sourceUsd * (cryptoReceived / cryptoInvoiced) * 1e8) / 1e8;
+  return creditUsd > maxCredit ? maxCredit : creditUsd;
 }
 
 /**
@@ -103,7 +102,13 @@ export function computePlisioCreditUsd(
     const cryptoReceived = base.cryptoReceived;
     if (cryptoReceived > 0 && livePriceLookup) {
       const price = await livePriceLookup(currency);
-      const creditUsd = Math.round(cryptoReceived * price * 1e8) / 1e8;
+      let creditUsd = Math.round(cryptoReceived * price * 1e8) / 1e8;
+      creditUsd = capCreditToUnderpaymentRatio(
+        creditUsd,
+        cryptoReceived,
+        base.cryptoInvoiced,
+        base.sourceUsd,
+      );
       return {
         ...base,
         creditUsd,
@@ -129,21 +134,41 @@ function computePlisioCreditUsdSync(
   let creditMethod = "none";
   let exchangeRate: number | null = null;
 
-  if (receivedUsd > 0) {
-    creditUsd = Math.round(receivedUsd * 1e8) / 1e8;
-    creditMethod = "plisio_usd_direct";
-    if (cryptoReceived > 0) {
-      exchangeRate = Math.round((receivedUsd / cryptoReceived) * 1e8) / 1e8;
-    }
-  } else if (cryptoReceived > 0 && cryptoInvoiced > 0 && sourceUsd > 0) {
+  // Underpayment: ratio from actual_sum / invoice_total_sum is authoritative.
+  // received_amount_usd often reflects sum expected, not sum actual.
+  if (cryptoReceived > 0 && cryptoInvoiced > 0 && sourceUsd > 0) {
     const ratio = cryptoReceived / cryptoInvoiced;
     creditUsd = Math.round(sourceUsd * ratio * 1e8) / 1e8;
     creditMethod = "ratio_sum_actual_over_expected";
     exchangeRate =
       cryptoReceived > 0 ? Math.round((creditUsd / cryptoReceived) * 1e8) / 1e8 : null;
+
+    if (!isUnderpayment(cryptoReceived, cryptoInvoiced) && receivedUsd > 0) {
+      // Full pay or overpay — prefer Plisio's actual_sum_usd when available.
+      creditUsd = Math.round(receivedUsd * 1e8) / 1e8;
+      creditMethod = "plisio_usd_direct";
+      exchangeRate = Math.round((creditUsd / cryptoReceived) * 1e8) / 1e8;
+    }
+  } else if (receivedUsd > 0) {
+    creditUsd = Math.round(receivedUsd * 1e8) / 1e8;
+    creditMethod = "plisio_usd_direct";
+    if (cryptoReceived > 0) {
+      exchangeRate = Math.round((receivedUsd / cryptoReceived) * 1e8) / 1e8;
+    }
   } else if (cryptoReceived > 0 && sourceUsd > 0 && cryptoInvoiced <= 0) {
-    // No invoice total — defer to live price in async wrapper
     creditMethod = "live_price_lookup_pending";
+  }
+
+  creditUsd = capCreditToUnderpaymentRatio(creditUsd, cryptoReceived, cryptoInvoiced, sourceUsd);
+
+  // Never credit more than requested invoice USD unless clearly overpaid on-chain.
+  if (
+    sourceUsd > 0 &&
+    creditUsd > sourceUsd * 1.05 &&
+    !(cryptoInvoiced > 0 && cryptoReceived > cryptoInvoiced * 1.001)
+  ) {
+    creditUsd = Math.round(sourceUsd * 1e8) / 1e8;
+    creditMethod += "_capped_to_invoice";
   }
 
   void currency;
@@ -156,4 +181,9 @@ function computePlisioCreditUsdSync(
     creditMethod,
     exchangeRate,
   });
+}
+
+/** Whether Plisio data contains enough sum_actual to safely credit a deposit. */
+export function canCreditFromPlisioData(data: Record<string, unknown>): boolean {
+  return extractPlisioReceivedCrypto(data) > 0 || extractPlisioReceivedUsd(data) > 0;
 }
