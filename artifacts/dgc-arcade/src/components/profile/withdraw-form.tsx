@@ -13,6 +13,8 @@ import { CoinIcon, CURRENCIES } from "@/components/wallet/coin-icon";
 import { formatCurrency } from "@/lib/format";
 import { RefreshCw, ShieldAlert, CheckCircle2, Mail } from "lucide-react";
 import { WithdrawalTracker } from "@/components/profile/withdrawal-tracker";
+import { useWagerRequirement } from "@/hooks/use-wager-requirement";
+import { WithdrawPolicyNotice } from "@/components/wallet/withdraw-policy-notice";
 
 const withdrawSchema = z.object({
   amount: z.coerce.number().min(1, "Minimum withdrawal is $1"),
@@ -35,14 +37,15 @@ export function WithdrawForm() {
   const { user } = useAuth();
   const isCreator = user?.withdrawalsEnabled === false;
 
-  // Wagering requirement calculation
-  const totalWagered = parseFloat(String((user as any)?.totalWageredAmount ?? 0));
-  const signupBonus = parseFloat(String((user as any)?.signupBonus ?? 100));
-  const wagerRequirement = signupBonus * 1.0; // 100% of signup bonus
-  const wagerRemaining = Math.max(0, wagerRequirement - totalWagered);
-  const wagerProgress = totalWagered / wagerRequirement;
-  const wagerPercentage = Math.min(100, Math.round(wagerProgress * 100));
-  const isWagerMet = wagerRemaining <= 0;
+  // Wagering requirement (deposits + signup bonus — matches backend)
+  const {
+    isWagerMet,
+    wagerPercentage,
+    wagerRemaining,
+    formattedRemaining,
+    formattedRequirement,
+    depositWagerReq,
+  } = useWagerRequirement();
 
   // Live coin balance data from backend
   const [coinData, setCoinData] = useState<CoinBalanceData>({
@@ -128,7 +131,7 @@ export function WithdrawForm() {
 
   const availableCurrencies = hasCryptoBalances
     ? CURRENCIES.filter(c => (coinData.balances[c.value] ?? 0) > 0)
-    : liveTotal > 0 ? CURRENCIES : [];
+    : [];
 
   const firstAvailable = availableCurrencies[0]?.value ?? "";
 
@@ -233,6 +236,7 @@ export function WithdrawForm() {
           onComplete={() => setActiveWithdrawal(null)}
         />
       )}
+      <WithdrawPolicyNotice />
       {/* Wagering Requirement Status Card */}
       <div className={`rounded-xl border p-5 space-y-4 transition-all ${isWagerMet ? "border-green-500/30 bg-green-500/5" : "border-amber-500/30 bg-amber-500/5"}`}>
         <div className="flex items-start justify-between">
@@ -268,9 +272,12 @@ export function WithdrawForm() {
         <div className="flex items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground leading-relaxed max-w-[240px]">
             {isWagerMet ? (
-              <span className="text-green-400/90">✓ You've met the 100% wagering requirement! Withdrawals are now unlocked.</span>
+              <span className="text-green-400/90">✓ You've met the 100% playthrough requirement. Withdrawals unlocked.</span>
             ) : (
-              <span>You must wager 100% of your sign-up bonus before withdrawing. Play any game to unlock!</span>
+              <span>
+                Wager <strong className="text-foreground">{formattedRemaining}</strong> more (
+                {depositWagerReq > 0 ? "includes 100% of your deposits" : "sign-up bonus playthrough"}). Play any game to progress.
+              </span>
             )}
           </p>
           {!isWagerMet && (

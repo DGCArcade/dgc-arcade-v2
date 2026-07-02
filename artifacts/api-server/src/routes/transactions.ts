@@ -22,6 +22,14 @@ import {
 import { sendWithdrawalOtpEmail } from "../lib/mail-service.js";
 import { getCryptoPrice } from "../lib/price-service.js";
 import { getUserBalance, deductBalance, creditBalance, creditCryptoBalance } from "../lib/balance-service.js";
+import {
+  extractPlisioReceivedCrypto,
+  extractPlisioInvoicedCrypto,
+  extractPlisioReceivedUsd,
+  extractPlisioSourceUsd,
+  computePlisioCreditUsd,
+} from "../lib/plisio-amounts.js";
+import { sendDepositEmail } from "../lib/mail-service.js";
 import { logFinancialActivity } from "../services/activity-log.js";
 import { getRequestContext } from "../lib/request-context.js";
 import { checkDepositLimit } from "../services/gambling-limits.js";
@@ -151,8 +159,8 @@ transactionsRouter.post("/deposit/initiate", requireAuth, requireLocationVerifie
       order_name: "DGC Arcade Deposit",
       source_currency: "USD",
       callback_url: `${apiUrl}/api/transactions/deposit/callback`,
-      success_url: `${siteUrl}/profile`,
-      fail_url: `${siteUrl}/profile`,
+      success_url: `${siteUrl}/deposit/success?order=${orderId}`,
+      fail_url: `${siteUrl}/deposit/failed?order=${orderId}`,
     });
     const response = await fetch(`${PLISIO_API}/invoices/new?${params.toString()}`);
     const data = await response.json() as {
@@ -434,96 +442,23 @@ transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type:
       ipnBody: JSON.stringify(callbackBody).substring(0, 4000),
     }, "Plisio IPN: full body for crediting decision");
 
-    // ── ACTUAL RECEIVED AMOUNT (exhaustive field search) ───────────────────
-    // "Completed Auto" = Plisio auto-completed an underpaid invoice.
-    // We MUST credit the actual received amount, never the invoiced amount.
+    // ── SUM ACTUAL (never invoice amount when sum_actual is present) ─────────
     const cryptoCurrency = tx.currency || pCurrency || "ETH";
-    const bodyRaw = callbackBody;
-
-    // STEP 1 & 2: actual_sum — priority chain:
-    //   1. Plisio API server-to-server verified actual_sum (most authoritative — real on-chain amount)
-    //   2. actual_sum / actual_commission_sum from IPN body (mismatch/overdue — real received amount)
-    //   3. amount from IPN body only when status=completed (Plisio confirms full invoice paid)
-    //   4. other field name aliases as last resort
-    let cryptoAmountReceived: number;
+    const mergedPlisio: Record<string, unknown> = { ...callbackBody };
     if (plisioVerifiedActualAmount > 0) {
-      // Server-verified: always use actual_sum from the operations API
-      cryptoAmountReceived = plisioVerifiedActualAmount;
-    } else {
-      // IPN body fallback — field choice depends on status per Plisio docs:
-      //   completed  → `amount` (full invoice amount confirmed paid)
-      //   mismatch / overdue → `actual_sum` (partial/late real received amount)
-      //   everything else → try actual_sum first, then amount
-      const ipnActualSum = parseFloat(String(bodyRaw.actual_sum || bodyRaw.actual_commission_sum || "0"));
-      const ipnAmount    = parseFloat(String(bodyRaw.amount || received_amount || "0"));
-
-      if (pStatus === "completed") {
-        // Full payment confirmed — use `amount` (invoice total = received total)
-        cryptoAmountReceived = ipnAmount > 0 ? ipnAmount : ipnActualSum;
-      } else if (pStatus === "mismatch" || pStatus === "overdue") {
-        // Partial or late payment — `actual_sum` is the real incoming crypto
-        cryptoAmountReceived = ipnActualSum > 0 ? ipnActualSum : ipnAmount;
-      } else {
-        // overpaid / finished — prefer actual_sum, fall back to amount
-        cryptoAmountReceived = ipnActualSum > 0
-          ? ipnActualSum
-          : parseFloat(String(
-              received_amount         ||
-              bodyRaw.received_sum    ||
-              bodyRaw.paid_amount     ||
-              bodyRaw.tx_amount       ||
-              bodyRaw.amount_received ||
-              bodyRaw.sum_received    ||
-              bodyRaw.amount          ||
-              "0"
-            ));
-      }
+      mergedPlisio.sum_actual = plisioVerifiedActualAmount;
+      mergedPlisio.actual_sum = plisioVerifiedActualAmount;
     }
-    const cryptoAmountInvoiced = parseFloat(String(invoice_total_sum || bodyRaw.total_sum || bodyRaw.sum_expected || "0"));
-    // Use Plisio API verified USD value as top priority
-    let receivedUsdValue = plisioVerifiedActualAmountUsd > 0
-      ? plisioVerifiedActualAmountUsd
-      : parseFloat(String(received_amount_usd || bodyRaw.received_sum_usd || bodyRaw.amount_usd || "0"));
-    const sourceUsd = parseFloat(String(source_amount_usd || source_amount || tx.amount));
-
-    // ── EXTRACT FROM txs ARRAY IN IPN BODY ────────────────────────────────
-    // Plisio IPN sometimes includes txs array with on-chain tx data.
-    // This is the most reliable source for actual received crypto.
-    if (cryptoAmountReceived <= 0) {
-      const rawTxs = bodyRaw.txs ?? bodyRaw.transactions ?? bodyRaw.tx_list;
-      const txsList: any[] = Array.isArray(rawTxs)
-        ? rawTxs
-        : (rawTxs && typeof rawTxs === "object" ? Object.values(rawTxs as object) : []);
-
-      if (txsList.length > 0) {
-        const extracted = txsList.reduce((sum: number, t: any) => {
-          const amt = parseFloat(String(
-            t.amount          ||
-            t.received        ||
-            t.crypto_amount   ||
-            t.source_amount   ||
-            t.value           ||
-            t.sum             ||
-            t.received_amount ||
-            t.incoming        ||
-            "0"
-          ));
-          return sum + amt;
-        }, 0);
-        if (extracted > 0) {
-          cryptoAmountReceived = extracted;
-          req.log.info(
-            { txn_id, cryptoAmountReceived, txsCount: txsList.length },
-            "Plisio IPN: extracted received amount from txs array"
-          );
-        }
-      }
+    if (plisioVerifiedActualAmountUsd > 0) {
+      mergedPlisio.sum_actual_usd = plisioVerifiedActualAmountUsd;
+      mergedPlisio.received_amount_usd = plisioVerifiedActualAmountUsd;
     }
 
-    const altReceivedCrypto = 0; // already folded into cryptoAmountReceived above
+    const cryptoAmountReceived = extractPlisioReceivedCrypto(mergedPlisio);
+    const cryptoAmountInvoiced = extractPlisioInvoicedCrypto(mergedPlisio);
+    const receivedUsdValue = extractPlisioReceivedUsd(mergedPlisio);
+    const sourceUsd = extractPlisioSourceUsd(mergedPlisio, parseFloat(String(tx.amount)));
 
-    // ── STRUCTURED ENTRY LOG ──────────────────────────────────────────────
-    // Full audit trail before any crediting decision is made.
     req.log.info({
       event: "plisio_ipn_received",
       txn_id,
@@ -538,74 +473,39 @@ transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type:
       wallet_address: tx.address ?? null,
     }, "Plisio IPN: crediting decision start");
 
-    // ── STRICT GUARD: require real received data from Plisio ────────────────
-    // If neither received_amount nor received_amount_usd is present we cannot
-    // determine how much actually arrived. Return 200 so Plisio doesn't retry.
-    // Exception: for "completed" status Plisio confirms the full invoice was paid —
-    // credit sourceUsd directly since the polling API doesn't always echo received_amount.
-    const effectiveCryptoReceived = cryptoAmountReceived > 0 ? cryptoAmountReceived : altReceivedCrypto;
-    if (effectiveCryptoReceived <= 0 && receivedUsdValue <= 0) {
-      if (pStatus === "completed" && sourceUsd > 0) {
-        // background-tasks will also attempt this, but let IPN credit it if present
-        req.log.info({
-          event: "plisio_ipn_completed_no_received",
-          txn_id, tx_db_id: tx.id, user_id: tx.userId, sourceUsd,
-        }, "Plisio IPN: status=completed, received_amount=0 — will credit invoice amount");
-        // fall through with effectiveCryptoReceived=0 and we'll use sourceUsd directly below
-      } else {
-        req.log.warn({
-          event: "plisio_ipn_no_received_amount",
-          txn_id, tx_db_id: tx.id, user_id: tx.userId, ipn_status: pStatus,
-          received_amount, received_amount_usd,
-        }, "Plisio IPN: no received_amount data — skipping credit, sync will handle it");
-        res.json({ success: true });
-        return;
-      }
+    const creditCalc = await computePlisioCreditUsd(
+      mergedPlisio,
+      sourceUsd,
+      (c) => getCryptoPrice(c),
+      cryptoCurrency,
+    );
+
+    const effectiveCryptoReceived = creditCalc.cryptoReceived;
+    let creditAmountUsd = creditCalc.creditUsd;
+    let exchangeRate = creditCalc.exchangeRate;
+    let creditCalcMethod = creditCalc.creditMethod;
+
+    if (creditAmountUsd <= 0 && effectiveCryptoReceived <= 0 && receivedUsdValue <= 0) {
+      req.log.warn({
+        event: "plisio_ipn_no_received_amount",
+        txn_id, tx_db_id: tx.id, user_id: tx.userId, ipn_status: pStatus,
+      }, "Plisio IPN: no sum_actual data — skipping credit (sync will retry)");
+      res.json({ success: true });
+      return;
     }
 
-    // ── CALCULATE USD CREDIT AMOUNT ─────────────────────────────────────────
-    // Priority 1: Plisio gives us received_amount_usd directly.
-    // Priority 2: We have both received and invoiced crypto amounts → use ratio.
-    // Priority 3: We have received crypto but no invoiced amount → price-lookup.
-    //             NEVER fall back to sourceUsd (invoice amount) — that would credit
-    //             the full invoice value even when only a fraction was paid.
-    let creditAmountUsd: number;
-    let exchangeRate: number | null = null;
-    let creditCalcMethod: string;
-
-    if (receivedUsdValue > 0) {
-      creditAmountUsd = Math.round(receivedUsdValue * 1e8) / 1e8;
-      creditCalcMethod = "plisio_usd_direct";
-      if (effectiveCryptoReceived > 0) {
-        exchangeRate = Math.round((receivedUsdValue / effectiveCryptoReceived) * 1e8) / 1e8;
-      }
-    } else if (effectiveCryptoReceived > 0 && cryptoAmountInvoiced > 0 && sourceUsd > 0) {
-      const ratio = effectiveCryptoReceived / cryptoAmountInvoiced;
-      creditAmountUsd = Math.round(sourceUsd * ratio * 1e8) / 1e8;
-      creditCalcMethod = "ratio_received_over_invoiced";
-      exchangeRate = effectiveCryptoReceived > 0 ? Math.round((creditAmountUsd / effectiveCryptoReceived) * 1e8) / 1e8 : null;
-    } else if (effectiveCryptoReceived > 0) {
-      // Have received crypto but no invoiced total — look up live price.
+    if (creditAmountUsd <= 0 && effectiveCryptoReceived > 0) {
       const livePrice = await getCryptoPrice(cryptoCurrency);
       creditAmountUsd = Math.round(effectiveCryptoReceived * livePrice * 1e8) / 1e8;
       exchangeRate = livePrice;
       creditCalcMethod = "live_price_lookup";
+    }
 
-      req.log.warn({
-        event: "plisio_ipn_no_invoice_total",
-        txn_id, tx_db_id: tx.id, user_id: tx.userId,
-        cryptoCurrency, effectiveCryptoReceived, livePrice, creditAmountUsd,
-        requested_amount_usd: sourceUsd,
-      }, "Plisio IPN: invoice_total_sum missing — used live price lookup (NOT invoice amount)");
-    } else {
-      // Plisio marks "completed" when they decide the invoice is fulfilled.
-      // However, "Completed Auto" (partial payment within tolerance) also results in status=completed.
-      // If we have NO received_amount data from any source (IPN, API, or txs array),
-      // we must NOT credit the full invoice amount as it might be a partial payment.
+    if (creditAmountUsd <= 0) {
       req.log.warn({
         event: "plisio_ipn_completed_no_received_data",
         txn_id, tx_db_id: tx.id, user_id: tx.userId, sourceUsd,
-      }, "Plisio IPN: status=completed but NO received_amount data found — skipping credit to prevent over-crediting partial payments.");
+      }, "Plisio IPN: could not compute credit from sum_actual — skipping");
       res.json({ success: true });
       return;
     }
@@ -631,7 +531,7 @@ transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type:
           amount: String(creditAmountUsd),
           metadata: JSON.stringify({
             invoice_amount_crypto: cryptoAmountInvoiced,
-            received_amount_crypto: cryptoAmountReceived,
+            received_amount_crypto: effectiveCryptoReceived,
             received_amount_usd: receivedUsdValue,
             requested_amount_usd: sourceUsd,
             credit_amount_usd: creditAmountUsd,
@@ -709,7 +609,7 @@ transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type:
     });
 
     const [depositorUser] = await db
-      .select({ username: usersTable.username })
+      .select({ username: usersTable.username, email: usersTable.email })
       .from(usersTable)
       .where(eq(usersTable.id, tx.userId))
       .limit(1);
@@ -724,11 +624,30 @@ transactionsRouter.post("/deposit/callback", urlencoded({ extended: false, type:
       metadata: { txn_id, plisioStatus: pStatus, creditCalcMethod },
     });
 
+    if (depositorUser?.email) {
+      const creditedLabel = effectiveCryptoReceived > 0
+        ? `${effectiveCryptoReceived} ${cryptoCurrency} (~$${creditAmountUsd.toFixed(2)})`
+        : `$${creditAmountUsd.toFixed(2)}`;
+      sendDepositEmail(
+        depositorUser.email,
+        depositorUser.username,
+        creditedLabel,
+        txn_id,
+        {
+          creditedUsd: creditAmountUsd,
+          requestedUsd: sourceUsd,
+          receivedCrypto: effectiveCryptoReceived,
+          currency: cryptoCurrency,
+          orderId: tx.orderId ?? undefined,
+        },
+      ).catch((e) => req.log.warn({ e }, "Deposit confirmation email failed"));
+    }
+
     sendNtfy(process.env.NTFY_TOPIC, {
       title: "DGC Arcade — New Deposit",
       priority: "high",
       tags: "money_with_wings",
-      body: `+${cryptoAmountReceived} ${cryptoCurrency} (~$${creditAmountUsd.toFixed(2)})\nTxn: ${txn_id}\nUser: ${tx.userId}`,
+      body: `+${effectiveCryptoReceived} ${cryptoCurrency} (~$${creditAmountUsd.toFixed(2)})\nTxn: ${txn_id}\nUser: ${tx.userId}`,
     });
     res.json({ success: true });
   } catch (err) {
@@ -754,6 +673,8 @@ transactionsRouter.get("/deposit/status/:orderId", requireAuth, async (req, res)
         amount: transactionsTable.amount,
         currency: transactionsTable.currency,
         plisioTrackId: transactionsTable.plisioTrackId,
+        orderId: transactionsTable.orderId,
+        metadata: transactionsTable.metadata,
         createdAt: transactionsTable.createdAt,
         updatedAt: transactionsTable.updatedAt,
       })
@@ -767,18 +688,36 @@ transactionsRouter.get("/deposit/status/:orderId", requireAuth, async (req, res)
 
     if (!tx) { res.status(404).json({ error: "Transaction not found" }); return; }
 
+    let receipt: Record<string, unknown> = {};
+    try {
+      if (tx.metadata) receipt = JSON.parse(tx.metadata);
+    } catch {
+      receipt = {};
+    }
+
     // Live balance — crypto-native, current market price
     const { totalBalance, cryptoBalances } = await getUserBalance(req.user!.userId);
 
     res.json({
       transactionId: tx.id,
+      orderId: tx.orderId,
       status: tx.status,
       amount: tx.amount,
       currency: tx.currency,
+      plisioTrackId: tx.plisioTrackId,
       credited: tx.status === "completed",
       liveBalance: totalBalance,
       cryptoBalances,
       updatedAt: tx.updatedAt,
+      receipt: {
+        requestedUsd: receipt.requested_amount_usd ?? tx.amount,
+        creditedUsd: receipt.credit_amount_usd ?? (tx.status === "completed" ? tx.amount : null),
+        receivedCrypto: receipt.received_amount_crypto ?? null,
+        receivedUsd: receipt.received_amount_usd ?? null,
+        invoiceCrypto: receipt.invoice_amount_crypto ?? null,
+        creditMethod: receipt.credit_calc_method ?? null,
+        paidAt: receipt.paid_at ?? null,
+      },
     });
   } catch (err) {
     req.log.error({ err }, "Deposit status polling error");
@@ -913,23 +852,35 @@ transactionsRouter.post("/withdraw", requireAuth, requireLocationVerified, async
     const { totalBalance, cryptoBalances } = await getUserBalance(user.id);
     if (totalBalance < amount) { res.status(400).json({ error: "Insufficient balance" }); return; }
 
-    // ── Strict Coin-Specific Withdrawal Rules ──────────────────────────────────
-    // Users can ONLY withdraw the specific coin they have a balance in.
-    // We check the live USD value of that specific coin balance.
-    const coinBalance = cryptoBalances.find(cb => cb.currency === currency);
-    const coinUsdValue = coinBalance ? coinBalance.usdValue : 0;
-    
-    // If user has crypto holdings but not in this coin, or amount exceeds this coin's value
+    // ── Strict coin-specific withdrawal ───────────────────────────────────────
+    // Users can ONLY withdraw crypto they have deposited (per-coin balance > 0).
+    const depositedCoins = cryptoBalances.filter((cb) => cb.amount > 0);
+    if (depositedCoins.length === 0) {
+      res.status(400).json({
+        error: "Deposit crypto before withdrawing. Withdrawals are paid back in the same coin you deposited.",
+        code: "NO_CRYPTO_DEPOSITS",
+      });
+      return;
+    }
+
+    const coinBalance = depositedCoins.find((cb) => cb.currency === currency);
+    if (!coinBalance) {
+      res.status(400).json({
+        error: `You can only withdraw ${depositedCoins.map((c) => c.currency.split("_")[0]).join(", ")} — the coins you've deposited. Deposit ${currency.split("_")[0]} first to unlock withdrawals in that asset.`,
+        code: "COIN_NOT_DEPOSITED",
+        availableCoins: depositedCoins.map((c) => c.currency),
+      });
+      return;
+    }
+
+    const coinUsdValue = coinBalance.usdValue;
     if (amount > coinUsdValue) {
-      // Exception: If they have NO crypto holdings at all, they can withdraw from static USD balance
-      const hasAnyCrypto = cryptoBalances.some(cb => cb.amount > 0);
-      if (hasAnyCrypto || currency !== "USD") {
-        res.status(400).json({
-          error: `Insufficient ${currency} balance. You can only withdraw up to $${coinUsdValue.toFixed(2)} worth of ${currency}.`,
-          availableUsd: coinUsdValue
-        });
-        return;
-      }
+      res.status(400).json({
+        error: `Insufficient ${currency} balance. You can withdraw up to $${coinUsdValue.toFixed(2)} worth of ${currency.split("_")[0]} (your deposited balance in that coin).`,
+        availableUsd: coinUsdValue,
+        code: "INSUFFICIENT_COIN_BALANCE",
+      });
+      return;
     }
 
     const settings = await getPlatformSettings();

@@ -32,6 +32,7 @@ async function formatUser(user: typeof usersTable.$inferSelect) {
     withdrawalsEnabled: user.withdrawalsEnabled,
     referralCode: user.referralCode ?? null,
     totalWageredAmount: parseFloat(user.totalWageredAmount ?? "0"),
+    wagerRequirement: parseFloat(user.wagerRequirement ?? "0"),
     lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
     telegramUsername: user.telegramUsername ?? null,
     rakebackClaimed: parseFloat(user.rakebackClaimed ?? "0"),
