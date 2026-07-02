@@ -1,7 +1,11 @@
 import { db, usersTable, transactionsTable, referralsTable, userBalancesTable, creatorBankTxnsTable } from "@workspace/db";
 import { eq, and, ne, sql, count } from "drizzle-orm";
 import { recordLedger } from "../services/ledger.js";
-// Using native fetch available in Node.js 18+
+import {
+  canCreditFromPlisioData,
+  computePlisioCreditUsd,
+  extractPlisioSourceUsd,
+} from "../lib/plisio-amounts.js";
 
 const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY;
 
@@ -45,81 +49,57 @@ async function reconcileAll() {
         const data = await resp.json() as any;
         if (data.status !== "success" || !data.data) continue;
 
-        const pStatus = data.data.status;
-        const creditStatuses = ["completed", "mismatch", "overpaid"];
-        
-        if (creditStatuses.includes(pStatus)) {
-          // IMPORTANT: Use received_amount/received_sum for ACTUAL received amount.
-          // 'amount' in Plisio response often refers to the EXPECTED invoice amount.
-          const receivedAmount  = parseFloat(String(data.data.received_amount || data.data.received_sum || "0"));
-          const invoicedAmount  = parseFloat(String(data.data.invoice_total_sum || data.data.total_sum || data.data.amount || data.data.invoice_amount || "0"));
-          const sourceUsd       = parseFloat(String(data.data.source_amount || tx.amount));
-          const receivedUsdValue = parseFloat(String(data.data.received_amount_usd || data.data.received_sum_usd || "0"));
-          
-          // ── CALCULATE USD CREDIT AMOUNT ────────────────────────────────────
-          // Priority 1: Plisio provides received_amount_usd directly.
-          // Priority 2: Both received and invoiced crypto known → ratio method.
-          // Priority 3: Received crypto but no invoiced amount → live price lookup.
-          //             NEVER fall back to sourceUsd (invoice amount) — that would
-          //             credit the full invoice even when only a fraction was paid.
-          // STRICT GUARD: If no received_amount data at all, skip — do not credit.
-          let creditAmount: number;
-          let exchangeRate: number | null = null;
-          let creditCalcMethod: string;
-          const cryptoCurrency = tx.currency || data.data.currency || "ETH";
+        const pStatus = String(data.data.status).toLowerCase();
+        const creditStatuses = ["completed", "mismatch", "overpaid", "finished", "overdue"];
 
-          if (receivedUsdValue > 0) {
-            creditAmount = Math.round(receivedUsdValue * 1e8) / 1e8;
-            creditCalcMethod = "plisio_usd_direct";
-            if (receivedAmount > 0) {
-              exchangeRate = Math.round((receivedUsdValue / receivedAmount) * 1e8) / 1e8;
-            }
-            console.log(`Reconciling tx ${tx.id}: direct USD received = $${creditAmount} [${creditCalcMethod}]`);
-          } else if (receivedAmount > 0 && invoicedAmount > 0 && sourceUsd > 0) {
-            const ratio = receivedAmount / invoicedAmount;
-            creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
-            creditCalcMethod = "ratio_received_over_invoiced";
-            exchangeRate = receivedAmount > 0 ? Math.round((creditAmount / receivedAmount) * 1e8) / 1e8 : null;
-            console.log(`Reconciling tx ${tx.id}: ratio=${ratio.toFixed(6)}, credit=$${creditAmount} [${creditCalcMethod}]`);
-          } else if (receivedAmount > 0) {
-            // invoice_total_sum not available — use live price, NOT sourceUsd.
-            const priceModule = await import("../lib/price-service.js");
-            const livePrice = await priceModule.getCryptoPrice(cryptoCurrency);
-            creditAmount = Math.round(receivedAmount * livePrice * 1e8) / 1e8;
-            exchangeRate = livePrice;
-            creditCalcMethod = "live_price_lookup";
-            console.warn(`Reconciling tx ${tx.id}: invoice_total_sum missing — live price lookup $${livePrice}/unit → credit=$${creditAmount} [${creditCalcMethod}]`);
-          } else {
-            // STRICT GUARD: No received_amount data at all — do not credit.
-            console.warn(`Transaction ${tx.id}: No received_amount data from Plisio — skipping. Will retry next run.`);
+        if (creditStatuses.includes(pStatus)) {
+          const plisioData = data.data as Record<string, unknown>;
+          if (!canCreditFromPlisioData(plisioData)) {
+            console.warn(`Transaction ${tx.id}: No sum_actual from Plisio — skipping.`);
             continue;
           }
+
+          const cryptoCurrency = tx.currency || String(plisioData.currency ?? "ETH");
+          const sourceUsd = extractPlisioSourceUsd(plisioData, parseFloat(String(tx.amount)));
+          const priceModule = await import("../lib/price-service.js");
+          const creditCalc = await computePlisioCreditUsd(
+            plisioData,
+            sourceUsd,
+            (c) => priceModule.getCryptoPrice(c),
+            cryptoCurrency,
+          );
+
+          const receivedAmount = creditCalc.cryptoReceived;
+          const invoicedAmount = creditCalc.cryptoInvoiced;
+          const creditAmount = creditCalc.creditUsd;
+          const exchangeRate = creditCalc.exchangeRate;
+          const creditCalcMethod = creditCalc.creditMethod;
 
           if (creditAmount <= 0) {
-            console.warn(`Transaction ${tx.id}: calculated credit is zero or negative ($${creditAmount}), skipping`);
+            console.warn(`Transaction ${tx.id}: calculated credit is zero — skipping`);
             continue;
           }
 
-          console.log(`Reconciling tx ${tx.id}: invoice_amount_crypto=${invoicedAmount}, received_amount_crypto=${receivedAmount}, received_usd=${receivedUsdValue}, requested_usd=${sourceUsd}, credit_usd=${creditAmount}, rate=${exchangeRate}, currency=${cryptoCurrency}, method=${creditCalcMethod}`);
+          console.log(`Reconciling tx ${tx.id}: invoice_amount_crypto=${invoicedAmount}, received_amount_crypto=${receivedAmount}, requested_usd=${sourceUsd}, credit_usd=${creditAmount}, method=${creditCalcMethod}`);
 
           await db.transaction(async (txn) => {
             const flipped = await txn
               .update(transactionsTable)
-              .set({ 
-                status: "completed", 
+              .set({
+                status: "completed",
                 amount: String(creditAmount),
                 metadata: JSON.stringify({
                   invoice_amount_crypto: invoicedAmount,
                   received_amount_crypto: receivedAmount,
-                  received_amount_usd: receivedUsdValue,
+                  received_amount_usd: creditAmount,
                   requested_amount_usd: sourceUsd,
                   credit_amount_usd: creditAmount,
                   exchange_rate: exchangeRate,
                   credit_calc_method: creditCalcMethod,
                   currency: cryptoCurrency,
                   paid_at: data.data.updated_at || new Date().toISOString(),
-                  reconciled_at: new Date().toISOString()
-                })
+                  reconciled_at: new Date().toISOString(),
+                }),
               })
               .where(and(eq(transactionsTable.id, tx.id), ne(transactionsTable.status, "completed")))
               .returning({ id: transactionsTable.id });
@@ -129,11 +109,6 @@ async function reconcileAll() {
               return;
             }
 
-            // ── Credit balance — crypto OR static USD, never both ──────────
-            // If we have a real received crypto amount, credit that only.
-            // If we only have a USD value (e.g. stablecoin or direct USD report),
-            // credit the static USD balance only.
-            // We do NOT double-credit — no static USD bump when crypto is credited.
             if (receivedAmount > 0) {
               await txn
                 .insert(userBalancesTable)
@@ -143,20 +118,17 @@ async function reconcileAll() {
                   set: { amount: sql`user_balances.amount + ${String(receivedAmount)}` },
                 });
             } else {
-              // receivedUsdValue > 0 but no crypto amount — credit static USD balance only
               await txn
                 .update(usersTable)
                 .set({ balance: sql`balance + ${creditAmount}` })
                 .where(eq(usersTable.id, tx.userId));
             }
 
-            // Update stats
             await txn.update(usersTable).set({
               totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
               wagerRequirement: sql`coalesce(wager_requirement, 0) + ${creditAmount}`,
             }).where(eq(usersTable.id, tx.userId));
 
-            // Ledger entry with real balanceBefore/After
             const [postUser] = await txn
               .select({ balance: usersTable.balance })
               .from(usersTable)
@@ -164,7 +136,7 @@ async function reconcileAll() {
               .limit(1);
             const balanceAfterStatic = postUser ? parseFloat(postUser.balance) : 0;
             const balanceBeforeStatic = receivedAmount > 0
-              ? balanceAfterStatic       // static USD unchanged when crypto credited
+              ? balanceAfterStatic
               : balanceAfterStatic - creditAmount;
 
             await recordLedger(txn, {
@@ -175,10 +147,9 @@ async function reconcileAll() {
               reason: "deposit",
               referenceId: tx.id,
               referenceType: "transaction",
-              note: `Reconcile credited ${receivedAmount > 0 ? receivedAmount + " " + cryptoCurrency : "$" + creditAmount + " USD"} (~$${creditAmount.toFixed(2)}) via ${creditCalcMethod}. Invoice: ${invoicedAmount} ${cryptoCurrency}.`,
+              note: `Reconcile credited ${receivedAmount > 0 ? receivedAmount + " " + cryptoCurrency : "$" + creditAmount + " USD"} (~$${creditAmount.toFixed(2)}) via ${creditCalcMethod}.`,
             });
-            
-            // Handle Referral
+
             try {
               const [depositor] = await txn.select({ referredBy: usersTable.referredBy }).from(usersTable).where(eq(usersTable.id, tx.userId)).limit(1);
               if (depositor?.referredBy) {
@@ -190,14 +161,13 @@ async function reconcileAll() {
                 if (commission > 0) {
                   await txn.update(usersTable).set({ balance: sql`balance + ${commission}` }).where(eq(usersTable.id, referrerId));
                   await txn.update(referralsTable).set({ status: "active", earnedAmount: sql`CAST(earned_amount AS DECIMAL) + ${commission}` }).where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.referredId, tx.userId)));
-                  
-                  // Record in creator bank
+
                   await txn.insert(creatorBankTxnsTable).values({
                     creatorId: referrerId,
                     type: "referral_commission",
                     amount: String(commission),
                     toUserId: tx.userId,
-                    description: `Retroactive commission from deposit ${tx.plisioTrackId || tx.id}`
+                    description: `Retroactive commission from deposit ${tx.plisioTrackId || tx.id}`,
                   });
                 }
               }

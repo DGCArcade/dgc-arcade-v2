@@ -130,9 +130,9 @@ export async function syncPlisioDeposits() {
           const cryptoAmountReceived = extractPlisioReceivedCrypto(plisioData);
           const cryptoAmountInvoiced = extractPlisioInvoicedCrypto(plisioData);
           const sourceUsd = extractPlisioSourceUsd(plisioData, parseFloat(String(tx.amount)));
-          const receivedUsdValue = extractPlisioReceivedUsd(plisioData);
+          const receivedUsdFromPlisio = extractPlisioReceivedUsd(plisioData);
 
-          if (cryptoAmountReceived <= 0 && receivedUsdValue <= 0) {
+          if (cryptoAmountReceived <= 0 && receivedUsdFromPlisio <= 0) {
             logger.info(
               { txId: tx.id, plisioTrackId: tx.plisioTrackId, pStatus },
               "Plisio sync: skipping — no sum_actual data yet",
@@ -173,7 +173,7 @@ export async function syncPlisioDeposits() {
             currency: cryptoCurrency,
             invoice_amount_crypto: cryptoAmountInvoiced,
             received_amount_crypto: effectiveReceived,
-            received_amount_usd: receivedUsdValue,
+            received_amount_usd: creditAmountUsd,
             requested_amount_usd: sourceUsd,
             credit_amount_usd: creditAmountUsd,
             exchange_rate: exchangeRate,
@@ -189,7 +189,7 @@ export async function syncPlisioDeposits() {
                 metadata: JSON.stringify({
                   invoice_amount_crypto: cryptoAmountInvoiced,
                   received_amount_crypto: effectiveReceived,
-                  received_amount_usd: receivedUsdValue,
+                  received_amount_usd: creditAmountUsd,
                   requested_amount_usd: sourceUsd,
                   credit_amount_usd: creditAmountUsd,
                   exchange_rate: exchangeRate,
