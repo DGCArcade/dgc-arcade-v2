@@ -32,6 +32,8 @@ const ProvablyFairPage = lazy(() => import("./pages/provably-fair"));
 const InstantPayoutsPage = lazy(() => import("./pages/instant-payouts"));
 const CryptoNativePage = lazy(() => import("./pages/crypto-native"));
 const DebugSentryPage = lazy(() => import("@/pages/debug-sentry"));
+const DepositSuccessPage = lazy(() => import("@/pages/deposit-success"));
+const DepositFailedPage = lazy(() => import("@/pages/deposit-failed"));
 
 function SessionLimitWatcher() {
   useSessionLimit();
@@ -195,6 +197,9 @@ function Router() {
           <Route path="/provably-fair" component={ProvablyFairPage} />
           <Route path="/instant-payouts" component={InstantPayoutsPage} />
           <Route path="/crypto-native" component={CryptoNativePage} />
+
+          <Route path="/deposit/success" component={DepositSuccessPage} />
+          <Route path="/deposit/failed" component={DepositFailedPage} />
 
           {/* Hidden owner-only Sentry smoke test — not linked in nav */}
           <Route path="/debug-sentry">

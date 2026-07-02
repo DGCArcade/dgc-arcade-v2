@@ -11,6 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
 import { ExternalLink, Send, Wallet, ArrowDownToLine, ArrowUpFromLine, Lock, Unlock, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { CoinIcon, CURRENCIES } from "./coin-icon";
+import { useWagerRequirement } from "@/hooks/use-wager-requirement";
+import { WithdrawPolicyNotice } from "./withdraw-policy-notice";
 
 interface WalletModalProps {
   open: boolean;
@@ -145,6 +147,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const selectedCurrency = CURRENCIES.find(c => c.value === currency) ?? CURRENCIES[0];
   // Creator accounts (withdrawalsEnabled === false) only see Vault
   const isCreator = user?.withdrawalsEnabled === false;
+  const { isWagerMet, wagerRemaining } = useWagerRequirement();
 
   // ── Live balance values ────────────────────────────────────────────────────
   // totalBalance from coinData is the live backend value (crypto + static USD).
@@ -158,13 +161,18 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   // Max the user can withdraw for the selected coin:
   //   • If they have crypto rows: min(live coin USD value, total live balance)
   //   • If they only have static USD balance (old user): total live balance
-  const hasCryptoBalances = Object.keys(coinData.balances).length > 0;
+  const hasCryptoBalances = Object.keys(coinData.balances).some(k => (coinData.balances[k] ?? 0) > 0);
   const maxWithdrawForCoin = hasCryptoBalances
     ? Math.min(coinLiveUsd, liveTotal)
-    : liveTotal; // old user — allow any coin, capped at total balance
+    : 0;
+
+  // Only coins with deposited balance are withdrawable
+  const withdrawableCurrencies = CURRENCIES.filter(c =>
+    hasCryptoBalances ? (coinData.balances[c.value] ?? 0) > 0 : false,
+  );
 
   // Whether the selected coin is available for withdrawal
-  const isCoinAvailable = hasCryptoBalances ? coinLiveUsd > 0 : liveTotal > 0;
+  const isCoinAvailable = withdrawableCurrencies.some(c => c.value === withdrawCurrency);
 
   const handleDeposit = () => {
     initiateDeposit.mutate({ data: { amount, currency } } as any, {
@@ -186,6 +194,14 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   };
 
   const handleWithdraw = () => {
+    if (!isWagerMet) {
+      toast({
+        title: "Playthrough required",
+        description: `Wager ${formatCurrency(wagerRemaining)} more before withdrawing.`,
+        variant: "destructive",
+      });
+      return;
+    }
     if (!withdrawAddress) { toast({ title: "Address required", variant: "destructive" }); return; }
     if (withdrawAmount <= 0) { toast({ title: "Amount must be greater than 0", variant: "destructive" }); return; }
     if (withdrawAmount > liveTotal) {
@@ -465,6 +481,13 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
             {/* ── WITHDRAW ────────────────────────────────────────── */}
             {!isCreator && (
             <TabsContent value="withdraw" className="space-y-4 mt-0">
+              <WithdrawPolicyNotice compact />
+
+              {!hasCryptoBalances && !coinBalancesLoading && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-muted-foreground">
+                  Deposit crypto first to enable withdrawals. Payouts return in the <strong className="text-foreground">same coin you deposited</strong>.
+                </div>
+              )}
 
               {/* Live balance summary */}
               <div className="bg-secondary/40 rounded-lg p-3 border border-border/40 space-y-1">
@@ -502,10 +525,9 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
 
               {/* Coin selector */}
               <div className="flex gap-2 flex-wrap">
-                {CURRENCIES.map(c => {
+                {withdrawableCurrencies.map(c => {
                   const liveUsd = coinData.balances[c.value] ?? 0;
-                  // For old users (no crypto rows), all coins are available up to total balance
-                  const isAvailable = hasCryptoBalances ? liveUsd > 0 : liveTotal > 0;
+                  const isAvailable = liveUsd > 0;
                   return (
                     <button key={c.value}
                       disabled={!isAvailable || coinBalancesLoading}
@@ -597,6 +619,8 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                 onClick={handleWithdraw}
                 disabled={
                   requestWithdrawal.isPending ||
+                  !isWagerMet ||
+                  withdrawableCurrencies.length === 0 ||
                   withdrawAmount < 1 ||
                   !hasBalance ||
                   withdrawAmount > liveTotal ||
@@ -606,7 +630,9 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
               >
                 {requestWithdrawal.isPending
                   ? "Processing…"
-                  : withdrawAmount >= 10000
+                  : !isWagerMet
+                    ? "Playthrough required"
+                    : withdrawAmount >= 10000
                     ? "Request Withdrawal"
                     : "Instant Withdrawal"}
               </Button>

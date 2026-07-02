@@ -522,16 +522,39 @@ export async function sendLoginSecurityEmail(
 // ╚══════════════════════════════════════════════════════════════════════════╝
 
 const depositVariants: Array<
-  (username: string, amount: string, txHash: string) => { subject: string; html: string }
+  (
+    username: string,
+    amount: string,
+    txHash: string,
+    receipt?: DepositReceiptDetails,
+  ) => { subject: string; html: string }
 > = [
   // V1 — Gold, celebratory
-  (username, amount, txHash) => {
+  (username, amount, txHash, receipt) => {
     const accent = ACCENTS.gold;
+    const receiptRows = receipt
+      ? [
+          ["💵 Credited (sum actual):", hl(`$${receipt.creditedUsd.toFixed(2)}`, accent)],
+          ...(receipt.requestedUsd != null
+            ? [["📋 Invoice requested:", `$${receipt.requestedUsd.toFixed(2)}`]]
+            : []),
+          ...(receipt.receivedCrypto != null && receipt.currency
+            ? [["⛓️ Received on-chain:", `${receipt.receivedCrypto} ${receipt.currency}`]]
+            : []),
+          ["🔗 Plisio ID:", txHash],
+          ["✅ Status:", "CONFIRMED"],
+        ]
+      : [
+          ["💵 Amount:", hl(amount, accent)],
+          ["🔗 Transaction:", txHash],
+          ["✅ Status:", "CONFIRMED"],
+        ];
     const body = `
       ${h("Deposit Confirmed 💰", accent)}
-      ${p(`Yo ${hl(username, accent)}, your deposit cleared and it's locked into your balance. Time to make it work.`)}
+      ${p(`Yo ${hl(username, accent)}, your deposit cleared. We credited the <strong>actual sum received</strong> after network &amp; processor fees — not the invoice estimate.`)}
       ${infoBox(`✅ <strong>${amount}</strong> added to your balance.`, accent.glow)}
-      ${dataRows([["💵 Amount:", hl(amount, accent)], ["🔗 Transaction:", txHash], ["✅ Status:", "CONFIRMED"]], accent)}
+      ${dataRows(receiptRows as [string, string][], accent)}
+      ${btn(`${SITE_URL}/deposit/success${receipt?.orderId ? `?order=${receipt.orderId}` : ""}`, "View Receipt", accent)}
       ${btn(`${SITE_URL}/games`, "Start Playing", accent)}
       ${infoBox("💡 Your balance is live. Play smart, win big — the streets always win.", "#00D4FF")}
     `;
@@ -541,13 +564,18 @@ const depositVariants: Array<
     };
   },
   // V2 — Cyber, "funds loaded"
-  (username, amount, txHash) => {
+  (username, amount, txHash, receipt) => {
     const accent = ACCENTS.cyber;
     const body = `
       ${h("Funds Loaded ⚡", accent)}
-      ${p(`${hl(username, accent)}, the chain confirmed it — your deposit is in and ready to ride.`)}
-      ${dataRows([["💸 Credited:", hl(amount, accent)], ["🔗 Tx hash:", txHash], ["🟢 Status:", "CONFIRMED ON-CHAIN"]], accent)}
-      ${p("No holds, no delays. Your full balance is playable right now.")}
+      ${p(`${hl(username, accent)}, the chain confirmed it — we credited your <strong>sum actual</strong> (real received amount).`)}
+      ${dataRows([
+        ["💸 Credited:", hl(amount, accent)],
+        ...(receipt?.requestedUsd != null ? [["📋 Invoice:", `$${receipt.requestedUsd.toFixed(2)}`]] : []),
+        ["🔗 Plisio ID:", txHash],
+        ["🟢 Status:", "CONFIRMED ON-CHAIN"],
+      ], accent)}
+      ${p("No holds, no delays. Your credited balance is playable right now.")}
       ${btn(`${SITE_URL}/games`, "Hit the Tables", accent)}
     `;
     return {
@@ -556,13 +584,18 @@ const depositVariants: Array<
     };
   },
   // V3 — Neon, "bag secured"
-  (username, amount, txHash) => {
+  (username, amount, txHash, receipt) => {
     const accent = ACCENTS.neon;
     const body = `
       ${h("Bag Secured 💎", accent)}
-      ${p(`Money moves, ${hl(username, accent)}. Your deposit hit and your balance just went up.`)}
+      ${p(`Money moves, ${hl(username, accent)}. Your deposit hit — credited at sum actual after fees.`)}
       ${infoBox(`✅ <strong>${amount}</strong> is now in play.`, accent.glow)}
-      ${dataRows([["💵 Amount:", hl(amount, accent)], ["🔗 Transaction:", txHash], ["💎 Status:", "CONFIRMED"]], accent)}
+      ${dataRows([
+        ["💵 Credited:", hl(amount, accent)],
+        ["🔗 Plisio ID:", txHash],
+        ["💎 Status:", "CONFIRMED"],
+      ], accent)}
+      ${btn(`${SITE_URL}/deposit/success${receipt?.orderId ? `?order=${receipt.orderId}` : ""}`, "View Receipt", accent)}
       ${btn(`${SITE_URL}/games`, "Run It Up", accent)}
       ${p("Get paid or get played. Make the right moves.")}
     `;
@@ -573,13 +606,22 @@ const depositVariants: Array<
   },
 ];
 
+export interface DepositReceiptDetails {
+  creditedUsd: number;
+  requestedUsd?: number;
+  receivedCrypto?: number;
+  currency?: string;
+  orderId?: string;
+}
+
 export async function sendDepositEmail(
   email: string,
   username: string,
   amount: string,
-  txHash: string
+  txHash: string,
+  receipt?: DepositReceiptDetails,
 ): Promise<void> {
-  const { subject, html } = depositVariants[pick(depositVariants.length)](username, amount, txHash);
+  const { subject, html } = depositVariants[pick(depositVariants.length)](username, amount, txHash, receipt);
   if (resend) await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
 }
 
