@@ -33,6 +33,9 @@ interface DashboardData {
   activeReferrals: number;
   pendingReferrals: number;
   totalCommissionEarned: number;
+  totalPlatformPlayers?: number;
+  totalPlatformGames?: number;
+  totalPaymentMethods?: number;
   bankHistory: Array<{
     id: number; type: string; amount: number;
     description: string; createdAt: string; toUserId: number | null;
@@ -408,9 +411,9 @@ function SpecialtyHub({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 py-6 border-y border-border/50">
                 {[
-                  { value: "10K+", label: "Registered Players", icon: <Users className="w-4 h-4 text-primary/60" /> },
-                  { value: "15+", label: "Payment Methods", icon: <Wallet className="w-4 h-4 text-primary/60" /> },
-                  { value: "50+", label: "Casino Games", icon: <Zap className="w-4 h-4 text-primary/60" /> },
+                  { value: dashboard.totalPlatformPlayers ? `${(dashboard.totalPlatformPlayers / 1000).toFixed(1)}K+` : "10K+", label: "Registered Players", icon: <Users className="w-4 h-4 text-primary/60" /> },
+                  { value: dashboard.totalPaymentMethods ? `${dashboard.totalPaymentMethods}+` : "15+", label: "Payment Methods", icon: <Wallet className="w-4 h-4 text-primary/60" /> },
+                  { value: dashboard.totalPlatformGames ? `${dashboard.totalPlatformGames}+` : "50+", label: "Casino Games", icon: <Zap className="w-4 h-4 text-primary/60" /> },
                 ].map(s => (
                   <div key={s.label} className="text-center flex flex-col items-center p-3 rounded-xl bg-secondary/20 sm:bg-transparent">
                     <div className="mb-2 sm:hidden">{s.icon}</div>
