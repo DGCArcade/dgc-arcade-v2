@@ -60,6 +60,19 @@ export const usersTable = pgTable("users", {
   // Specialty Creator Fields
   commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }), // Override standard tier rate
   displayName: text("display_name"), // Custom display name for creators
+  // Security & Step-up
+  ownerStepupCode: text("owner_stepup_code"),
+  ownerStepupExpiresAt: timestamp("owner_stepup_expires_at", { withTimezone: true }),
+  withdrawOtpSentAt: timestamp("withdraw_otp_sent_at", { withTimezone: true }),
+  withdrawOtpCode: text("withdraw_otp_code"),
+  withdrawOtpExpiresAt: timestamp("withdraw_otp_expires_at", { withTimezone: true }),
+  ownerStepupSentAt: timestamp("owner_stepup_sent_at", { withTimezone: true }),
+  sessionStartedAt: timestamp("session_started_at", { withTimezone: true }),
+  depositLimitDaily: numeric("deposit_limit_daily", { precision: 18, scale: 8 }),
+  depositLimitWeekly: numeric("deposit_limit_weekly", { precision: 18, scale: 8 }),
+  depositLimitMonthly: numeric("deposit_limit_monthly", { precision: 18, scale: 8 }),
+  lossLimitDaily: numeric("loss_limit_daily", { precision: 18, scale: 8 }),
+  sessionLimitMinutes: integer("session_limit_minutes"),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({

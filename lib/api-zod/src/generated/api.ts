@@ -41,6 +41,7 @@ export const RequestWithdrawalBody = zod.object({
   amount: zod.number().positive(),
   currency: zod.string().min(1),
   address: zod.string().min(1),
+  otpCode: zod.string().optional(),
 });
 
 export const ListTransactionsQueryParams = zod.object({
