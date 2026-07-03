@@ -6,7 +6,13 @@ cd "$REPO_DIR" || { echo "ERROR: Could not find $REPO_DIR"; exit 1; }
 
 git config user.email "replit-agent@dgcarcade.dev"
 git config user.name "Replit Agent"
-git remote set-url origin "https://$GITHUB_TOKEN@github.com/DGCArcade/dgc-arcade-v2.git"
+
+REMOTE_URL="https://$GITHUB_TOKEN@github.com/DGCArcade/dgc-arcade-v2.git"
+if git remote | grep -q '^origin$'; then
+  git remote set-url origin "$REMOTE_URL"
+else
+  git remote add origin "$REMOTE_URL"
+fi
 
 echo "Auto-push watcher started for DGC Arcade v2"
 echo "Watching for changes every 30 seconds..."
