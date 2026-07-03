@@ -40,6 +40,8 @@ const ALLOWED_ORIGINS = [
   "https://www.differentgrindcrew.com",
   "https://dgcarcade.io",
   "https://www.dgcarcade.io",
+  "https://dgcarcade.com",
+  "https://www.dgcarcade.com",
   "https://dgc-arcade-frontend-cb8i.onrender.com",
 ];
 
@@ -103,7 +105,7 @@ function isOwnerRequest(req: Request): boolean {
   }
 }
 
-// ── Rate limiting ────────────────────────────────────────────────────────────
+// ── Rate limiting ─────────────────────────────────────────────────────────[...]
 // Login/register: strict — 10 attempts per 15 minutes per IP (brute-force guard)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
