@@ -724,6 +724,8 @@ adminRouter.post("/create-specialty-creator", async (req, res) => {
         balance: promo,
         promoBalance: promo,
         withdrawalsEnabled: false,
+        commissionRate: String((customCommissionPct ?? 10) / 100),
+        displayName: displayName || null,
       })
       .returning();
 
@@ -2267,11 +2269,13 @@ adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
       updates.disabledGameSlugs = JSON.stringify(body.disabledGameSlugs.filter((s: unknown) => typeof s === "string"));
     }
 
+    const { invalidatePlatformSettingsCache } = await import("../lib/platform-settings.js");
     for (const [key, value] of Object.entries(updates)) {
       await db.insert(platformSettingsTable)
         .values({ key, value })
         .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value } });
     }
+    invalidatePlatformSettingsCache();
 
     const settings = await getPlatformSettings();
     res.json({ success: true, settings });
@@ -3656,7 +3660,9 @@ adminRouter.get("/creators", async (req, res) => {
             ),
           );
 
+        const [specialty] = await db.select({ commissionRate: usersTable.commissionRate }).from(usersTable).where(eq(usersTable.id, c.id)).limit(1);
         const tier = getReferralTier(activeCount);
+        const commissionRate = specialty?.commissionRate ? parseFloat(specialty.commissionRate) : tier.commissionRate;
 
         return {
           id: c.id,
@@ -3668,11 +3674,11 @@ adminRouter.get("/creators", async (req, res) => {
           monthlyCommission: parseFloat(monthlyEarned ?? "0"),
           lifetimeCommission: parseFloat(lifetimeEarned ?? "0"),
           totalAdminDeposits: parseFloat(totalDeposited ?? "0"),
-          tier: tier.tier,
-          group: tier.group,
-          color: tier.color,
-          emoji: tier.emoji,
-          commissionPct: Math.round(tier.commissionRate * 100),
+          tier: specialty?.commissionRate ? "Specialty" : tier.tier,
+          group: specialty?.commissionRate ? "Partner" : tier.group,
+          color: specialty?.commissionRate ? "#ec4899" : tier.color,
+          emoji: specialty?.commissionRate ? "💎" : tier.emoji,
+          commissionPct: Math.round(commissionRate * 100),
           joinedAt: c.createdAt.toISOString(),
         };
       }),

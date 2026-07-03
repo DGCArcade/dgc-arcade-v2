@@ -806,6 +806,9 @@ export default function AdminDashboard() {
       loadNeedsReview();
       if (isOwner) loadBankSettings();
     }
+    if (activeTab === "owner" && isOwner) {
+      loadBankSettings();
+    }
   }, [activeTab, isAdmin, bankUnlocked, isOwner, loadBank, loadFraudAlerts, loadNeedsReview, loadBankSettings]);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable, creatorBankTxnsTable, referralsTable, creatorLinkedAccountsTable, creatorMessagesTable, creatorMessageReadsTable, betsTable, transactionsTable } from "@workspace/db";
+import { db, usersTable, gamesTable, creatorBankTxnsTable, referralsTable, creatorLinkedAccountsTable, creatorMessagesTable, creatorMessageReadsTable, betsTable, transactionsTable } from "@workspace/db";
 import { eq, and, desc, sum, count, or, inArray, sql, not } from "drizzle-orm";
 import { requireAuth, signToken, requireCreator } from "../middlewares/auth.js";
 import { getReferralTier } from "./referrals.js";
@@ -71,6 +71,15 @@ creatorRouter.get("/dashboard", requireCreator, async (req, res) => {
     const code = user.referralCode ?? `DGC${user.id}`;
     const siteUrl = process.env.SITE_URL ?? "";
 
+    // Stats for Creator Hub Overview
+    const [{ totalPlayers }] = await db.select({ totalPlayers: count() }).from(usersTable);
+    const { getPlatformSettings } = await import("../lib/platform-settings.js");
+    const settings = await getPlatformSettings();
+    const [{ totalGames }] = await db.select({ totalGames: count() }).from(gamesTable).where(eq(gamesTable.active, true));
+    
+    // Payment methods (coins supported by Plisio)
+    const paymentMethodsCount = 10; // BTC, ETH, USDT (TRC20/ERC20), USDC, BNB, SOL, LTC, DOGE, TRX
+
     const bankHistory = await db
       .select({
         id: creatorBankTxnsTable.id,
@@ -115,6 +124,9 @@ creatorRouter.get("/dashboard", requireCreator, async (req, res) => {
       activeReferrals: activeCount,
       pendingReferrals: pendingCount,
       totalCommissionEarned: parseFloat(totalEarned ?? "0"),
+      totalPlatformPlayers: Number(totalPlayers),
+      totalPlatformGames: Number(totalGames),
+      totalPaymentMethods: paymentMethodsCount,
       bankHistory: bankHistory.map(h => ({
         id: h.id,
         type: h.type,
