@@ -17,23 +17,16 @@ echo "Watching for changes in $REPO_DIR every 30 seconds..."
 while true; do
   if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
     TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$TIMESTAMP] Changes detected — staging and committing..."
+    echo "[$TIMESTAMP] Changes detected — committing..."
     git add -A
     git commit -m "Auto-save: $TIMESTAMP"
 
-    echo "[$TIMESTAMP] Pushing to GitHub..."
-    git push origin HEAD:main 2>&1
+    echo "[$TIMESTAMP] Pushing to GitHub (force)..."
+    git push --force origin HEAD:main 2>&1
     if [ $? -eq 0 ]; then
       echo "[$TIMESTAMP] Successfully pushed to GitHub."
     else
-      echo "[$TIMESTAMP] Push rejected (remote has newer commits). Pulling and retrying..."
-      git pull --no-rebase origin main 2>&1
-      git push origin HEAD:main 2>&1
-      if [ $? -eq 0 ]; then
-        echo "[$TIMESTAMP] Pushed successfully after pull."
-      else
-        echo "[$TIMESTAMP] Push still failed. Will retry next cycle."
-      fi
+      echo "[$TIMESTAMP] Push failed. Will retry next cycle."
     fi
   else
     echo "[$(date '+%H:%M:%S')] No changes."
