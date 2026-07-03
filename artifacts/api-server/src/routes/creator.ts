@@ -1,6 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable, creatorBankTxnsTable, referralsTable, creatorLinkedAccountsTable, creatorMessagesTable, creatorMessageReadsTable, betsTable, transactionsTable } from "@workspace/db";
+import { db, usersTable, gamesTable, creatorBankTxnsTable, referralsTable, creatorLinkedAccountsTable, creatorMessagesTable, creatorMessageReadsTable, betsTable, transactionsTable } from "@workspace/db";
 import { eq, and, desc, sum, count, or, inArray, sql, not } from "drizzle-orm";
 import { requireAuth, signToken, requireCreator } from "../middlewares/auth.js";
 import { getReferralTier } from "./referrals.js";

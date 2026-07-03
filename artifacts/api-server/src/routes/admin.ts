@@ -724,7 +724,7 @@ adminRouter.post("/create-specialty-creator", async (req, res) => {
         balance: promo,
         promoBalance: promo,
         withdrawalsEnabled: false,
-        commissionRate: String(customCommissionPct / 100),
+        commissionRate: String((customCommissionPct ?? 10) / 100),
         displayName: displayName || null,
       })
       .returning();
