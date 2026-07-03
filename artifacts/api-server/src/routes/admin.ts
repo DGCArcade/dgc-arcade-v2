@@ -730,8 +730,7 @@ adminRouter.post("/create-specialty-creator", async (req, res) => {
         withdrawalsEnabled: false,
         // commissionRate stored as decimal fraction (0.10 = 10%).
         // customCommissionPct is expected as a percentage (e.g. 10 = 10%).
-        // Guard: if caller accidentally sends a decimal fraction already (<=1), use it directly.
-        commissionRate: String((customCommissionPct ?? 10) > 1 ? (customCommissionPct ?? 10) / 100 : (customCommissionPct ?? 10)),
+        commissionRate: String((customCommissionPct ?? 10) / 100),
         displayName: displayName || null,
       })
       .returning();
@@ -3029,13 +3028,12 @@ adminRouter.patch("/users/:id/account-type", async (req, res) => {
 
   // Specialty Creator Fields
   // commissionRate is stored as a decimal fraction (e.g. 0.10 = 10%).
-  // If the caller sends a value > 1 (e.g. 10 meaning 10%), normalise it by dividing by 100.
+  // Frontend sends percentage values (e.g. 10 for 10%), so we always divide by 100.
   if (commissionRate !== undefined) {
     if (commissionRate === null) {
       updates.commissionRate = null;
     } else {
-      const normalized = commissionRate > 1 ? commissionRate / 100 : commissionRate;
-      updates.commissionRate = String(normalized);
+      updates.commissionRate = String(commissionRate / 100);
     }
   }
   if (displayName !== undefined) {

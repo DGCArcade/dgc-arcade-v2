@@ -121,7 +121,12 @@ referralsRouter.get("/tiers", (_req, res) => {
 referralsRouter.get("/my-code", requireAuth, async (req, res) => {
   try {
     const [user] = await db
-      .select({ id: usersTable.id, username: usersTable.username, referralCode: usersTable.referralCode })
+      .select({ 
+        id: usersTable.id, 
+        username: usersTable.username, 
+        referralCode: usersTable.referralCode,
+        commissionRate: usersTable.commissionRate 
+      })
       .from(usersTable)
       .where(eq(usersTable.id, req.user!.userId))
       .limit(1);
@@ -138,18 +143,26 @@ referralsRouter.get("/my-code", requireAuth, async (req, res) => {
       .from(referralsTable)
       .where(eq(referralsTable.referrerId, user.id));
 
-    const tier = getReferralTier(activeCount);
-    const siteUrl = process.env.SITE_URL ?? "";
+        const tier = getReferralTier(activeCount);
+    
+    // If user has a custom commission rate (specialty creator), use it.
+    // Otherwise, use the tier-based rate.
+    const customRate = user.commissionRate ? parseFloat(user.commissionRate) : null;
+    const finalCommissionRate = customRate !== null ? customRate : tier.commissionRate;
+    const finalTierName = customRate !== null ? "Specialty" : tier.tier;
+    const finalTierEmoji = customRate !== null ? "💠" : tier.emoji;
+    const finalTierColor = customRate !== null ? "#b9f2ff" : tier.color;
 
+    const siteUrl = process.env.SITE_URL ?? "";
     res.json({
       code,
       link: siteUrl ? `${siteUrl}?ref=${code}` : `/?ref=${code}`,
-      tier: tier.tier,
-      group: tier.group,
-      color: tier.color,
-      emoji: tier.emoji,
-      commissionRate: tier.commissionRate,
-      commissionPct: Math.round(tier.commissionRate * 100),
+      tier: finalTierName,
+      group: customRate !== null ? "Private" : tier.group,
+      color: finalTierColor,
+      emoji: finalTierEmoji,
+      commissionRate: finalCommissionRate,
+      commissionPct: Math.round(finalCommissionRate * 100),
       nextTierAt: tier.nextTierAt,
       description: tier.description,
       isPrivate: tier.isPrivate,
