@@ -33,6 +33,9 @@ interface DashboardData {
   activeReferrals: number;
   pendingReferrals: number;
   totalCommissionEarned: number;
+  totalPlatformPlayers?: number;
+  totalPlatformGames?: number;
+  totalPaymentMethods?: number;
   bankHistory: Array<{
     id: number; type: string; amount: number;
     description: string; createdAt: string; toUserId: number | null;
@@ -40,7 +43,16 @@ interface DashboardData {
 }
 
 interface Referral {
-  id: number; username: string; status: string; earned: number; joinedAt: string;
+  id: number;
+  username: string;
+  status: string;
+  earned: number;
+  joinedAt: string;
+  // Extended stats
+  totalDeposited?: number;
+  totalWagered?: number;
+  houseProfit?: number;
+  estimatedCommission?: number;
 }
 
 interface CreatorMessage {
@@ -120,6 +132,13 @@ const EARNINGS_FAQ = [
   { q: "When and how do I get paid?", a: "Payouts are processed on the 1st of each month. Regular users receive their commission directly to their DGC Arcade wallet balance. Specialty Creators receive payouts to their registered crypto wallet via our payment gateway." },
   { q: "Can I track my earnings in real time?", a: "Yes — your Commission tab shows pending, available, and lifetime commission figures. Referred user activity updates daily." },
   { q: "Can I earn commission from users who have the same IP address?", a: "For fraud prevention, referrals from the same IP address as the referrer are not counted. Multi-accounting and self-referrals are strictly prohibited and will result in account suspension." },
+];
+
+const TIER_FAQ = [
+  { q: "What are the Affiliate Tiers?", a: "Our program features 13 tiers across 4 groups: Bronze (Hustler, Grinder, Baller), Silver (High Roller, Whale, Shark), Gold (Legend, Icon, Goat), and Platinum (I, II, III). You advance by increasing your count of 'Active Referrals' (users who have deposited)." },
+  { q: "What is an 'Active Referral'?", a: "A user is considered active once they make their first successful deposit on DGC Arcade. Pending referrals are users who signed up but haven't deposited yet." },
+  { q: "How do the commission rates increase?", a: "Rates start at 3% for Hustlers (0+ refs) and scale up to 30% for Platinum III (100+ refs). Specialty Creators (negotiated partners) can have custom rates starting from 30% and above." },
+  { q: "What is a Specialty Creator?", a: "Specialty Creators are high-reach partners who receive custom commission rates, starting promo balances, and dedicated support. This status is invite-only or negotiated with the DGC Arcade team." },
 ];
 
 export default function CreatorPage() {
@@ -252,7 +271,7 @@ function SpecialtyHub({
 }) {
   const [section, setSection] = useState<"overview" | "campaigns" | "commission" | "referred" | "faq" | "messages">("overview");
   const [copied, setCopied] = useState(false);
-  const [faqTab, setFaqTab] = useState<"general" | "affiliate" | "earnings">("general");
+  const [faqTab, setFaqTab] = useState<"general" | "affiliate" | "tiers" | "earnings">("general");
 
   const [campaigns, setCampaigns] = useState<Campaign[]>(() => {
     try { return JSON.parse(localStorage.getItem("dgc_campaigns") || "[]"); } catch { return []; }
@@ -408,9 +427,9 @@ function SpecialtyHub({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 py-6 border-y border-border/50">
                 {[
-                  { value: "10K+", label: "Registered Players", icon: <Users className="w-4 h-4 text-primary/60" /> },
-                  { value: "15+", label: "Payment Methods", icon: <Wallet className="w-4 h-4 text-primary/60" /> },
-                  { value: "50+", label: "Casino Games", icon: <Zap className="w-4 h-4 text-primary/60" /> },
+                  { value: dashboard.totalPlatformPlayers ? `${(dashboard.totalPlatformPlayers / 1000).toFixed(1)}K+` : "10K+", label: "Registered Players", icon: <Users className="w-4 h-4 text-primary/60" /> },
+                  { value: dashboard.totalPaymentMethods ? `${dashboard.totalPaymentMethods}+` : "15+", label: "Payment Methods", icon: <Wallet className="w-4 h-4 text-primary/60" /> },
+                  { value: dashboard.totalPlatformGames ? `${dashboard.totalPlatformGames}+` : "50+", label: "Casino Games", icon: <Zap className="w-4 h-4 text-primary/60" /> },
                 ].map(s => (
                   <div key={s.label} className="text-center flex flex-col items-center p-3 rounded-xl bg-secondary/20 sm:bg-transparent">
                     <div className="mb-2 sm:hidden">{s.icon}</div>
@@ -440,7 +459,7 @@ function SpecialtyHub({
                   {[
                     { icon: "⚡", title: "Monthly Payouts", desc: "Commission paid out on the 1st of every month to your registered wallet." },
                     { icon: "📈", title: "Lifetime Commission", desc: "Keep earning as long as your referred players stay active on DGC Arcade." },
-                    { icon: "🎰", title: "Industry-Favourite Games", desc: "Slots, crash, dice, plinko, hilo, and more — players love to come back." },
+                    { icon: "🎲", title: "Industry-Favourite Games", desc: "Crash, dice, roulette, blackjack, mines, and more — players love to come back." },
                     { icon: "%", title: "Custom Commission Rate", desc: "Specialty creators can negotiate rates up to 30%+ based on their reach.", style: "font-bold text-primary text-base" },
                     { icon: "💎", title: "VIP Rakeback", desc: "Your referred players earn rakeback as they climb the VIP ladder — keeping them engaged." },
                     { icon: "🛎", title: "Dedicated Support", desc: "Priority support for all creator-level partners — we're here 24/7." },
@@ -732,19 +751,30 @@ function SpecialtyHub({
                 </div>
               ) : (
                 <div className="rounded-xl border border-border/50 overflow-x-auto">
-                  <div className="grid grid-cols-4 text-xs font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-4 py-2.5 border-b border-border/50 min-w-[320px]">
-                    <span className="col-span-2">Player</span><span>Status</span><span>Joined</span>
+                  <div className="grid grid-cols-7 text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-4 py-2.5 border-b border-border/50 min-w-[800px]">
+                    <span className="col-span-2">Player</span>
+                    <span className="text-right">Deposits</span>
+                    <span className="text-right">Wagered</span>
+                    <span className="text-right">House Profit</span>
+                    <span className="text-right text-primary">Est. Earn</span>
+                    <span className="text-right">Status</span>
                   </div>
                   <div className="divide-y divide-border/30">
                     {referrals.map(r => (
-                      <div key={r.id} className="grid grid-cols-4 px-4 py-3 text-sm hover:bg-secondary/20 transition-colors min-w-[320px]">
-                        <span className="col-span-2 font-mono font-bold">@{r.username}</span>
-                        <span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-bold uppercase ${r.status === "active" ? "bg-green-500/15 text-green-400" : "bg-yellow-500/15 text-yellow-400"}`}>
+                      <div key={r.id} className="grid grid-cols-7 px-4 py-3 text-sm hover:bg-secondary/20 transition-colors min-w-[800px] items-center">
+                        <div className="col-span-2 flex flex-col">
+                          <span className="font-mono font-bold text-white">@{r.username}</span>
+                          <span className="text-[10px] text-muted-foreground font-mono">Joined {new Date(r.joinedAt).toLocaleDateString()}</span>
+                        </div>
+                        <span className="text-right font-mono text-xs">${(r.totalDeposited || 0).toFixed(2)}</span>
+                        <span className="text-right font-mono text-xs">${(r.totalWagered || 0).toFixed(2)}</span>
+                        <span className="text-right font-mono text-xs text-yellow-400/80">${(r.houseProfit || 0).toFixed(2)}</span>
+                        <span className="text-right font-mono text-xs font-bold text-primary">${(r.estimatedCommission || 0).toFixed(2)}</span>
+                        <div className="text-right">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${r.status === "active" ? "bg-green-500/15 text-green-400" : "bg-yellow-500/15 text-yellow-400"}`}>
                             {r.status}
                           </span>
-                        </span>
-                        <span className="text-xs text-muted-foreground font-mono">{new Date(r.joinedAt).toLocaleDateString()}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -796,7 +826,7 @@ function SpecialtyHub({
               </div>
 
               <div className="flex gap-1 border-b border-border/50 pb-0">
-                {(["general", "affiliate", "earnings"] as const).map(t => (
+                {(["general", "affiliate", "tiers", "earnings"] as const).map(t => (
                   <button key={t} onClick={() => setFaqTab(t)}
                     className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border-b-2 -mb-px capitalize ${faqTab === t ? "border-primary text-primary bg-primary/5" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
                     {t === "affiliate" ? "Affiliate Program" : t.charAt(0).toUpperCase() + t.slice(1)}
@@ -805,7 +835,7 @@ function SpecialtyHub({
               </div>
 
               <div className="divide-y divide-border/30 bg-secondary/20 rounded-xl border border-border/50 px-5">
-                {(faqTab === "general" ? GENERAL_FAQ : faqTab === "affiliate" ? AFFILIATE_FAQ : EARNINGS_FAQ).map(item => (
+                {(faqTab === "general" ? GENERAL_FAQ : faqTab === "affiliate" ? AFFILIATE_FAQ : faqTab === "earnings" ? EARNINGS_FAQ : TIER_FAQ).map(item => (
                   <FaqItem key={item.q} q={item.q} a={item.a} />
                 ))}
               </div>
@@ -991,14 +1021,15 @@ function RegularHub({
             </div>
           ) : (
             <div className="rounded-lg border border-border/40 overflow-hidden">
-              <div className="grid grid-cols-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-3 py-2 border-b border-border/40">
-                <span>Player</span><span className="text-right">Joined</span>
+              <div className="grid grid-cols-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-3 py-2 border-b border-border/40">
+                <span>Player</span><span className="text-right">Deposits</span><span className="text-right">Joined</span>
               </div>
               <div className="divide-y divide-border/30 max-h-48 overflow-y-auto">
                 {referrals.map(r => (
-                  <div key={r.id} className="grid grid-cols-2 px-3 py-2.5 text-sm hover:bg-secondary/20 transition-colors">
-                    <span className="font-mono text-xs font-bold">@{r.username}</span>
-                    <span className="text-right text-xs text-muted-foreground font-mono">{new Date(r.joinedAt).toLocaleDateString()}</span>
+                  <div key={r.id} className="grid grid-cols-3 px-3 py-2.5 text-sm hover:bg-secondary/20 transition-colors items-center">
+                    <span className="font-mono text-[11px] font-bold">@{r.username}</span>
+                    <span className="text-right font-mono text-xs text-primary font-bold">${(r.totalDeposited || 0).toFixed(0)}</span>
+                    <span className="text-right text-[10px] text-muted-foreground font-mono">{new Date(r.joinedAt).toLocaleDateString()}</span>
                   </div>
                 ))}
               </div>
@@ -1015,6 +1046,7 @@ function RegularHub({
           {faqOpen && (
             <div className="mt-3 divide-y divide-border/30">
               {GENERAL_FAQ.map(item => <FaqItem key={item.q} q={item.q} a={item.a} />)}
+              {TIER_FAQ.map(item => <FaqItem key={item.q} q={item.q} a={item.a} />)}
               {EARNINGS_FAQ.map(item => <FaqItem key={item.q} q={item.q} a={item.a} />)}
             </div>
           )}

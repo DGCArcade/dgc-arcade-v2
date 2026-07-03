@@ -3,6 +3,14 @@ import { eq, and, lt, gte, ne, sql, count } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { recordLedger } from "../services/ledger.js";
 import { creditCryptoBalance } from "./balance-service.js";
+import {
+  extractPlisioReceivedCrypto,
+  extractPlisioInvoicedCrypto,
+  extractPlisioReceivedUsd,
+  extractPlisioSourceUsd,
+  computePlisioCreditUsd,
+} from "./plisio-amounts.js";
+import { getCryptoPrice } from "./price-service.js";
 import { diceRoundManager } from "./dice-round-manager.js";
 
 const WAGER_MULTIPLIER = 1.0;
@@ -117,131 +125,44 @@ export async function syncPlisioDeposits() {
             plisioRaw: JSON.stringify(data.data).substring(0, 4000),
           }, "Plisio sync: raw API response for crediting decision");
 
-          // ── EXTRACT RECEIVED AMOUNT (exhaustive field search) ───────────────
-          // Plisio uses different field names depending on API version/coin.
-          // "Completed Auto" means Plisio auto-completed an underpaid invoice —
-          // we MUST use the actual received amount, not the invoiced amount.
-          let cryptoAmountReceived = parseFloat(String(
-            data.data.received_amount ||
-            data.data.received_sum    ||
-            data.data.paid_amount     ||
-            data.data.amount_received ||
-            data.data.actual_amount   ||
-            data.data.sum_received    ||
-            "0"
-          ));
-          const cryptoAmountInvoiced = parseFloat(String(
-            data.data.invoice_total_sum ||
-            data.data.total_sum         ||
-            data.data.invoice_amount    ||
-            data.data.sum_expected      ||
-            "0"
-          ));
-          const sourceUsd = parseFloat(String(data.data.source_amount || data.data.source_amount_usd || tx.amount));
-          let receivedUsdValue = parseFloat(String(
-            data.data.received_amount_usd ||
-            data.data.received_sum_usd    ||
-            data.data.amount_usd          ||
-            "0"
-          ));
-          const cryptoCurrency = tx.currency || data.data.currency || "ETH";
+          const plisioData = data.data as Record<string, unknown>;
+          const cryptoCurrency = tx.currency || String(plisioData.currency ?? "ETH");
+          const cryptoAmountReceived = extractPlisioReceivedCrypto(plisioData);
+          const cryptoAmountInvoiced = extractPlisioInvoicedCrypto(plisioData);
+          const sourceUsd = extractPlisioSourceUsd(plisioData, parseFloat(String(tx.amount)));
+          const receivedUsdFromPlisio = extractPlisioReceivedUsd(plisioData);
 
-          // ── EXTRACT FROM txs ARRAY (on-chain tx data, most reliable) ───────
-          // Plisio stores the actual on-chain transactions here.
-          // Handle both array and plain-object (numeric-keyed) formats.
-          if (cryptoAmountReceived <= 0) {
-            const rawTxs = data.data.txs ?? data.data.transactions ?? data.data.tx_list;
-            const txsList: any[] = Array.isArray(rawTxs)
-              ? rawTxs
-              : (rawTxs && typeof rawTxs === "object" ? Object.values(rawTxs) : []);
-
-            if (txsList.length > 0) {
-              const extracted = txsList.reduce((sum: number, t: any) => {
-                const amt = parseFloat(String(
-                  t.amount         ||
-                  t.received       ||
-                  t.crypto_amount  ||
-                  t.source_amount  ||
-                  t.value          ||
-                  t.sum            ||
-                  t.received_amount||
-                  t.incoming       ||
-                  "0"
-                ));
-                return sum + amt;
-              }, 0);
-              if (extracted > 0) {
-                cryptoAmountReceived = extracted;
-                logger.info(
-                  { txId: tx.id, cryptoAmountReceived, txsCount: txsList.length },
-                  "Plisio sync: extracted received amount from txs array"
-                );
-              }
-            }
-          }
-
-          // ── STRICT GUARD ────────────────────────────────────────────────────
-          // If we still have no received amount:
-          // - mismatch/overpaid: ALWAYS skip — we must have the real amount.
-          // - completed: only fall back to sourceUsd if BOTH received_amount AND
-          //   txs are empty (some coins never populate received_amount in GET).
-          //   Log a WARNING so this shows up in production logs.
-          if (cryptoAmountReceived <= 0 && receivedUsdValue <= 0) {
-            // Even if pStatus === "completed", we MUST NOT fall back to sourceUsd (invoice amount).
-            // "Completed Auto" in Plisio marks an underpaid invoice as completed.
-            // Crediting the full invoice amount would be an over-credit.
-            // If Plisio hasn't provided the actual received amount yet, we skip and wait for the next sync.
+          if (cryptoAmountReceived <= 0 && receivedUsdFromPlisio <= 0) {
             logger.info(
               { txId: tx.id, plisioTrackId: tx.plisioTrackId, pStatus },
-              "Plisio sync: skipping — status is completed but NO received_amount data yet (prevents over-crediting partial payments)"
+              "Plisio sync: skipping — no sum_actual data yet",
             );
             continue;
           }
 
-          // ── CALCULATE USD CREDIT AMOUNT ─────────────────────────────────────
-          // Priority 1: Plisio provides received_amount_usd directly.
-          // Priority 2: Both received and invoiced crypto known → ratio method.
-          // Priority 3: Received crypto known but no invoiced amount → live price.
-          //             NEVER fall back to sourceUsd (invoice amount) — that would
-          //             credit the full invoice even when only a fraction was paid.
-          let creditAmountUsd: number;
-          let exchangeRate: number | null = null;
-          let creditCalcMethod: string;
+          const creditCalc = await computePlisioCreditUsd(
+            plisioData,
+            sourceUsd,
+            (c) => getCryptoPrice(c),
+            cryptoCurrency,
+          );
+          let creditAmountUsd = creditCalc.creditUsd;
+          let exchangeRate = creditCalc.exchangeRate;
+          let creditCalcMethod = creditCalc.creditMethod;
 
-          if (receivedUsdValue > 0) {
-            creditAmountUsd = Math.round(receivedUsdValue * 1e8) / 1e8;
-            creditCalcMethod = "plisio_usd_direct";
-            if (cryptoAmountReceived > 0) {
-              exchangeRate = Math.round((receivedUsdValue / cryptoAmountReceived) * 1e8) / 1e8;
-            }
-          } else if (cryptoAmountReceived > 0 && cryptoAmountInvoiced > 0 && sourceUsd > 0) {
-            const ratio = cryptoAmountReceived / cryptoAmountInvoiced;
-            creditAmountUsd = Math.round(sourceUsd * ratio * 1e8) / 1e8;
-            creditCalcMethod = "ratio_received_over_invoiced";
-            exchangeRate = cryptoAmountReceived > 0 ? Math.round((creditAmountUsd / cryptoAmountReceived) * 1e8) / 1e8 : null;
-          } else {
-            // cryptoAmountReceived > 0 but invoice_total_sum missing.
-            // Use live price to convert real received crypto → USD.
-            // NEVER use sourceUsd here — that is the invoice amount and would
-            // over-credit the user if they only paid a fraction of it.
-            const { getCryptoPrice } = await import("./price-service.js");
+          if (creditAmountUsd <= 0 && creditCalc.cryptoReceived > 0) {
             const livePrice = await getCryptoPrice(cryptoCurrency);
-            creditAmountUsd = Math.round(cryptoAmountReceived * livePrice * 1e8) / 1e8;
+            creditAmountUsd = Math.round(creditCalc.cryptoReceived * livePrice * 1e8) / 1e8;
             exchangeRate = livePrice;
             creditCalcMethod = "live_price_lookup";
-
-            logger.warn({
-              event: "plisio_sync_no_invoice_total",
-              txId: tx.id,
-              plisioTrackId: tx.plisioTrackId,
-              userId: tx.userId,
-              cryptoCurrency,
-              cryptoAmountReceived,
-              livePrice,
-              creditAmountUsd,
-              requested_amount_usd: sourceUsd,
-            }, "Plisio sync: invoice_total_sum missing — used live price lookup (NOT invoice amount)");
           }
+
+          if (creditAmountUsd <= 0) {
+            logger.info({ txId: tx.id }, "Plisio sync: could not compute credit from sum_actual");
+            continue;
+          }
+
+          const effectiveReceived = creditCalc.cryptoReceived;
 
           logger.info({
             event: "plisio_sync_crediting",
@@ -251,13 +172,13 @@ export async function syncPlisioDeposits() {
             ipn_status: pStatus,
             currency: cryptoCurrency,
             invoice_amount_crypto: cryptoAmountInvoiced,
-            received_amount_crypto: cryptoAmountReceived,
-            received_amount_usd: receivedUsdValue,
+            received_amount_crypto: effectiveReceived,
+            received_amount_usd: creditAmountUsd,
             requested_amount_usd: sourceUsd,
             credit_amount_usd: creditAmountUsd,
             exchange_rate: exchangeRate,
             credit_calc_method: creditCalcMethod,
-          }, "Plisio sync: crediting deposit (actual received amount)");
+          }, "Plisio sync: crediting deposit (sum actual)");
 
           await db.transaction(async (txn) => {
             const flipped = await txn
@@ -267,8 +188,8 @@ export async function syncPlisioDeposits() {
                 amount: String(creditAmountUsd),
                 metadata: JSON.stringify({
                   invoice_amount_crypto: cryptoAmountInvoiced,
-                  received_amount_crypto: cryptoAmountReceived,
-                  received_amount_usd: receivedUsdValue,
+                  received_amount_crypto: effectiveReceived,
+                  received_amount_usd: creditAmountUsd,
                   requested_amount_usd: sourceUsd,
                   credit_amount_usd: creditAmountUsd,
                   exchange_rate: exchangeRate,
@@ -284,8 +205,8 @@ export async function syncPlisioDeposits() {
             if (flipped.length === 0) return;
 
             // 1. Credit Crypto-Native Balance — always use real received crypto, never invoice.
-            if (cryptoAmountReceived > 0) {
-              await creditCryptoBalance(tx.userId, cryptoCurrency, cryptoAmountReceived, txn);
+            if (effectiveReceived > 0) {
+              await creditCryptoBalance(tx.userId, cryptoCurrency, effectiveReceived, txn);
             } else {
               // receivedUsdValue > 0 but no crypto amount — credit static USD balance only
               await txn.update(usersTable).set({ balance: sql`balance + ${creditAmountUsd}` }).where(eq(usersTable.id, tx.userId));

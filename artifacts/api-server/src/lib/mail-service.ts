@@ -19,8 +19,8 @@ import { Resend } from "resend";
 // ──────────────────────────────────────────────────────────────────────────────
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const SENDER_EMAIL = process.env.SENDER_EMAIL || "noreply@differentgrindcrew.com";
-const SITE_URL = process.env.SITE_URL || "https://differentgrindcrew.com";
+const SENDER_EMAIL = process.env.SENDER_EMAIL || "noreply@dgcarcade.com";
+const SITE_URL = process.env.SITE_URL || "https://dgcarcade.com";
 
 // Where the hosted logo assets live. Defaults to the live site's /email-assets
 // folder (served from artifacts/dgc-arcade/public/email-assets). Override with
@@ -385,6 +385,66 @@ export async function sendEmailVerificationEmail(
   if (resend) await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
 }
 
+export async function sendOwnerStepUpEmail(
+  email: string,
+  username: string,
+  code: string,
+): Promise<void> {
+  const accent = ACCENTS.purple;
+  const body = `
+    ${h("Owner Profile Lock", accent)}
+    ${p(`${hl(username, accent)}, enter this code to unlock owner tools on your profile. Valid 10 minutes.`)}
+    <div style="text-align:center;margin:24px 0;">
+      <div style="display:inline-block;font-family:monospace;font-size:32px;font-weight:900;letter-spacing:0.35em;padding:16px 24px;border-radius:12px;border:2px solid ${accent.glow};color:${accent.text};background:rgba(180,79,255,0.08);">${code}</div>
+    </div>
+    ${infoBox("Login is still open from anywhere — this code only protects owner AI & bank controls.", accent.glow)}
+  `;
+  const html = shell({
+    accentName: "purple",
+    header: iconHeader(LOGOS.dFuturistic, accent, "Owner Step-Up"),
+    body,
+    preheader: "Owner profile verification code",
+  });
+  if (resend) {
+    await resend.emails.send({
+      from: SENDER_EMAIL,
+      to: email,
+      subject: "🔐 DGC Arcade — Owner Profile Code",
+      html,
+    });
+  }
+}
+
+export async function sendWithdrawalOtpEmail(
+  email: string,
+  username: string,
+  code: string,
+): Promise<void> {
+  const accent = ACCENTS.gold;
+  const body = `
+    ${h("Withdrawal Verification", accent)}
+    ${p(`Hey ${hl(username, accent)}, use this one-time code to confirm your withdrawal. It expires in 10 minutes.`)}
+    <div style="text-align:center;margin:24px 0;">
+      <div style="display:inline-block;font-family:monospace;font-size:32px;font-weight:900;letter-spacing:0.35em;padding:16px 24px;border-radius:12px;border:2px solid ${accent.glow};color:${accent.text};background:rgba(255,215,0,0.08);">${code}</div>
+    </div>
+    ${infoBox("Never share this code. DGC staff will never ask for it.", accent.glow)}
+  `;
+  const html = shell({
+    accentName: "gold",
+    header: wordmarkHeader(LOGOS.wordmarkGold, accent),
+    body,
+    preheader: "Your withdrawal verification code",
+  });
+  if (resend) {
+    await resend.emails.send({
+      from: SENDER_EMAIL,
+      to: email,
+      subject: "🔐 DGC Arcade — Withdrawal Verification Code",
+      html,
+    });
+  }
+}
+
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║ 3. LOGIN SECURITY ALERT — 3 variations                                    ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
@@ -462,16 +522,43 @@ export async function sendLoginSecurityEmail(
 // ╚══════════════════════════════════════════════════════════════════════════╝
 
 const depositVariants: Array<
-  (username: string, amount: string, txHash: string) => { subject: string; html: string }
+  (
+    username: string,
+    amount: string,
+    txHash: string,
+    receipt?: DepositReceiptDetails,
+  ) => { subject: string; html: string }
 > = [
   // V1 — Gold, celebratory
-  (username, amount, txHash) => {
+  (username, amount, txHash, receipt) => {
     const accent = ACCENTS.gold;
+    const receiptRows: Array<[string, string]> = receipt
+      ? [
+          ["💵 Credited (sum actual):", hl(`$${receipt.creditedUsd.toFixed(2)}`, accent)],
+          ["🔗 Plisio ID:", txHash],
+          ["✅ Status:", "CONFIRMED"],
+        ]
+      : [
+          ["💵 Amount:", hl(amount, accent)],
+          ["🔗 Transaction:", txHash],
+          ["✅ Status:", "CONFIRMED"],
+        ];
+    if (receipt?.requestedUsd != null) {
+      receiptRows.splice(1, 0, ["📋 Invoice requested:", `$${receipt.requestedUsd.toFixed(2)}`]);
+    }
+    if (receipt?.receivedCrypto != null && receipt.currency) {
+      receiptRows.splice(
+        receipt?.requestedUsd != null ? 2 : 1,
+        0,
+        ["⛓️ Received on-chain:", `${receipt.receivedCrypto} ${receipt.currency}`],
+      );
+    }
     const body = `
       ${h("Deposit Confirmed 💰", accent)}
-      ${p(`Yo ${hl(username, accent)}, your deposit cleared and it's locked into your balance. Time to make it work.`)}
+      ${p(`Yo ${hl(username, accent)}, your deposit cleared. We credited the <strong>actual sum received</strong> after network &amp; processor fees — not the invoice estimate.`)}
       ${infoBox(`✅ <strong>${amount}</strong> added to your balance.`, accent.glow)}
-      ${dataRows([["💵 Amount:", hl(amount, accent)], ["🔗 Transaction:", txHash], ["✅ Status:", "CONFIRMED"]], accent)}
+      ${dataRows(receiptRows, accent)}
+      ${btn(`${SITE_URL}/deposit/success${receipt?.orderId ? `?order=${receipt.orderId}` : ""}`, "View Receipt", accent)}
       ${btn(`${SITE_URL}/games`, "Start Playing", accent)}
       ${infoBox("💡 Your balance is live. Play smart, win big — the streets always win.", "#00D4FF")}
     `;
@@ -481,13 +568,21 @@ const depositVariants: Array<
     };
   },
   // V2 — Cyber, "funds loaded"
-  (username, amount, txHash) => {
+  (username, amount, txHash, receipt) => {
     const accent = ACCENTS.cyber;
+    const rows: Array<[string, string]> = [
+      ["💸 Credited:", hl(amount, accent)],
+      ["🔗 Plisio ID:", txHash],
+      ["🟢 Status:", "CONFIRMED ON-CHAIN"],
+    ];
+    if (receipt?.requestedUsd != null) {
+      rows.splice(1, 0, ["📋 Invoice:", `$${receipt.requestedUsd.toFixed(2)}`]);
+    }
     const body = `
       ${h("Funds Loaded ⚡", accent)}
-      ${p(`${hl(username, accent)}, the chain confirmed it — your deposit is in and ready to ride.`)}
-      ${dataRows([["💸 Credited:", hl(amount, accent)], ["🔗 Tx hash:", txHash], ["🟢 Status:", "CONFIRMED ON-CHAIN"]], accent)}
-      ${p("No holds, no delays. Your full balance is playable right now.")}
+      ${p(`${hl(username, accent)}, the chain confirmed it — we credited your <strong>sum actual</strong> (real received amount).`)}
+      ${dataRows(rows, accent)}
+      ${p("No holds, no delays. Your credited balance is playable right now.")}
       ${btn(`${SITE_URL}/games`, "Hit the Tables", accent)}
     `;
     return {
@@ -496,13 +591,18 @@ const depositVariants: Array<
     };
   },
   // V3 — Neon, "bag secured"
-  (username, amount, txHash) => {
+  (username, amount, txHash, receipt) => {
     const accent = ACCENTS.neon;
     const body = `
       ${h("Bag Secured 💎", accent)}
-      ${p(`Money moves, ${hl(username, accent)}. Your deposit hit and your balance just went up.`)}
+      ${p(`Money moves, ${hl(username, accent)}. Your deposit hit — credited at sum actual after fees.`)}
       ${infoBox(`✅ <strong>${amount}</strong> is now in play.`, accent.glow)}
-      ${dataRows([["💵 Amount:", hl(amount, accent)], ["🔗 Transaction:", txHash], ["💎 Status:", "CONFIRMED"]], accent)}
+      ${dataRows([
+        ["💵 Credited:", hl(amount, accent)],
+        ["🔗 Plisio ID:", txHash],
+        ["💎 Status:", "CONFIRMED"],
+      ], accent)}
+      ${btn(`${SITE_URL}/deposit/success${receipt?.orderId ? `?order=${receipt.orderId}` : ""}`, "View Receipt", accent)}
       ${btn(`${SITE_URL}/games`, "Run It Up", accent)}
       ${p("Get paid or get played. Make the right moves.")}
     `;
@@ -513,19 +613,121 @@ const depositVariants: Array<
   },
 ];
 
+export interface DepositReceiptDetails {
+  creditedUsd: number;
+  requestedUsd?: number;
+  receivedCrypto?: number;
+  currency?: string;
+  orderId?: string;
+}
+
 export async function sendDepositEmail(
   email: string,
   username: string,
   amount: string,
-  txHash: string
+  txHash: string,
+  receipt?: DepositReceiptDetails,
 ): Promise<void> {
-  const { subject, html } = depositVariants[pick(depositVariants.length)](username, amount, txHash);
+  const { subject, html } = depositVariants[pick(depositVariants.length)](username, amount, txHash, receipt);
   if (resend) await resend.emails.send({ from: SENDER_EMAIL, to: email, subject, html });
 }
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║ 5. WITHDRAWAL CONFIRMATION — 3 variations                                 ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
+
+export async function sendWithdrawalRequestedEmail(
+  email: string,
+  username: string,
+  amount: string,
+  address: string,
+): Promise<void> {
+  const accent = ACCENTS.gold;
+  const body = `
+    ${h("Withdrawal Requested", accent)}
+    ${p(`Hey ${hl(username, accent)}, we received your cashout request and it's in the queue.`)}
+    ${dataRows([["💵 Amount:", hl(amount, accent)], ["📬 Destination:", address.slice(0, 24) + (address.length > 24 ? "…" : "")], ["📋 Status:", "REQUESTED"]], accent)}
+    ${infoBox("You'll get another email when we start processing and when funds are sent.", accent.glow)}
+    ${btn(`${SITE_URL}/profile`, "Track Withdrawal", accent)}
+  `;
+  const html = shell({
+    accentName: "gold",
+    header: iconHeader(LOGOS.dGoldSpace, accent, "Cashout Requested"),
+    body,
+    preheader: `Withdrawal of ${amount} requested`,
+  });
+  if (resend) {
+    await resend.emails.send({
+      from: SENDER_EMAIL,
+      to: email,
+      subject: `📤 Withdrawal Requested — ${amount} • DGC Arcade`,
+      html,
+    });
+  }
+}
+
+export async function sendWithdrawalProcessingEmail(
+  email: string,
+  username: string,
+  amount: string,
+  reference: string,
+): Promise<void> {
+  const accent = ACCENTS.ocean;
+  const body = `
+    ${h("Withdrawal Processing", accent)}
+    ${p(`${hl(username, accent)}, your payout is being processed on-chain right now.`)}
+    ${dataRows([["💵 Amount:", hl(amount, accent)], ["🔗 Reference:", reference], ["⏳ Status:", "PROCESSING"]], accent)}
+    ${infoBox("Most withdrawals complete within a few minutes. Track progress in your profile.", accent.glow)}
+    ${btn(`${SITE_URL}/profile`, "View Status", accent)}
+  `;
+  const html = shell({
+    accentName: "ocean",
+    header: iconHeader(LOGOS.dOcean, accent, "Processing"),
+    body,
+    preheader: `${amount} is being processed`,
+  });
+  if (resend) {
+    await resend.emails.send({
+      from: SENDER_EMAIL,
+      to: email,
+      subject: `⏳ Withdrawal Processing — ${amount} • DGC Arcade`,
+      html,
+    });
+  }
+}
+
+export async function sendWithdrawalFailedEmail(
+  email: string,
+  username: string,
+  amount: string,
+  reason: "failed" | "needs_review",
+): Promise<void> {
+  const accent = ACCENTS.blood;
+  const statusLabel = reason === "needs_review" ? "UNDER REVIEW" : "NEEDS ATTENTION";
+  const body = `
+    ${h("Withdrawal Update", accent)}
+    ${p(`Hey ${hl(username, accent)}, your withdrawal of ${hl(amount, accent)} requires attention.`)}
+    ${dataRows([["💵 Amount:", amount], ["📋 Status:", statusLabel]], accent)}
+    ${infoBox(reason === "needs_review"
+      ? "Our team is reviewing this payout. Funds remain secured — contact support if you have questions."
+      : "The payout could not be completed automatically. Check your profile or contact support.", accent.glow)}
+    ${btn(`${SITE_URL}/profile`, "View Profile", accent)}
+  `;
+  const html = shell({
+    accentName: "blood",
+    header: iconHeader(LOGOS.dBlood, accent, "Withdrawal Update"),
+    body,
+    preheader: `Withdrawal ${statusLabel.toLowerCase()}`,
+  });
+  if (resend) {
+    await resend.emails.send({
+      from: SENDER_EMAIL,
+      to: email,
+      subject: `⚠️ Withdrawal Update — ${amount} • DGC Arcade`,
+      html,
+    });
+  }
+}
 
 const withdrawalVariants: Array<
   (username: string, amount: string, txHash: string) => { subject: string; html: string }

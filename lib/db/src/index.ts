@@ -4,45 +4,48 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
+// Uses DATABASE_URL from Render (your Neon connection string).
+// Optionally set DATABASE_POOL_URL to Neon's pooled endpoint (-pooler in hostname) for slightly
+// faster reconnects under load — not required if you only have one DATABASE_URL.
+const connectionString =
+  process.env.DATABASE_POOL_URL ?? process.env.DATABASE_URL;
+
+if (!connectionString) {
   throw new Error(
     "DATABASE_URL must be set. Did you forget to provision a database?",
   );
 }
 
-// Neon.tech requires SSL from external hosts like Render
+// Neon.tech requires SSL from external hosts like Render (Oregon)
 const ssl =
   process.env.NODE_ENV === "production"
     ? { rejectUnauthorized: false }
     : undefined;
 
-// Optimized connection pool for Neon (Singapore region)
-// Neon supports connection pooling for better performance
-const poolConfig = {
-  connectionString: process.env.DATABASE_URL,
+const poolConfig: pg.PoolConfig = {
+  connectionString,
   ssl,
-  // Connection pool settings optimized for production
-  max: Number(process.env.PG_POOL_MAX ?? 20), // Increased from 10 for better concurrency
-  min: Number(process.env.PG_POOL_MIN ?? 5), // Maintain minimum connections
-  idleTimeoutMillis: 30_000, // 30 seconds
-  connectionTimeoutMillis: 10_000, // 10 seconds
+  max: Number(process.env.PG_POOL_MAX ?? 25),
+  min: Number(process.env.PG_POOL_MIN ?? 3),
+  idleTimeoutMillis: 60_000,
+  connectionTimeoutMillis: 12_000,
   keepAlive: true,
-  // Neon-specific optimizations
+  keepAliveInitialDelayMillis: 10_000,
   application_name: "dgc-arcade-api",
-  // Enable TCP keepalive for long-lived connections
-  statement_timeout: 30000, // 30 seconds per statement
 };
 
 export const pool = new Pool(poolConfig);
 
-// Log pool events for monitoring
-pool.on("connect", () => {
-  // Connection established
+// statement_timeout must be set per-connection — not a valid Pool option
+pool.on("connect", (client) => {
+  client.query("SET statement_timeout = 25000").catch(() => {});
+  client.query("SET idle_in_transaction_session_timeout = 30000").catch(() => {});
 });
 
 pool.on("error", (err) => {
   console.error("Unexpected error on idle client in pool", err);
 });
-export const db = drizzle(pool, { schema, logger: false }); // Disable query logging in production for performance
+
+export const db = drizzle(pool, { schema, logger: false });
 
 export * from "./schema";

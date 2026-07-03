@@ -1,16 +1,23 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable, creatorMessagesTable, creatorMessageReadsTable, fraudReviewsTable, referralsTable, userBalancesTable, creatorBankTxnsTable, slotThemesTable, adminAuditLogsTable, deviceHistoryTable } from "@workspace/db";
+import { db, usersTable, betsTable, transactionsTable, platformSettingsTable, tournamentsTable, tournamentEntriesTable, adminMessagesTable, creatorMessagesTable, creatorMessageReadsTable, fraudReviewsTable, referralsTable, userBalancesTable, creatorBankTxnsTable, slotThemesTable, adminAuditLogsTable, deviceHistoryTable, activityLogsTable } from "@workspace/db";
 import { eq, desc, ilike, and, sql, count, or, gt, ne } from "drizzle-orm";
 // Using native fetch available in Node.js 18+
 import { requireAdmin } from "../middlewares/auth.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
+import { invalidatePublicGamesCache } from "./games.js";
 import { logAudit } from "../services/audit.js";
 import { recordLedger, recordLedgerStandalone } from "../services/ledger.js";
-import { getUserBalance } from "../lib/balance-service.js";
+import { getUserBalance, creditBalance } from "../lib/balance-service.js";
 import { getPlisioPayoutReadiness, sendPlisioPayout } from "../lib/plisio-payout.js";
 import { getDailyWinLoss, getDailyWithdrawals, getDailyDeposits } from "../services/stats-service.js";
 import { getCryptoPrice } from "../lib/price-service.js";
+import {
+  canCreditFromPlisioData,
+  computePlisioCreditUsd,
+  extractPlisioReceivedCrypto,
+  extractPlisioSourceUsd,
+} from "../lib/plisio-amounts.js";
 
 // Rate limiting to prevent double-clicks and abuse
 const requestTimestamps = new Map<string, number[]>();
@@ -48,11 +55,11 @@ adminRouter.use(requireAdmin);
 const OWNER_USERNAME = "fanodgc";
 async function callerIsOwner(req: { user?: { userId: number } }): Promise<boolean> {
   const [caller] = await db
-    .select({ username: usersTable.username })
+    .select({ username: usersTable.username, role: usersTable.role })
     .from(usersTable)
     .where(eq(usersTable.id, req.user!.userId))
     .limit(1);
-  return (caller?.username ?? "").toLowerCase() === OWNER_USERNAME;
+  return (caller?.username ?? "").toLowerCase() === OWNER_USERNAME || caller?.role === "owner";
 }
 
 // True if the target row is the protected platform owner. Matches by case-insensitive
@@ -132,6 +139,60 @@ function getSiteUrl(): string {
   }
   return "";
 }
+
+// GET /api/admin/activity-logs — full platform audit trail (bets, deposits, withdrawals, logins, visitors)
+adminRouter.get("/activity-logs", async (req, res) => {
+  const limit = Math.min(parseInt(String(req.query.limit ?? "100"), 10), 500);
+  const offset = parseInt(String(req.query.offset ?? "0"), 10);
+  const action = typeof req.query.action === "string" ? req.query.action : undefined;
+  const username = typeof req.query.username === "string" ? req.query.username : undefined;
+  const actorType = typeof req.query.actorType === "string" ? req.query.actorType : undefined;
+
+  try {
+    const conditions = [];
+    if (action) conditions.push(eq(activityLogsTable.action, action));
+    if (username) conditions.push(ilike(activityLogsTable.username, `%${username}%`));
+    if (actorType) conditions.push(eq(activityLogsTable.actorType, actorType));
+
+    const rows = await db
+      .select()
+      .from(activityLogsTable)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(activityLogsTable.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(activityLogsTable)
+      .where(conditions.length ? and(...conditions) : undefined);
+
+    res.json({
+      logs: rows.map((r) => ({
+        id: r.id,
+        userId: r.userId,
+        username: r.username,
+        visitorId: r.visitorId,
+        actorType: r.actorType,
+        action: r.action,
+        ip: r.ip,
+        fingerprint: r.fingerprint,
+        amount: r.amount != null ? parseFloat(String(r.amount)) : null,
+        currency: r.currency,
+        referenceType: r.referenceType,
+        referenceId: r.referenceId,
+        metadata: r.metadata,
+        createdAt: r.createdAt.toISOString(),
+      })),
+      total: Number(total),
+      limit,
+      offset,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Activity logs error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // GET /api/admin/users
 adminRouter.get("/users", async (req, res) => {
@@ -341,7 +402,7 @@ adminRouter.post("/test-email", async (req, res) => {
 
     const testUsername = "TestUser";
     const testToken = "test-token-" + Date.now();
-    const siteUrl = process.env.SITE_URL || "https://differentgrindcrew.com";
+    const siteUrl = process.env.SITE_URL || "https://dgcarcade.com";
 
     switch (emailType) {
       case "welcome":
@@ -437,6 +498,9 @@ adminRouter.get("/users/:id", async (req, res) => {
       return;
     }
 
+    const callerIsOwnerUser = await callerIsOwner(req);
+    const targetIsOwner = isOwnerAccount(user);
+
     const { totalBalance, cryptoBalances } = await getUserBalance(userId);
 
     const bets = await db
@@ -476,29 +540,33 @@ adminRouter.get("/users/:id", async (req, res) => {
         promoBalance: parseFloat(user.promoBalance ?? "0"),
         totalDeposited: parseFloat(user.totalDeposited ?? "0"),
         totalWageredAmount: parseFloat(user.totalWageredAmount ?? "0"),
-        // ── Location / geo ──
-        locationVerified: user.locationVerified,
-        geoIp: user.geoIp,
-        geoCountry: user.geoCountry,
-        geoCountryCode: user.geoCountryCode,
-        geoRegion: user.geoRegion,
-        geoCity: user.geoCity,
-        geoHostname: user.geoHostname,
-        geoAsn: user.geoAsn,
-        geoIsp: user.geoIsp,
-        geoLat: user.geoLat,
-        geoLon: user.geoLon,
-        geoTimezone: user.geoTimezone,
-        vpnDetected: user.vpnDetected,
-        vpnProvider: user.vpnProvider,
-        // ── Device ──
-        deviceFingerprint: user.deviceFingerprint,
-        deviceName: user.deviceName,
-        deviceOs: user.deviceOs,
-        deviceBrowser: user.deviceBrowser,
-        deviceType: user.deviceType,
+        // ── Specialty Creator Fields ──
+        commissionRate: user.commissionRate != null ? parseFloat(user.commissionRate) : null,
+        commissionPct: user.commissionRate != null ? Math.round(parseFloat(user.commissionRate) * 100) : null,
+        displayName: user.displayName ?? null,
+        // ── Location / geo (redacted for owner account unless caller is owner) ──
+        locationVerified: targetIsOwner && !callerIsOwnerUser ? undefined : user.locationVerified,
+        geoIp: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoIp,
+        geoCountry: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoCountry,
+        geoCountryCode: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoCountryCode,
+        geoRegion: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoRegion,
+        geoCity: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoCity,
+        geoHostname: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoHostname,
+        geoAsn: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoAsn,
+        geoIsp: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoIsp,
+        geoLat: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoLat,
+        geoLon: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoLon,
+        geoTimezone: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoTimezone,
+        vpnDetected: targetIsOwner && !callerIsOwnerUser ? undefined : user.vpnDetected,
+        vpnProvider: targetIsOwner && !callerIsOwnerUser ? undefined : user.vpnProvider,
+        // ── Device (redacted for owner account unless caller is owner) ──
+        deviceFingerprint: targetIsOwner && !callerIsOwnerUser ? undefined : user.deviceFingerprint,
+        deviceName: targetIsOwner && !callerIsOwnerUser ? undefined : user.deviceName,
+        deviceOs: targetIsOwner && !callerIsOwnerUser ? undefined : user.deviceOs,
+        deviceBrowser: targetIsOwner && !callerIsOwnerUser ? undefined : user.deviceBrowser,
+        deviceType: targetIsOwner && !callerIsOwnerUser ? undefined : user.deviceType,
       },
-      deviceHistory: deviceHistory.map((d) => ({
+      deviceHistory: targetIsOwner && !callerIsOwnerUser ? [] : deviceHistory.map((d) => ({
         id: d.id,
         fingerprint: d.fingerprint,
         deviceName: d.deviceName,
@@ -563,6 +631,11 @@ adminRouter.post("/create-user", async (req, res) => {
   // Only the owner may create admin accounts (and therefore see a new admin's PIN).
   if (role === "admin" && !(await callerIsOwner(req))) {
     res.status(403).json({ error: "Only the owner can create admin accounts." });
+    return;
+  }
+  // Only the owner may seed accounts with a non-zero balance.
+  if (typeof balance === "number" && balance > 0 && !(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Only the owner can create users with a starting balance." });
     return;
   }
 
@@ -655,6 +728,10 @@ adminRouter.post("/create-specialty-creator", async (req, res) => {
         balance: promo,
         promoBalance: promo,
         withdrawalsEnabled: false,
+        // commissionRate stored as decimal fraction (0.10 = 10%).
+        // customCommissionPct is expected as a percentage (e.g. 10 = 10%).
+        commissionRate: String((customCommissionPct ?? 10) / 100),
+        displayName: displayName || null,
       })
       .returning();
 
@@ -719,6 +796,11 @@ adminRouter.patch("/users/:id", async (req, res) => {
   // Only the owner can change a user's role (promote/demote admin status).
   if (role !== undefined && role !== target?.role && !(await callerIsOwner(req))) {
     res.status(403).json({ error: "Only the owner can change a user's role." });
+    return;
+  }
+  // Only the owner can directly set balances — prevents admin balance inflation.
+  if (balance !== undefined && !(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Only the owner can set user balances directly." });
     return;
   }
 
@@ -1021,24 +1103,19 @@ adminRouter.patch("/transactions/:id", requireBankSession, async (req, res) => {
           .where(and(eq(transactionsTable.id, txId), eq(transactionsTable.status, "pending")))
           .returning({ id: transactionsTable.id });
         if (flipped.length === 0) return false;
-        const [userAfter] = await txn
-          .update(usersTable)
-          .set({ balance: sql`balance + ${refundAmount}` })
-          .where(eq(usersTable.id, tx.userId))
-          .returning({ balance: usersTable.balance });
-        if (userAfter) {
-          const balanceAfter = parseFloat(userAfter.balance);
-          await recordLedger(txn, {
-            userId: tx.userId,
-            amount: refundAmount,
-            balanceBefore: balanceAfter - refundAmount,
-            balanceAfter,
-            reason: "withdrawal_refund",
-            referenceId: txId,
-            referenceType: "transaction",
-            note: `Withdrawal rejected by admin #${req.user!.userId}`,
-          });
-        }
+        await creditBalance(tx.userId, refundAmount, tx.currency ?? "USD", txn);
+        const { totalBalance } = await getUserBalance(tx.userId);
+        const balanceAfter = totalBalance;
+        await recordLedger(txn, {
+          userId: tx.userId,
+          amount: refundAmount,
+          balanceBefore: balanceAfter - refundAmount,
+          balanceAfter,
+          reason: "withdrawal_refund",
+          referenceId: txId,
+          referenceType: "transaction",
+          note: `Withdrawal rejected by admin #${req.user!.userId}`,
+        });
         return true;
       });
       if (!refunded) {
@@ -1638,37 +1715,19 @@ adminRouter.get("/bank/invoices", requireBankSession, async (req, res) => {
             );
             const data = await resp.json() as any;
             if (data.status !== "success" || !data.data) return;
-            const d = data.data;
-
-            // Exhaustive received_amount extraction (same logic as background-tasks)
-            let receivedCrypto = parseFloat(String(
-              d.received_amount || d.received_sum || d.paid_amount ||
-              d.amount_received || d.actual_amount || d.sum_received || "0"
-            ));
-            if (receivedCrypto <= 0) {
-              const rawTxs = d.txs ?? d.transactions ?? d.tx_list;
-              const txsList: any[] = Array.isArray(rawTxs) ? rawTxs
-                : (rawTxs && typeof rawTxs === "object" ? Object.values(rawTxs) : []);
-              if (txsList.length > 0) {
-                const ext = txsList.reduce((s: number, t: any) => s + parseFloat(String(
-                  t.amount || t.received || t.crypto_amount || t.source_amount || t.value || "0"
-                )), 0);
-                if (ext > 0) receivedCrypto = ext;
-              }
-            }
-
-            let receivedUsd = parseFloat(String(d.received_amount_usd || d.received_sum_usd || d.amount_usd || "0"));
-            const invoicedCrypto = parseFloat(String(d.invoice_total_sum || d.total_sum || "0"));
-            const sourceUsd = parseFloat(String(d.source_amount || d.source_amount_usd || "0"));
-
-            // Compute USD from ratio if Plisio didn't give us direct USD
-            if (!receivedUsd && receivedCrypto > 0 && invoicedCrypto > 0 && sourceUsd > 0) {
-              receivedUsd = Math.round(sourceUsd * (receivedCrypto / invoicedCrypto) * 1e4) / 1e4;
-            }
+            const d = data.data as Record<string, unknown>;
+            const cryptoReceived = extractPlisioReceivedCrypto(d);
+            const sourceUsd = extractPlisioSourceUsd(d, parseFloat(String(inv.amount)));
+            const creditCalc = await computePlisioCreditUsd(
+              d,
+              sourceUsd,
+              (c) => getCryptoPrice(c),
+              inv.currency ?? "ETH",
+            );
 
             enrichMap.set(inv.id, {
-              plisioReceivedCrypto: receivedCrypto > 0 ? receivedCrypto : null,
-              plisioReceivedUsd: receivedUsd > 0 ? receivedUsd : null,
+              plisioReceivedCrypto: cryptoReceived > 0 ? cryptoReceived : null,
+              plisioReceivedUsd: creditCalc.creditUsd > 0 ? creditCalc.creditUsd : null,
               plisioSourceUsd: sourceUsd > 0 ? sourceUsd : null,
             });
           } catch { /* enrichment is best-effort */ }
@@ -1799,21 +1858,31 @@ adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
         const creditStatuses = ["completed", "mismatch", "overpaid", "finished"];
         
         if (creditStatuses.includes(pStatus)) {
-          const receivedAmount = parseFloat(String(data.data.received_amount || "0"));
-          const invoicedAmount = parseFloat(String(data.data.invoice_total_sum || "0"));
-          const sourceUsd = parseFloat(String(data.data.source_amount || tx.amount));
-          // STRICT GUARD: Only credit when we have the actual received amount from Plisio.
-          // Never fall back to the invoice/source amount — that would over-credit users
-          // when the actual payment was less (e.g. network fees deducted).
-          if (receivedAmount <= 0) {
+          const plisioData = data.data as Record<string, unknown>;
+          if (!canCreditFromPlisioData(plisioData)) {
             req.log.warn(
-              { txId: tx.id, pStatus, sourceUsd },
-              "Reconcile: received_amount is 0 — skipping, will retry when Plisio provides real data"
+              { txId: tx.id, pStatus, sourceUsd: tx.amount },
+              "Reconcile: no actual_sum from Plisio — skipping, will retry when real data available",
             );
             continue;
           }
-          const ratio = (invoicedAmount > 0) ? (receivedAmount / invoicedAmount) : 1;
-          const creditAmount = Math.round(sourceUsd * ratio * 1e8) / 1e8;
+
+          const cryptoCurrency = tx.currency || String(plisioData.currency ?? "ETH");
+          const sourceUsd = extractPlisioSourceUsd(plisioData, parseFloat(String(tx.amount)));
+          const creditCalc = await computePlisioCreditUsd(
+            plisioData,
+            sourceUsd,
+            (c) => getCryptoPrice(c),
+            cryptoCurrency,
+          );
+          const receivedAmount = creditCalc.cryptoReceived;
+          const invoicedAmount = creditCalc.cryptoInvoiced;
+          const creditAmount = creditCalc.creditUsd;
+
+          if (creditAmount <= 0) {
+            req.log.warn({ txId: tx.id, pStatus }, "Reconcile: could not compute credit from sum_actual");
+            continue;
+          }
 
           await db.transaction(async (txn) => {
             const flipped = await txn.update(transactionsTable)
@@ -1821,10 +1890,12 @@ adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
                 status: "completed", 
                 amount: String(creditAmount),
                 metadata: JSON.stringify({
-                  received_amount: String(receivedAmount),
-                  invoice_total_sum: String(invoicedAmount),
-                  source_amount: String(sourceUsd),
-                  ratio,
+                  invoice_amount_crypto: invoicedAmount,
+                  received_amount_crypto: receivedAmount,
+                  received_amount_usd: creditAmount,
+                  requested_amount_usd: sourceUsd,
+                  credit_amount_usd: creditAmount,
+                  credit_calc_method: creditCalc.creditMethod,
                   paid_at: data.data.updated_at || new Date().toISOString(),
                   reconciled_at: new Date().toISOString()
                 })
@@ -1834,9 +1905,12 @@ adminRouter.post("/bank/reconcile", requireBankSession, async (req, res) => {
 
             if (flipped.length === 0) return;
 
-            const cryptoCurrency = tx.currency || "ETH";
             const { creditCryptoBalance: creditCrypto } = await import("../lib/balance-service.js");
-            await creditCrypto(tx.userId, cryptoCurrency, receivedAmount, txn);
+            if (receivedAmount > 0) {
+              await creditCrypto(tx.userId, cryptoCurrency, receivedAmount, txn);
+            } else {
+              await txn.update(usersTable).set({ balance: sql`balance + ${creditAmount}` }).where(eq(usersTable.id, tx.userId));
+            }
 
             const [updatedUser] = await txn.update(usersTable).set({
               totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
@@ -1954,130 +2028,56 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
     req.log.info({ plisioData: data.data }, "Smart Sync: Deep Debug Plisio Data");
 
     const pStatus = String(data.data.status).toLowerCase();
-    
-    // ROBUST AMOUNT EXTRACTION: exhaustive field search across all Plisio API versions/coins.
-    // "Completed Auto" = Plisio auto-completed an underpaid invoice — credit ACTUAL, not invoice.
-    let receivedAmount = parseFloat(String(
-      data.data.received_amount ||
-      data.data.received_sum    ||
-      data.data.paid_amount     ||
-      data.data.amount_received ||
-      data.data.actual_amount   ||
-      data.data.sum_received    ||
-      "0"
-    ));
-    const invoicedAmount = parseFloat(String(
-      data.data.invoice_total_sum ||
-      data.data.total_sum         ||
-      data.data.invoice_amount    ||
-      data.data.sum_expected      ||
-      "0"
-    ));
-    const sourceUsd = parseFloat(String(data.data.source_amount || data.data.source_amount_usd || tx.amount));
-    let receivedUsdValue = parseFloat(String(
-      data.data.received_amount_usd ||
-      data.data.received_sum_usd    ||
-      data.data.amount_usd          ||
-      "0"
-    ));
+    const plisioData = data.data as Record<string, unknown>;
 
-    // ── FULL RAW RESPONSE LOG ────────────────────────────────────────────
     req.log.info({
       event: "plisio_smart_sync_raw",
-      plisioRaw: JSON.stringify(data.data).substring(0, 4000),
+      plisioRaw: JSON.stringify(plisioData).substring(0, 4000),
     }, "Smart Sync: raw Plisio API response");
 
-    // ── EXTRACT FROM txs ARRAY (exhaustive, handles array + object formats) ─
-    // Plisio "Completed Auto" = underpaid but auto-completed. txs has the real amount.
-    if (receivedAmount <= 0) {
-      const rawTxs = data.data.txs ?? data.data.transactions ?? data.data.tx_list;
-      const txsList: any[] = Array.isArray(rawTxs)
-        ? rawTxs
-        : (rawTxs && typeof rawTxs === "object" ? Object.values(rawTxs) : []);
+    const isPaid = ["completed", "mismatch", "overpaid", "finished", "overdue"].includes(pStatus);
 
-      if (txsList.length > 0) {
-        const extracted = txsList.reduce((sum: number, t: any) => {
-          const amt = parseFloat(String(
-            t.amount         ||
-            t.received       ||
-            t.crypto_amount  ||
-            t.source_amount  ||
-            t.value          ||
-            t.sum            ||
-            t.received_amount||
-            t.incoming       ||
-            "0"
-          ));
-          return sum + amt;
-        }, 0);
-        if (extracted > 0) {
-          receivedAmount = extracted;
-          req.log.info({ receivedAmount, txsCount: txsList.length }, "Smart Sync: extracted receivedAmount from txs array");
-        }
-      }
-    }
-
-    // Also try more top-level field name aliases
-    if (receivedAmount <= 0) {
-      receivedAmount = parseFloat(String(
-        data.data.amount_received ||
-        data.data.actual_amount   ||
-        data.data.sum_received    ||
-        "0"
-      ));
-    }
-    
-    // Logic to determine if we should credit
-    const isPaid = ["completed", "mismatch", "overpaid", "finished"].includes(pStatus);
-    
     if (!isPaid) {
-      res.json({ 
-        success: false, 
+      res.json({
+        success: false,
         message: `Plisio reports status: ${pStatus}. Not credited.`,
-        plisioData: data.data 
+        plisioData: data.data,
       });
       return;
     }
 
-    // REAL AMOUNT CALCULATION: Credit the real received amount after fees.
-    let ratioUsed: number;
-    let creditAmount: number;
-    
-    if (receivedUsdValue > 0) {
-      creditAmount = Math.round(receivedUsdValue * 1e8) / 1e8;
-      ratioUsed = sourceUsd > 0 ? (creditAmount / sourceUsd) : 1;
-      req.log.info({ receivedUsdValue, creditAmount, sourceUsd }, "Smart Sync: Crediting based on direct USD received value");
-    } else if (receivedAmount > 0 && invoicedAmount > 0 && sourceUsd > 0) {
-      ratioUsed = receivedAmount / invoicedAmount;
-      creditAmount = Math.round(sourceUsd * ratioUsed * 1e8) / 1e8;
-      req.log.info({ receivedAmount, invoicedAmount, sourceUsd, ratio: ratioUsed, creditAmount }, "Smart Sync: crediting with ratio method");
-    } else if (receivedAmount > 0 && sourceUsd > 0) {
-      // Have received crypto but no invoiced total — use live price
-      const { getCryptoPrice } = await import("../lib/price-service.js");
-      const cryptoCurrencyForPrice = tx.currency || data.data.currency || "ETH";
-      const livePrice = await getCryptoPrice(cryptoCurrencyForPrice);
-      creditAmount = Math.round(receivedAmount * livePrice * 1e8) / 1e8;
-      ratioUsed = sourceUsd > 0 ? (creditAmount / sourceUsd) : 1;
-      receivedUsdValue = creditAmount;
-      req.log.info({ receivedAmount, livePrice, creditAmount }, "Smart Sync: crediting with live price lookup");
-    } else if (pStatus === "completed" && sourceUsd > 0 && receivedAmount > 0) {
-      // If we have both status=completed AND a real receivedAmount, use it.
-      creditAmount = Math.round(sourceUsd * 1e8) / 1e8;
-      ratioUsed = 1.0;
-      req.log.info({ pStatus, sourceUsd, creditAmount }, "Smart Sync: status=completed with received amount, crediting invoice amount");
-    } else {
-      req.log.warn(
-        { pStatus, receivedAmount, invoicedAmount, sourceUsd },
-        "Smart Sync: No received_amount data from Plisio — cannot determine credit amount"
-      );
+    if (!canCreditFromPlisioData(plisioData)) {
+      req.log.warn({ pStatus, plisioData }, "Smart Sync: no actual_sum from Plisio — cannot credit");
       res.status(400).json({
-        error: "Plisio has not provided the actual received amount yet. " +
-               "Please wait for the payment to fully confirm on-chain, then retry. " +
-               "(received_amount=0, invoice_total_sum=" + invoicedAmount + ", source_usd=" + sourceUsd + ")"
+        error:
+          "Plisio has not provided sum_actual (on-chain received amount) yet. " +
+          "Cannot credit without verified actual payment — retry after confirmation.",
       });
       return;
     }
-    
+
+    const cryptoCurrency = tx.currency || String(plisioData.currency ?? "ETH");
+    const sourceUsd = extractPlisioSourceUsd(plisioData, parseFloat(String(tx.amount)));
+    const creditCalc = await computePlisioCreditUsd(
+      plisioData,
+      sourceUsd,
+      (c) => getCryptoPrice(c),
+      cryptoCurrency,
+    );
+
+    const receivedAmount = creditCalc.cryptoReceived;
+    const invoicedAmount = creditCalc.cryptoInvoiced;
+    const creditAmount = creditCalc.creditUsd;
+    const ratioUsed = invoicedAmount > 0 && receivedAmount > 0 ? receivedAmount / invoicedAmount : 1;
+
+    req.log.info({
+      receivedAmount,
+      invoicedAmount,
+      sourceUsd,
+      creditAmount,
+      creditMethod: creditCalc.creditMethod,
+    }, "Smart Sync: crediting sum_actual");
+
     if (creditAmount <= 0) {
       res.status(400).json({ error: `Calculated credit is $${creditAmount}. Not crediting.` });
       return;
@@ -2095,14 +2095,16 @@ adminRouter.post("/bank/smart-sync", requireBankSession, async (req, res) => {
           amount: String(creditAmount),
           plisioTrackId: trackId, // Update if we were searching by txId
           metadata: JSON.stringify({
-            received_amount: String(receivedAmount),
-            invoice_total_sum: String(invoicedAmount),
-            source_amount: String(sourceUsd),
-            ratio: ratioUsed,
+            invoice_amount_crypto: invoicedAmount,
+            received_amount_crypto: receivedAmount,
+            received_amount_usd: creditAmount,
+            requested_amount_usd: sourceUsd,
             credit_amount_usd: creditAmount,
+            credit_calc_method: creditCalc.creditMethod,
+            ratio: ratioUsed,
             paid_at: data.data.updated_at || new Date().toISOString(),
-            smart_synced_at: new Date().toISOString()
-          })
+            smart_synced_at: new Date().toISOString(),
+          }),
         })
         .where(and(eq(transactionsTable.id, tx.id), ne(transactionsTable.status, "completed")))
         .returning({ id: transactionsTable.id });
@@ -2255,18 +2257,31 @@ adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
     }
 
     // Boolean settings
-    const booleanKeys = ["slotsEnabled", "raceEnabled", "leaderboardEnabled", "gamesEnabled", "maintenanceMode"];
+    const booleanKeys = ["slotsEnabled", "raceEnabled", "leaderboardEnabled", "gamesEnabled", "maintenanceMode", "custom404Enabled"];
     for (const key of booleanKeys) {
       if (typeof body[key] === "boolean") {
         updates[key] = String(body[key]);
       }
     }
 
+    const stringKeys = ["custom404Title", "custom404Message", "custom404ButtonText", "custom404ButtonUrl"];
+    for (const key of stringKeys) {
+      if (typeof body[key] === "string") {
+        updates[key] = body[key];
+      }
+    }
+
+    if (Array.isArray(body.disabledGameSlugs)) {
+      updates.disabledGameSlugs = JSON.stringify(body.disabledGameSlugs.filter((s: unknown) => typeof s === "string"));
+    }
+
+    const { invalidatePlatformSettingsCache } = await import("../lib/platform-settings.js");
     for (const [key, value] of Object.entries(updates)) {
       await db.insert(platformSettingsTable)
         .values({ key, value })
         .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value } });
     }
+    invalidatePlatformSettingsCache();
 
     const settings = await getPlatformSettings();
     res.json({ success: true, settings });
@@ -2539,56 +2554,9 @@ adminRouter.get("/bank/fraud-alerts", requireBankSession, async (req, res) => {
 });
 
 
-// POST /api/admin/tip — any logged-in user can tip another user
-adminRouter.post("/tip", async (req, res) => {
-  const { toUsername, amount } = req.body as { toUsername?: string; amount?: number };
-  if (!toUsername || !amount || amount <= 0) {
-    res.status(400).json({ error: "Username and a positive amount are required" });
-    return;
-  }
-  if (amount > 10000) {
-    res.status(400).json({ error: "Tip amount too large" });
-    return;
-  }
-  try {
-    // Get sender
-    const [sender] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-    if (!sender) { res.status(401).json({ error: "Sender not found" }); return; }
-    if (parseFloat(sender.balance) < amount) {
-      res.status(400).json({ error: "Insufficient balance" });
-      return;
-    }
-    // Get recipient
-    const [recipient] = await db.select().from(usersTable).where(ilike(usersTable.username, toUsername)).limit(1);
-    if (!recipient) { res.status(404).json({ error: "User not found: " + toUsername }); return; }
-    if (recipient.id === sender.id) { res.status(400).json({ error: "Cannot tip yourself" }); return; }
-    // The platform owner account is never externally mutable — block tips into it.
-    if (isOwnerAccount(recipient)) { res.status(400).json({ error: "Cannot tip the house account" }); return; }
-
-    // Deduct from sender, add to recipient
-    const newSenderBalance = parseFloat(sender.balance) - amount;
-    const newRecipientBalance = parseFloat(recipient.balance) + amount;
-
-    await db.update(usersTable).set({ balance: String(newSenderBalance) }).where(eq(usersTable.id, sender.id));
-    await db.update(usersTable).set({ balance: String(newRecipientBalance) }).where(eq(usersTable.id, recipient.id));
-
-    // Log as transactions for both users
-    await db.insert(transactionsTable).values({
-      userId: sender.id, type: "tip_sent", amount: String(amount),
-      currency: "USD", status: "completed",
-      metadata: JSON.stringify({ toUsername: recipient.username }),
-    });
-    await db.insert(transactionsTable).values({
-      userId: recipient.id, type: "tip_received", amount: String(amount),
-      currency: "USD", status: "completed",
-      metadata: JSON.stringify({ fromUsername: sender.username }),
-    });
-
-    res.json({ success: true, newBalance: newSenderBalance });
-  } catch (err) {
-    req.log.error({ err }, "Tip error");
-    res.status(500).json({ error: "Internal server error" });
-  }
+// POST /api/admin/tip — removed; tips use POST /api/users/tip (requireAuth, not admin)
+adminRouter.post("/tip", (_req, res) => {
+  res.status(410).json({ error: "Tips moved to POST /api/users/tip" });
 });
 
 // POST /api/admin/payout-callback — Plisio payout IPN
@@ -2624,21 +2592,83 @@ adminRouter.post("/transactions/:id/complete-deposit", requireBankSession, async
       res.status(400).json({ error: `Cannot complete a deposit with status "${tx.status}"` });
       return;
     }
-    const creditAmount = parseFloat(tx.amount);
+
+    const PLISIO_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY ?? "";
+    if (!tx.plisioTrackId || !PLISIO_KEY) {
+      res.status(400).json({
+        error: "Cannot complete without Plisio verification. Use Smart Sync or ensure plisioTrackId is set.",
+      });
+      return;
+    }
+
+    const verifyResp = await fetch(
+      `https://api.plisio.net/api/v1/operations/${tx.plisioTrackId}?api_key=${PLISIO_KEY}`,
+      { signal: AbortSignal.timeout(12_000) },
+    );
+    const verifyData = await verifyResp.json() as { status?: string; data?: Record<string, unknown> };
+    if (verifyData.status !== "success" || !verifyData.data) {
+      res.status(400).json({ error: "Could not verify deposit with Plisio. Use Smart Sync instead." });
+      return;
+    }
+
+    const plisioData = verifyData.data;
+    const pStatus = String(plisioData.status ?? "").toLowerCase();
+    if (!["completed", "mismatch", "overpaid", "finished", "overdue"].includes(pStatus)) {
+      res.status(400).json({ error: `Plisio status is "${pStatus}" — not paid yet.` });
+      return;
+    }
+    if (!canCreditFromPlisioData(plisioData)) {
+      res.status(400).json({ error: "Plisio has no sum_actual yet — cannot credit invoice amount." });
+      return;
+    }
+
+    const cryptoCurrency = tx.currency || String(plisioData.currency ?? "ETH");
+    const sourceUsd = extractPlisioSourceUsd(plisioData, parseFloat(String(tx.amount)));
+    const creditCalc = await computePlisioCreditUsd(
+      plisioData,
+      sourceUsd,
+      (c) => getCryptoPrice(c),
+      cryptoCurrency,
+    );
+    const creditAmount = creditCalc.creditUsd;
+    const receivedCrypto = creditCalc.cryptoReceived;
+
+    if (creditAmount <= 0) {
+      res.status(400).json({ error: "Could not compute credit from Plisio sum_actual." });
+      return;
+    }
+
     const WAGER_MULT = 1.0;
     await db.transaction(async (txn) => {
-      // Guarded flip — idempotent against concurrent calls
       const flipped = await txn
         .update(transactionsTable)
-        .set({ status: "completed" })
+        .set({
+          status: "completed",
+          amount: String(creditAmount),
+          metadata: JSON.stringify({
+            invoice_amount_crypto: creditCalc.cryptoInvoiced,
+            received_amount_crypto: receivedCrypto,
+            received_amount_usd: creditAmount,
+            requested_amount_usd: sourceUsd,
+            credit_amount_usd: creditAmount,
+            credit_calc_method: creditCalc.creditMethod,
+            manual_complete_at: new Date().toISOString(),
+          }),
+        })
         .where(and(eq(transactionsTable.id, tx.id), eq(transactionsTable.status, "pending")))
         .returning({ id: transactionsTable.id });
-      if (flipped.length === 0) return; // already completed by a concurrent call
+      if (flipped.length === 0) return;
+
+      if (receivedCrypto > 0) {
+        const { creditCryptoBalance } = await import("../lib/balance-service.js");
+        await creditCryptoBalance(tx.userId, cryptoCurrency, receivedCrypto, txn);
+      } else {
+        await txn.update(usersTable).set({ balance: sql`balance + ${creditAmount}` }).where(eq(usersTable.id, tx.userId));
+      }
+
       const [userAfter] = await txn.update(usersTable).set({
-        // Manual owner credit goes to static USD balance (bonus/correction)
-        balance: sql`balance + ${creditAmount}`,
         totalDeposited: sql`coalesce(total_deposited, 0) + ${creditAmount}`,
-        wagerRequirement: sql`coalesce(wager_requirement, 0) + ${creditAmount}`,
+        wagerRequirement: sql`coalesce(wager_requirement, 0) + ${creditAmount * WAGER_MULT}`,
       }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
       if (userAfter) {
         await recordLedger(txn, {
@@ -2688,7 +2718,7 @@ adminRouter.post("/transactions/sync-plisio", requireBankSession, async (req, re
     return;
   }
   const WAGER_MULT = 1.0;
-  const creditStatuses = new Set(["completed", "mismatch"]);
+  const creditStatuses = new Set(["completed", "mismatch", "overpaid", "finished", "overdue"]);
 
   try {
     const pending = await db
@@ -2719,7 +2749,8 @@ adminRouter.post("/transactions/sync-plisio", requireBankSession, async (req, re
             invoice_total_sum?: string | number;
           };
         };
-        const plisioStatus = data.data?.status ?? null;
+        const plisioData = (data.data ?? {}) as Record<string, unknown>;
+        const plisioStatus = String(plisioData.status ?? "").toLowerCase() || null;
 
         if (!plisioStatus) {
           results.push({ id: tx.id, userId: tx.userId, plisioTrackId: tx.plisioTrackId, plisioStatus: null, action: "no_status_from_plisio" });
@@ -2730,40 +2761,57 @@ adminRouter.post("/transactions/sync-plisio", requireBankSession, async (req, re
           continue;
         }
 
-        // Plisio confirms this deposit was paid — compute credit amount
-        const requestedUsd   = parseFloat(tx.amount);
-        const sourceUsd      = data.data?.source_amount     != null ? parseFloat(String(data.data.source_amount))     : null;
-        const receivedCrypto = data.data?.received_amount   != null ? parseFloat(String(data.data.received_amount))   : null;
-        const invoicedCrypto = data.data?.invoice_total_sum != null ? parseFloat(String(data.data.invoice_total_sum)) : null;
-
-        let creditAmount: number;
-        if (receivedCrypto != null && invoicedCrypto != null && invoicedCrypto > 0 && sourceUsd != null) {
-          const ratio = Math.min(receivedCrypto / invoicedCrypto, 1.0);
-          creditAmount = Math.min(Math.round(sourceUsd * ratio * 1e8) / 1e8, requestedUsd);
-        } else if (sourceUsd != null) {
-          creditAmount = Math.min(sourceUsd, requestedUsd);
-        } else {
-          creditAmount = requestedUsd;
-        }
-
-        if (creditAmount < 0.01) {
-          results.push({ id: tx.id, userId: tx.userId, plisioTrackId: tx.plisioTrackId, plisioStatus, action: "credit_too_small", creditAmount });
+        if (!canCreditFromPlisioData(plisioData)) {
+          results.push({ id: tx.id, userId: tx.userId, plisioTrackId: tx.plisioTrackId, plisioStatus, action: "no_sum_actual" });
           continue;
         }
 
-        const finalCredit = creditAmount;
+        const cryptoCurrency = tx.currency || String(plisioData.currency ?? "ETH");
+        const sourceUsd = extractPlisioSourceUsd(plisioData, parseFloat(String(tx.amount)));
+        const creditCalc = await computePlisioCreditUsd(
+          plisioData,
+          sourceUsd,
+          (c) => getCryptoPrice(c),
+          cryptoCurrency,
+        );
+        const finalCredit = creditCalc.creditUsd;
+        const receivedCrypto = creditCalc.cryptoReceived;
+
+        if (finalCredit < 0.01) {
+          results.push({ id: tx.id, userId: tx.userId, plisioTrackId: tx.plisioTrackId, plisioStatus, action: "credit_too_small", creditAmount: finalCredit });
+          continue;
+        }
+
         await db.transaction(async (txn) => {
           const flipped = await txn
             .update(transactionsTable)
-            .set({ status: "completed", amount: String(finalCredit) })
+            .set({
+              status: "completed",
+              amount: String(finalCredit),
+              metadata: JSON.stringify({
+                invoice_amount_crypto: creditCalc.cryptoInvoiced,
+                received_amount_crypto: receivedCrypto,
+                received_amount_usd: finalCredit,
+                requested_amount_usd: sourceUsd,
+                credit_amount_usd: finalCredit,
+                credit_calc_method: creditCalc.creditMethod,
+                synced_at: new Date().toISOString(),
+              }),
+            })
             .where(and(eq(transactionsTable.id, tx.id), eq(transactionsTable.status, "pending")))
             .returning({ id: transactionsTable.id });
-          if (flipped.length === 0) return; // already credited by concurrent call
+          if (flipped.length === 0) return;
+
+          if (receivedCrypto > 0) {
+            const { creditCryptoBalance } = await import("../lib/balance-service.js");
+            await creditCryptoBalance(tx.userId, cryptoCurrency, receivedCrypto, txn);
+          } else {
+            await txn.update(usersTable).set({ balance: sql`balance + ${finalCredit}` }).where(eq(usersTable.id, tx.userId));
+          }
 
           const [userAfter] = await txn.update(usersTable).set({
-            balance: sql`balance + ${finalCredit}`,
             totalDeposited: sql`coalesce(total_deposited, 0) + ${finalCredit}`,
-            wagerRequirement: sql`(coalesce(total_deposited, 0) + ${finalCredit}) * ${WAGER_MULT}`,
+            wagerRequirement: sql`coalesce(wager_requirement, 0) + ${finalCredit * WAGER_MULT}`,
           }).where(eq(usersTable.id, tx.userId)).returning({ balance: usersTable.balance });
 
           if (userAfter) {
@@ -2979,8 +3027,14 @@ adminRouter.patch("/users/:id/account-type", async (req, res) => {
   }
 
   // Specialty Creator Fields
+  // commissionRate is stored as a decimal fraction (e.g. 0.10 = 10%).
+  // Frontend sends percentage values (e.g. 10 for 10%), so we always divide by 100.
   if (commissionRate !== undefined) {
-    updates.commissionRate = commissionRate !== null ? String(commissionRate) : null;
+    if (commissionRate === null) {
+      updates.commissionRate = null;
+    } else {
+      updates.commissionRate = String(commissionRate / 100);
+    }
   }
   if (displayName !== undefined) {
     updates.displayName = displayName;
@@ -3081,6 +3135,10 @@ adminRouter.post("/users/:id/regenerate-pin", requireAdmin, async (req, res) => 
   res.json({ success: true, pin: newPin, username: target.username });
 });
 
+const bankPinAttempts = new Map<number, number[]>();
+const BANK_PIN_WINDOW_MS = 15 * 60 * 1000;
+const BANK_PIN_MAX_ATTEMPTS = 5;
+
 // POST /api/admin/verify-bank-pin
 // Admin verifies their DGC Bank PIN to access the bank section
 adminRouter.post("/verify-bank-pin", async (req, res) => {
@@ -3099,11 +3157,21 @@ adminRouter.post("/verify-bank-pin", async (req, res) => {
   if (!user) { res.status(401).json({ error: "User not found" }); return; }
   if (!user.dgcBankPin) { res.status(403).json({ error: "No DGC Bank PIN set for your account" }); return; }
 
+  const now = Date.now();
+  const attempts = (bankPinAttempts.get(user.id) ?? []).filter((t) => now - t < BANK_PIN_WINDOW_MS);
+  if (attempts.length >= BANK_PIN_MAX_ATTEMPTS) {
+    res.status(429).json({ error: "Too many PIN attempts. Try again in 15 minutes." });
+    return;
+  }
+
   // Verify PIN — direct plain text comparison
   if (pin !== user.dgcBankPin) {
+    attempts.push(now);
+    bankPinAttempts.set(user.id, attempts);
     res.status(401).json({ error: "Incorrect PIN" });
     return;
   }
+  bankPinAttempts.delete(user.id);
 
   // Issue a short-lived bank session token (valid 70 minutes — 1h10m)
   const sessionToken = crypto.randomBytes(32).toString("hex");
@@ -3251,15 +3319,15 @@ adminRouter.post("/tournaments/:id/end", async (req, res) => {
 });
 
 // POST /api/admin/tournaments/:id/award — credit prize to a winner's balance
-adminRouter.post("/tournaments/:id/award", async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+adminRouter.post("/tournaments/:id/award", requireBankSession, async (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
   const { userId, amount } = req.body as { userId?: number; amount?: number };
   if (!userId || !amount || amount <= 0) { res.status(400).json({ error: "userId and amount > 0 are required" }); return; }
   try {
     const [target] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
     if (!target) { res.status(404).json({ error: "User not found" }); return; }
-    await db.update(usersTable).set({ balance: sql`balance + ${amount}` }).where(eq(usersTable.id, userId));
+    await creditBalance(userId, amount);
     await db.insert(transactionsTable).values({
       userId, type: "bet_win", amount: String(amount), currency: "USD", status: "completed",
       metadata: JSON.stringify({ source: "tournament_prize", tournamentId: id, awardedBy: req.user!.userId }),
@@ -3604,7 +3672,9 @@ adminRouter.get("/creators", async (req, res) => {
             ),
           );
 
+        const [specialty] = await db.select({ commissionRate: usersTable.commissionRate }).from(usersTable).where(eq(usersTable.id, c.id)).limit(1);
         const tier = getReferralTier(activeCount);
+        const commissionRate = specialty?.commissionRate ? parseFloat(specialty.commissionRate) : tier.commissionRate;
 
         return {
           id: c.id,
@@ -3616,11 +3686,11 @@ adminRouter.get("/creators", async (req, res) => {
           monthlyCommission: parseFloat(monthlyEarned ?? "0"),
           lifetimeCommission: parseFloat(lifetimeEarned ?? "0"),
           totalAdminDeposits: parseFloat(totalDeposited ?? "0"),
-          tier: tier.tier,
-          group: tier.group,
-          color: tier.color,
-          emoji: tier.emoji,
-          commissionPct: Math.round(tier.commissionRate * 100),
+          tier: specialty?.commissionRate ? "Specialty" : tier.tier,
+          group: specialty?.commissionRate ? "Partner" : tier.group,
+          color: specialty?.commissionRate ? "#ec4899" : tier.color,
+          emoji: specialty?.commissionRate ? "💎" : tier.emoji,
+          commissionPct: Math.round(commissionRate * 100),
           joinedAt: c.createdAt.toISOString(),
         };
       }),
@@ -3754,6 +3824,7 @@ adminRouter.post("/slots/themes", async (req, res) => {
       ip: req.ip,
     }).catch(() => {});
 
+    invalidatePublicGamesCache();
     res.json({ theme });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
@@ -3818,6 +3889,7 @@ adminRouter.patch("/slots/themes/:id", async (req, res) => {
       note: `Theme slug: ${before.slug}`,
     }).catch(() => {});
 
+    invalidatePublicGamesCache();
     res.json({ theme: updated });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });

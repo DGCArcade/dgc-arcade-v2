@@ -25,7 +25,7 @@ export interface Affiliatetier {
 export function getReferralTier(activeCount: number): Affiliatetier {
   // Private / Contract tier (invite-only, negotiated rate — shown as locked)
   if (activeCount >= 200) return {
-    tier: "Legend", group: "Private", commissionRate: 0, nextTierAt: null,
+    tier: "Specialty", group: "Private", commissionRate: 0, nextTierAt: null,
     color: "#ff6aff", emoji: "🔒", isPrivate: true,
     description: "Contract-based. Invite only."
   };
@@ -59,9 +59,9 @@ export function getReferralTier(activeCount: number): Affiliatetier {
     color: "#ffc53d", emoji: "⭐", isPrivate: false,
     description: "12% monthly commission"
   };
-  // Gold I — Legend
+  // Gold I — Pro
   if (activeCount >= 7) return {
-    tier: "Legend", group: "Gold", commissionRate: 0.10, nextTierAt: 12,
+    tier: "Pro", group: "Gold", commissionRate: 0.10, nextTierAt: 12,
     color: "#ffaa00", emoji: "🥇", isPrivate: false,
     description: "10% monthly commission"
   };
@@ -103,13 +103,13 @@ export const ALL_TIERS: Affiliatetier[] = [
   { tier: "High Roller", group: "Silver",  commissionRate: 0.05, nextTierAt: 4,   color: "#b0d0ff", emoji: "🎰", isPrivate: false, description: "5% monthly commission" },
   { tier: "Whale",       group: "Silver",  commissionRate: 0.06, nextTierAt: 7,   color: "#c0c0c0", emoji: "🐋", isPrivate: false, description: "6% monthly commission" },
   { tier: "Shark",       group: "Silver",  commissionRate: 0.08, nextTierAt: 12,  color: "#a0cfff", emoji: "🦈", isPrivate: false, description: "8% monthly commission" },
-  { tier: "Legend",      group: "Gold",    commissionRate: 0.10, nextTierAt: 20,  color: "#ffaa00", emoji: "🥇", isPrivate: false, description: "10% monthly commission" },
-  { tier: "Icon",        group: "Gold",    commissionRate: 0.12, nextTierAt: 35,  color: "#ffc53d", emoji: "⭐", isPrivate: false, description: "12% monthly commission" },
-  { tier: "Goat",        group: "Gold",    commissionRate: 0.15, nextTierAt: 60,  color: "#ffd700", emoji: "🐐", isPrivate: false, description: "15% monthly commission" },
-  { tier: "Platinum I",  group: "Platinum",commissionRate: 0.20, nextTierAt: 100, color: "#e5e4e2", emoji: "🏆", isPrivate: false, description: "20% monthly commission" },
-  { tier: "Platinum II", group: "Platinum",commissionRate: 0.25, nextTierAt: 200, color: "#c8e6ff", emoji: "💎", isPrivate: false, description: "25% monthly commission" },
-  { tier: "Platinum III",group: "Platinum",commissionRate: 0.30, nextTierAt: null,color: "#b9f2ff", emoji: "💠", isPrivate: false, description: "30% monthly commission — max public" },
-  { tier: "Legend",      group: "Private", commissionRate: 0,    nextTierAt: null, color: "#ff6aff", emoji: "🔒", isPrivate: true,  description: "Contract-based. Invite only." },
+  { tier: "Pro",         group: "Gold",    commissionRate: 0.10, nextTierAt: 12,  color: "#ffaa00", emoji: "🥇", isPrivate: false, description: "10% monthly commission" },
+  { tier: "Icon",        group: "Gold",    commissionRate: 0.12, nextTierAt: 20,  color: "#ffc53d", emoji: "⭐", isPrivate: false, description: "12% monthly commission" },
+  { tier: "Goat",        group: "Gold",    commissionRate: 0.15, nextTierAt: 35,  color: "#ffd700", emoji: "🐐", isPrivate: false, description: "15% monthly commission" },
+  { tier: "Platinum I",  group: "Platinum",commissionRate: 0.20, nextTierAt: 60,  color: "#e5e4e2", emoji: "🏆", isPrivate: false, description: "20% monthly commission" },
+  { tier: "Platinum II", group: "Platinum",commissionRate: 0.25, nextTierAt: 100, color: "#c8e6ff", emoji: "💎", isPrivate: false, description: "25% monthly commission" },
+  { tier: "Platinum III",group: "Platinum",commissionRate: 0.30, nextTierAt: 200, color: "#b9f2ff", emoji: "💠", isPrivate: false, description: "30% monthly commission — max public" },
+  { tier: "Specialty",   group: "Private", commissionRate: 0,    nextTierAt: null, color: "#ff6aff", emoji: "🔒", isPrivate: true,  description: "Contract-based. Invite only." },
 ];
 
 // GET /api/referrals/tiers — public endpoint to display the tier ladder
@@ -121,7 +121,12 @@ referralsRouter.get("/tiers", (_req, res) => {
 referralsRouter.get("/my-code", requireAuth, async (req, res) => {
   try {
     const [user] = await db
-      .select({ id: usersTable.id, username: usersTable.username, referralCode: usersTable.referralCode })
+      .select({ 
+        id: usersTable.id, 
+        username: usersTable.username, 
+        referralCode: usersTable.referralCode,
+        commissionRate: usersTable.commissionRate 
+      })
       .from(usersTable)
       .where(eq(usersTable.id, req.user!.userId))
       .limit(1);
@@ -138,18 +143,26 @@ referralsRouter.get("/my-code", requireAuth, async (req, res) => {
       .from(referralsTable)
       .where(eq(referralsTable.referrerId, user.id));
 
-    const tier = getReferralTier(activeCount);
-    const siteUrl = process.env.SITE_URL ?? "";
+        const tier = getReferralTier(activeCount);
+    
+    // If user has a custom commission rate (specialty creator), use it.
+    // Otherwise, use the tier-based rate.
+    const customRate = user.commissionRate ? parseFloat(user.commissionRate) : null;
+    const finalCommissionRate = customRate !== null ? customRate : tier.commissionRate;
+    const finalTierName = customRate !== null ? "Specialty" : tier.tier;
+    const finalTierEmoji = customRate !== null ? "💠" : tier.emoji;
+    const finalTierColor = customRate !== null ? "#b9f2ff" : tier.color;
 
+    const siteUrl = process.env.SITE_URL ?? "";
     res.json({
       code,
       link: siteUrl ? `${siteUrl}?ref=${code}` : `/?ref=${code}`,
-      tier: tier.tier,
-      group: tier.group,
-      color: tier.color,
-      emoji: tier.emoji,
-      commissionRate: tier.commissionRate,
-      commissionPct: Math.round(tier.commissionRate * 100),
+      tier: finalTierName,
+      group: customRate !== null ? "Private" : tier.group,
+      color: finalTierColor,
+      emoji: finalTierEmoji,
+      commissionRate: finalCommissionRate,
+      commissionPct: Math.round(finalCommissionRate * 100),
       nextTierAt: tier.nextTierAt,
       description: tier.description,
       isPrivate: tier.isPrivate,
@@ -166,6 +179,23 @@ referralsRouter.get("/my-code", requireAuth, async (req, res) => {
 // GET /api/referrals/my-referrals
 referralsRouter.get("/my-referrals", requireAuth, async (req, res) => {
   try {
+    const referrerId = req.user!.userId;
+
+    // Fetch referrer's commission rate (specialty override or tier-based)
+    const [referrer] = await db
+      .select({ commissionRate: usersTable.commissionRate })
+      .from(usersTable)
+      .where(eq(usersTable.id, referrerId))
+      .limit(1);
+
+    const [{ activeCount }] = await db
+      .select({ activeCount: count() })
+      .from(referralsTable)
+      .where(and(eq(referralsTable.referrerId, referrerId), eq(referralsTable.status, "active")));
+
+    const tier = getReferralTier(activeCount);
+    const commissionRate = referrer?.commissionRate ? parseFloat(referrer.commissionRate) : tier.commissionRate;
+
     const rows = await db
       .select({
         id: referralsTable.id,
@@ -173,20 +203,33 @@ referralsRouter.get("/my-referrals", requireAuth, async (req, res) => {
         status: referralsTable.status,
         earnedAmount: referralsTable.earnedAmount,
         createdAt: referralsTable.createdAt,
+        totalDeposited: usersTable.totalDeposited,
+        totalWagered: usersTable.totalWageredAmount,
+        totalWon: usersTable.totalWon,
       })
       .from(referralsTable)
       .innerJoin(usersTable, eq(referralsTable.referredId, usersTable.id))
-      .where(eq(referralsTable.referrerId, req.user!.userId))
+      .where(eq(referralsTable.referrerId, referrerId))
       .orderBy(sql`${referralsTable.createdAt} DESC`)
       .limit(100);
 
-    res.json(rows.map(r => ({
-      id: r.id,
-      username: r.referredUsername,
-      status: r.status,
-      earned: parseFloat(r.earnedAmount),
-      joinedAt: r.createdAt.toISOString(),
-    })));
+    res.json(rows.map(r => {
+      const wagered = parseFloat(r.totalWagered || "0");
+      const won = parseFloat(r.totalWon || "0");
+      const houseProfit = Math.max(0, wagered - won);
+      return {
+        id: r.id,
+        username: r.referredUsername,
+        status: r.status,
+        earned: parseFloat(r.earnedAmount),
+        joinedAt: r.createdAt.toISOString(),
+        // ── Extended stats ──
+        totalDeposited: parseFloat(r.totalDeposited || "0"),
+        totalWagered: wagered,
+        houseProfit: houseProfit,
+        estimatedCommission: houseProfit * commissionRate,
+      };
+    }));
   } catch (err) {
     req.log.error({ err }, "Referrals my-referrals error");
     res.status(500).json({ error: "Internal server error" });

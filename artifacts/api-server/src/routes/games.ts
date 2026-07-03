@@ -1,12 +1,56 @@
 import { Router } from "express";
 import { db, gamesTable, slotThemesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { getPlatformSettings } from "../lib/platform-settings.js";
+import { getPlatformSettings, isGameSlugEnabled } from "../lib/platform-settings.js";
 export const gamesRouter = Router();
 
 const PUBLIC_GAME_CACHE_MS = 60_000;
 let activeGamesCache: { expiresAt: number; value: ReturnType<typeof formatGame>[] } | null = null;
 let slotThemesCache: { expiresAt: number; value: { themes: typeof slotThemesTable.$inferSelect[] } } | null = null;
+
+export function invalidatePublicGamesCache() {
+  activeGamesCache = null;
+  slotThemesCache = null;
+}
+
+// ── Core (non-slot) table games shown in the lobby ───────────────────────────
+const CORE_GAMES: Array<{
+  slug: string;
+  name: string;
+  description: string;
+  minBet: string;
+  maxBet: string;
+  houseEdge: string;
+}> = [
+  { slug: "roulette", name: "Roulette", description: "Spin the wheel — European single-zero", minBet: "0.10", maxBet: "1000", houseEdge: "0.0270" },
+  { slug: "dice", name: "Dice", description: "Roll over or under your target", minBet: "0.10", maxBet: "1000", houseEdge: "0.0100" },
+  { slug: "crash", name: "Crash", description: "Cash out before the rocket crashes", minBet: "0.10", maxBet: "1000", houseEdge: "0.0300" },
+  { slug: "mines", name: "Mines", description: "Find the gems, avoid the bombs", minBet: "0.10", maxBet: "1000", houseEdge: "0.0300" },
+  { slug: "blackjack", name: "Blackjack", description: "Beat the dealer to 21", minBet: "0.10", maxBet: "1000", houseEdge: "0.0050" },
+  { slug: "hilo", name: "Hi-Lo", description: "Guess higher or lower", minBet: "0.10", maxBet: "1000", houseEdge: "0.0200" },
+  { slug: "coinflip", name: "Coin Flip", description: "50/50 — pays 2 to 1", minBet: "0.10", maxBet: "1000", houseEdge: "0.0200" },
+  { slug: "keno", name: "Keno", description: "Pick your lucky numbers", minBet: "0.10", maxBet: "1000", houseEdge: "0.0500" },
+  { slug: "chicken-road", name: "Chicken Road", description: "Cross the road, dodge the cars", minBet: "0.10", maxBet: "1000", houseEdge: "0.0400" },
+  { slug: "race", name: "DGC Derby", description: "Pick your horse — first place pays 5.5×", minBet: "0.10", maxBet: "1000", houseEdge: "0.0500" },
+];
+
+// ── Bootstrap the core game catalog ONLY when the games table is empty ────────
+// This makes the lobby populate on a brand-new database. The empty-table guard
+// means it never resurrects or overwrites games an admin has intentionally
+// changed or removed — it only bootstraps a blank catalog. It touches no money,
+// balances, or wallet data.
+export async function ensureCoreGamesSeeded() {
+  try {
+    const existing = await db.select({ id: gamesTable.id }).from(gamesTable).limit(1);
+    if (existing.length > 0) return;
+    await db
+      .insert(gamesTable)
+      .values(CORE_GAMES.map((g) => ({ ...g, active: true })))
+      .onConflictDoNothing();
+  } catch (err) {
+    console.error("ensureCoreGamesSeeded error:", err);
+  }
+}
 
 // ── Ensure all active slot themes have a corresponding games table entry ──────
 export async function ensureSlotGamesSeeded() {
@@ -27,6 +71,25 @@ export async function ensureSlotGamesSeeded() {
   } catch (err) {
     console.error("ensureSlotGamesSeeded error:", err);
   }
+}
+
+async function ensureGameSeeded(slug: string) {
+  const def = CORE_GAMES.find((g) => g.slug === slug);
+  if (!def) return;
+  try {
+    await db.insert(gamesTable).values({ ...def, active: true }).onConflictDoNothing();
+    invalidatePublicGamesCache();
+  } catch (err) {
+    console.error(`ensureGameSeeded(${slug}) error:`, err);
+  }
+}
+
+export async function ensureRaceGameSeeded() {
+  return ensureGameSeeded("race");
+}
+
+export async function ensureChickenRoadSeeded() {
+  return ensureGameSeeded("chicken-road");
 }
 
 function formatGame(g: typeof gamesTable.$inferSelect) {
@@ -54,7 +117,10 @@ gamesRouter.get("/", async (req, res) => {
     }
 
     const games = await db.select().from(gamesTable).where(eq(gamesTable.active, true));
-    const value = games.map(formatGame);
+    const settings = await getPlatformSettings();
+    const value = games
+      .filter((g) => isGameSlugEnabled(settings, g.slug))
+      .map(formatGame);
     activeGamesCache = { value, expiresAt: now + PUBLIC_GAME_CACHE_MS };
     res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
     res.json(value);
@@ -142,6 +208,12 @@ gamesRouter.get("/settings", async (req, res) => {
       leaderboardEnabled: settings.leaderboardEnabled,
       gamesEnabled: settings.gamesEnabled,
       maintenanceMode: settings.maintenanceMode,
+      disabledGameSlugs: settings.disabledGameSlugs,
+      custom404Enabled: settings.custom404Enabled,
+      custom404Title: settings.custom404Title,
+      custom404Message: settings.custom404Message,
+      custom404ButtonText: settings.custom404ButtonText,
+      custom404ButtonUrl: settings.custom404ButtonUrl,
     });
   } catch (err) {
     req.log.error({ err }, "Get public settings error");
@@ -149,20 +221,35 @@ gamesRouter.get("/settings", async (req, res) => {
   }
 });
 
-gamesRouter.get("/:gameId", async (req, res) => {
-  const gameId = parseInt(req.params.gameId);
-  if (isNaN(gameId)) {
-    res.status(400).json({ error: "Invalid game ID" });
+gamesRouter.get("/:gameIdOrSlug", async (req, res) => {
+  const raw = String(req.params.gameIdOrSlug ?? "").trim();
+  if (!raw) {
+    res.status(400).json({ error: "Game reference required" });
     return;
   }
+
+  const isNumericId = /^\d+$/.test(raw);
+
   try {
-    const [game] = await db
-      .select()
-      .from(gamesTable)
-      .where(eq(gamesTable.id, gameId))
-      .limit(1);
+    const settings = await getPlatformSettings();
+
+    const [game] = isNumericId
+      ? await db
+          .select()
+          .from(gamesTable)
+          .where(eq(gamesTable.id, parseInt(raw, 10)))
+          .limit(1)
+      : await db
+          .select()
+          .from(gamesTable)
+          .where(eq(gamesTable.slug, raw))
+          .limit(1);
 
     if (!game) {
+      res.status(404).json({ error: "Game not found" });
+      return;
+    }
+    if (!game.active || !isGameSlugEnabled(settings, game.slug)) {
       res.status(404).json({ error: "Game not found" });
       return;
     }

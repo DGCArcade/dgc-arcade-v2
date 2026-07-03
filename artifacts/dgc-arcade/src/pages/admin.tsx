@@ -171,6 +171,10 @@ interface AdminUser {
   deviceOs?: string | null;
   deviceBrowser?: string | null;
   deviceType?: string | null;
+  // ── Specialty Creator Fields ──
+  commissionRate?: number | null;
+  commissionPct?: number | null;
+  displayName?: string | null;
 }
 
 interface AdminTx {
@@ -268,6 +272,7 @@ export default function AdminDashboard() {
   const [pinLoading, setPinLoading] = useState(false);
   const [pinRegenLoading, setPinRegenLoading] = useState(false);
   const [balanceEdit, setBalanceEdit] = useState<{ userId: number; value: string } | null>(null);
+  const [commissionEdit, setCommissionEdit] = useState<{ userId: number; value: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<AdminUser | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [createUserOpen, setCreateUserOpen] = useState(false);
@@ -325,6 +330,12 @@ export default function AdminDashboard() {
 	    leaderboardEnabled: true,
 	    gamesEnabled: true,
 	    maintenanceMode: false,
+	    disabledGameSlugs: [] as string[],
+	    custom404Enabled: false,
+	    custom404Title: "Page Not Found",
+	    custom404Message: "The page you're looking for doesn't exist or has been moved.",
+	    custom404ButtonText: "Back to Home",
+	    custom404ButtonUrl: "/",
 	  });
   const [confirmReset, setConfirmReset] = useState<AdminUser | null>(null);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -800,6 +811,9 @@ export default function AdminDashboard() {
       loadNeedsReview();
       if (isOwner) loadBankSettings();
     }
+    if (activeTab === "owner" && isOwner) {
+      loadBankSettings();
+    }
   }, [activeTab, isAdmin, bankUnlocked, isOwner, loadBank, loadFraudAlerts, loadNeedsReview, loadBankSettings]);
 
   useEffect(() => {
@@ -984,6 +998,34 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleCommissionSave(userId: number) {
+    if (!commissionEdit) return;
+    const pct = parseFloat(commissionEdit.value);
+    if (isNaN(pct) || pct < 0 || pct > 100) {
+      toast({ title: "Invalid commission rate", description: "Enter a value between 0 and 100.", variant: "destructive" });
+      return;
+    }
+    setLoadingAction(`commission-${userId}`);
+    try {
+      // Send as percentage (e.g. 10 for 10%); backend normalises to decimal fraction
+      await adminFetch(`/users/${userId}/account-type`, {
+        method: "PATCH",
+        body: JSON.stringify({ commissionRate: pct }),
+      });
+      toast({ title: "Commission rate updated", description: `Set to ${pct}%` });
+      setCommissionEdit(null);
+      // Refresh the selected user detail so the modal reflects the new rate
+      if (selectedUser) {
+        const data = await adminFetch(`/users/${userId}`);
+        setSelectedUser(data);
+      }
+      loadUsers();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingAction(null);
+    }
+  }
   async function handleDeleteUser(u: AdminUser) {
     setLoadingAction(`delete-${u.id}`);
     try {
@@ -2700,6 +2742,98 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
+            {/* Per-game toggles */}
+            <Card className="border-border/60 bg-card/60 shadow-xl shadow-primary/5">
+              <CardHeader className="pb-2 pt-4 px-4 border-b border-border/40 mb-4">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-primary" /> Individual Games
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-2 max-h-72 overflow-y-auto">
+                {[
+                  { slug: "roulette", label: "Roulette" },
+                  { slug: "dice", label: "Dice" },
+                  { slug: "crash", label: "Crash" },
+                  { slug: "mines", label: "Mines" },
+                  { slug: "blackjack", label: "Blackjack" },
+                  { slug: "hilo", label: "Hi-Lo" },
+                  { slug: "coinflip", label: "Coin Flip" },
+                  { slug: "keno", label: "Keno" },
+                  { slug: "chicken-road", label: "Chicken Road" },
+                  { slug: "race", label: "DGC Derby" },
+                ].map((g) => {
+                  const disabled = (bankSettings.disabledGameSlugs ?? []).includes(g.slug);
+                  return (
+                    <div key={g.slug} className="flex items-center justify-between p-2 rounded-lg bg-secondary/20 border border-border/10">
+                      <span className="text-xs font-bold uppercase tracking-wider">{g.label}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const list = bankSettings.disabledGameSlugs ?? [];
+                          const next = disabled ? list.filter((s: string) => s !== g.slug) : [...list, g.slug];
+                          saveBankSettings({ disabledGameSlugs: next });
+                        }}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-all ${!disabled ? "bg-primary" : "bg-secondary"}`}
+                      >
+                        <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${!disabled ? "translate-x-5" : "translate-x-1"}`} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
+            {/* Custom 404 page */}
+            <Card className="border-border/60 bg-card/60 shadow-xl shadow-primary/5 md:col-span-2">
+              <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between border-b border-border/40 mb-4">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-primary" /> Site-Wide Custom 404 Page
+                </CardTitle>
+                <button
+                  type="button"
+                  onClick={() => saveBankSettings({ custom404Enabled: !bankSettings.custom404Enabled })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all ${bankSettings.custom404Enabled ? "bg-primary" : "bg-secondary"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${bankSettings.custom404Enabled ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Title</label>
+                  <input
+                    className="w-full bg-background border border-border/40 rounded-lg px-3 py-2 text-sm"
+                    value={bankSettings.custom404Title ?? ""}
+                    onChange={e => setBankSettings(p => ({ ...p, custom404Title: e.target.value }))}
+                    onBlur={e => saveBankSettings({ custom404Title: e.target.value })}
+                  />
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Message</label>
+                  <textarea
+                    className="w-full bg-background border border-border/40 rounded-lg px-3 py-2 text-sm min-h-[80px]"
+                    value={bankSettings.custom404Message ?? ""}
+                    onChange={e => setBankSettings(p => ({ ...p, custom404Message: e.target.value }))}
+                    onBlur={e => saveBankSettings({ custom404Message: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-3">
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Button Text</label>
+                  <input
+                    className="w-full bg-background border border-border/40 rounded-lg px-3 py-2 text-sm"
+                    value={bankSettings.custom404ButtonText ?? ""}
+                    onChange={e => setBankSettings(p => ({ ...p, custom404ButtonText: e.target.value }))}
+                    onBlur={e => saveBankSettings({ custom404ButtonText: e.target.value })}
+                  />
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Button URL</label>
+                  <input
+                    className="w-full bg-background border border-border/40 rounded-lg px-3 py-2 text-sm font-mono"
+                    value={bankSettings.custom404ButtonUrl ?? ""}
+                    onChange={e => setBankSettings(p => ({ ...p, custom404ButtonUrl: e.target.value }))}
+                    onBlur={e => saveBankSettings({ custom404ButtonUrl: e.target.value })}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Applies to every missing route site-wide when enabled.</p>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* AI Fraud & Platform Parameters */}
             <Card className="border-border/60 bg-card/60 shadow-xl shadow-red-500/5">
               <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between border-b border-border/40 mb-4">
@@ -3129,6 +3263,102 @@ export default function AdminDashboard() {
                 ))}
               </div>
 
+              {/* ── Specialty Creator Commission Rate (owner only) ── */}
+              {isOwner && (selectedUser.user.accountType === "creator" || selectedUser.user.role === "creator" || selectedUser.user.commissionRate != null) && (
+                <div className="bg-purple-950/30 border border-purple-500/30 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center">
+                        <span className="text-purple-400 text-xs font-black">%</span>
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm text-white">Commission Rate</div>
+                        <div className="text-xs text-muted-foreground">Custom rate overrides the tier default</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {commissionEdit?.userId === selectedUser.user.id ? (
+                        <>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                            className="w-24 h-7 text-xs bg-secondary border-purple-500/40"
+                            value={commissionEdit.value}
+                            onChange={(e) => setCommissionEdit({ userId: selectedUser.user.id, value: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleCommissionSave(selectedUser.user.id);
+                              if (e.key === "Escape") setCommissionEdit(null);
+                            }}
+                            autoFocus
+                          />
+                          <span className="text-xs text-muted-foreground">%</span>
+                          <Button
+                            size="icon"
+                            className="h-7 w-7 bg-purple-600 hover:bg-purple-700"
+                            onClick={() => handleCommissionSave(selectedUser.user.id)}
+                            disabled={loadingAction === `commission-${selectedUser.user.id}`}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setCommissionEdit(null)}>
+                            <XCircle className="w-3.5 h-3.5" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-mono font-bold text-purple-300 text-lg">
+                            {selectedUser.user.commissionPct != null ? `${selectedUser.user.commissionPct}%` : "Default (tier)"}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-purple-500/40 text-purple-300 hover:bg-purple-500/10"
+                            onClick={() => setCommissionEdit({
+                              userId: selectedUser.user.id,
+                              value: selectedUser.user.commissionPct != null ? String(selectedUser.user.commissionPct) : "10",
+                            })}
+                          >
+                            <Pencil className="w-3 h-3 mr-1" /> Edit
+                          </Button>
+                          {selectedUser.user.commissionRate != null && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs text-muted-foreground hover:text-red-400"
+                              onClick={async () => {
+                                setLoadingAction(`commission-${selectedUser.user.id}`);
+                                try {
+                                  await adminFetch(`/users/${selectedUser.user.id}/account-type`, {
+                                    method: "PATCH",
+                                    body: JSON.stringify({ commissionRate: null }),
+                                  });
+                                  toast({ title: "Commission rate cleared", description: "User will now use their tier default rate." });
+                                  const data = await adminFetch(`/users/${selectedUser.user.id}`);
+                                  setSelectedUser(data);
+                                } catch (err: any) {
+                                  toast({ title: "Error", description: err.message, variant: "destructive" });
+                                } finally {
+                                  setLoadingAction(null);
+                                }
+                              }}
+                              disabled={loadingAction === `commission-${selectedUser.user.id}`}
+                            >
+                              <XCircle className="w-3 h-3 mr-1" /> Clear
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {selectedUser.user.commissionRate != null
+                      ? `Custom rate: ${selectedUser.user.commissionPct}% — overrides tier commission.`
+                      : "No custom rate set — using tier-based commission rate."}
+                  </div>
+                </div>
+              )}
               {/* ── Location & Device (all collected compliance data) ── */}
               <div>
                 <h4 className="font-bold uppercase tracking-wider text-sm mb-3 text-muted-foreground flex items-center gap-2">
@@ -3417,9 +3647,9 @@ export default function AdminDashboard() {
                 <p className="text-[10px] text-muted-foreground mt-1">Non-withdrawable casino credits</p>
               </div>
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Commission % (custom)</label>
-                <Input type="number" min={0} max={50} placeholder="10" value={newCreator.customCommissionPct} onChange={e => setNewCreator(p => ({ ...p, customCommissionPct: e.target.value }))} className="bg-secondary border-border/60" />
-                <p className="text-[10px] text-muted-foreground mt-1">Monthly % of house profit</p>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Commission %</label>
+                <Input type="number" min={0} max={100} placeholder="10" value={newCreator.customCommissionPct} onChange={e => setNewCreator(p => ({ ...p, customCommissionPct: e.target.value }))} className="bg-secondary border-border/60" />
+                <p className="text-[10px] text-muted-foreground mt-1">Negotiated % of house profit</p>
               </div>
             </div>
             <div>

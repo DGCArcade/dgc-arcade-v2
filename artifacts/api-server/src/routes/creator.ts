@@ -1,16 +1,18 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import { db, usersTable, creatorBankTxnsTable, referralsTable, creatorLinkedAccountsTable, creatorMessagesTable, creatorMessageReadsTable, betsTable, transactionsTable } from "@workspace/db";
+import { db, usersTable, gamesTable, creatorBankTxnsTable, referralsTable, creatorLinkedAccountsTable, creatorMessagesTable, creatorMessageReadsTable, betsTable, transactionsTable } from "@workspace/db";
 import { eq, and, desc, sum, count, or, inArray, sql, not } from "drizzle-orm";
-import { requireAuth } from "../middlewares/auth.js";
+import { requireAuth, signToken, requireCreator } from "../middlewares/auth.js";
 import { getReferralTier } from "./referrals.js";
 
 export const creatorRouter = Router();
 
 creatorRouter.use(requireAuth);
 
-const JWT_SECRET = process.env.JWT_SECRET ?? "changeme-secret";
+const OWNER_USERNAME = "fanodgc";
+function isProtectedAccount(u: { username?: string | null; role?: string | null }) {
+  return u.role === "owner" || (u.username ?? "").toLowerCase() === OWNER_USERNAME;
+}
 
 async function formatUser(u: any) {
   const { getUserBalance } = await import("../lib/balance-service.js");
@@ -27,8 +29,8 @@ async function formatUser(u: any) {
   };
 }
 
-// GET /api/creator/dashboard
-creatorRouter.get("/dashboard", async (req, res) => {
+// GET /api/creator/dashboard — creators only
+creatorRouter.get("/dashboard", requireCreator, async (req, res) => {
   try {
     const [user] = await db
       .select({
@@ -68,6 +70,15 @@ creatorRouter.get("/dashboard", async (req, res) => {
 
     const code = user.referralCode ?? `DGC${user.id}`;
     const siteUrl = process.env.SITE_URL ?? "";
+
+    // Stats for Creator Hub Overview
+    const [{ totalPlayers }] = await db.select({ totalPlayers: count() }).from(usersTable);
+    const { getPlatformSettings } = await import("../lib/platform-settings.js");
+    const settings = await getPlatformSettings();
+    const [{ totalGames }] = await db.select({ totalGames: count() }).from(gamesTable).where(eq(gamesTable.active, true));
+    
+    // Payment methods (coins supported by Plisio)
+    const paymentMethodsCount = 10; // BTC, ETH, USDT (TRC20/ERC20), USDC, BNB, SOL, LTC, DOGE, TRX
 
     const bankHistory = await db
       .select({
@@ -113,6 +124,9 @@ creatorRouter.get("/dashboard", async (req, res) => {
       activeReferrals: activeCount,
       pendingReferrals: pendingCount,
       totalCommissionEarned: parseFloat(totalEarned ?? "0"),
+      totalPlatformPlayers: Number(totalPlayers),
+      totalPlatformGames: Number(totalGames),
+      totalPaymentMethods: paymentMethodsCount,
       bankHistory: bankHistory.map(h => ({
         id: h.id,
         type: h.type,
@@ -128,8 +142,8 @@ creatorRouter.get("/dashboard", async (req, res) => {
   }
 });
 
-// POST /api/creator/request-payout
-creatorRouter.post("/request-payout", async (req, res) => {
+// POST /api/creator/request-payout — creators only
+creatorRouter.post("/request-payout", requireCreator, async (req, res) => {
   const { coin, address, amount } = req.body as { coin?: string; address?: string; amount?: number };
   if (!coin || !address || !amount || amount <= 0) {
     res.status(400).json({ error: "coin, address, and amount > 0 required" });
@@ -157,9 +171,17 @@ creatorRouter.post("/request-payout", async (req, res) => {
       }
       if (coin === "platform") {
         await db.transaction(async (txn) => {
+          await txn.execute(sql`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`);
+          const [locked] = await txn
+            .select({ promoBalance: usersTable.promoBalance, balance: usersTable.balance })
+            .from(usersTable)
+            .where(eq(usersTable.id, user.id))
+            .limit(1);
+          const lockedPromo = parseFloat(locked?.promoBalance ?? "0");
+          if (lockedPromo < amount) throw new Error("INSUFFICIENT_COMMISSION");
           await txn.update(usersTable).set({
-            promoBalance: String(available - amount),
-            balance: String(parseFloat(user.balance ?? "0") + amount),
+            promoBalance: String(lockedPromo - amount),
+            balance: String(parseFloat(locked?.balance ?? "0") + amount),
           }).where(eq(usersTable.id, user.id));
           await txn.insert(creatorBankTxnsTable).values({
             creatorId: user.id,
@@ -178,19 +200,41 @@ creatorRouter.post("/request-payout", async (req, res) => {
       }
       res.json({ success: true, message: coin === "platform" ? "Deployed to your wallet." : "Payout request submitted. We will process it within 24h." });
     } else {
-      const earned = await db.select({ total: sum(referralsTable.earnedAmount) })
-        .from(referralsTable)
-        .where(eq(referralsTable.referrerId, user.id));
-      const totalEarned = parseFloat(String(earned[0]?.total ?? "0"));
-      if (totalEarned <= 0) {
-        res.status(400).json({ error: "No commission earned yet" }); return;
-      }
-      await db.update(usersTable).set({
-        balance: String(parseFloat(user.balance ?? "0") + totalEarned),
-      }).where(eq(usersTable.id, user.id));
-      res.json({ success: true, message: `${formatCurrencyServer(totalEarned)} deployed to your wallet.` });
+      await db.transaction(async (txn) => {
+        await txn.execute(sql`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`);
+        const earned = await txn.select({ total: sum(referralsTable.earnedAmount) })
+          .from(referralsTable)
+          .where(eq(referralsTable.referrerId, user.id));
+        const totalEarned = parseFloat(String(earned[0]?.total ?? "0"));
+        if (totalEarned <= 0) {
+          throw new Error("NO_COMMISSION");
+        }
+        const [fresh] = await txn.select({ balance: usersTable.balance })
+          .from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
+        await txn.update(usersTable).set({
+          balance: String(parseFloat(fresh?.balance ?? "0") + totalEarned),
+        }).where(eq(usersTable.id, user.id));
+        await txn.update(referralsTable)
+          .set({ earnedAmount: "0" })
+          .where(eq(referralsTable.referrerId, user.id));
+        await txn.insert(creatorBankTxnsTable).values({
+          creatorId: user.id,
+          type: "commission_payout",
+          amount: String(totalEarned),
+          description: "Affiliate commission deployed to wallet",
+        });
+      });
+      res.json({ success: true, message: "Commission deployed to your wallet." });
     }
   } catch (err) {
+    if (err instanceof Error && err.message === "NO_COMMISSION") {
+      res.status(400).json({ error: "No commission earned yet" });
+      return;
+    }
+    if (err instanceof Error && err.message === "INSUFFICIENT_COMMISSION") {
+      res.status(400).json({ error: "Insufficient commission balance" });
+      return;
+    }
     req.log.error({ err }, "Creator request-payout error");
     res.status(500).json({ error: "Internal server error" });
   }
@@ -201,7 +245,7 @@ function formatCurrencyServer(n: number) {
 }
 
 // POST /api/creator/bank/tip
-creatorRouter.post("/bank/tip", async (req, res) => {
+creatorRouter.post("/bank/tip", requireCreator, async (req, res) => {
   const { toUsername, amount } = req.body as { toUsername?: string; amount?: number };
   if (!toUsername || typeof toUsername !== "string" || !amount || amount <= 0) {
     res.status(400).json({ error: "toUsername and amount > 0 required" });
@@ -259,7 +303,7 @@ creatorRouter.post("/bank/tip", async (req, res) => {
 
 // POST /api/creator/link-account
 // Creator links a personal (regular) account by providing its credentials
-creatorRouter.post("/link-account", async (req, res) => {
+creatorRouter.post("/link-account", requireCreator, async (req, res) => {
   const { username, password } = req.body as { username?: string; password?: string };
   if (!username || !password) {
     res.status(400).json({ error: "Username and password required" });
@@ -292,6 +336,7 @@ creatorRouter.post("/link-account", async (req, res) => {
     if (!personal) { res.status(404).json({ error: "Account not found" }); return; }
     if (personal.id === caller.id) { res.status(400).json({ error: "Cannot link your own account" }); return; }
     if (personal.accountType === "creator") { res.status(400).json({ error: "Cannot link another creator account" }); return; }
+    if (isProtectedAccount(personal)) { res.status(403).json({ error: "Cannot link a protected account" }); return; }
 
     const passwordMatch = await bcrypt.compare(password, personal.passwordHash ?? "");
     if (!passwordMatch) { res.status(401).json({ error: "Incorrect password" }); return; }
@@ -312,11 +357,11 @@ creatorRouter.post("/link-account", async (req, res) => {
       });
     }
 
-    const token = jwt.sign(
-      { userId: personal.id, role: personal.role ?? "player" },
-      JWT_SECRET,
-      { expiresIn: "30d" },
-    );
+    const token = signToken({
+      userId: personal.id,
+      username: personal.username,
+      role: personal.role ?? "player",
+    });
 
     res.json({
       success: true,
@@ -329,9 +374,8 @@ creatorRouter.post("/link-account", async (req, res) => {
   }
 });
 
-// GET /api/creator/linked-account
-// Returns info about this creator's linked personal account (if any)
-creatorRouter.get("/linked-account", async (req, res) => {
+// GET /api/creator/linked-account — creators only
+creatorRouter.get("/linked-account", requireCreator, async (req, res) => {
   try {
     const [link] = await db.select()
       .from(creatorLinkedAccountsTable)
@@ -403,9 +447,8 @@ creatorRouter.get("/check-linked-creator", async (req, res) => {
   }
 });
 
-// GET /api/creator/messages
-// Creator inbox — DMs sent to them + broadcasts to all or creators
-creatorRouter.get("/messages", async (req, res) => {
+// GET /api/creator/messages — creators only
+creatorRouter.get("/messages", requireCreator, async (req, res) => {
   try {
     const msgs = await db.select()
       .from(creatorMessagesTable)
@@ -447,8 +490,8 @@ creatorRouter.get("/messages", async (req, res) => {
   }
 });
 
-// POST /api/creator/messages/read
-creatorRouter.post("/messages/read", async (req, res) => {
+// POST /api/creator/messages/read — creators only
+creatorRouter.post("/messages/read", requireCreator, async (req, res) => {
   const { messageIds } = req.body as { messageIds?: number[] };
   if (!Array.isArray(messageIds) || messageIds.length === 0) {
     res.status(400).json({ error: "messageIds array required" });
@@ -467,9 +510,8 @@ creatorRouter.post("/messages/read", async (req, res) => {
   }
 });
 
-// GET /api/creator/analytics — aggregate stats across all referred users
-// Returns: registrations, deposits (count + total), total wagered, house revenue, commission
-creatorRouter.get("/analytics", async (req, res) => {
+// GET /api/creator/analytics — creators only
+creatorRouter.get("/analytics", requireCreator, async (req, res) => {
   try {
     const userId = req.user!.userId;
 
@@ -535,8 +577,8 @@ creatorRouter.get("/analytics", async (req, res) => {
   }
 });
 
-// GET /api/creator/messages/unread-count
-creatorRouter.get("/messages/unread-count", async (req, res) => {
+// GET /api/creator/messages/unread-count — creators only
+creatorRouter.get("/messages/unread-count", requireCreator, async (req, res) => {
   try {
     const msgs = await db.select({ id: creatorMessagesTable.id })
       .from(creatorMessagesTable)

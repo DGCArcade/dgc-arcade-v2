@@ -42,6 +42,8 @@ export const visitorsTable = pgTable("visitors", {
 
   // Link to registered user if they sign in
   userId: integer("user_id").references(() => usersTable.id, { onDelete: "set null" }),
+  /** Denormalized username snapshot when a visitor becomes a logged-in player */
+  username: text("username"),
 
   // Timestamps
   firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
