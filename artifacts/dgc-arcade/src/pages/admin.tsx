@@ -3647,9 +3647,9 @@ export default function AdminDashboard() {
                 <p className="text-[10px] text-muted-foreground mt-1">Non-withdrawable casino credits</p>
               </div>
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Commission % (custom)</label>
-                <Input type="number" min={0} max={50} placeholder="10" value={newCreator.customCommissionPct} onChange={e => setNewCreator(p => ({ ...p, customCommissionPct: e.target.value }))} className="bg-secondary border-border/60" />
-                <p className="text-[10px] text-muted-foreground mt-1">Monthly % of house profit</p>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Commission %</label>
+                <Input type="number" min={0} max={100} placeholder="10" value={newCreator.customCommissionPct} onChange={e => setNewCreator(p => ({ ...p, customCommissionPct: e.target.value }))} className="bg-secondary border-border/60" />
+                <p className="text-[10px] text-muted-foreground mt-1">Negotiated % of house profit</p>
               </div>
             </div>
             <div>
