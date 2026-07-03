@@ -20,14 +20,21 @@ echo "Watching for changes every 30 seconds..."
 while true; do
   if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
     TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$TIMESTAMP] Changes detected — committing and pushing..."
+    echo "[$TIMESTAMP] Changes detected — committing..."
     git add -A
     git commit -m "Auto-save: $TIMESTAMP"
-    git push origin HEAD 2>&1
-    if [ $? -eq 0 ]; then
-      echo "[$TIMESTAMP] Pushed successfully."
+    echo "[$TIMESTAMP] Pulling remote changes before push..."
+    git pull --rebase origin main 2>&1
+    if [ $? -ne 0 ]; then
+      echo "[$TIMESTAMP] Rebase failed — aborting and will retry next cycle."
+      git rebase --abort 2>/dev/null
     else
-      echo "[$TIMESTAMP] Push failed. Will retry next cycle."
+      git push origin HEAD:main 2>&1
+      if [ $? -eq 0 ]; then
+        echo "[$TIMESTAMP] Pushed successfully to GitHub."
+      else
+        echo "[$TIMESTAMP] Push failed. Will retry next cycle."
+      fi
     fi
   else
     echo "[$(date '+%H:%M:%S')] No changes."
