@@ -171,6 +171,10 @@ interface AdminUser {
   deviceOs?: string | null;
   deviceBrowser?: string | null;
   deviceType?: string | null;
+  // ── Specialty Creator Fields ──
+  commissionRate?: number | null;
+  commissionPct?: number | null;
+  displayName?: string | null;
 }
 
 interface AdminTx {
@@ -268,6 +272,7 @@ export default function AdminDashboard() {
   const [pinLoading, setPinLoading] = useState(false);
   const [pinRegenLoading, setPinRegenLoading] = useState(false);
   const [balanceEdit, setBalanceEdit] = useState<{ userId: number; value: string } | null>(null);
+  const [commissionEdit, setCommissionEdit] = useState<{ userId: number; value: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<AdminUser | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [createUserOpen, setCreateUserOpen] = useState(false);
@@ -993,6 +998,34 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleCommissionSave(userId: number) {
+    if (!commissionEdit) return;
+    const pct = parseFloat(commissionEdit.value);
+    if (isNaN(pct) || pct < 0 || pct > 100) {
+      toast({ title: "Invalid commission rate", description: "Enter a value between 0 and 100.", variant: "destructive" });
+      return;
+    }
+    setLoadingAction(`commission-${userId}`);
+    try {
+      // Send as percentage (e.g. 10 for 10%); backend normalises to decimal fraction
+      await adminFetch(`/users/${userId}/account-type`, {
+        method: "PATCH",
+        body: JSON.stringify({ commissionRate: pct }),
+      });
+      toast({ title: "Commission rate updated", description: `Set to ${pct}%` });
+      setCommissionEdit(null);
+      // Refresh the selected user detail so the modal reflects the new rate
+      if (selectedUser) {
+        const data = await adminFetch(`/users/${userId}`);
+        setSelectedUser(data);
+      }
+      loadUsers();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingAction(null);
+    }
+  }
   async function handleDeleteUser(u: AdminUser) {
     setLoadingAction(`delete-${u.id}`);
     try {
@@ -3230,6 +3263,102 @@ export default function AdminDashboard() {
                 ))}
               </div>
 
+              {/* ── Specialty Creator Commission Rate (owner only) ── */}
+              {isOwner && (selectedUser.user.accountType === "creator" || selectedUser.user.role === "creator" || selectedUser.user.commissionRate != null) && (
+                <div className="bg-purple-950/30 border border-purple-500/30 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center">
+                        <span className="text-purple-400 text-xs font-black">%</span>
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm text-white">Commission Rate</div>
+                        <div className="text-xs text-muted-foreground">Custom rate overrides the tier default</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {commissionEdit?.userId === selectedUser.user.id ? (
+                        <>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                            className="w-24 h-7 text-xs bg-secondary border-purple-500/40"
+                            value={commissionEdit.value}
+                            onChange={(e) => setCommissionEdit({ userId: selectedUser.user.id, value: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleCommissionSave(selectedUser.user.id);
+                              if (e.key === "Escape") setCommissionEdit(null);
+                            }}
+                            autoFocus
+                          />
+                          <span className="text-xs text-muted-foreground">%</span>
+                          <Button
+                            size="icon"
+                            className="h-7 w-7 bg-purple-600 hover:bg-purple-700"
+                            onClick={() => handleCommissionSave(selectedUser.user.id)}
+                            disabled={loadingAction === `commission-${selectedUser.user.id}`}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setCommissionEdit(null)}>
+                            <XCircle className="w-3.5 h-3.5" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-mono font-bold text-purple-300 text-lg">
+                            {selectedUser.user.commissionPct != null ? `${selectedUser.user.commissionPct}%` : "Default (tier)"}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-purple-500/40 text-purple-300 hover:bg-purple-500/10"
+                            onClick={() => setCommissionEdit({
+                              userId: selectedUser.user.id,
+                              value: selectedUser.user.commissionPct != null ? String(selectedUser.user.commissionPct) : "10",
+                            })}
+                          >
+                            <Pencil className="w-3 h-3 mr-1" /> Edit
+                          </Button>
+                          {selectedUser.user.commissionRate != null && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs text-muted-foreground hover:text-red-400"
+                              onClick={async () => {
+                                setLoadingAction(`commission-${selectedUser.user.id}`);
+                                try {
+                                  await adminFetch(`/users/${selectedUser.user.id}/account-type`, {
+                                    method: "PATCH",
+                                    body: JSON.stringify({ commissionRate: null }),
+                                  });
+                                  toast({ title: "Commission rate cleared", description: "User will now use their tier default rate." });
+                                  const data = await adminFetch(`/users/${selectedUser.user.id}`);
+                                  setSelectedUser(data);
+                                } catch (err: any) {
+                                  toast({ title: "Error", description: err.message, variant: "destructive" });
+                                } finally {
+                                  setLoadingAction(null);
+                                }
+                              }}
+                              disabled={loadingAction === `commission-${selectedUser.user.id}`}
+                            >
+                              <XCircle className="w-3 h-3 mr-1" /> Clear
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {selectedUser.user.commissionRate != null
+                      ? `Custom rate: ${selectedUser.user.commissionPct}% — overrides tier commission.`
+                      : "No custom rate set — using tier-based commission rate."}
+                  </div>
+                </div>
+              )}
               {/* ── Location & Device (all collected compliance data) ── */}
               <div>
                 <h4 className="font-bold uppercase tracking-wider text-sm mb-3 text-muted-foreground flex items-center gap-2">

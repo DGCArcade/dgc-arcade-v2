@@ -540,6 +540,10 @@ adminRouter.get("/users/:id", async (req, res) => {
         promoBalance: parseFloat(user.promoBalance ?? "0"),
         totalDeposited: parseFloat(user.totalDeposited ?? "0"),
         totalWageredAmount: parseFloat(user.totalWageredAmount ?? "0"),
+        // ── Specialty Creator Fields ──
+        commissionRate: user.commissionRate != null ? parseFloat(user.commissionRate) : null,
+        commissionPct: user.commissionRate != null ? Math.round(parseFloat(user.commissionRate) * 100) : null,
+        displayName: user.displayName ?? null,
         // ── Location / geo (redacted for owner account unless caller is owner) ──
         locationVerified: targetIsOwner && !callerIsOwnerUser ? undefined : user.locationVerified,
         geoIp: targetIsOwner && !callerIsOwnerUser ? undefined : user.geoIp,
@@ -724,7 +728,10 @@ adminRouter.post("/create-specialty-creator", async (req, res) => {
         balance: promo,
         promoBalance: promo,
         withdrawalsEnabled: false,
-        commissionRate: String((customCommissionPct ?? 10) / 100),
+        // commissionRate stored as decimal fraction (0.10 = 10%).
+        // customCommissionPct is expected as a percentage (e.g. 10 = 10%).
+        // Guard: if caller accidentally sends a decimal fraction already (<=1), use it directly.
+        commissionRate: String((customCommissionPct ?? 10) > 1 ? (customCommissionPct ?? 10) / 100 : (customCommissionPct ?? 10)),
         displayName: displayName || null,
       })
       .returning();
@@ -3021,8 +3028,15 @@ adminRouter.patch("/users/:id/account-type", async (req, res) => {
   }
 
   // Specialty Creator Fields
+  // commissionRate is stored as a decimal fraction (e.g. 0.10 = 10%).
+  // If the caller sends a value > 1 (e.g. 10 meaning 10%), normalise it by dividing by 100.
   if (commissionRate !== undefined) {
-    updates.commissionRate = commissionRate !== null ? String(commissionRate) : null;
+    if (commissionRate === null) {
+      updates.commissionRate = null;
+    } else {
+      const normalized = commissionRate > 1 ? commissionRate / 100 : commissionRate;
+      updates.commissionRate = String(normalized);
+    }
   }
   if (displayName !== undefined) {
     updates.displayName = displayName;
