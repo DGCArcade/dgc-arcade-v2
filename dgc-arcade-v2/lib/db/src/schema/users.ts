@@ -1,0 +1,86 @@
+import { pgTable, text, serial, timestamp, numeric, integer, boolean } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+
+export const usersTable = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  email: text("email").unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  emailVerificationCode: text("email_verification_code"),
+  emailVerificationExpiresAt: timestamp("email_verification_expires_at", { withTimezone: true }),
+  passwordHash: text("password_hash").notNull(),
+  balance: numeric("balance", { precision: 18, scale: 8 }).notNull().default("0"),
+  avatarUrl: text("avatar_url"),
+  totalBets: integer("total_bets").notNull().default(0),
+  totalWon: numeric("total_won", { precision: 18, scale: 8 }).notNull().default("0"),
+  role: text("role").notNull().default("player"),
+  isBanned: boolean("is_banned").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  geoCountry: text("geo_country"),
+  geoCountryCode: text("geo_country_code"),
+  geoRegion: text("geo_region"),
+  geoCity: text("geo_city"),
+  geoIp: text("geo_ip"),
+  geoHostname: text("geo_hostname"),
+  geoAsn: text("geo_asn"),
+  geoIsp: text("geo_isp"),
+  geoLat: text("geo_lat"),
+  geoLon: text("geo_lon"),
+  geoTimezone: text("geo_timezone"),
+  totalDeposited: numeric("total_deposited", { precision: 18, scale: 8 }).notNull().default("0"),
+  totalWageredAmount: numeric("total_wagered_amount", { precision: 18, scale: 8 }).notNull().default("0"),
+  wagerRequirement: numeric("wager_requirement", { precision: 18, scale: 8 }).notNull().default("0"),
+  deviceFingerprint: text("device_fingerprint"),
+  deviceName: text("device_name"),
+  deviceOs: text("device_os"),
+  deviceBrowser: text("device_browser"),
+  deviceType: text("device_type"),
+  vpnDetected: boolean("vpn_detected").default(false),
+  vpnProvider: text("vpn_provider"),
+  locationVerified: boolean("location_verified").notNull().default(false),
+  usernameChangedAt: timestamp("username_changed_at", { withTimezone: true }),
+  deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
+  accountType: text("account_type").notNull().default("normal"),
+  promoBalance: numeric("promo_balance", { precision: 18, scale: 8 }).notNull().default("0"),
+  vaultBalance: numeric("vault_balance", { precision: 18, scale: 8 }).notNull().default("0"),
+  signupBonus: numeric("signup_bonus", { precision: 18, scale: 8 }).notNull().default("100"),
+  bonusWagered: numeric("bonus_wagered", { precision: 18, scale: 8 }).notNull().default("0"),
+  withdrawalsEnabled: boolean("withdrawals_enabled").notNull().default(true),
+  dgcBankPin: text("dgc_bank_pin"),
+  dgcBankPinRevealed: boolean("dgc_bank_pin_revealed").notNull().default(false),
+  referralCode: text("referral_code").unique(),
+  referredBy: integer("referred_by"),
+  // VIP & Session tracking
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  telegramUsername: text("telegram_username"),
+  rakebackClaimed: numeric("rakeback_claimed", { precision: 18, scale: 8 }).notNull().default("0"),
+  withdrawalAttempts: integer("withdrawal_attempts").notNull().default(0),
+  // Specialty Creator Fields
+  commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }), // Override standard tier rate
+  displayName: text("display_name"), // Custom display name for creators
+  // Security & Step-up
+  ownerStepupCode: text("owner_stepup_code"),
+  ownerStepupExpiresAt: timestamp("owner_stepup_expires_at", { withTimezone: true }),
+  withdrawOtpSentAt: timestamp("withdraw_otp_sent_at", { withTimezone: true }),
+  withdrawOtpCode: text("withdraw_otp_code"),
+  withdrawOtpExpiresAt: timestamp("withdraw_otp_expires_at", { withTimezone: true }),
+  ownerStepupSentAt: timestamp("owner_stepup_sent_at", { withTimezone: true }),
+  sessionStartedAt: timestamp("session_started_at", { withTimezone: true }),
+  depositLimitDaily: numeric("deposit_limit_daily", { precision: 18, scale: 8 }),
+  depositLimitWeekly: numeric("deposit_limit_weekly", { precision: 18, scale: 8 }),
+  depositLimitMonthly: numeric("deposit_limit_monthly", { precision: 18, scale: 8 }),
+  lossLimitDaily: numeric("loss_limit_daily", { precision: 18, scale: 8 }),
+  sessionLimitMinutes: integer("session_limit_minutes"),
+});
+
+export const insertUserSchema = createInsertSchema(usersTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  totalBets: true,
+  totalWon: true,
+});
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof usersTable.$inferSelect;

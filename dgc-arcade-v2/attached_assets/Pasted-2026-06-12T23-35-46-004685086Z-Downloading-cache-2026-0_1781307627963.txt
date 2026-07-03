@@ -1,0 +1,43 @@
+2026-06-12T23:35:46.004685086Z ==> Downloading cache...
+2026-06-12T23:35:46.04032972Z ==> Cloning from https://github.com/DGC4/dgc-arcade-v2
+2026-06-12T23:35:47.775869417Z ==> Checking out commit a3f069d62a1c8dcf6d7e4b0090461ebeb754d4d8 in branch main
+2026-06-12T23:35:54.983952172Z ==> Downloaded 107MB in 4s. Extraction took 4s.
+2026-06-12T23:35:59.385176919Z ==> Using Node.js version 24.14.1 (default)
+2026-06-12T23:35:59.385194619Z ==> Docs on specifying a Node.js version: https://render.com/docs/node-version
+2026-06-12T23:35:59.429601698Z ==> Running build command 'pnpm install && pnpm --filter @workspace/api-server run build'...
+2026-06-12T23:36:01.420939833Z 
+2026-06-12T23:36:01.420964793Z > @workspace/api-server@0.0.0 build /opt/render/project/src/artifacts/api-server
+2026-06-12T23:36:01.420970633Z > node ./build.mjs
+2026-06-12T23:36:01.420974694Z 
+2026-06-12T23:36:01.953975454Z ✘ [ERROR] No matching export in "../../lib/api-zod/src/index.ts" for import "BetBody"
+2026-06-12T23:36:01.954000555Z 
+2026-06-12T23:36:01.954005215Z     src/routes/bets.ts:4:9:
+2026-06-12T23:36:01.954009165Z       4 │ import { BetBody, ListBetsQueryParams } from "@workspace/api-zod";
+2026-06-12T23:36:01.954012605Z         ╵          ~~~~~~~
+2026-06-12T23:36:01.954015645Z 
+2026-06-12T23:36:01.961022225Z 1 error
+2026-06-12T23:36:01.961133208Z 
+2026-06-12T23:36:01.961138108Z   dist/pino-worker.mjs               153.4kb
+2026-06-12T23:36:01.961140678Z   dist/pino-file.mjs                 142.1kb
+2026-06-12T23:36:01.961142648Z   dist/pino-pretty.mjs               114.6kb
+2026-06-12T23:36:01.961144748Z   dist/thread-stream-worker.mjs        7.3kb
+2026-06-12T23:36:01.961148728Z   dist/pino-worker.mjs.map           256.9kb
+2026-06-12T23:36:01.961150858Z   dist/pino-file.mjs.map             229.0kb
+2026-06-12T23:36:01.961152928Z   dist/pino-pretty.mjs.map           204.0kb
+2026-06-12T23:36:01.961154968Z   dist/thread-stream-worker.mjs.map   12.0kb
+2026-06-12T23:36:01.961157799Z 
+2026-06-12T23:36:01.961161459Z ⚡ Done in 485ms
+2026-06-12T23:36:01.963076658Z Error: Build failed with 1 error:
+2026-06-12T23:36:01.963090398Z src/routes/bets.ts:4:9: ERROR: No matching export in "../../lib/api-zod/src/index.ts" for import "BetBody"
+2026-06-12T23:36:01.963095068Z     at failureErrorWithLog (/opt/render/project/src/node_modules/.pnpm/esbuild@0.27.3/node_modules/esbuild/lib/main.js:1467:15)
+2026-06-12T23:36:01.963098388Z     at /opt/render/project/src/node_modules/.pnpm/esbuild@0.27.3/node_modules/esbuild/lib/main.js:926:25
+2026-06-12T23:36:01.963101728Z     at /opt/render/project/src/node_modules/.pnpm/esbuild@0.27.3/node_modules/esbuild/lib/main.js:1345:9
+2026-06-12T23:36:01.963105728Z     at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+2026-06-12T23:36:01.963109318Z   errors: [Getter/Setter],
+2026-06-12T23:36:01.963112849Z   warnings: [Getter/Setter]
+2026-06-12T23:36:01.963116089Z }
+2026-06-12T23:36:01.979575581Z /opt/render/project/src/artifacts/api-server:
+2026-06-12T23:36:01.979593421Z  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 build: `node ./build.mjs`
+2026-06-12T23:36:01.979598281Z Exit status 1
+2026-06-12T23:36:02.043377647Z ==> Build failed 😞
+2026-06-12T23:36:02.043406898Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys

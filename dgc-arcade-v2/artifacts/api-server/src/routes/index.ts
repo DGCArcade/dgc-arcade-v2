@@ -1,0 +1,48 @@
+import { Router, type IRouter } from "express";
+import healthRouter from "./health.js";
+import { authRouter } from "./auth.js";
+import { usersRouter } from "./users.js";
+import { gamesRouter } from "./games.js";
+import { betsRouter } from "./bets.js";
+import { transactionsRouter } from "./transactions.js";
+import { leaderboardRouter } from "./leaderboard.js";
+import { statsRouter } from "./stats.js";
+import { adminRouter } from "./admin.js";
+import { blackjackRouter } from "./blackjack.js";
+import { minesRouter } from "./mines.js";
+import { dailyBonusRouter } from "./daily-bonus.js";
+import { raceRouter } from "./race.js";
+import { referralsRouter } from "./referrals.js";
+import { creatorRouter } from "./creator.js";
+import { tournamentsRouter } from "./tournaments.js";
+import { ownerAiRouter } from "./owner-ai.js";
+import { visitorLogsRouter } from "./visitor-logs.js";
+import { jackpotRouter } from "./jackpot.js";
+import { diceLiveRouter } from "./dice-live.js";
+import { chickenRoadRouter } from "./chicken-road.js";
+
+const router: IRouter = Router();
+
+router.use(healthRouter);
+router.use("/auth", authRouter);
+router.use("/users", usersRouter);
+router.use("/games", gamesRouter);
+router.use("/bets", betsRouter);
+router.use("/transactions", transactionsRouter);
+router.use("/leaderboard", leaderboardRouter);
+router.use("/stats", statsRouter);
+router.use("/admin", adminRouter);
+router.use("/blackjack", blackjackRouter);
+router.use("/mines", minesRouter);
+router.use("/daily-bonus", dailyBonusRouter);
+router.use("/race", raceRouter);
+router.use("/referrals", referralsRouter);
+router.use("/creator", creatorRouter);
+router.use("/tournaments", tournamentsRouter);
+router.use("/admin", ownerAiRouter);
+router.use("/admin/visitor-logs", visitorLogsRouter);
+router.use("/jackpot", jackpotRouter);
+router.use("/dice/live", diceLiveRouter);
+router.use("/chicken-road", chickenRoadRouter);
+
+export default router;

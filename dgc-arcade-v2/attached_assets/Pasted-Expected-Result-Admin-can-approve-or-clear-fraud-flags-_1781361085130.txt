@@ -1,0 +1,289 @@
+Expected Result:
+Admin can approve or clear fraud flags successfully and all status changes persist correctly.
+
+⸻
+
+PRIORITY 3 - OVERVIEW DASHBOARD DRILL-DOWN
+
+Current Problem:
+Overview dashboard displays metrics but clicking them does not provide detailed data.
+
+Metrics Requiring Drill-Down Pages:
+
+* Total Users
+* Active Users
+* Total Bets
+* Total Wagered
+* Total Deposits
+* Total Withdrawals
+* Biggest Win
+* Pending Withdrawals
+* Fraud Flags
+* Revenue
+* VIP Users
+
+Tasks:
+
+Make every dashboard metric clickable.
+
+Example:
+
+Click Total Users
+→ Open full user list
+
+Click Total Bets
+→ Open complete betting history
+
+Click Total Wagered
+→ Show wagers by:
+
+* User
+* Game
+* Date Range
+
+Click Biggest Win
+→ Show:
+
+* User
+* Amount
+* Game
+* Timestamp
+* Transaction ID
+
+Click Pending Withdrawals
+→ Open withdrawal review page directly
+
+Expected Result:
+Dashboard becomes a management center, not just a statistics display.
+
+⸻
+
+PRIORITY 4 - REVIEW NOW BUTTON
+
+Issue:
+Review Now button under Pending Withdrawals does not route correctly.
+
+Tasks:
+
+Review Now should:
+
+Dashboard
+↓
+Click Review Now
+↓
+Pending Withdrawals Page
+
+with:
+
+* User
+* Amount
+* Currency
+* Wallet Address
+* Timestamp
+* Risk Score
+* Approve
+* Reject
+* View User Profile
+
+Expected Result:
+One click opens withdrawal queue.
+
+⸻
+
+PRIORITY 5 - WALLET CURRENCY ICONS
+
+Issue:
+Deposit and Withdrawal pages display currency names only.
+
+Requirement:
+
+Display currency icon beside every currency everywhere in platform.
+
+Examples:
+
+BTC ₿
+ETH ♦
+LTC Ł
+DOGE 🐕
+SOL ◎
+USDT 💵
+USDC 💲
+BNB 🔶
+TRX 🔺
+XRP ✕
+MATIC 🟣
+
+Apply to:
+
+* Wallet Page
+* Deposit Page
+* Withdrawal Page
+* DGC Bank
+* User Profile
+* Transaction History
+* Admin Dashboard
+* Wallet Selector
+
+Expected Result:
+Users instantly recognize currencies visually.
+
+⸻
+
+PRIORITY 6 - DEPOSIT FLOW REDESIGN
+
+Current Problem:
+Users may need to manually copy addresses.
+
+Goal:
+Reduce friction.
+
+Flow:
+
+User Clicks Deposit
+↓
+Select Currency
+↓
+Select Provider
+↓
+Provider Opens
+↓
+Wallet Address Auto-Filled
+↓
+User Completes Purchase
+
+No manual address copying.
+
+Tasks:
+
+Build provider abstraction layer.
+
+Provider Examples:
+
+* MoonPay
+* Coinbase Pay
+* Transak
+* Banxa
+* Ramp Network
+
+Each provider should:
+
+* Receive selected coin
+* Receive user wallet address
+* Pre-fill destination address
+* Open purchase flow automatically
+
+Expected Result:
+Deposit process becomes one-click.
+
+⸻
+
+PRIORITY 7 - PROVIDER REVIEW
+
+Review all current crypto purchase providers.
+
+Tasks:
+
+Evaluate:
+
+* Fees
+* Verification requirements
+* Availability
+* Supported countries
+* Supported assets
+* Conversion rates
+
+Create comparison dashboard.
+
+Recommend keeping only providers with:
+
+* Competitive fees
+* Good conversion rates
+* Reliable uptime
+* Broad availability
+
+Remove providers that create excessive friction.
+
+⸻
+
+PRIORITY 8 - WALLET UX IMPROVEMENTS
+
+Wallet should function like a premium crypto app.
+
+Add:
+
+* Currency icons
+* Asset logos
+* Balance cards
+* Recent transactions
+* Deposit history
+* Withdrawal history
+* Copy address button
+* QR code generation
+* Chain selection
+* Network warnings
+
+Expected Result:
+Wallet feels similar to a modern crypto exchange.
+
+⸻
+
+PRIORITY 9 - ADMIN AUDIT LOGS
+
+Add logging for all sensitive actions.
+
+Track:
+
+* Withdrawal approvals
+* Withdrawal rejections
+* Fraud approvals
+* Fraud dismissals
+* Balance adjustments
+* User bans
+* User unbans
+
+Store:
+
+* Admin ID
+* Timestamp
+* Action
+* Previous Value
+* New Value
+
+Expected Result:
+Every action is traceable.
+
+⸻
+
+PRIORITY 10 - ERROR HANDLING
+
+Remove generic:
+
+“Internal Server Error”
+
+Replace with:
+
+* Permission Error
+* Database Error
+* Wallet Error
+* Validation Error
+* API Error
+
+Log full backend error details.
+
+Display safe user-friendly message.
+
+Expected Result:
+Faster debugging and cleaner admin experience.
+
+FINAL GOAL
+
+Transform admin panel from a basic dashboard into a complete casino operations center with:
+
+* Full analytics
+* Full withdrawal management
+* Full fraud management
+* Full wallet management
+* Detailed drill-down reporting
+* Professional crypto onboarding
+* Reduced deposit friction
+* Better visibility across all platform metrics

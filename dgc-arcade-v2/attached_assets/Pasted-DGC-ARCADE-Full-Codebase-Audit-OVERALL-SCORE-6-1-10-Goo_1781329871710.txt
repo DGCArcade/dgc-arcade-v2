@@ -1,0 +1,95 @@
+DGC ARCADE — Full Codebase Audit
+
+OVERALL SCORE: 6.1 / 10
+Good foundation. Real games working, Plisio integrated, fraud detection exists, owner protection in place. But several critical financial and security issues would get you in serious trouble at production scale.
+
+CATEGORY SCORES
+
+1. Payment System (Plisio) — 7/10
+✅ OxaPay completely removed — Plisio is the only payment processor
+ ✅ USD → crypto conversion working (source_amount + source_currency)
+ ✅ Currency map covers BTC, ETH, LTC, DOGE, SOL, USDT-TRX, and more
+ ✅ Plisio payout API wired for admin withdrawal approval
+ ✅ Callback HMAC signature verification is in place
+❌ Critical: Wager requirement is set to 1.0 (100%) not 0.75 (75%). That means players must bet their ENTIRE deposit before withdrawing. That's too aggressive and likely a typo bug from the last session
+ ❌ Plisio API base URL is https://api.plisio.net/api/v1 in one place but https://plisio.net/api/v1 was used before — needs to be consistent
+ ❌ No Plisio webhook IP allowlist — anyone who knows your callback URL can fake a deposit confirmation
+
+2. Database & Schema — 7.5/10
+✅ Neon PostgreSQL — solid production database
+ ✅ Schema is well structured with proper foreign keys
+ ✅ All new columns added: total_deposited, total_wagered_amount, wager_requirement, device_fingerprint, location_verified
+ ✅ plisio_track_id replaces oxapay_track_id in transactions table
+ ✅ platform_settings table for dynamic config
+ ✅ device_history table for login tracking
+ ✅ mines_sessions and blackjack_hands tables for stateful games
+❌ Critical: No database transactions (BEGIN/COMMIT) on balance updates. If the server crashes between deducting balance and inserting the bet record, money disappears with no record
+ ❌ Balances stored as numeric strings but calculated with JavaScript parseFloat — floating point errors will accumulate over time on real money
+
+3. Security — 5/10
+✅ Device fingerprinting blocks duplicate registrations
+ ✅ Location verification required before withdrawals
+ ✅ JWT tokens used correctly
+ ✅ fanodgc account hardcoded as protected — can't be deleted or modified
+ ✅ bcrypt with 12 rounds for passwords
+ ✅ Fraud detection with 6 behavioral rules
+❌ Critical: cors() with NO options — accepts requests from ANY domain. Any website on the internet can make API calls to your backend
+ ❌ Critical: JWT secret has an insecure hardcoded fallback — "dgc-arcade-secret-change-in-production". If env var is missing, tokens are trivially forgeable
+ ❌ No rate limiting on login, registration, or bet endpoints — open to brute force and spam
+ ❌ No security headers (helmet) — missing HSTS, X-Frame-Options, CSP, etc
+ ❌ Bank PIN sessions stored in global.__bankSessions in memory — lost on every server restart, and not safe in a multi-instance setup
+ ❌ requireAdmin middleware does NOT accept the owner role — the owner can be locked out of admin routes if their role is owner not admin
+
+4. Game Logic — 7/10
+✅ 10 games implemented with real provably-fair seeds (SHA-256)
+ ✅ House edge applied correctly across all games
+ ✅ Blackjack has real stateful session management
+ ✅ Mines has interactive session with cashout
+ ✅ Server seed + client seed = verifiable results
+❌ No commit-reveal for provably fair — server seed is revealed in the response, meaning the server could theoretically know outcomes before the client
+ ❌ Balance updates in bets are NOT atomic — race condition possible if user fires two simultaneous bets
+ ❌ Wager tracking doesn't count blackjack or mines bets (those go through separate routes that don't increment totalWageredAmount)
+
+5. Owner / Admin Dashboard — 7/10
+✅ Full bank section in admin panel
+ ✅ Real-time Plisio BTC balance visible
+ ✅ Recent invoices from Plisio
+ ✅ Pending withdrawal queue
+ ✅ AI fraud detection with 6 rules and configurable sensitivity
+ ✅ Account type system (normal/creator/tester)
+ ✅ DGC Bank PIN system for admins
+ ✅ Owner-only settings panel
+❌ Bank PIN revealed message is misleading — says it was "shown at promotion time" but there's no mechanism to actually show it at that time in the current code
+ ❌ Fraud alert auto-approve under $50 threshold means small fraudulent withdrawals bypass review entirely
+ ❌ isAdmin check on frontend — owner role won't see admin panel if role is owner not admin
+
+6. Frontend / UX — 6.5/10
+✅ Mobile-responsive stats cards
+ ✅ Wallet modal with Plisio invoice redirect
+ ✅ Location gate with Indiana/Florida allowed
+ ✅ Currency selector with proper active state
+ ✅ Register form sends device fingerprint header
+❌ Scroll lock issue in wallet modal on mobile (known bug)
+ ❌ Keno reloads mid-game (known bug — not fixed yet)
+ ❌ Blackjack deal button broken (known bug — not fixed yet)
+ ❌ No loading states on several game components
+ ❌ API_BASE = "/api/admin" in admin.tsx is a relative path — only works because of the Render rewrite rule, fragile
+
+7. Infrastructure / Deployment — 7/10
+✅ GitHub → Render auto-deploy on push
+ ✅ Frontend and backend deployed as separate Render services
+ ✅ Neon database properly connected on Render
+ ✅ render.yaml in repo for reproducible deploys
+ ✅ Environment variables properly externalized
+❌ Free tier Render — backend spins down after 15 minutes of inactivity, causes 50+ second cold starts for first user each time
+ ❌ No staging environment — all changes go straight to production
+ ❌ No database backups configured (Neon has this but it needs to be set up)
+ ❌ Frontend Render rewrite rule is required for page routing — if it ever gets reset, all deep links break
+
+TOP 5 THINGS TO FIX FIRST
+In order of urgency:
+Fix wager requirement from 100% back to 75% — right now players literally cannot withdraw
+Lock down CORS — only allow requests from differentgrindcrew.com
+Add rate limiting — login and bet endpoints are wide open to abuse
+Fix requireAdmin to also allow owner role — or you could lock yourself out
+Add atomic database transactions to balance updates — prevent money disappearing on server crash
