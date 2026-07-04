@@ -18,6 +18,7 @@ function serializeBets(round: NonNullable<ReturnType<typeof crashRoundManager.ge
   return round.bets.map((b) => ({
     username: b.username,
     amount: b.amount,
+    currency: b.currency || "USD",
     cashoutAt: b.cashoutAt,
     ...(reveal ? { won: b.won, payout: b.payout } : {}),
   }));
@@ -121,8 +122,11 @@ crashLiveRouter.post("/bet", requireAuth, requireLocationVerified, async (req, r
     }
 
     let newBalance: number;
+    let usedCurrency: string;
     try {
-      newBalance = await deductBalance(user.id, amt);
+      const result = await deductBalance(user.id, amt);
+      newBalance = result.newBalance;
+      usedCurrency = result.usedCurrency;
     } catch (err: unknown) {
       res.status(400).json({ error: (err as Error).message || "Insufficient balance" });
       return;
@@ -136,14 +140,15 @@ crashLiveRouter.post("/bet", requireAuth, requireLocationVerified, async (req, r
         username: user.username,
         amount: amt,
         cashoutAt: target,
+        currency: usedCurrency,
       });
     } catch (err: unknown) {
-      await creditBalance(user.id, amt);
+      await creditBalance(user.id, amt, usedCurrency);
       res.status(400).json({ error: (err as Error).message });
       return;
     }
 
-    res.json({ success: true, newBalance, roundId: round.roundId });
+    res.json({ success: true, newBalance, roundId: round.roundId, currency: usedCurrency });
   } catch (err) {
     req.log.error({ err }, "Crash live bet error");
     res.status(500).json({ error: "Internal server error" });
@@ -184,8 +189,9 @@ crashRoundManager.setOnCrashResolve(async (round) => {
     const won = bet.won ?? false;
     const payout = bet.payout ?? 0;
     const multiplier = won ? bet.cashoutAt : 0;
+    const usedCurrency = bet.currency || "USD";
 
-    await creditBalance(bet.userId, payout);
+    await creditBalance(bet.userId, payout, usedCurrency);
 
     await db.update(usersTable).set({
       totalBets: sql`coalesce(total_bets, 0) + 1`,
@@ -204,6 +210,7 @@ crashRoundManager.setOnCrashResolve(async (round) => {
       serverSeedHash,
       clientSeed,
       nonce,
+      currency: usedCurrency,
       meta: {
         cashoutAt: bet.cashoutAt,
         crashPoint: round.crashPoint,

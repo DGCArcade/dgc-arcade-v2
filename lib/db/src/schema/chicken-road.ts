@@ -14,6 +14,7 @@ export const chickenRoadSessionsTable = pgTable("chicken_road_sessions", {
   matrix: text("matrix").notNull(), // JSON string of number[][]
   revealed: text("revealed").notNull().default("[]"), // JSON string of revealed positions (user picks)
   status: text("status").notNull().default("active"), // active, won, lost
+  currency: text("currency").notNull().default("USD"),
   currentMultiplier: numeric("current_multiplier", { precision: 10, scale: 4 }).notNull().default("1"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

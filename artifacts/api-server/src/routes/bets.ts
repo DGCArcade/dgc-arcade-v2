@@ -334,8 +334,11 @@ betsRouter.post("/", requireAuth, requireLocationVerified, async (req, res) => {
 
     // Standardized balance deduction (crypto-first, live prices)
     let newBalanceAfterDeduct: number;
+    let usedCurrency: string;
     try {
-      newBalanceAfterDeduct = await deductBalance(user.id, amount);
+      const result = await deductBalance(user.id, amount);
+      newBalanceAfterDeduct = result.newBalance;
+      usedCurrency = result.usedCurrency;
     } catch (err: any) {
       res.status(400).json({ error: err.message || "Insufficient balance" });
       return;
@@ -353,7 +356,7 @@ betsRouter.post("/", requireAuth, requireLocationVerified, async (req, res) => {
         (meta as Record<string, unknown>) ?? null, nonce
       ));
     } catch (err: any) {
-      await creditBalance(user.id, amount);
+      await creditBalance(user.id, amount, usedCurrency);
       res.status(400).json({ error: err.message || "Unsupported game" });
       return;
     }
@@ -375,7 +378,7 @@ betsRouter.post("/", requireAuth, requireLocationVerified, async (req, res) => {
     }
     
     // Standardized balance credit and stat updates
-    const finalBalance = await creditBalance(user.id, payout);
+    const finalBalance = await creditBalance(user.id, payout, usedCurrency);
     
     await db.update(usersTable).set({
       totalBets: sql`coalesce(total_bets, 0) + 1`,
@@ -394,6 +397,7 @@ betsRouter.post("/", requireAuth, requireLocationVerified, async (req, res) => {
       serverSeedHash,
       clientSeed: clientSeedStr,
       nonce,
+      currency: usedCurrency,
       meta: { ...resultMeta, userMeta: meta, username: user.username },
     }).returning();
     clearLiveFeedCaches();

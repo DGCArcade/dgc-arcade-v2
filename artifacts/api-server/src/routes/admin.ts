@@ -777,10 +777,11 @@ adminRouter.post("/create-specialty-creator", async (req, res) => {
 // PATCH /api/admin/users/:id
 adminRouter.patch("/users/:id", async (req, res) => {
   const userId = parseInt(req.params.id, 10);
-  const { balance, role, isBanned } = req.body as {
+  const { balance, role, isBanned, currency = "USD" } = req.body as {
     balance?: number;
     role?: string;
     isBanned?: boolean;
+    currency?: string;
   };
 
   // Protect superadmin
@@ -806,7 +807,7 @@ adminRouter.patch("/users/:id", async (req, res) => {
 
   try {
     const updates: Partial<typeof usersTable.$inferInsert> = {};
-    if (balance !== undefined) updates.balance = String(balance);
+    if (balance !== undefined && currency === "USD") updates.balance = String(balance);
     if (role !== undefined) updates.role = role;
     if (isBanned !== undefined) updates.isBanned = isBanned;
 
@@ -830,53 +831,54 @@ adminRouter.patch("/users/:id", async (req, res) => {
       return;
     }
 
-    const [before] = await db.select({ balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    let updatedUser: any;
+    if (Object.keys(updates).length > 0) {
+      [updatedUser] = await db
+        .update(usersTable)
+        .set(updates)
+        .where(eq(usersTable.id, userId))
+        .returning();
+    } else {
+      [updatedUser] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    }
 
-    const [updated] = await db
-      .update(usersTable)
-      .set(updates)
-      .where(eq(usersTable.id, userId))
-      .returning();
-
-    if (!updated) {
+    if (!updatedUser) {
       res.status(404).json({ error: "User not found" });
       return;
     }
 
-    // Audit log — fire-and-forget
-    logAudit({
-      adminId: req.user!.userId,
-      adminUsername: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1))[0]?.username ?? "admin",
-      action: isBanned !== undefined ? (isBanned ? "ban_user" : "unban_user") : role !== undefined ? "change_role" : "adjust_balance",
-      targetType: "user",
-      targetId: userId,
-      oldValue: { balance: parseFloat(before?.balance ?? "0"), role: target?.role, isBanned: false },
-      newValue: { balance: parseFloat(updated.balance), role: updated.role, isBanned: updated.isBanned },
-      ip: req.ip,
-    }).catch(() => {});
+    // Handle crypto balance update if specified
+    if (balance !== undefined && currency !== "USD") {
+      const [oldCrypto] = await db.select().from(userBalancesTable).where(and(eq(userBalancesTable.userId, userId), eq(userBalancesTable.currency, currency))).limit(1);
+      const oldAmt = oldCrypto ? parseFloat(oldCrypto.amount) : 0;
+      
+      await db.insert(userBalancesTable).values({
+        userId,
+        currency,
+        amount: String(balance),
+      }).onConflictDoUpdate({
+        target: [userBalancesTable.userId, userBalancesTable.currency],
+        set: { amount: String(balance) },
+      });
 
-    // If balance was manually set, record a ledger entry
-    if (balance !== undefined && before) {
-      const oldBal = parseFloat(before.balance);
-      const newBal = parseFloat(updated.balance);
       recordLedgerStandalone({
         userId,
-        amount: newBal - oldBal,
-        balanceBefore: oldBal,
-        balanceAfter: newBal,
+        amount: balance - oldAmt,
+        balanceBefore: oldAmt,
+        balanceAfter: balance,
         reason: "admin_adjustment",
-        note: `Admin balance set to ${newBal} by admin #${req.user!.userId}`,
+        note: `Admin set ${currency} balance to ${balance} by admin #${req.user!.userId}`,
       }).catch(() => {});
     }
 
     res.json({
-      id: updated.id,
-      username: updated.username,
-      balance: parseFloat(updated.balance),
-      role: updated.role,
-      isBanned: updated.isBanned,
-      totalBets: updated.totalBets,
-      totalWon: parseFloat(updated.totalWon),
+      id: updatedUser.id,
+      username: updatedUser.username,
+      balance: parseFloat(updatedUser.balance),
+      role: updatedUser.role,
+      isBanned: updatedUser.isBanned,
+      totalBets: updatedUser.totalBets,
+      totalWon: parseFloat(updatedUser.totalWon),
     });
   } catch (err) {
     req.log.error({ err }, "Admin update user error");

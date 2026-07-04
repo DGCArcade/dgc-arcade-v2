@@ -14,6 +14,7 @@ export const blackjackHandsTable = pgTable("blackjack_hands", {
   clientSeed: text("client_seed"),
   nonce: integer("nonce").notNull().default(1),
   status: text("status").notNull().default("active"),
+  currency: text("currency").notNull().default("USD"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

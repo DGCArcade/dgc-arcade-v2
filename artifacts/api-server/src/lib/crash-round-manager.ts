@@ -7,6 +7,7 @@ export interface CrashRoundBet {
   username: string;
   amount: number;
   cashoutAt: number;
+  currency?: string;
   won?: boolean;
   payout?: number;
 }

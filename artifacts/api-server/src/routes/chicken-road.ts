@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable, gamesTable, betsTable, chickenRoadSessionsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 import { requireLocationVerified } from "../middlewares/location.js";
 import { v4 as uuidv4 } from "uuid";
@@ -52,6 +52,7 @@ chickenRoadRouter.get("/session", requireAuth, async (req, res) => {
         currentLane: revealed.length,
         currentMultiplier: parseFloat(session.currentMultiplier),
         bet: parseFloat(session.bet),
+        currency: session.currency || "USD",
         multipliers: getMultiplierTable(tier),
         status: "active",
       },
@@ -122,7 +123,16 @@ chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, asyn
     const [game] = await db.select().from(gamesTable).where(eq(gamesTable.id, gameId)).limit(1);
     if (!game) { res.status(404).json({ error: "Game not found" }); return; }
 
-    const finalBalance = await deductBalance(user.id, amount);
+    let finalBalance: number;
+    let usedCurrency: string;
+    try {
+      const result = await deductBalance(user.id, amount);
+      finalBalance = result.newBalance;
+      usedCurrency = result.usedCurrency;
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || "Insufficient balance" });
+      return;
+    }
 
     const serverSeed = uuidv4().replace(/-/g, "") + uuidv4().replace(/-/g, "");
     const clientSeed = rawClientSeed || "chicken-road";
@@ -143,6 +153,7 @@ chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, asyn
       revealed: JSON.stringify([]),
       status: "active",
       currentMultiplier: "1",
+      currency: usedCurrency,
     }).returning();
 
     const serverSeedHash = createHash("sha256").update(serverSeed).digest("hex");
@@ -159,6 +170,7 @@ chickenRoadRouter.post("/initialize", requireAuth, requireLocationVerified, asyn
       rtp: RTP,
       status: "active",
       currentMultiplier: 1,
+      currency: usedCurrency,
       multipliers: getMultiplierTable(tier),
     });
 
@@ -194,6 +206,7 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
     const tier = normalizeTier(session.tier);
     const maxSteps = maxStepsForTier(tier);
     const revealed: number[] = JSON.parse(session.revealed);
+    const usedCurrency = session.currency || "USD";
 
     if (laneNum !== revealed.length) {
       res.status(400).json({ error: `Must play lane ${revealed.length} next` });
@@ -227,6 +240,7 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
         serverSeedHash: createHash("sha256").update(session.serverSeed).digest("hex"),
         clientSeed: session.clientSeed,
         nonce: session.nonce,
+        currency: usedCurrency,
         meta: { layout, revealed, result: "bust", tier: session.tier, hazardType },
       });
 
@@ -248,7 +262,7 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
 
     if (revealed.length === maxSteps) {
       const payout = parseFloat(session.bet) * newMultiplier;
-      const finalBalance = await creditBalance(session.userId, payout);
+      const finalBalance = await creditBalance(session.userId, payout, usedCurrency);
 
       await db.update(chickenRoadSessionsTable)
         .set({ status: "won", revealed: JSON.stringify(revealed), currentMultiplier: String(newMultiplier) })
@@ -265,6 +279,7 @@ chickenRoadRouter.post("/progress", requireAuth, requireLocationVerified, async 
         serverSeedHash: createHash("sha256").update(session.serverSeed).digest("hex"),
         clientSeed: session.clientSeed,
         nonce: session.nonce,
+        currency: usedCurrency,
         meta: { layout, revealed, result: "completed", tier: session.tier },
       });
 
@@ -326,7 +341,8 @@ chickenRoadRouter.post("/settle", requireAuth, requireLocationVerified, async (r
 
     const multiplier = parseFloat(session.currentMultiplier);
     const payout = parseFloat(session.bet) * multiplier;
-    const finalBalance = await creditBalance(session.userId, payout);
+    const usedCurrency = session.currency || "USD";
+    const finalBalance = await creditBalance(session.userId, payout, usedCurrency);
     const layout = parseLayout(session.matrix);
 
     await db.update(chickenRoadSessionsTable)
@@ -344,6 +360,7 @@ chickenRoadRouter.post("/settle", requireAuth, requireLocationVerified, async (r
       serverSeedHash: createHash("sha256").update(session.serverSeed).digest("hex"),
       clientSeed: session.clientSeed,
       nonce: session.nonce,
+      currency: usedCurrency,
       meta: { layout, revealed, result: "cashed_out", tier: session.tier },
     });
 

@@ -79,8 +79,10 @@ raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) =
     .limit(1);
   if (!user) return res.status(404).json({ error: "User not found" });
 
+  let usedCurrency: string;
   try {
-    await deductBalance(userId, betAmount);
+    const result = await deductBalance(userId, betAmount);
+    usedCurrency = result.usedCurrency;
   } catch (err: any) {
     return res.status(400).json({ error: err.message || "Insufficient balance" });
   }
@@ -100,7 +102,7 @@ raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) =
   const payout = won ? betAmount * multiplier : 0;
   const profit = payout - betAmount;
 
-  const finalBalance = await creditBalance(userId, payout);
+  const finalBalance = await creditBalance(userId, payout, usedCurrency);
   await db.update(usersTable).set({
     totalBets: sql`coalesce(total_bets, 0) + 1`,
     totalWon: sql`coalesce(total_won, 0) + ${won ? payout : 0}`,
@@ -118,6 +120,7 @@ raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) =
     serverSeedHash,
     clientSeed: clientSeedStr,
     nonce,
+    currency: usedCurrency,
     meta: { racerId, winnerRacerId, finishOrder, playerPlace, username: user.username },
   }).returning({ id: betsTable.id });
 
@@ -131,6 +134,7 @@ raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) =
     payout,
     won,
     multiplier,
+    currency: usedCurrency,
   });
 
   return res.json({
@@ -144,6 +148,7 @@ raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) =
     payout,
     profit,
     newBalance: finalBalance,
+    currency: usedCurrency,
     serverSeedHash,
     serverSeed,
     clientSeed: clientSeedStr,

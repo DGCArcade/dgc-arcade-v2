@@ -271,7 +271,7 @@ export default function AdminDashboard() {
   const [adminPin, setAdminPin] = useState<string | null>(null);
   const [pinLoading, setPinLoading] = useState(false);
   const [pinRegenLoading, setPinRegenLoading] = useState(false);
-  const [balanceEdit, setBalanceEdit] = useState<{ userId: number; value: string } | null>(null);
+  const [balanceEdit, setBalanceEdit] = useState<{ userId: number; value: string; currency: string } | null>(null);
   const [commissionEdit, setCommissionEdit] = useState<{ userId: number; value: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<AdminUser | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
@@ -986,9 +986,12 @@ export default function AdminDashboard() {
     try {
       await adminFetch(`/users/${userId}`, {
         method: "PATCH",
-        body: JSON.stringify({ balance: amount }),
+        body: JSON.stringify({ 
+          balance: amount,
+          currency: balanceEdit.currency 
+        }),
       });
-      toast({ title: "Balance updated" });
+      toast({ title: "Balance updated", description: `Set ${balanceEdit.currency} to ${amount}` });
       setBalanceEdit(null);
       loadUsers();
     } catch (err: any) {
@@ -1509,33 +1512,51 @@ export default function AdminDashboard() {
 
                       <TableCell>
                         {balanceEdit?.userId === u.id ? (
-                          <div className="flex gap-1">
-                            <Input
-                              className="w-24 h-7 text-xs bg-secondary border-primary/40"
-                              value={balanceEdit.value}
-                              onChange={(e) => setBalanceEdit({ userId: u.id, value: e.target.value })}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleBalanceSave(u.id);
-                                if (e.key === "Escape") setBalanceEdit(null);
-                              }}
-                              autoFocus
-                            />
-                            <Button
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => handleBalanceSave(u.id)}
-                              disabled={loadingAction === `balance-${u.id}`}
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setBalanceEdit(null)}>
-                              <XCircle className="w-3.5 h-3.5" />
-                            </Button>
+                          <div className="flex flex-col gap-1.5 p-1 bg-secondary/40 rounded border border-primary/20">
+                            <div className="flex items-center gap-1">
+                              <select 
+                                className="h-7 text-[10px] bg-background border border-border rounded px-1 uppercase font-bold text-primary outline-none"
+                                value={balanceEdit.currency}
+                                onChange={(e) => setBalanceEdit({ ...balanceEdit, currency: e.target.value })}
+                              >
+                                <option value="USD">USD</option>
+                                <option value="DOGE">DOGE</option>
+                                <option value="LTC">LTC</option>
+                                <option value="BTC">BTC</option>
+                                <option value="ETH">ETH</option>
+                                <option value="SOL">SOL</option>
+                                <option value="USDT">USDT</option>
+                                <option value="TRX">TRX</option>
+                              </select>
+                              <Input
+                                className="w-20 h-7 text-xs bg-background border-primary/40 font-mono"
+                                value={balanceEdit.value}
+                                onChange={(e) => setBalanceEdit({ ...balanceEdit, value: e.target.value })}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleBalanceSave(u.id);
+                                  if (e.key === "Escape") setBalanceEdit(null);
+                                }}
+                                autoFocus
+                              />
+                            </div>
+                            <div className="flex gap-1 justify-end">
+                              <Button
+                                size="sm"
+                                className="h-6 px-2 text-[10px] font-bold uppercase"
+                                onClick={() => handleBalanceSave(u.id)}
+                                disabled={loadingAction === `balance-${u.id}`}
+                              >
+                                Save
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] font-bold uppercase" onClick={() => setBalanceEdit(null)}>
+                                Cancel
+                              </Button>
+                            </div>
                           </div>
                         ) : (
                           <button
                             className="font-mono text-sm text-primary hover:text-primary/80 font-bold transition-colors"
-                            onClick={() => setBalanceEdit({ userId: u.id, value: String(u.balance) })}
+                            onClick={() => setBalanceEdit({ userId: u.id, value: String(u.balance), currency: "USD" })}
                             title="Click to edit balance"
                           >
                             {formatCurrency(u.balance)}

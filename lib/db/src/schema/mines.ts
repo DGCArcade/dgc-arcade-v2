@@ -22,6 +22,7 @@ export const minesSessionsTable = pgTable("mines_sessions", {
   minePositions: text("mine_positions").notNull(),
   revealed: text("revealed").notNull().default("[]"),
   status: text("status").notNull().default("active"),
+  currency: text("currency").notNull().default("USD"),
   currentMultiplier: numeric("current_multiplier", { precision: 10, scale: 4 }).notNull().default("1"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -183,6 +183,10 @@ creatorRouter.post("/request-payout", requireCreator, async (req, res) => {
             promoBalance: String(lockedPromo - amount),
             balance: String(parseFloat(locked?.balance ?? "0") + amount),
           }).where(eq(usersTable.id, user.id));
+          
+          // Specialty creators: if withdrawing to platform wallet, we treat it as USD credit
+          // The creditBalance helper handles recording this correctly.
+          // Note: users.balance is the legacy static USD bucket.
           await txn.insert(creatorBankTxnsTable).values({
             creatorId: user.id,
             type: "commission_payout",
