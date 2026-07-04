@@ -41,12 +41,8 @@ app.use(
   }),
 );
 const STATIC_ORIGINS = [
-  "https://differentgrindcrew.com",
-  "https://www.differentgrindcrew.com",
   "https://dgcarcade.com",
   "https://www.dgcarcade.com",
-  "https://dgcarcade.io",
-  "https://www.dgcarcade.io",
   "https://dgc-arcade-frontend-cb8i.onrender.com",
 ];
 
