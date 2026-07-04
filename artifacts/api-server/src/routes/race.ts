@@ -124,9 +124,9 @@ raceRouter.post("/run", requireAuth, requireLocationVerified, async (req, res) =
     meta: { racerId, winnerRacerId, finishOrder, playerPlace, username: user.username },
   }).returning({ id: betsTable.id });
 
-  logBetActivity({
+  (logBetActivity as any)({
     userId,
-    username: user.username,
+    username: req.user!.username,
     ctx: getRequestContext(req),
     betId: betRow.id,
     gameSlug: "race",

@@ -102,7 +102,11 @@ export function DGCBankDashboard() {
     setUsersError(null);
     try {
       const data = await bankFetch("/bank/user-balances");
-      setUserBalances(data.users ?? []);
+      // Hide specialty creators and owners from the leaderboard to keep it focused on real players
+      const realPlayers = (data.users ?? []).filter((u: UserBalance) => 
+        u.role !== "owner" && u.role !== "creator" && (u as any).accountType !== "creator"
+      );
+      setUserBalances(realPlayers);
     } catch (err: any) {
       setUsersError(err?.message ?? "Failed to load user balances");
     } finally {

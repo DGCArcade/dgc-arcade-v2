@@ -117,6 +117,7 @@ const GENERAL_FAQ = [
   { q: "Who can join the DGC Arcade Affiliate Program?", a: "Anyone with a DGC Arcade account can join and start referring players. Specialty Creator status is invite-only and available to established streamers, influencers, and content creators." },
   { q: "How do I join?", a: "You're already in! Your personal referral link is shown in this hub. Share it anywhere — social media, Discord, livestreams, or direct messages. Every player who signs up through your link is tracked automatically." },
   { q: "What are the benefits of joining?", a: "Earn up to 30% monthly commission on your referred players' casino activity, advance through 13 tiers, and unlock exclusive DGC Arcade perks. Specialty Creators also receive a starting promo balance and priority support." },
+  { q: "How do regular users earn commission?", a: "Every regular user starts at the 'Hustler' tier with a 3% commission rate. As you refer more 'Active Players' (users who deposit), you climb through 13 tiers—Bronze, Silver, Gold, and Platinum—to reach up to 30% monthly commission." },
 ];
 
 const AFFILIATE_FAQ = [
@@ -132,6 +133,7 @@ const EARNINGS_FAQ = [
   { q: "When and how do I get paid?", a: "Payouts are processed on the 1st of each month. Regular users receive their commission directly to their DGC Arcade wallet balance. Specialty Creators receive payouts to their registered crypto wallet via our payment gateway." },
   { q: "Can I track my earnings in real time?", a: "Yes — your Commission tab shows pending, available, and lifetime commission figures. Referred user activity updates daily." },
   { q: "Can I earn commission from users who have the same IP address?", a: "For fraud prevention, referrals from the same IP address as the referrer are not counted. Multi-accounting and self-referrals are strictly prohibited and will result in account suspension." },
+  { q: "Can I tip other users?", a: "Tipping is currently available for regular players. Specialty Creators cannot send tips to ensure the integrity of the platform and prevent the use of promotional balances for tipping." },
 ];
 
 const TIER_FAQ = [

@@ -265,40 +265,8 @@ creatorRouter.post("/bank/tip", requireCreator, async (req, res) => {
     }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
 
     if (!creator) { res.status(404).json({ error: "User not found" }); return; }
-    if (creator.accountType !== "creator") {
-      res.status(403).json({ error: "Only creator accounts can send promo tips" });
-      return;
-    }
-    if (parseFloat(creator.promoBalance ?? "0") < amount) {
-      res.status(400).json({ error: "Insufficient Creator Bank balance" });
-      return;
-    }
-
-    const [target] = await db.select({ id: usersTable.id, username: usersTable.username })
-      .from(usersTable)
-      .where(eq(usersTable.username, toUsername.trim()))
-      .limit(1);
-    if (!target) { res.status(404).json({ error: "Recipient not found" }); return; }
-    if (target.id === creator.id) { res.status(400).json({ error: "Cannot tip yourself" }); return; }
-
-    await db.transaction(async (txn) => {
-      await txn.update(usersTable)
-        .set({ promoBalance: String(parseFloat(creator.promoBalance ?? "0") - amount) })
-        .where(eq(usersTable.id, creator.id));
-      const [tgt] = await txn.select({ p: usersTable.promoBalance }).from(usersTable).where(eq(usersTable.id, target.id)).limit(1);
-      await txn.update(usersTable)
-        .set({ promoBalance: String(parseFloat(tgt?.p ?? "0") + amount) })
-        .where(eq(usersTable.id, target.id));
-      await txn.insert(creatorBankTxnsTable).values({
-        creatorId: creator.id,
-        type: "promo_tip",
-        amount: String(amount),
-        toUserId: target.id,
-        description: `Promo tip to @${target.username}`,
-      });
-    });
-
-    res.json({ success: true, newPromoBalance: parseFloat(creator.promoBalance ?? "0") - amount });
+    // Disable tipping for specialty creators entirely
+    res.status(403).json({ error: "Specialty creators cannot send tips" });
   } catch (err) {
     req.log.error({ err }, "Creator bank tip error");
     res.status(500).json({ error: "Internal server error" });

@@ -86,6 +86,7 @@ export function logBetActivity(params: {
   payout: number;
   won: boolean;
   multiplier?: number;
+  currency?: string;
 }): void {
   logActivity({
     userId: params.userId,
@@ -94,7 +95,7 @@ export function logBetActivity(params: {
     action: "bet",
     ctx: params.ctx,
     amount: params.amount,
-    currency: "USD",
+    currency: params.currency ?? "USD",
     referenceType: "bet",
     referenceId: params.betId,
     metadata: {

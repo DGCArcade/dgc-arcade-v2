@@ -453,6 +453,14 @@ usersRouter.post("/tip", requireAuth, requireLocationVerified, async (req, res) 
 
   try {
     const senderId = req.user!.userId;
+    const [sender] = await db.select({ role: usersTable.role, accountType: usersTable.accountType }).from(usersTable).where(eq(usersTable.id, senderId)).limit(1);
+    
+    // Disable tipping for specialty creators entirely
+    if (sender?.role === "creator" || sender?.accountType === "creator") {
+      res.status(403).json({ error: "Specialty creators cannot send tips" });
+      return;
+    }
+
     const [recipient] = await db
       .select({ id: usersTable.id, username: usersTable.username, role: usersTable.role })
       .from(usersTable)
@@ -466,14 +474,15 @@ usersRouter.post("/tip", requireAuth, requireLocationVerified, async (req, res) 
     const balanceBefore = (await getUserBalance(senderId)).totalBalance;
     let senderBalanceAfter: number;
     try {
-      senderBalanceAfter = await deductBalance(senderId, amount);
+      const result = await deductBalance(senderId, amount) as any;
+      senderBalanceAfter = result.newBalance;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Insufficient balance";
       res.status(400).json({ error: msg });
       return;
     }
 
-    const recipientBalanceAfter = await creditBalance(recipient.id, amount);
+    const recipientBalanceAfter = await creditBalance(recipient.id, amount) as any;
 
     await db.insert(transactionsTable).values([
       {
