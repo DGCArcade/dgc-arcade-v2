@@ -1,11 +1,31 @@
 import { Router } from "express";
-import { db, usersTable, userBalancesTable } from "@workspace/db";
+import crypto from "crypto";
+import { db, usersTable, userBalancesTable, transactionsTable } from "@workspace/db";
 import { eq, ilike, sql } from "drizzle-orm";
 import { getCryptoPrice } from "../lib/price-service.js";
-import { getUserBalance } from "../lib/balance-service.js";
-import { requireAuth } from "../middlewares/auth.js";
+import { deductBalance, creditBalance, getUserBalance } from "../lib/balance-service.js";
+import { requireAuth, isOwnerUser, isProtectedAccount } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
+import { evaluateIpAccess } from "../lib/geo-policy.js";
+import { lookupGeoByIp } from "../lib/geo-lookup.js";
 import { sendEmailVerificationEmail } from "../lib/mail-service.js";
+import { recordLedgerStandalone } from "../services/ledger.js";
+import { logFinancialActivity, logActivity, linkVisitorToUser } from "../services/activity-log.js";
+import { getRequestContext } from "../lib/request-context.js";
+import {
+  getGamblingLimitsState,
+  updateGamblingLimits,
+  type GamblingLimits,
+} from "../services/gambling-limits.js";
 export const usersRouter = Router();
+
+const verifyResendAttempts = new Map<number, number[]>();
+const VERIFY_RESEND_WINDOW_MS = 60_000;
+const VERIFY_RESEND_MAX = 3;
+
+const verifyCodeAttempts = new Map<number, number[]>();
+const VERIFY_CODE_WINDOW_MS = 15 * 60 * 1000;
+const VERIFY_CODE_MAX = 10;
 
 const VIP_TIERS = [
   { id: 0, min: 0,         rakebackPct: 5  },
@@ -22,8 +42,7 @@ function getVipTier(wagered: number) {
 }
 
 usersRouter.get("/owner/plisio-balance", requireAuth, async (req, res) => {
-  const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  if (!user || user.username !== "fanodgc") { res.status(403).json({ error: "Forbidden" }); return; }
+  if (!req.user || !isOwnerUser(req.user)) { res.status(403).json({ error: "Owner access required" }); return; }
   try {
     const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY ?? process.env.PLISIO_API_KEY ?? process.env.API_KEY ?? "";
     if (!PLISIO_SECRET_KEY) { res.status(500).json({ error: "Plisio API key not configured (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)" }); return; }
@@ -80,20 +99,62 @@ usersRouter.get("/owner/plisio-balance", requireAuth, async (req, res) => {
   } catch { res.status(500).json({ error: "Failed to fetch Plisio balances" }); }
 });
 
-const BLOCKED_COUNTRIES = ["GB","FR","NL","AU","BE","DK","DE","IT","RO","ES","SE","CH","CZ"];
-const ALLOWED_US_STATES = ["Indiana","Florida"];
-
 usersRouter.post("/geo", requireAuth, async (req, res) => {
-  const { country, countryCode, region, city, ip, hostname, asn, isp, lat, lon, timezone, deviceName, deviceOs, deviceBrowser, deviceType, vpnDetected, vpnProvider, fingerprint } = req.body;
+  const { deviceName, deviceOs, deviceBrowser, deviceType, vpnDetected, vpnProvider, fingerprint } = req.body;
   try {
     const str = (v: unknown) => (typeof v === "string" && v.trim().length > 0 ? v : undefined);
-    const cc = typeof countryCode === "string" ? countryCode.toUpperCase() : "";
-    const hasValidIp = typeof ip === "string" && ip.trim().length > 0;
-    const jurisdictionAllowed = cc.length > 0 && !BLOCKED_COUNTRIES.includes(cc) && !(cc === "US" && typeof region === "string" && region.length > 0 && !ALLOWED_US_STATES.includes(region));
-    const locationVerified = hasValidIp && jurisdictionAllowed;
-    const updates = { geoCountry: str(country), geoCountryCode: str(countryCode), geoRegion: str(region), geoCity: str(city), geoIp: str(ip), geoHostname: str(hostname), geoAsn: str(asn), geoIsp: str(isp), geoLat: str(lat), geoLon: str(lon), geoTimezone: str(timezone), deviceName: str(deviceName), deviceOs: str(deviceOs), deviceBrowser: str(deviceBrowser), deviceType: str(deviceType), vpnProvider: str(vpnProvider), deviceFingerprint: str(fingerprint), vpnDetected: typeof vpnDetected === "boolean" ? vpnDetected : undefined, locationVerified: hasValidIp ? locationVerified : undefined };
-    if (Object.values(updates).some((v) => v !== undefined)) await db.update(usersTable).set(updates).where(eq(usersTable.id, req.user!.userId));
-    res.json({ success: true, locationVerified });
+    const serverGeo = await lookupGeoByIp(req.ip ?? "");
+    if (!serverGeo?.country_code) {
+      res.status(400).json({ error: "Unable to verify location from server IP", locationVerified: false });
+      return;
+    }
+
+    const cc = serverGeo.country_code.toUpperCase();
+    const access = evaluateIpAccess(serverGeo);
+    const locationVerified = access.allowed;
+
+    const updates = {
+      geoCountry: serverGeo.country_name,
+      geoCountryCode: cc,
+      geoRegion: serverGeo.region,
+      geoCity: serverGeo.city,
+      geoIp: serverGeo.ip,
+      geoAsn: serverGeo.asn,
+      geoIsp: serverGeo.org,
+      geoLat: serverGeo.latitude != null ? String(serverGeo.latitude) : undefined,
+      geoLon: serverGeo.longitude != null ? String(serverGeo.longitude) : undefined,
+      geoTimezone: serverGeo.timezone,
+      deviceName: str(deviceName),
+      deviceOs: str(deviceOs),
+      deviceBrowser: str(deviceBrowser),
+      deviceType: str(deviceType),
+      vpnProvider: access.stateActor
+        ? "State network"
+        : access.vpn
+          ? str(vpnProvider) ?? serverGeo.org
+          : str(vpnProvider),
+      deviceFingerprint: str(fingerprint),
+      vpnDetected: access.vpn || access.datacenter || access.tor || access.stateActor,
+      locationVerified,
+    };
+    if (Object.values(updates).some((v) => v !== undefined)) {
+      await db.update(usersTable).set(updates).where(eq(usersTable.id, req.user!.userId));
+    }
+
+    logActivity({
+      userId: req.user!.userId,
+      username: req.user!.username,
+      action: locationVerified ? "geo_verified" : "geo_denied",
+      ctx: getRequestContext(req),
+      metadata: { countryCode: cc, region: serverGeo.region, city: serverGeo.city, code: access.code, signals: access.signals },
+    });
+
+    res.json({
+      success: locationVerified,
+      locationVerified,
+      code: access.code,
+      error: locationVerified ? undefined : access.reason,
+    });
   } catch (err) { req.log.error({ err }, "Save geo error"); res.status(500).json({ error: "Internal server error" }); }
 });
 
@@ -174,12 +235,21 @@ usersRouter.post("/me/verify/resend", requireAuth, async (req, res) => {
     if (user.emailVerified) { res.status(400).json({ error: "Email already verified" }); return; }
     if (!user.email) { res.status(400).json({ error: "No email set" }); return; }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const now = Date.now();
+    const attempts = (verifyResendAttempts.get(req.user!.userId) ?? []).filter((t) => now - t < VERIFY_RESEND_WINDOW_MS);
+    if (attempts.length >= VERIFY_RESEND_MAX) {
+      res.status(429).json({ error: "Too many verification emails. Try again in a minute." });
+      return;
+    }
+    attempts.push(now);
+    verifyResendAttempts.set(req.user!.userId, attempts);
+
+    const code = String(crypto.randomInt(100000, 1000000));
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
     await db.update(usersTable).set({ emailVerificationCode: code, emailVerificationExpiresAt: expiresAt }).where(eq(usersTable.id, req.user!.userId));
     
     await sendEmailVerificationEmail(user.email, user.username, code);
-    res.json({ success: true, message: "Verification email sent", code });
+    res.json({ success: true, message: "Verification email sent" });
   } catch (err: any) {
     req.log.error({ err }, "Resend verification error");
     res.status(500).json({ error: "Failed to send email", details: err.message });
@@ -192,6 +262,13 @@ usersRouter.post("/me/verify/code", requireAuth, async (req, res) => {
   if (!code) { res.status(400).json({ error: "Verification code required" }); return; }
   
   try {
+    const now = Date.now();
+    const attempts = (verifyCodeAttempts.get(req.user!.userId) ?? []).filter((t) => now - t < VERIFY_CODE_WINDOW_MS);
+    if (attempts.length >= VERIFY_CODE_MAX) {
+      res.status(429).json({ error: "Too many verification attempts. Try again later." });
+      return;
+    }
+
     const [user] = await db.select({
       id: usersTable.id,
       emailVerificationCode: usersTable.emailVerificationCode,
@@ -209,9 +286,12 @@ usersRouter.post("/me/verify/code", requireAuth, async (req, res) => {
     }
     
     if (user.emailVerificationCode !== code) {
+      attempts.push(now);
+      verifyCodeAttempts.set(req.user!.userId, attempts);
       res.status(400).json({ error: "Invalid verification code" });
       return;
     }
+    verifyCodeAttempts.delete(req.user!.userId);
     
     await db.update(usersTable).set({
       emailVerified: true,
@@ -315,22 +395,145 @@ usersRouter.patch("/me/password", requireAuth, async (req, res) => {
 
 usersRouter.post("/me/rakeback/claim", requireAuth, async (req, res) => {
   try {
-    const [user] = await db.select({ totalWageredAmount: usersTable.totalWageredAmount, rakebackClaimed: usersTable.rakebackClaimed }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-    if (!user) { res.status(404).json({ error: "User not found" }); return; }
-    const wagered = parseFloat(user.totalWageredAmount ?? "0");
-    const tier = getVipTier(wagered);
-    const rakebackRate = tier.rakebackPct / 100;
-    const totalRakeback = wagered * rakebackRate;
-    const claimed = parseFloat(user.rakebackClaimed ?? "0");
-    const available = Math.max(0, totalRakeback - claimed);
-    if (available < 0.01) { res.status(400).json({ error: "No rakeback available to claim" }); return; }
-    const newClaimed = (claimed + available).toFixed(8);
-    await db.update(usersTable).set({ 
-      balance: sql`balance + ${available.toFixed(8)}`, 
-      rakebackClaimed: newClaimed 
-    }).where(eq(usersTable.id, req.user!.userId));
-    res.json({ success: true, claimedAmount: available, tier: tier.id });
-  } catch (err) { req.log.error({ err }, "Rakeback claim error"); res.status(500).json({ error: "Internal server error" }); }
+    const userId = req.user!.userId;
+    const result = await db.transaction(async (txn) => {
+      await txn.execute(sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`);
+
+      const [user] = await txn
+        .select({ totalWageredAmount: usersTable.totalWageredAmount, rakebackClaimed: usersTable.rakebackClaimed })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId))
+        .limit(1);
+      if (!user) throw new Error("USER_NOT_FOUND");
+
+      const wagered = parseFloat(user.totalWageredAmount ?? "0");
+      const tier = getVipTier(wagered);
+      const rakebackRate = tier.rakebackPct / 100;
+      const totalRakeback = wagered * rakebackRate;
+      const claimed = parseFloat(user.rakebackClaimed ?? "0");
+      const available = Math.max(0, totalRakeback - claimed);
+      if (available < 0.01) throw new Error("NO_RAKEBACK");
+
+      const newClaimed = (claimed + available).toFixed(8);
+      await txn.update(usersTable).set({
+        balance: sql`balance + ${available.toFixed(8)}`,
+        rakebackClaimed: newClaimed,
+      }).where(eq(usersTable.id, userId));
+
+      return { claimedAmount: available, tier: tier.id };
+    });
+
+    res.json({ success: true, ...result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg === "NO_RAKEBACK") {
+      res.status(400).json({ error: "No rakeback available to claim" });
+      return;
+    }
+    if (msg === "USER_NOT_FOUND") {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    req.log.error({ err }, "Rakeback claim error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/users/tip — authenticated players send real-money tips (not admin-only)
+usersRouter.post("/tip", requireAuth, requireLocationVerified, async (req, res) => {
+  const { toUsername, amount } = req.body as { toUsername?: string; amount?: number };
+  if (!toUsername?.trim() || !amount || amount <= 0) {
+    res.status(400).json({ error: "Username and a positive amount are required" });
+    return;
+  }
+  if (amount > 10_000) {
+    res.status(400).json({ error: "Tip amount too large" });
+    return;
+  }
+
+  try {
+    const senderId = req.user!.userId;
+    const [recipient] = await db
+      .select({ id: usersTable.id, username: usersTable.username, role: usersTable.role })
+      .from(usersTable)
+      .where(ilike(usersTable.username, toUsername.trim()))
+      .limit(1);
+
+    if (!recipient) { res.status(404).json({ error: "User not found" }); return; }
+    if (recipient.id === senderId) { res.status(400).json({ error: "Cannot tip yourself" }); return; }
+    if (isProtectedAccount(recipient)) { res.status(400).json({ error: "Cannot tip the house account" }); return; }
+
+    const balanceBefore = (await getUserBalance(senderId)).totalBalance;
+    let senderBalanceAfter: number;
+    try {
+      senderBalanceAfter = await deductBalance(senderId, amount);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Insufficient balance";
+      res.status(400).json({ error: msg });
+      return;
+    }
+
+    const recipientBalanceAfter = await creditBalance(recipient.id, amount);
+
+    await db.insert(transactionsTable).values([
+      {
+        userId: senderId,
+        type: "tip_sent",
+        amount: String(amount),
+        currency: "USD",
+        status: "completed",
+        metadata: JSON.stringify({ toUsername: recipient.username }),
+      },
+      {
+        userId: recipient.id,
+        type: "tip_received",
+        amount: String(amount),
+        currency: "USD",
+        status: "completed",
+        metadata: JSON.stringify({ fromUsername: req.user!.username }),
+      },
+    ]);
+
+    recordLedgerStandalone({
+      userId: senderId,
+      amount: -amount,
+      balanceBefore,
+      balanceAfter: senderBalanceAfter,
+      reason: "tip_sent",
+      note: `Tip to @${recipient.username}`,
+    }).catch(() => {});
+    recordLedgerStandalone({
+      userId: recipient.id,
+      amount,
+      balanceBefore: recipientBalanceAfter - amount,
+      balanceAfter: recipientBalanceAfter,
+      reason: "tip_received",
+      note: `Tip from @${req.user!.username}`,
+    }).catch(() => {});
+
+    logFinancialActivity({
+      userId: senderId,
+      username: req.user!.username,
+      action: "tip_sent",
+      ctx: getRequestContext(req),
+      amount,
+      referenceType: "transaction",
+      metadata: { toUsername: recipient.username },
+    });
+    logFinancialActivity({
+      userId: recipient.id,
+      username: recipient.username,
+      action: "tip_received",
+      ctx: getRequestContext(req),
+      amount,
+      metadata: { fromUsername: req.user!.username },
+    });
+
+    res.json({ success: true, newBalance: senderBalanceAfter });
+  } catch (err) {
+    req.log.error({ err }, "User tip error");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 usersRouter.get("/me", requireAuth, async (req, res) => {
@@ -362,4 +565,50 @@ usersRouter.get("/me", requireAuth, async (req, res) => {
       bonusWagered: user.bonusWagered,
     });
   } catch (err) { req.log.error({ err }, "Get me error"); res.status(500).json({ error: "Internal server error" }); }
+});
+
+usersRouter.get("/me/limits", requireAuth, async (req, res) => {
+  try {
+    const state = await getGamblingLimitsState(req.user!.userId);
+    if (!state) { res.status(404).json({ error: "User not found" }); return; }
+    res.json({ success: true, limits: state });
+  } catch (err) {
+    req.log.error({ err }, "Get limits error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+usersRouter.patch("/me/limits", requireAuth, async (req, res) => {
+  const body = req.body as Partial<GamblingLimits> & {
+    depositLimitDaily?: number | null;
+    depositLimitWeekly?: number | null;
+    depositLimitMonthly?: number | null;
+    lossLimitDaily?: number | null;
+    sessionLimitMinutes?: number | null;
+  };
+
+  const parse = (v: unknown): number | null | undefined => {
+    if (v === undefined) return undefined;
+    if (v === null || v === "") return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) return undefined;
+    return n === 0 ? null : n;
+  };
+
+  try {
+    const input: Partial<GamblingLimits> = {
+      depositLimitDaily: parse(body.depositLimitDaily),
+      depositLimitWeekly: parse(body.depositLimitWeekly),
+      depositLimitMonthly: parse(body.depositLimitMonthly),
+      lossLimitDaily: parse(body.lossLimitDaily),
+      sessionLimitMinutes: parse(body.sessionLimitMinutes),
+    };
+
+    const state = await updateGamblingLimits(req.user!.userId, input);
+    if (!state) { res.status(404).json({ error: "User not found" }); return; }
+    res.json({ success: true, limits: state });
+  } catch (err) {
+    req.log.error({ err }, "Update limits error");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });

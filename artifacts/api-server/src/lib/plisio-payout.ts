@@ -1,5 +1,6 @@
 import { db, transactionsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
+import { notifyWithdrawalStatus } from "../services/withdrawal-notify.js";
 
 const PLISIO_PAYOUT_MAP: Record<string, string> = {
   BTC: "BTC", ETH: "ETH", LTC: "LTC", DOGE: "DOGE", SOL: "SOL",
@@ -375,6 +376,8 @@ export async function sendPlisioPayout(
 
   if (claimed.length === 0) return { outcome: "already_processing" };
 
+  notifyWithdrawalStatus(txId, "processing").catch(() => {});
+
   const revertToPending = () =>
     db.update(transactionsTable)
       .set({ status: "pending" })
@@ -494,6 +497,8 @@ export async function sendPlisioPayout(
     log.error({ txId, plisioTxId }, "Plisio payout succeeded but row no longer 'processing'");
     return { outcome: "completed", id: txId, txHash: plisioTxId, amount: parseFloat(tx.amount) };
   }
+
+  notifyWithdrawalStatus(txId, "completed", plisioTxId).catch(() => {});
 
   return {
     outcome: "completed",

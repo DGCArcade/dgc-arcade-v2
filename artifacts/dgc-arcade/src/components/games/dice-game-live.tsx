@@ -266,7 +266,7 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
   const bettingActive = liveRound?.round?.state === "betting";
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-slate-950 to-slate-900 p-2 md:p-4">
+    <div className="w-full bg-gradient-to-br from-slate-950 to-slate-900 p-2 md:p-4">
       <style>{`
         /* DESKTOP LAYOUT (3-column spacious) */
         @media (min-width: 1024px) {
@@ -315,7 +315,8 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
             grid-template-columns: 1fr 1fr;
             grid-template-rows: auto auto auto;
             gap: 8px;
-            height: calc(100vh - 120px);
+            height: auto;
+            min-height: 0;
           }
           .betting-panel { grid-column: 1; grid-row: 1 / 3; }
           .dice-display { grid-column: 2; grid-row: 1; }

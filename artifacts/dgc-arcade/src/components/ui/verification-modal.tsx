@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
@@ -68,7 +69,7 @@ export function VerificationModal({ open, onClose, required = false }: Verificat
         setStatus({ type: "success", msg: "✅ Email verified successfully!" });
         setCode("");
         // Invalidate user cache to refresh emailVerified status
-        await queryClient.invalidateQueries({ queryKey: ["getGetMe"] });
+        await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         setTimeout(() => onClose(), 1500);
       } else {
         setStatus({ type: "error", msg: data.error || "Verification failed. Please try again." });

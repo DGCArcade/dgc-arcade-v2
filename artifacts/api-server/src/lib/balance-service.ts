@@ -16,11 +16,18 @@ export interface UserBalance {
 /**
  * Calculates the real-time balance for a user, including live crypto valuations.
  */
-export async function getUserBalance(userId: number): Promise<UserBalance> {
-  const [user] = await db.select({ balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+export async function getUserBalance(
+  userId: number,
+  prefetchedStaticBalance?: string,
+): Promise<UserBalance> {
+  // Batch DB reads in parallel — each round trip costs ~150ms Oregon↔Singapore.
+  const [user, cryptoBalances] = await Promise.all([
+    prefetchedStaticBalance !== undefined
+      ? Promise.resolve({ balance: prefetchedStaticBalance })
+      : db.select({ balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, userId)).limit(1).then((rows) => rows[0]),
+    db.select().from(userBalancesTable).where(eq(userBalancesTable.userId, userId)),
+  ]);
   if (!user) throw new Error("User not found");
-
-  const cryptoBalances = await db.select().from(userBalancesTable).where(eq(userBalancesTable.userId, userId));
   
   // OPTIMIZATION: Fetch all prices in parallel first, then map. 
   // This reduces the impact of Oregon-to-Singapore latency by batching operations.
@@ -171,30 +178,37 @@ export async function deductBalance(userId: number, amount: number, txn?: any, p
  * If no currency (or USD), it credits to the static bonus balance.
  */
 export async function creditBalance(userId: number, amount: number, currency?: string, txn?: any): Promise<number> {
-  const database = txn || db;
-  
-  if (currency && currency !== "USD") {
-    const price = await getCryptoPrice(currency);
-    const cryptoAmount = amount / price;
-    
-    await database.insert(userBalancesTable)
-      .values({
-        userId,
-        currency,
-        amount: String(cryptoAmount),
-      })
-      .onConflictDoUpdate({
-        target: [userBalancesTable.userId, userBalancesTable.currency],
-        set: { amount: sql`user_balances.amount + ${String(cryptoAmount)}` },
-      });
-  } else {
-    await database.update(usersTable)
-      .set({ balance: sql`balance + ${amount}` })
-      .where(eq(usersTable.id, userId));
-  }
+  const doCredit = async (database: any) => {
+    await database.execute(sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`);
+    if (currency && currency !== "USD") {
+      await database.execute(sql`SELECT id FROM user_balances WHERE user_id = ${userId} FOR UPDATE`);
+      const price = await getCryptoPrice(currency);
+      const cryptoAmount = amount / price;
 
-  const { totalBalance } = await getUserBalance(userId);
-  return totalBalance;
+      await database.insert(userBalancesTable)
+        .values({
+          userId,
+          currency,
+          amount: String(cryptoAmount),
+        })
+        .onConflictDoUpdate({
+          target: [userBalancesTable.userId, userBalancesTable.currency],
+          set: { amount: sql`user_balances.amount + ${String(cryptoAmount)}` },
+        });
+    } else {
+      await database.update(usersTable)
+        .set({ balance: sql`balance + ${amount}` })
+        .where(eq(usersTable.id, userId));
+    }
+
+    const { totalBalance } = await getUserBalance(userId);
+    return totalBalance;
+  };
+
+  if (txn) {
+    return doCredit(txn);
+  }
+  return db.transaction(doCredit);
 }
 
 /**

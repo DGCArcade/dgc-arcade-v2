@@ -19,7 +19,7 @@ const priceCache: Record<string, { price: number; timestamp: number }> = {};
 // This prevents the "return 0" bug where a transient API outage zeros out balances
 const lastGoodPrice: Record<string, number> = {};
 
-const CACHE_TTL = 5 * 1000; // 5 seconds for real-time market reflection
+const CACHE_TTL = 15 * 1000; // 15s — balances don't need tick-level prices; cuts external API load
 
 export async function getCryptoPrice(currency: string): Promise<number> {
   if (STABLECOINS.has(currency)) return 1.0;

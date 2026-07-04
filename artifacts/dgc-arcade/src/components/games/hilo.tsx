@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ChevronUp, ChevronDown } from "lucide-react";
+import { ProvablyFairPanel } from "./provably-fair-panel";
 
 interface HiLoProps { game: Game }
 
@@ -16,7 +17,6 @@ const SUITS = ["♠","♥","♦","♣"];
 const RANKS = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
 
 function rankValue(rank: string) { return RANKS.indexOf(rank); }
-function randomCard() { return { rank: RANKS[Math.floor(Math.random()*13)], suit: SUITS[Math.floor(Math.random()*4)] }; }
 const isRed = (suit: string) => suit === "♥" || suit === "♦";
 
 function CardFace({ rank, suit, animate }: { rank:string; suit:string; animate?:boolean }) {
@@ -50,29 +50,34 @@ export function HiLo({ game }: HiLoProps) {
   const [nextCard, setNextCard] = useState<{rank:string;suit:string}|null>(null);
   const [streak, setStreak] = useState(0);
   const [multiplier, setMultiplier] = useState(1);
-  const [choice, setChoice] = useState<"hi"|"lo"|null>(null);
   const [showResult, setShowResult] = useState(false);
   const [lastWon, setLastWon] = useState<boolean|null>(null);
   const [roundPayout, setRoundPayout] = useState(0);
   const [history, setHistory] = useState<{won:boolean;rank:string;suit:string;mult:number}[]>([]);
+  const [pf, setPf] = useState<{ betId?: number; serverSeedHash?: string; serverSeed?: string; clientSeed?: string; nonce?: number }>({});
 
   const deal = (pick: "hi"|"lo") => {
     requireAuth(() => {
       if (!user || amount > user.balance) { toast({ title:"Insufficient balance", variant:"destructive" }); return; }
-      setChoice(pick);
-      setNextCard(null);
       setShowResult(false);
 
-      placeBet.mutate({ data: { gameId: game.id, amount, meta: { pick, currentRank: currentCard?.rank ?? null } } }, {
+      placeBet.mutate({ data: { gameId: game.id, amount, meta: { pick, currentRank: currentCard?.rank ?? "7" } } }, {
         onSuccess: (data) => {
           const meta = data.bet.meta as Record<string,unknown>;
-          const drawnRank = meta?.drawnRank as string ?? "7";
-          const drawnSuit = SUITS[Math.floor(Math.random()*4)];
+          const drawnRank = String(meta?.drawnRank ?? "7");
+          const drawnSuit = String(meta?.suit ?? "♠");
           const next = { rank: drawnRank, suit: drawnSuit };
           setNextCard(next);
           setShowResult(true);
           setLastWon(data.won);
           setRoundPayout(data.payout);
+          setPf({
+            betId: data.bet.id,
+            serverSeedHash: data.bet.serverSeedHash ?? undefined,
+            serverSeed: data.bet.serverSeed ?? undefined,
+            clientSeed: data.bet.clientSeed ?? undefined,
+            nonce: data.bet.nonce ?? undefined,
+          });
           qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
           qc.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
           qc.invalidateQueries({ queryKey: getListBetsQueryKey() });
@@ -90,7 +95,7 @@ export function HiLo({ game }: HiLoProps) {
             setStreak(0);
             setMultiplier(1);
             setTimeout(() => {
-              setCurrentCard({ rank: RANKS[Math.floor(Math.random()*13)], suit: SUITS[Math.floor(Math.random()*4)] });
+              setCurrentCard({ rank: "7", suit: "♠" });
               setNextCard(null);
               setShowResult(false);
               setLastWon(null);
@@ -103,18 +108,16 @@ export function HiLo({ game }: HiLoProps) {
   };
 
   const startGame = () => {
-    requireAuth(() => setCurrentCard(randomCard()));
+    requireAuth(() => setCurrentCard({ rank: "7", suit: "♠" }));
   };
 
-  const currentRankVal = currentCard ? rankValue(currentCard.rank) : -1;
-  const hiOdds = currentCard ? (13 - currentRankVal) / 13 : 0.5;
-  const loOdds = currentCard ? (currentRankVal + 1) / 13 : 0.5;
+  const currentRankVal = currentCard ? rankValue(currentCard.rank) : 6;
+  const hiOdds = currentCard ? (12 - currentRankVal) / 13 : 0.5;
+  const loOdds = currentCard ? currentRankVal / 13 : 0.5;
 
   return (
     <div className="hilo-game-root flex flex-col md:flex-row gap-8">
-      {/* Game Area */}
       <div className="hilo-card-area flex-1 bg-secondary border border-border rounded-xl p-4 md:p-6 flex flex-col items-center justify-center min-h-[220px] md:min-h-[440px] gap-4 md:gap-6">
-        {/* History */}
         {history.length > 0 && (
           <div className="flex gap-1 justify-center flex-wrap">
             {history.map((h,i)=>(
@@ -125,7 +128,6 @@ export function HiLo({ game }: HiLoProps) {
           </div>
         )}
 
-        {/* Cards */}
         <div className="flex items-center gap-8">
           {currentCard ? <CardFace {...currentCard} /> : <CardBack />}
           <div className="flex flex-col items-center gap-2">
@@ -137,7 +139,6 @@ export function HiLo({ game }: HiLoProps) {
           {showResult && nextCard ? <CardFace {...nextCard} animate /> : <CardBack />}
         </div>
 
-        {/* Streak */}
         {streak > 0 && (
           <div className="text-center">
             <div className="text-xs text-muted-foreground uppercase tracking-widest">Streak</div>
@@ -151,16 +152,15 @@ export function HiLo({ game }: HiLoProps) {
           </div>
         )}
 
-        {/* Hi/Lo buttons */}
         {currentCard && !placeBet.isPending && (
           <div className="flex gap-6">
             <Button size="lg" className="min-w-[120px] h-14 font-black text-lg uppercase bg-green-700 hover:bg-green-600 flex flex-col"
-              onClick={()=>deal("hi")} disabled={placeBet.isPending}>
+              onClick={()=>deal("hi")} disabled={placeBet.isPending || currentRankVal >= 12}>
               <ChevronUp className="w-5 h-5"/>
               Hi <span className="text-xs font-normal opacity-70">{Math.round(hiOdds*100)}%</span>
             </Button>
             <Button size="lg" className="min-w-[120px] h-14 font-black text-lg uppercase bg-red-700 hover:bg-red-600 flex flex-col"
-              onClick={()=>deal("lo")} disabled={placeBet.isPending}>
+              onClick={()=>deal("lo")} disabled={placeBet.isPending || currentRankVal <= 0}>
               <ChevronDown className="w-5 h-5"/>
               Lo <span className="text-xs font-normal opacity-70">{Math.round(loOdds*100)}%</span>
             </Button>
@@ -174,7 +174,6 @@ export function HiLo({ game }: HiLoProps) {
         )}
       </div>
 
-      {/* Controls */}
       <div className="hilo-bet-panel w-full md:w-72 bg-card border border-border rounded-xl p-6 flex flex-col gap-5">
         <div>
           <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Bet Per Round</Label>
@@ -182,22 +181,17 @@ export function HiLo({ game }: HiLoProps) {
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono">$</span>
             <Input type="number" value={amount} onChange={e=>setAmount(Number(e.target.value))} min={game.minBet} max={game.maxBet} className="pl-8 font-mono bg-secondary"/>
           </div>
-          <div className="flex gap-2 mt-2">
-            {["MIN","x2","/2","MAX"].map((l,i)=>(
-              <Button key={l} variant="outline" size="sm" className="flex-1 text-xs h-7 bg-secondary"
-                onClick={()=>{if(i===0)setAmount(game.minBet);if(i===1)setAmount(Math.min(amount*2,game.maxBet));if(i===2)setAmount(Math.max(game.minBet,amount/2));if(i===3)setAmount(Math.min(user?.balance||0,game.maxBet));}}>{l}</Button>
-            ))}
-          </div>
         </div>
 
         <div className="bg-secondary/50 rounded-lg p-3 text-xs border border-border/40 space-y-1.5 font-mono">
           <div className="flex justify-between"><span className="text-muted-foreground">Streak</span><span className="text-primary font-bold">{streak}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Multiplier</span><span className="text-primary font-bold">{multiplier}x</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Potential</span><span className="text-green-400 font-bold">+{formatCurrency(amount*multiplier-amount)}</span></div>
         </div>
 
+        <ProvablyFairPanel {...pf} />
+
         <div className="text-xs text-muted-foreground space-y-1 text-center border-t border-border/40 pt-3">
-          <div>Higher multiplier on streaks</div>
+          <div>Server draws next card via SHA-256</div>
           <div>Ace is high · 2 is low</div>
         </div>
       </div>

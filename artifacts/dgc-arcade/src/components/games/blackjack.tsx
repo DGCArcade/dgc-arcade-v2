@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { formatCurrency } from "@/lib/format";
 import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
+import { ProvablyFairPanel } from "./provably-fair-panel";
 
 interface Card { suit: string; rank: string }
 type Status = "idle" | "active" | "player_blackjack" | "player_wins" | "dealer_wins" | "push" | "player_bust" | "split_complete";
@@ -338,13 +339,13 @@ function ScoreBubble({ total, displayTotal, bust, bj, label }: { total: number; 
       display: "flex", flexDirection: "column", alignItems: "center", gap: 2, position: "relative"
     }}>
       {/* Label moved outside to prevent collision */}
-      <div style={{ fontSize: 8, fontWeight: 800, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: 2, marginBottom: -4 }}>{label}</div>
-      <div style={{
+      <div style={{ fontSize: 8, fontWeight: 800, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: 2, marginBottom: -4 }} className="bj-score-label">{label}</div>
+      <div className="bj-score-bubble" style={{
         background: bg, border: `1.5px solid ${border}`, borderRadius: 12,
         padding: "8px 16px", backdropFilter: "blur(12px)", minWidth: 64, textAlign: "center",
         boxShadow: "0 10px 30px rgba(0,0,0,0.7)", position: "relative"
       }}>
-        <div style={{ fontSize: 24, fontWeight: 900, color, fontFamily: "monospace", lineHeight: 1 }}>{displayTotal ?? (total > 0 ? total : "—")}</div>
+        <div className="bj-score-value" style={{ fontSize: 24, fontWeight: 900, color, fontFamily: "monospace", lineHeight: 1 }}>{displayTotal ?? (total > 0 ? total : "—")}</div>
       </div>
     </div>
   );
@@ -576,16 +577,114 @@ export function Blackjack({ game }: BlackjackProps) {
   };
 
   return (
-    <div className="bj-game-root" style={{ display: "flex", flexDirection: "row", width: "100%", padding: "12px", gap: 12, boxSizing: "border-box" }}>
+    <div className={isMobile ? "bj-game-root bj-game-root--mobile" : "bj-game-root"} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", width: "100%", padding: isMobile ? 0 : 12, gap: isMobile ? 4 : 12, boxSizing: "border-box" }}>
       <style>{`
-        @media (max-width: 1024px) {
-          .bj-game-root { flex-direction: column-reverse !important; padding: 8px !important; gap: 12px !important; }
-          .bj-table-area { min-height: auto !important; padding: 30px 10px !important; width: 100% !important; order: 2; }
-          .bj-card-container { width: clamp(45px, 12vw, 65px) !important; height: clamp(65px, 17vw, 90px) !important; }
-          .bj-card-inner { width: 100% !important; height: 100% !important; }
-          .bj-controls-bar { width: 100% !important; gap: 8px !important; padding: 12px !important; order: 1; position: static !important; }
-          .bj-action-btn { padding: 10px !important; font-size: 12px !important; }
+        /* Tablet only — stack controls above table */
+        @media (min-width: 768px) and (max-width: 1024px) {
+          .bj-game-root:not(.bj-game-root--mobile) { flex-direction: column-reverse !important; padding: 8px !important; gap: 12px !important; }
+          .bj-game-root:not(.bj-game-root--mobile) .bj-table-area { min-height: auto !important; padding: 30px 10px !important; width: 100% !important; order: 2; }
+          .bj-game-root:not(.bj-game-root--mobile) .bj-controls-bar { width: 100% !important; order: 1; position: static !important; }
         }
+
+        /* Phone — column stack like Mines: felt table on top, full-width bets below */
+        .bj-game-root--mobile {
+          flex-direction: column !important;
+          align-items: stretch !important;
+          height: 100% !important;
+          padding: 0 !important;
+          gap: 4px !important;
+          overflow: hidden !important;
+        }
+        .bj-game-root--mobile .bj-table-area {
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          min-height: 0 !important;
+          width: 100% !important;
+          max-height: none !important;
+          padding: 6px 4px !important;
+          border-width: 2px !important;
+          border-radius: 10px !important;
+          justify-content: center !important;
+          gap: 4px !important;
+          order: 1 !important;
+        }
+        .bj-game-root--mobile .bj-table-deco {
+          display: block !important;
+          width: 72% !important;
+          height: 58% !important;
+          top: 18% !important;
+          border-width: 1px !important;
+          opacity: 0.22 !important;
+        }
+        .bj-game-root--mobile .bj-deck-stack {
+          display: block !important;
+          top: 6px !important;
+          right: 6px !important;
+          width: 36px !important;
+          height: 50px !important;
+          transform: scale(0.55);
+          transform-origin: top right;
+        }
+        .bj-game-root--mobile .bj-deck-stack > div {
+          width: 36px !important;
+          height: 50px !important;
+        }
+        .bj-game-root--mobile .bj-table-footer {
+          display: block !important;
+          bottom: 3px !important;
+          font-size: 5px !important;
+          letter-spacing: 0.5px !important;
+          opacity: 0.55 !important;
+        }
+        .bj-game-root--mobile .bj-table-title {
+          font-size: 7px !important;
+          letter-spacing: 1px !important;
+          top: 4px !important;
+        }
+        .bj-game-root--mobile .bj-card-container {
+          width: 42px !important;
+          height: 58px !important;
+        }
+        .bj-game-root--mobile .bj-card-container .bj-card-front-rank { font-size: 12px !important; }
+        .bj-game-root--mobile .bj-card-container .bj-card-front-suit-sm { font-size: 10px !important; }
+        .bj-game-root--mobile .bj-card-container .bj-card-front-suit-lg { font-size: 18px !important; }
+        .bj-game-root--mobile .bj-score-bubble { padding: 4px 8px !important; min-width: 44px !important; }
+        .bj-game-root--mobile .bj-score-value { font-size: 14px !important; }
+        .bj-game-root--mobile .bj-score-label { font-size: 6px !important; margin-bottom: 0 !important; }
+        .bj-game-root--mobile .bj-controls-bar {
+          flex: 0 0 auto !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          padding: 6px 8px !important;
+          gap: 4px !important;
+          overflow: visible !important;
+          order: 2 !important;
+        }
+        .bj-game-root--mobile .bj-controls-bar input {
+          font-size: 12px !important;
+          padding: 6px 6px 6px 20px !important;
+        }
+        .bj-game-root--mobile .bj-controls-bar .bj-mute-btn {
+          width: 32px !important;
+          height: 32px !important;
+          font-size: 14px !important;
+          flex-shrink: 0;
+        }
+        .bj-game-root--mobile .bj-bet-mult button {
+          padding: 5px 2px !important;
+          font-size: 9px !important;
+        }
+        .bj-game-root--mobile .bj-action-btn {
+          padding: 7px 4px !important;
+          font-size: 9px !important;
+        }
+        .bj-game-root--mobile .bj-place-bet-btn {
+          padding: 8px !important;
+          font-size: 10px !important;
+        }
+        .bj-game-root--mobile .bj-pf-panel { display: none !important; }
+        .bj-game-root--mobile .bj-hand-row { min-height: 58px !important; gap: 4px !important; }
         @keyframes bj-card-deal {
           0% { transform: translate(var(--deal-start-x, 0), var(--deal-start-y, 0)) rotate(45deg); opacity: 0; }
           100% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
@@ -614,20 +713,20 @@ export function Blackjack({ game }: BlackjackProps) {
 
       {/* ── TABLE AREA ── */}
       <div className="bj-table-area" style={{
-        flex: 1, position: "relative", minHeight: 520, 
+        flex: 1, position: "relative", minHeight: isMobile ? 0 : 520, 
         background: `radial-gradient(ellipse at 50% 10%, ${felt.felt} 0%, #050505 100%)`,
-        border: `4px solid ${felt.rail}`, boxShadow: "0 20px 50px rgba(0,0,0,0.8)",
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between",
-        padding: "40px 20px", overflow: "hidden", borderRadius: 16
+        border: `4px solid ${felt.rail}`, boxShadow: isMobile ? "0 4px 16px rgba(0,0,0,0.6)" : "0 20px 50px rgba(0,0,0,0.8)",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: isMobile ? "center" : "space-between",
+        padding: isMobile ? "8px 4px" : "40px 20px", overflow: "hidden", borderRadius: isMobile ? 10 : 16
       }}>
         {/* Table Decoration */}
-        <div style={{
+        <div className="bj-table-deco" style={{
           position: "absolute", top: "15%", width: "80%", height: "70%",
           border: `2px solid ${felt.text}`, borderRadius: "50%", opacity: 0.3, pointerEvents: "none", zIndex: 2
         }} />
 
         {/* Game Title */}
-        <div style={{
+        <div className="bj-table-title" style={{
           position: "absolute", top: 12, left: 0, right: 0, textAlign: "center",
           fontSize: 11, fontWeight: 900, letterSpacing: 3, color: felt.text,
           textTransform: "uppercase", zIndex: 3
@@ -636,7 +735,7 @@ export function Blackjack({ game }: BlackjackProps) {
         </div>
 
         {/* Deck on Top Right */}
-        <div ref={deckRef} style={{ position: "absolute", top: 20, right: 20, width: 60, height: 85, zIndex: 5 }}>
+        <div ref={deckRef} className="bj-deck-stack" style={{ position: "absolute", top: 20, right: 20, width: 60, height: 85, zIndex: 5 }}>
           {[3, 2, 1, 0].map(i => (
             <div key={i} style={{
               position: "absolute", width: 60, height: 85, borderRadius: 6,
@@ -650,7 +749,7 @@ export function Blackjack({ game }: BlackjackProps) {
 
         {/* Dealer Section */}
         <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: isMobile ? 4 : 12, zIndex: 10 }}>
-          <div style={{ position: "relative", display: "flex", gap: isMobile ? 6 : 10, minHeight: isMobile ? 90 : 118 }}>
+          <div style={{ position: "relative", display: "flex", gap: isMobile ? 4 : 10, minHeight: isMobile ? 58 : 118 }} className="bj-hand-row">
             {dealerHand.length > 0 ? dealerHand.map((c, i) => (
               <div key={`d-${i}`} style={{ position: "relative", transform: isMobile ? "scale(1.0)" : "none", transformOrigin: "top center" }}>
                 <PlayingCard card={c} hidden={c.suit === "?"} delay={i * 200} dealFrom={deckRef.current?.getBoundingClientRect()} isMobile={isMobile} />
@@ -702,7 +801,7 @@ export function Blackjack({ game }: BlackjackProps) {
                   <ScoreBubble total={playerTotal} displayTotal={getSoftTotalString(playerHand)} bust={playerTotal > 21} bj={status === "player_blackjack"} label="YOU" />
                 </div>
               )}
-              <div style={{ position: "relative", display: "flex", gap: isMobile ? 6 : 10, minHeight: isMobile ? 90 : 118 }}>
+              <div style={{ position: "relative", display: "flex", gap: isMobile ? 4 : 10, minHeight: isMobile ? 58 : 118 }} className="bj-hand-row">
                 {playerHand.length > 0 ? playerHand.map((c, i) => (
                   <div key={`p-${i}`} style={{ position: "relative", transform: isMobile ? "scale(1.0)" : "none", transformOrigin: "bottom center" }}>
                     <PlayingCard card={c} delay={(i + 2) * 200} dealFrom={deckRef.current?.getBoundingClientRect()} isMobile={isMobile} />
@@ -745,7 +844,7 @@ export function Blackjack({ game }: BlackjackProps) {
         </div>
 
         {/* Table Rules */}
-        <div style={{
+        <div className="bj-table-footer" style={{
           position: "absolute", bottom: 16, left: 0, right: 0, textAlign: "center",
           fontSize: 8, fontWeight: 700, color: felt.text, textTransform: "uppercase", letterSpacing: 1, opacity: 0.7
         }}>
@@ -754,9 +853,9 @@ export function Blackjack({ game }: BlackjackProps) {
       </div>
 
       {/* ── CONTROLS BAR ── */}
-      <div className="bj-controls-bar" style={{
-        display: "flex", flexDirection: "column", gap: isMobile ? 8 : 12, background: "rgba(8,12,26,0.9)", borderRadius: 12, padding: isMobile ? 10 : 14,
-        border: "1px solid rgba(255,255,255,0.08)", width: isMobile ? "100%" : 280, maxWidth: isMobile ? 320 : 280
+      <div className="bj-controls-bar bj-bet-panel" style={{
+        display: "flex", flexDirection: "column", gap: isMobile ? 5 : 12, background: "rgba(8,12,26,0.9)", borderRadius: 12, padding: isMobile ? 6 : 14,
+        border: "1px solid rgba(255,255,255,0.08)", width: isMobile ? undefined : 280, maxWidth: isMobile ? undefined : 280, flexShrink: isMobile ? 0 : undefined
       }}>
         {/* Bet Input Row */}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -768,7 +867,7 @@ export function Blackjack({ game }: BlackjackProps) {
                 padding: "10px 10px 10px 25px", color: "#fff", fontWeight: 700, fontFamily: "monospace", outline: "none", fontSize: 13
               }} />
           </div>
-          <button onClick={() => setMuted(!muted)} style={{
+          <button onClick={() => setMuted(!muted)} className="bj-mute-btn" style={{
             width: 40, height: 40, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
             color: muted ? "#ef4444" : "#fff", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center"
           }}>
@@ -777,7 +876,7 @@ export function Blackjack({ game }: BlackjackProps) {
         </div>
 
         {/* Bet Multipliers */}
-        <div style={{ display: "flex", gap: isMobile ? 4 : 6 }}>
+        <div className="bj-bet-mult" style={{ display: "flex", gap: isMobile ? 4 : 6 }}>
           <button onClick={() => handleBetMultiplier(0.5)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: isMobile ? 6 : 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>1/2</button>
           <button onClick={() => handleBetMultiplier(2)} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: isMobile ? 6 : 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>2x</button>
           <button onClick={handleMaxBet} disabled={isActive} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: isMobile ? 6 : 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>MAX</button>
@@ -785,19 +884,19 @@ export function Blackjack({ game }: BlackjackProps) {
 
         {/* Main Action Buttons */}
         {status === "idle" || isDone ? (
-          <button onClick={isDone ? reset : deal} disabled={loading} style={{
+          <button onClick={isDone ? reset : deal} disabled={loading} className="bj-place-bet-btn" style={{
             width: "100%", background: accent, color: "#000", border: "none", borderRadius: 10, padding: isMobile ? 12 : 14,
             fontWeight: 900, fontSize: isMobile ? 13 : 14, letterSpacing: 1, cursor: "pointer", boxShadow: `0 4px 15px ${accent}44`, textTransform: "uppercase"
           }}>
             {isDone ? "NEW GAME" : loading ? "DEALING..." : "PLACE BET"}
           </button>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 6 : 8 }}>
-            <div style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
+          <div className="bj-action-row" style={{ display: "flex", flexDirection: "column", gap: isMobile ? 6 : 8 }}>
+            <div className="bj-action-row" style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
               <button onClick={() => doAction("hit")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 10 : 12, fontWeight: 900, fontSize: 12 }}>HIT</button>
               <button onClick={() => doAction("stand")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 10 : 12, fontWeight: 900, fontSize: 12 }}>STAND</button>
             </div>
-            <div style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
+            <div className="bj-action-row" style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
               <button onClick={() => doAction("double")} disabled={loading || (isSplit ? (splitHands?.[activeHandIndex]?.length ?? 0) !== 2 : playerHand.length !== 2)} className="bj-action-btn" style={{ flex: 1, background: "#7c3aed", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>DOUBLE</button>
               {insuranceEligible && <button onClick={() => doAction("insurance")} disabled={loading} className="bj-action-btn" style={{ flex: 1, background: "#d97706", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? 8 : 10, fontWeight: 800, fontSize: 11 }}>INSURE</button>}
               {((!isSplit && playerHand.length === 2 && playerHand[0].rank === playerHand[1].rank) || 
@@ -814,40 +913,16 @@ export function Blackjack({ game }: BlackjackProps) {
           <span>Max: {formatCurrency(maxBet)}</span>
         </div>
 
-        {/* Provably Fair Info */}
-        {serverSeedHash && clientSeed !== null && nonce !== null && (
-          <div style={{
-            marginTop: 12, padding: 10, background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 8, fontSize: 8, color: "rgba(255,255,255,0.6)", fontFamily: "monospace", wordBreak: "break-all"
-          }}>
-            <div style={{ fontWeight: 900, color: "rgba(255,255,255,0.8)", marginBottom: 4 }}>PROVABLY FAIR</div>
-            <div style={{ marginBottom: 2 }}>Server Hash: {serverSeedHash.slice(0, 16)}...</div>
-            <div style={{ marginBottom: 2 }}>Client Seed: {clientSeed}</div>
-            <div>Nonce: {nonce}</div>
-            <div style={{ marginTop: 6, fontSize: 7, color: "rgba(255,255,255,0.4)" }}>
-              After game completes, verify at:
-              <a 
-                href={`/api/blackjack/verify/${handId}`} 
-                target="_blank" 
-                rel="noreferrer"
-                style={{ color: accent, marginLeft: 4, textDecoration: "underline" }}
-              >
-                /api/blackjack/verify/{handId}
-              </a>
-            </div>
-            {isDone && (
-              <button
-                onClick={() => window.open(`/api/blackjack/verify/${handId}`, '_blank')}
-                style={{
-                  marginTop: 8, width: "100%", padding: "4px 8px", background: "rgba(255,255,255,0.1)",
-                  border: "1px solid rgba(255,255,255,0.2)", borderRadius: 4, color: "#fff",
-                  fontSize: 8, fontWeight: 900, cursor: "pointer"
-                }}
-              >
-                VERIFY OUTCOME
-              </button>
-            )}
-          </div>
+        {/* Provably Fair */}
+        {serverSeedHash && clientSeed !== null && nonce !== null && handId && (
+          <ProvablyFairPanel
+            serverSeedHash={serverSeedHash}
+            clientSeed={clientSeed}
+            nonce={nonce}
+            verifyPath={`/api/blackjack/verify/${handId}`}
+            variant={isDone ? "full" : "compact"}
+            gameName="blackjack"
+          />
         )}
       </div>
     </div>

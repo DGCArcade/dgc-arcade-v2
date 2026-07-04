@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
+import { ProvablyFairPanel } from "./provably-fair-panel";
 
 interface PlinkoProps { game: Game }
 
@@ -34,7 +35,6 @@ export function Plinko({ game }: PlinkoProps) {
   const [amount, setAmount] = useState<number>(game.minBet);
   const [balls, setBalls] = useState<BallState[]>([]);
   const [results, setResults] = useState<{ multiplier: number; win: boolean; payout: number }[]>([]);
-  const [showPF, setShowPF] = useState(false);
   const [lastBetData, setLastBetData] = useState<any>(null);
   const ballId = useRef(0);
   const ballsRef = useRef<BallState[]>([]);
@@ -208,9 +208,9 @@ export function Plinko({ game }: PlinkoProps) {
     <div className="plinko-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start", boxSizing: "border-box" }}>
       <style>{`
         @media (max-width: 1024px) {
-          .plinko-root { flex-direction: column-reverse !important; padding: 8px !important; gap: 10px !important; }
-          .plinko-board-area { order: 2; width: 100% !important; min-height: auto !important; }
-          .plinko-bet-panel { order: 1; width: 100% !important; position: static !important; }
+          .plinko-root { flex-direction: column !important; padding: 8px !important; gap: 10px !important; }
+          .plinko-board-area { order: 1; width: 100% !important; min-height: auto !important; }
+          .plinko-bet-panel { order: 2; width: 100% !important; position: static !important; }
         }
         @media (min-width: 1025px) {
           .plinko-board-area { flex: 1; min-width: 0; }
@@ -453,103 +453,16 @@ export function Plinko({ game }: PlinkoProps) {
           {placeBet.isPending ? "Dropping…" : "Drop Ball"}
         </button>
 
-        {/* Provably Fair section */}
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 10 }}>
-          <button
-            onClick={() => setShowPF(v => !v)}
-            style={{
-              width: "100%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: 0,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width="13" height="14" viewBox="0 0 13 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M6.5 1L1 3.5V7C1 9.76 3.48 12.35 6.5 13C9.52 12.35 12 9.76 12 7V3.5L6.5 1Z" stroke="#FF8C00" strokeWidth="1.4" fill="none" />
-                <path d="M4 7l1.8 1.8L9 5" stroke="#FF8C00" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 2.5, color: "#FF8C00", textTransform: "uppercase" }}>
-                Provably Fair
-              </span>
-            </div>
-            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", transform: showPF ? "rotate(180deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>
-              ▼
-            </span>
-          </button>
-
-          {showPF && lastBetData && (
-            <div
-              style={{
-                marginTop: 8,
-                padding: 10,
-                background: "rgba(0,0,0,0.55)",
-                border: "1px solid rgba(255,255,255,0.09)",
-                borderRadius: 8,
-                fontSize: 8,
-                color: "rgba(255,255,255,0.55)",
-                fontFamily: "monospace",
-                wordBreak: "break-all",
-              }}
-            >
-              <div style={{ marginBottom: 6 }}>
-                <span style={{ color: "rgba(255,255,255,0.35)", display: "block", marginBottom: 2, letterSpacing: 1.5, textTransform: "uppercase" }}>
-                  Server Seed Hash (SHA-256)
-                </span>
-                <span style={{ color: "rgba(255,255,255,0.80)", fontSize: 7.5 }}>
-                  {lastBetData.bet.serverSeedHash}
-                </span>
-              </div>
-              {lastBetData.bet.clientSeed && (
-                <div style={{ marginBottom: 6 }}>
-                  <span style={{ color: "rgba(255,255,255,0.35)", display: "block", marginBottom: 2, letterSpacing: 1.5, textTransform: "uppercase" }}>
-                    Client Seed
-                  </span>
-                  <span style={{ color: "rgba(255,255,255,0.80)" }}>{lastBetData.bet.clientSeed}</span>
-                </div>
-              )}
-              {lastBetData.bet.nonce !== null && (
-                <div style={{ marginBottom: 6 }}>
-                  <span style={{ color: "rgba(255,255,255,0.35)", display: "block", marginBottom: 2, letterSpacing: 1.5, textTransform: "uppercase" }}>
-                    Nonce
-                  </span>
-                  <span style={{ color: "rgba(255,255,255,0.80)" }}>{lastBetData.bet.nonce}</span>
-                </div>
-              )}
-              {lastBetData.bet.id && (
-                <a
-                  href={`/api/bets/verify/${lastBetData.bet.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: "block",
-                    marginTop: 8,
-                    padding: "5px 8px",
-                    background: "#FF8C0018",
-                    border: "1px solid #FF8C0044",
-                    borderRadius: 5,
-                    color: "#FF8C00",
-                    textAlign: "center",
-                    fontSize: 8,
-                    fontWeight: 900,
-                    letterSpacing: 1.5,
-                    textTransform: "uppercase",
-                    textDecoration: "none",
-                  }}
-                >
-                  Verify Outcome →
-                </a>
-              )}
-              <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.07)", fontSize: 7, color: "rgba(255,255,255,0.30)", lineHeight: 1.6 }}>
-                The ball's path is determined by the SHA-256 hash of the server seed + your client seed. Each bounce is mathematically proven fair.
-              </div>
-            </div>
-          )}
-        </div>
+        {lastBetData?.bet && (
+          <ProvablyFairPanel
+            betId={lastBetData.bet.id}
+            serverSeedHash={lastBetData.bet.serverSeedHash}
+            clientSeed={lastBetData.bet.clientSeed}
+            nonce={lastBetData.bet.nonce}
+            variant="full"
+            gameName="plinko"
+          />
+        )}
       </div>
     </div>
   );

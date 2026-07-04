@@ -3,20 +3,19 @@ import bcrypt from "bcryptjs";
 import { db, usersTable, deviceHistoryTable, userBalancesTable } from "@workspace/db";
 import { eq, ilike, and, or } from "drizzle-orm";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
-import { requireAuth, signToken } from "../middlewares/auth.js";
+import { requireAuth, signToken, requireOwner } from "../middlewares/auth.js";
 import { logger } from "../lib/logger.js";
 import { getUserBalance } from "../lib/balance-service.js";
 import { getPlatformSettings } from "../lib/platform-settings.js";
 import crypto from "crypto";
+import { logActivity, linkVisitorToUser } from "../services/activity-log.js";
+import { getRequestContext } from "../lib/request-context.js";
+import { issueOwnerStepUpOtp, verifyOwnerStepUpOtp, verifyOwnerStepUpToken } from "../services/owner-stepup.js";
 
 export const authRouter = Router();
 
-// In-memory store for password reset tokens — no schema change needed
-// token → { userId, expiresAt }
-const passwordResetTokens = new Map<string, { userId: number; expiresAt: Date }>();
-
 async function formatUser(user: typeof usersTable.$inferSelect) {
-  const { totalBalance, cryptoBalances } = await getUserBalance(user.id);
+  const { totalBalance, cryptoBalances } = await getUserBalance(user.id, user.balance);
 
   return {
     id: user.id,
@@ -33,6 +32,7 @@ async function formatUser(user: typeof usersTable.$inferSelect) {
     withdrawalsEnabled: user.withdrawalsEnabled,
     referralCode: user.referralCode ?? null,
     totalWageredAmount: parseFloat(user.totalWageredAmount ?? "0"),
+    wagerRequirement: parseFloat(user.wagerRequirement ?? "0"),
     lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
     telegramUsername: user.telegramUsername ?? null,
     rakebackClaimed: parseFloat(user.rakebackClaimed ?? "0"),
@@ -137,12 +137,21 @@ authRouter.post("/register", async (req, res) => {
     }
 
     const token = signToken({ userId: user.id, username: user.username, role: user.role });
+    const ctx = getRequestContext(req);
+    linkVisitorToUser(ctx, user.id, user.username).catch(() => {});
+    logActivity({
+      userId: user.id,
+      username: user.username,
+      action: "register",
+      ctx,
+      metadata: { accountType: user.accountType },
+    });
 
     // Send verification email via Resend
     if (user.email) {
       try {
         const { sendEmailVerificationEmail } = await import("../lib/mail-service");
-        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const verificationCode = String(crypto.randomInt(100000, 1000000));
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
         await db.update(usersTable).set({ 
           emailVerificationCode: verificationCode, 
@@ -178,8 +187,8 @@ authRouter.post("/login", async (req, res) => {
     // We update it AFTER building the response, so the client sees "last time you logged in", not "right now".
     const responseUser = await formatUser(user);
 
-    // Update lastLoginAt to NOW (fire-and-forget)
-    db.update(usersTable).set({ lastLoginAt: new Date() }).where(eq(usersTable.id, user.id))
+    // Update lastLoginAt + session clock (fire-and-forget)
+    db.update(usersTable).set({ lastLoginAt: new Date(), sessionStartedAt: new Date() }).where(eq(usersTable.id, user.id))
       .catch((e) => logger.warn({ e }, "lastLoginAt update failed"));
 
     // Record device history (fire-and-forget — never block the login response)
@@ -229,66 +238,75 @@ authRouter.post("/login", async (req, res) => {
     } catch {}
 
     const token = signToken({ userId: user.id, username: user.username, role: user.role });
+    const ctx = getRequestContext(req);
+    linkVisitorToUser(ctx, user.id, user.username).catch(() => {});
+    logActivity({
+      userId: user.id,
+      username: user.username,
+      action: "login",
+      ctx,
+      metadata: { role: user.role },
+    });
     res.json({ user: responseUser, token });
   } catch (err) { req.log.error({ err }, "Login error"); res.status(500).json({ error: "Internal server error" }); }
 });
 
-// POST /api/auth/forgot-password
-authRouter.post("/forgot-password", async (req, res) => {
-  const { identifier } = req.body as { identifier?: string };
-  if (!identifier?.trim()) { res.status(400).json({ error: "Username or email required" }); return; }
-
+// POST /api/auth/owner/stepup/send — email code for owner profile tools only
+authRouter.post("/owner/stepup/send", requireAuth, requireOwner, async (req, res) => {
   try {
-    const [user] = await db.select({ id: usersTable.id, username: usersTable.username, email: usersTable.email })
-      .from(usersTable)
-      .where(or(ilike(usersTable.username, identifier.trim()), ilike(usersTable.email, identifier.trim())))
-      .limit(1);
-
-    // Always return success to prevent user enumeration
-    if (!user || !user.email) {
-      res.json({ success: true, message: "If that account exists, a reset email has been sent." });
+    const result = await issueOwnerStepUpOtp(req.user!);
+    if (!result.ok) {
+      res.status(result.code === "OTP_COOLDOWN" ? 429 : 400).json({
+        error: result.error,
+        code: result.code,
+        retryAfterSec: result.retryAfterSec,
+      });
       return;
     }
-
-    const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    passwordResetTokens.set(token, { userId: user.id, expiresAt });
-
-    const siteUrl = process.env.SITE_URL || "https://differentgrindcrew.com";
-    const resetLink = `${siteUrl}/reset-password?token=${token}`;
-    const { sendPasswordResetEmail } = await import("../lib/mail-service.js");
-    void sendPasswordResetEmail(user.email, user.username, resetLink);
-
-    res.json({ success: true, message: "If that account exists, a reset email has been sent." });
-  } catch (err: any) {
-    req.log.error({ err }, "Forgot password error");
-    res.status(500).json({ error: "Internal server error" });
+    res.json({
+      success: true,
+      message: "Owner code sent to your email.",
+    });
+  } catch (err) {
+    req.log.error({ err }, "Owner step-up send error");
+    res.status(500).json({ error: "Failed to send owner code" });
   }
 });
 
-// POST /api/auth/reset-password
-authRouter.post("/reset-password", async (req, res) => {
-  const { token, newPassword } = req.body as { token?: string; newPassword?: string };
-  if (!token || !newPassword) { res.status(400).json({ error: "Token and new password are required" }); return; }
-  if (newPassword.length < 6) { res.status(400).json({ error: "Password must be at least 6 characters" }); return; }
-
-  const record = passwordResetTokens.get(token);
-  if (!record) { res.status(400).json({ error: "Invalid or expired reset link. Please request a new one." }); return; }
-  if (new Date() > record.expiresAt) {
-    passwordResetTokens.delete(token);
-    res.status(400).json({ error: "Reset link has expired. Please request a new one." });
+// POST /api/auth/owner/stepup/verify
+authRouter.post("/owner/stepup/verify", requireAuth, requireOwner, async (req, res) => {
+  const code = typeof req.body?.code === "string" ? req.body.code : "";
+  if (!code) {
+    res.status(400).json({ error: "Verification code required" });
     return;
   }
-
   try {
-    const passwordHash = await bcrypt.hash(newPassword, 12);
-    await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, record.userId));
-    passwordResetTokens.delete(token);
-    res.json({ success: true, message: "Password reset successfully. You can now log in." });
-  } catch (err: any) {
-    req.log.error({ err }, "Reset password error");
-    res.status(500).json({ error: "Internal server error" });
+    const result = await verifyOwnerStepUpOtp(req.user!, code);
+    if (!result.ok) {
+      res.status(result.code === "OTP_LOCKED" ? 429 : 400).json({ error: result.error, code: result.code });
+      return;
+    }
+    res.json({
+      success: true,
+      stepUpToken: result.stepUpToken,
+      expiresInMinutes: 45,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Owner step-up verify error");
+    res.status(500).json({ error: "Verification failed" });
   }
+});
+
+// GET /api/auth/owner/stepup/status — whether current step-up header would pass
+authRouter.get("/owner/stepup/status", requireAuth, requireOwner, (req, res) => {
+  if (process.env.OWNER_STEPUP_DISABLED === "true") {
+    res.json({ verified: true, disabled: true });
+    return;
+  }
+  const token = req.headers["x-owner-step-up"]?.toString();
+  res.json({
+    verified: !!(token && verifyOwnerStepUpToken(token, req.user!.userId)),
+  });
 });
 
 // POST /api/auth/logout

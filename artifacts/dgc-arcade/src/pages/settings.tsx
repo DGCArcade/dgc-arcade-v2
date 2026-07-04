@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { User, Shield, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
+import { User, Shield, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Clock, Heart } from "lucide-react";
 
 function getToken() { return localStorage.getItem("dgc_token") ?? ""; }
 
@@ -41,6 +41,17 @@ export default function Settings() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  const [limits, setLimits] = useState<any>(null);
+  const [limitDraft, setLimitDraft] = useState({
+    depositLimitDaily: "",
+    depositLimitWeekly: "",
+    depositLimitMonthly: "",
+    lossLimitDaily: "",
+    sessionLimitMinutes: "",
+  });
+  const [limitsStatus, setLimitsStatus] = useState<{ type: "success"|"error"|""; msg: string }>({ type: "", msg: "" });
+  const [limitsLoading, setLimitsLoading] = useState(false);
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) setLocation("/");
   }, [isLoading, isAuthenticated, setLocation]);
@@ -50,6 +61,18 @@ export default function Settings() {
       apiCall("/api/users/me").then(d => {
         setMeData(d);
         if (d.email) setEmail(d.email);
+      });
+      apiCall("/api/users/me/limits").then(d => {
+        if (d.limits) {
+          setLimits(d.limits);
+          setLimitDraft({
+            depositLimitDaily: d.limits.depositLimitDaily?.toString() ?? "",
+            depositLimitWeekly: d.limits.depositLimitWeekly?.toString() ?? "",
+            depositLimitMonthly: d.limits.depositLimitMonthly?.toString() ?? "",
+            lossLimitDaily: d.limits.lossLimitDaily?.toString() ?? "",
+            sessionLimitMinutes: d.limits.sessionLimitMinutes?.toString() ?? "",
+          });
+        }
       });
     }
   }, [isAuthenticated]);
@@ -109,6 +132,31 @@ export default function Settings() {
       setPasswordStatus({ type: "error", msg: "Network error. Try again." });
     } finally {
       setPasswordLoading(false);
+    }
+  }
+
+  async function handleLimitsSave() {
+    setLimitsLoading(true);
+    setLimitsStatus({ type: "", msg: "" });
+    const parse = (v: string) => (v.trim() === "" ? null : Number(v));
+    try {
+      const res = await apiCall("/api/users/me/limits", "PATCH", {
+        depositLimitDaily: parse(limitDraft.depositLimitDaily),
+        depositLimitWeekly: parse(limitDraft.depositLimitWeekly),
+        depositLimitMonthly: parse(limitDraft.depositLimitMonthly),
+        lossLimitDaily: parse(limitDraft.lossLimitDaily),
+        sessionLimitMinutes: parse(limitDraft.sessionLimitMinutes),
+      });
+      if (res.success) {
+        setLimits(res.limits);
+        setLimitsStatus({ type: "success", msg: "Responsible gambling limits saved." });
+      } else {
+        setLimitsStatus({ type: "error", msg: res.error ?? "Failed to save limits" });
+      }
+    } catch {
+      setLimitsStatus({ type: "error", msg: "Network error. Try again." });
+    } finally {
+      setLimitsLoading(false);
     }
   }
 
@@ -239,6 +287,56 @@ export default function Settings() {
             <div className={`rounded-lg p-3 flex items-center gap-2 text-xs ${emailStatus.type === "success" ? "bg-green-500/10 border border-green-500/30 text-green-300" : "bg-red-500/10 border border-red-500/30 text-red-300"}`}>
               {emailStatus.type === "success" ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
               {emailStatus.msg}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Responsible Gambling Limits */}
+      <Card className="bg-card border-border/40 border-emerald-500/20">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            <Heart className="w-4 h-4 text-emerald-400" /> Responsible Gambling
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Set optional deposit, loss, and session limits. Leave blank to remove a limit. Limits apply immediately.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {([
+              ["depositLimitDaily", "Daily deposit ($)"],
+              ["depositLimitWeekly", "Weekly deposit ($)"],
+              ["depositLimitMonthly", "Monthly deposit ($)"],
+              ["lossLimitDaily", "Daily loss ($)"],
+              ["sessionLimitMinutes", "Session (minutes)"],
+            ] as const).map(([key, label]) => (
+              <div key={key} className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{label}</label>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="No limit"
+                  value={limitDraft[key]}
+                  onChange={e => setLimitDraft(d => ({ ...d, [key]: e.target.value }))}
+                  className="bg-secondary border-border/60 font-mono h-9"
+                />
+              </div>
+            ))}
+          </div>
+          {limits && (
+            <div className="rounded-lg bg-secondary/40 border border-border/40 p-3 text-[10px] font-mono text-muted-foreground space-y-1">
+              <p>Today: ${limits.depositDaily?.toFixed?.(2) ?? limits.depositDaily} deposited · ${limits.lossToday?.toFixed?.(2) ?? limits.lossToday} net loss</p>
+              <p>Session: {limits.sessionMinutes ?? 0} / {limits.sessionLimitMinutes ?? "∞"} min</p>
+            </div>
+          )}
+          <Button onClick={handleLimitsSave} disabled={limitsLoading} className="font-bold uppercase tracking-wider w-full sm:w-auto">
+            {limitsLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Save Limits"}
+          </Button>
+          {limitsStatus.msg && (
+            <div className={`rounded-lg p-3 flex items-center gap-2 text-xs ${limitsStatus.type === "success" ? "bg-green-500/10 border border-green-500/30 text-green-300" : "bg-red-500/10 border border-red-500/30 text-red-300"}`}>
+              {limitsStatus.type === "success" ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
+              {limitsStatus.msg}
             </div>
           )}
         </CardContent>

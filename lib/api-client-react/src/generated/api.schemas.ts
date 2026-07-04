@@ -153,6 +153,8 @@ export interface WithdrawInput {
   amount: number;
   currency: string;
   address: string;
+  /** Email step-up code from POST /api/transactions/withdraw/otp */
+  otpCode?: string;
 }
 
 export type TransactionType = typeof TransactionType[keyof typeof TransactionType];

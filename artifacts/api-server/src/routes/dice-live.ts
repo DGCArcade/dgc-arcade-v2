@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { diceRoundManager, type DiceRound, type DiceRoundBet } from "../lib/dice-round-manager.js";
-import { optionalAuth } from "../middlewares/auth.js";
+import { optionalAuth, requireAuth } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
@@ -43,8 +44,7 @@ diceLiveRouter.get("/round", optionalAuth, (req, res) => {
         amount: b.amount,
         target: b.target,
         mode: b.mode,
-        won: b.won,
-        payout: b.payout,
+        ...(round.state === "results" ? { won: b.won, payout: b.payout } : {}),
       })),
     });
   } catch (err) {
@@ -97,43 +97,12 @@ diceLiveRouter.get("/next-round", optionalAuth, (req, res) => {
  * Place a bet in the current or next round.
  * Query param: roundId (optional, defaults to current round)
  */
-diceLiveRouter.post("/bet", optionalAuth, async (req, res) => {
-  if (!req.user) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  const { amount, target, mode } = req.body;
-  const roundId = req.query.roundId as string | undefined;
-
-  try {
-    const [user] = await db
-      .select({ username: usersTable.username })
-      .from(usersTable)
-      .where(eq(usersTable.id, req.user.userId))
-      .limit(1);
-
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
-
-    const bet: DiceRoundBet = {
-      betId: 0, // Placeholder
-      userId: req.user.userId,
-      username: user.username,
-      amount: parseFloat(String(amount)),
-      target: parseInt(String(target)),
-      mode: mode as "over" | "under",
-    };
-
-    diceRoundManager.addBetToRound(bet, roundId);
-
-    res.json({ success: true, message: "Bet added to round", roundId: roundId || "current" });
-  } catch (err: any) {
-    req.log.error({ err }, "Add live bet error");
-    res.status(400).json({ error: err.message || "Internal server error" });
-  }
+diceLiveRouter.post("/bet", requireAuth, requireLocationVerified, async (_req, res) => {
+  // Disabled: live dice bets must go through POST /api/bets (balance + ledger).
+  // This endpoint only updated in-memory state and could show fake bets without charging.
+  res.status(410).json({
+    error: "Use POST /api/bets for dice wagers. This legacy live-bet endpoint is disabled.",
+  });
 });
 
 /**

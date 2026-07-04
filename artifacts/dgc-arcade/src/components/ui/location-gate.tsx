@@ -2,12 +2,14 @@ import { useState, useEffect, useRef } from "react";
 import { MapPin, Globe, ShieldAlert, X, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { savePendingGeo } from "@/lib/geo-sync";
+import { gpsConsistentWithIpGeo } from "@/lib/geo-guard";
 
 // Uses sessionStorage — shows on every new browser session, not cached forever
 const SESSION_KEY = "dgc_geo_session_v2";
 
 const BLOCKED_COUNTRIES = ["GB","FR","NL","AU","BE","DK","DE","IT","RO","ES","SE","CH","CZ"];
-const ALLOWED_US_STATES = ["Indiana","Florida"];
+// The entire United States is unlocked — every US state is allowed.
+// Access is only denied for the blocked countries listed above.
 
 type GeoState = "loading" | "asking" | "verifying" | "blocked_country" | "blocked_state" | "blocked_declined" | "accepted";
 
@@ -172,9 +174,11 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
     if (didFetch.current) return;
     didFetch.current = true;
 
-    // Check session — shows every new browser session
     const session = sessionStorage.getItem(SESSION_KEY);
-    if (session === "accepted") { setState("accepted"); return; }
+    if (session === "accepted") {
+      setState("accepted");
+      return;
+    }
     if (session === "declined") { setState("blocked_declined"); return; }
     if (session === "blocked_country") { setState("blocked_country"); return; }
     if (session === "blocked_state") { setState("blocked_state"); return; }
@@ -182,6 +186,42 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
     setState("asking");
     doGeoFetch();
   }, []);
+
+  /** Re-check IP jurisdiction on focus — DevTools cannot override server-side IP verification for bets. */
+  useEffect(() => {
+    if (state !== "accepted") return;
+
+    async function recheckGeo() {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 9000);
+        const res = await fetch("https://ipapi.co/json/", { signal: controller.signal });
+        clearTimeout(timeout);
+        if (!res.ok) return;
+        const data: GeoData = await res.json();
+        if (!data.country_code) return;
+        if (BLOCKED_COUNTRIES.includes(data.country_code)) {
+          sessionStorage.setItem(SESSION_KEY, "blocked_country");
+          setGeoData(data);
+          setState("blocked_country");
+        }
+      } catch {
+        /* non-blocking */
+      }
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") recheckGeo();
+    };
+    window.addEventListener("focus", recheckGeo);
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = window.setInterval(recheckGeo, 5 * 60 * 1000);
+    return () => {
+      window.removeEventListener("focus", recheckGeo);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(interval);
+    };
+  }, [state]);
 
   async function doGeoFetch() {
     try {
@@ -196,32 +236,29 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
       setGeoReady(true);
     } catch {
       setGeoFailed(true);
-      setGeoReady(true); // allow accept anyway if fetch fails
+      setGeoReady(false);
     }
   }
 
   async function handleAccept() {
-    // Try to get precise GPS location if available
+    // Optional GPS — never used for jurisdiction (server uses request IP). Reject DevTools sensor spoofing.
     if (navigator.geolocation) {
       setState("verifying");
       navigator.geolocation.getCurrentPosition(
         async (position) => {
-          // Got precise location
           const { latitude, longitude } = position.coords;
-          if (geoData) {
-            setGeoData({
-              ...geoData,
-              latitude,
-              longitude,
-            });
+          const ipLat = geoData?.latitude;
+          const ipLon = geoData?.longitude;
+          if (gpsConsistentWithIpGeo(latitude, longitude, ipLat, ipLon)) {
+            await processAccept(latitude, longitude);
+          } else {
+            await processAccept();
           }
-          await processAccept(latitude, longitude);
         },
         async () => {
-          // Declined or error — proceed with IP geo
           await processAccept();
         },
-        { timeout: 5000 }
+        { timeout: 5000, maximumAge: 0 },
       );
     } else {
       await processAccept();
@@ -231,15 +268,18 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
   async function processAccept(gpsLat?: number, gpsLon?: number) {
     setState("verifying");
     try {
-      // Block check
-      if (geoData?.country_code && BLOCKED_COUNTRIES.includes(geoData.country_code)) {
-        sessionStorage.setItem(SESSION_KEY, "blocked_country");
-        setState("blocked_country");
+      if (!geoData?.country_code) {
+        setGeoFailed(true);
+        setGeoReady(false);
+        setState("asking");
         return;
       }
-      if (geoData?.country_code === "US" && geoData?.region && !ALLOWED_US_STATES.includes(geoData.region)) {
-        sessionStorage.setItem(SESSION_KEY, "blocked_state");
-        setState("blocked_state");
+
+      // Block check — only the denied countries are blocked. The entire United
+      // States is allowed (no per-state restriction).
+      if (BLOCKED_COUNTRIES.includes(geoData.country_code)) {
+        sessionStorage.setItem(SESSION_KEY, "blocked_country");
+        setState("blocked_country");
         return;
       }
 
@@ -295,8 +335,9 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
 
       setState("accepted");
     } catch {
-      sessionStorage.setItem(SESSION_KEY, "accepted");
-      setState("accepted");
+      setGeoFailed(true);
+      setGeoReady(false);
+      setState("asking");
     }
   }
 
@@ -438,9 +479,9 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             {geoReady && !geoFailed && <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />}
             {geoFailed && <MapPin className="w-3.5 h-3.5 flex-shrink-0" />}
             <span>
-              {!geoReady && "Detecting your location…"}
+              {!geoReady && !geoFailed && "Detecting your location…"}
               {geoReady && !geoFailed && `Location verified — ${geoData?.city ?? ""}${geoData?.city ? ", " : ""}${geoData?.country_code ?? ""}`}
-              {geoFailed && "Location check timed out — you may proceed"}
+              {geoFailed && "Location check failed — retry required before continuing"}
             </span>
           </div>
 
@@ -459,6 +500,10 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex gap-2 items-start">
               <span className="text-yellow-400 mt-0.5 flex-shrink-0">⚠</span>
+              <span>Betting uses <strong className="text-foreground">server IP verification</strong> for licensed regions — VPN, Starlink, and mobile networks are allowed in permitted areas</span>
+            </div>
+            <div className="flex gap-2 items-start">
+              <span className="text-yellow-400 mt-0.5 flex-shrink-0">⚠</span>
               <span>You must be <strong className="text-foreground">18 years or older</strong> to access this platform</span>
             </div>
           </div>
@@ -473,6 +518,11 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             <Button variant="outline" className="flex-1 gap-2" onClick={handleDecline}>
               <X className="w-4 h-4" /> Decline
             </Button>
+            {geoFailed ? (
+              <Button className="flex-1 gap-2 font-bold" onClick={handleRetry}>
+                <MapPin className="w-4 h-4" /> Retry Location Check
+              </Button>
+            ) : (
             <Button
               className="flex-1 gap-2 font-bold transition-all duration-500"
               style={geoReady ? {
@@ -486,6 +536,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
                 : <><Loader2 className="w-4 h-4 animate-spin" /> Verifying Location…</>
               }
             </Button>
+            )}
           </div>
         </div>
 

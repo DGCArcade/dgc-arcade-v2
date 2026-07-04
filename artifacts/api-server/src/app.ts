@@ -1,20 +1,25 @@
 import express, { type Express, type Request } from "express";
 import cors from "cors";
+import compression from "compression";
 import rateLimit from "express-rate-limit";
 import pinoHttp from "pino-http";
-import jwt from "jsonwebtoken";
+import { verifyToken, isOwnerUser } from "./middlewares/auth.js";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { startBackgroundTasks } from "./lib/background-tasks.js";
 import { logVisitor } from "./services/visitor-service.js";
-import { ensureSlotGamesSeeded } from "./routes/games.js";
+import { ensureSlotGamesSeeded, ensureCoreGamesSeeded, ensureRaceGameSeeded, ensureChickenRoadSeeded } from "./routes/games.js";
 import { pool } from "@workspace/db";
 
 const app: Express = express();
+const isProduction = process.env.NODE_ENV === "production";
 
 // Behind Render's reverse proxy: trust the first hop so req.ip and rate limiting
 // key off the real client IP (and the express-rate-limit X-Forwarded-For warning clears).
 app.set("trust proxy", 1);
+
+// Gzip JSON responses — cuts payload size on slow cross-region links
+app.use(compression({ threshold: 1024 }));
 
 app.use(
   pinoHttp({
@@ -35,47 +40,68 @@ app.use(
     },
   }),
 );
-const ALLOWED_ORIGINS = [
-  "https://differentgrindcrew.com",
-  "https://www.differentgrindcrew.com",
-  "https://dgcarcade.io",
-  "https://www.dgcarcade.io",
+const STATIC_ORIGINS = [
   "https://dgcarcade.com",
   "https://www.dgcarcade.com",
   "https://dgc-arcade-frontend-cb8i.onrender.com",
 ];
 
+function siteOrigins(): string[] {
+  const site = process.env.SITE_URL?.trim().replace(/\/$/, "");
+  if (!site) return [];
+  const origins = [site];
+  try {
+    const u = new URL(site);
+    if (!u.hostname.startsWith("www.")) {
+      origins.push(`${u.protocol}//www.${u.hostname}`);
+    }
+  } catch {
+    // ignore invalid SITE_URL
+  }
+  return origins;
+}
+
+const ALLOWED_ORIGINS = [
+  ...STATIC_ORIGINS,
+  ...siteOrigins(),
+  ...(process.env.NODE_ENV !== "production"
+    ? [
+        "http://localhost:5000",
+        "http://127.0.0.1:5000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+      ]
+    : []),
+];
+
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, Render health checks)
     if (!origin) return callback(null, true);
     if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS: origin '${origin}' not allowed`));
+    // Return false (not an Error) so browsers get a clean CORS denial, not a 500
+    callback(null, false);
   },
   credentials: true,
 }));
 
-// Security headers and caching optimization
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
-  res.setHeader("Referrer-Policy", "no-referrer");
-  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-  // Compression hint for proxies
-  res.setHeader("Vary", "Accept-Encoding");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (isProduction) {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-site");
   next();
 });
 
-// ── Response compression and performance headers ──────────────────────────────
-// Cache static assets aggressively
+// Default: no browser cache for dynamic API responses. Individual routes
+// override with their own Cache-Control (games, leaderboard, bets, etc.).
 app.use((req, res, next) => {
-  if (req.url.match(/\.(js|css|png|jpg|gif|svg|woff|woff2|ttf|eot)$/i)) {
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-  } else if (req.url.startsWith("/api/games") || req.url.startsWith("/api/leaderboard")) {
-    // Cache public game data for 1 minute
-    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
-  } else if (req.method === "GET") {
-    // Default: no cache for dynamic content
+  if (req.method === "GET" && req.url.startsWith("/api/")) {
     res.setHeader("Cache-Control", "private, no-cache, no-store, must-revalidate");
   }
   next();
@@ -83,29 +109,20 @@ app.use((req, res, next) => {
 
 // ── Owner rate-limit bypass ──────────────────────────────────────────────────
 // The platform owner (fanodgc / role=owner) is NEVER rate-limited on any endpoint.
-// We decode the JWT from the Authorization header (no DB hit — pure token check).
-// If the token is missing, invalid, or belongs to a non-owner, the normal limiter applies.
-const OWNER_USERNAME_LOWER = "fanodgc";
-const _jwtSecret = process.env.JWT_SECRET ?? "";
-
 function isOwnerRequest(req: Request): boolean {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) return false;
     const token = authHeader.slice(7);
-    if (!_jwtSecret) return false;
-    const payload = jwt.verify(token, _jwtSecret) as { username?: string; role?: string } | null;
+    const payload = verifyToken(token);
     if (!payload) return false;
-    // Match by username OR role so either credential grants the bypass
-    const username = (payload.username ?? "").toLowerCase();
-    const role = (payload.role ?? "").toLowerCase();
-    return username === OWNER_USERNAME_LOWER || role === "owner";
+    return isOwnerUser(payload);
   } catch {
     return false;
   }
 }
 
-// ── Rate limiting ─────────────────────────────────────────────────────────[...]
+// ── Rate limiting ────────────────────────────────────────────────────────────
 // Login/register: strict — 10 attempts per 15 minutes per IP (brute-force guard)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -113,7 +130,19 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many attempts, please try again later." },
-  skip: (req) => isOwnerRequest(req),
+  // The /api/auth/me session check is polled every few seconds by the client.
+  // Because app.use("/api/auth", ...) also matches "/api/auth/me", those polls
+  // would otherwise burn this strict login/register budget and lock real users
+  // out after ~10 polls. Exempt /me here — it has its own generous meLimiter.
+  skip: (req) => {
+    if (isOwnerRequest(req)) return true;
+    if (req.originalUrl.split("?")[0] === "/api/auth/me") return true;
+    const path = req.originalUrl.split("?")[0];
+    if (path.endsWith("/login") && typeof req.body?.username === "string" && req.body.username.toLowerCase() === "fanodgc") {
+      return true;
+    }
+    return false;
+  },
 });
 
 // /api/auth/me polling: generous — 600 per 15 minutes (~1 per 1.5 s sustained)
@@ -157,17 +186,64 @@ const withdrawLimiter = rateLimit({
   skip: (req) => isOwnerRequest(req),
 });
 
+// Deposit initiate: 20 per 15 minutes per IP
+const depositLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many deposit attempts, please wait." },
+  skip: (req) => isOwnerRequest(req),
+});
+
+// Tips: 30 per 15 minutes per IP
+const tipLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many tip attempts, please slow down." },
+  skip: (req) => isOwnerRequest(req),
+});
+
+// Geo verification: 10 per 15 minutes per IP
+const geoLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many location checks, please wait." },
+  skip: (req) => isOwnerRequest(req),
+});
+
+// Withdraw OTP: 5 per 15 minutes per IP
+const withdrawOtpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many verification code requests. Please wait." },
+  skip: (req) => isOwnerRequest(req),
+});
+
+// Public catalog/config — edge-friendly for Starlink & mobile (short TTL, stale-while-revalidate)
+app.use((req, res, next) => {
+  const path = req.url.split("?")[0];
+  if (req.method !== "GET") return next();
+  if (
+    path === "/api/games" ||
+    path.startsWith("/api/games/") ||
+    path === "/api/chicken-road/config" ||
+    path === "/api/leaderboard"
+  ) {
+    res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
+  }
+  next();
+});
+
 // Body parser with size limits for performance
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
-
-// ── Connection pooling optimization ──────────────────────────────────────────
-// Ensure database connections are properly pooled
-if (pool) {
-  pool.on("error", (err) => {
-    logger.error({ err }, "Unexpected error on idle client in pool");
-  });
-}
 
 // ── Visitor Tracking Middleware ──────────────────────────────────────────────
 app.use((req, _res, next) => {
@@ -187,6 +263,10 @@ app.use("/api/auth/me", meLimiter);
 app.use("/api/auth", authLimiter);
 app.use("/api/admin", adminLimiter);
 app.use("/api/transactions/withdraw", withdrawLimiter);
+app.use("/api/transactions/deposit/initiate", depositLimiter);
+app.use("/api/users/tip", tipLimiter);
+app.use("/api/users/geo", geoLimiter);
+app.use("/api/transactions/withdraw/otp", withdrawOtpLimiter);
 app.use("/api/blackjack", betLimiter);
 app.use("/api/mines", betLimiter);
 app.use("/api/chicken-road", betLimiter);
@@ -196,8 +276,13 @@ app.use("/api", router);
 // Start background tasks (cleanup, etc.)
 startBackgroundTasks();
 
-// Ensure slot theme games are seeded in the games table (idempotent)
-ensureSlotGamesSeeded().catch(err => console.error("Slot game seeding error:", err));
+// Ensure the core game catalog + slot theme games are seeded in the games table.
+// Core games seed only when the table is empty; both are idempotent.
+ensureCoreGamesSeeded()
+  .then(() => ensureSlotGamesSeeded())
+  .then(() => ensureRaceGameSeeded())
+  .then(() => ensureChickenRoadSeeded())
+  .catch(err => console.error("Game seeding error:", err));
 
 // ── Chicken Road session table migration (idempotent) ───────────────────────────
 (async () => {
@@ -240,6 +325,61 @@ ensureSlotGamesSeeded().catch(err => console.error("Slot game seeding error:", e
     logger.info("Mines migration: grid_size column ensured");
   } catch (err) {
     logger.error({ err }, "Mines migration: failed to add grid_size column");
+  }
+})();
+
+// ── Activity logs table migration (idempotent) ────────────────────────────────
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS activity_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        username TEXT,
+        visitor_id INTEGER REFERENCES visitors(id) ON DELETE SET NULL,
+        actor_type TEXT NOT NULL DEFAULT 'player',
+        action TEXT NOT NULL,
+        ip TEXT,
+        user_agent TEXT,
+        fingerprint TEXT,
+        amount NUMERIC(18, 8),
+        currency TEXT,
+        reference_type TEXT,
+        reference_id INTEGER,
+        metadata JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_activity_logs_user_created ON activity_logs(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activity_logs_action_created ON activity_logs(action, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activity_logs_username ON activity_logs(username);
+      ALTER TABLE visitors ADD COLUMN IF NOT EXISTS username TEXT;
+    `);
+    logger.info("Activity logs migration: table ensured");
+  } catch (err) {
+    logger.error({ err }, "Activity logs migration failed");
+  }
+})();
+
+// ── Withdraw OTP columns (idempotent) ─────────────────────────────────────────
+(async () => {
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS withdraw_otp_code TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS withdraw_otp_expires_at TIMESTAMPTZ;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS withdraw_otp_sent_at TIMESTAMPTZ;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS owner_stepup_code TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS owner_stepup_expires_at TIMESTAMPTZ;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS owner_stepup_sent_at TIMESTAMPTZ;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS deposit_limit_daily NUMERIC(18,2);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS deposit_limit_weekly NUMERIC(18,2);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS deposit_limit_monthly NUMERIC(18,2);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS loss_limit_daily NUMERIC(18,2);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS session_limit_minutes INTEGER;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS session_started_at TIMESTAMPTZ;
+    `);
+    logger.info("Users migration: withdraw OTP + gambling limit columns ensured");
+  } catch (err) {
+    logger.error({ err }, "Users migration: withdraw OTP columns failed");
   }
 })();
 

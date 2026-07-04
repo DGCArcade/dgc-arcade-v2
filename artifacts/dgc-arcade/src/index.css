@@ -469,6 +469,1098 @@ body {
   animation: roulette-spin 3s cubic-bezier(0.17,0.67,0.35,1) forwards;
 }
 
+/* ── Game card cover animations (subtle) ─────────────────────────── */
+@keyframes cover-mult-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+@keyframes cover-gem-glow {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; filter: drop-shadow(0 0 4px #00FFCC); }
+}
+.cover-mult-pulse {
+  animation: cover-mult-pulse 2.5s ease-in-out infinite;
+}
+.cover-gem-glow {
+  animation: cover-gem-glow 2s ease-in-out infinite;
+}
+
+/* ── Horse gallop (DGC Derby) ────────────────────────────────────── */
+@keyframes horse-leg-swing {
+  0%, 100% { transform: rotate(-32deg) translateY(0); }
+  50% { transform: rotate(36deg) translateY(-2px); }
+}
+@keyframes horse-bob {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  35% { transform: translateY(-4px) scaleY(1.03); }
+  65% { transform: translateY(-1px) scaleY(0.98); }
+}
+@keyframes horse-dust-puff {
+  0%, 100% { opacity: 0.2; transform: scaleX(1); }
+  50% { opacity: 0.5; transform: scaleX(1.3); }
+}
+.horse-gallop {
+  animation: horse-bob 0.19s ease-in-out infinite;
+}
+.horse-gallop .horse-leg-front {
+  transform-origin: center top;
+  animation: horse-leg-swing 0.19s ease-in-out infinite;
+}
+.horse-gallop .horse-leg-back {
+  transform-origin: center top;
+  animation: horse-leg-swing 0.19s ease-in-out infinite reverse;
+}
+.horse-dust {
+  animation: horse-dust-puff 0.35s ease-in-out infinite;
+}
+.derby-track-scene {
+  image-rendering: auto;
+}
+.derby-pick-glow {
+  filter: drop-shadow(0 0 14px rgba(250, 204, 21, 1)) drop-shadow(0 0 24px rgba(255, 160, 0, 0.65)) brightness(1.28);
+  animation: derby-pick-pulse 1.4s ease-in-out infinite;
+}
+.derby-pick-glow-subtle {
+  filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.85)) brightness(1.14);
+}
+@keyframes derby-pick-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.85)) drop-shadow(0 0 18px rgba(255, 160, 0, 0.45)) brightness(1.18);
+  }
+  50% {
+    filter: drop-shadow(0 0 18px rgba(250, 230, 80, 1)) drop-shadow(0 0 28px rgba(255, 140, 0, 0.75)) brightness(1.32);
+  }
+}
+/* legacy — no border box */
+.derby-pick-ring {
+  filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.55));
+}
+.derby-pick-ring::after {
+  display: none;
+}
+
+@keyframes derby-speed-line {
+  from { background-position: 0 0; }
+  to { background-position: 80px 0; }
+}
+.derby-speed-lines {
+  background: repeating-linear-gradient(90deg, transparent 0, transparent 40px, rgba(255,255,255,0.08) 40px, rgba(255,255,255,0.08) 42px);
+  animation: derby-speed-line 0.4s linear infinite;
+}
+@keyframes derby-crowd-wave-anim {
+  0%, 100% { transform: translateY(0); opacity: 0.35; }
+  50% { transform: translateY(-2px); opacity: 0.45; }
+}
+.derby-crowd-wave {
+  animation: derby-crowd-wave-anim 0.8s ease-in-out infinite;
+}
+@keyframes derby-horse-bob-anim {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  35% { transform: translateY(-5px) scaleY(1.03); }
+  65% { transform: translateY(-2px) scaleY(0.98); }
+}
+.derby-horse-bob {
+  animation: derby-horse-bob-anim 0.19s ease-in-out infinite;
+}
+@keyframes derby-horse-lean-anim {
+  0%, 100% { transform: rotate(-2deg) translateX(0); }
+  50% { transform: rotate(4deg) translateX(2px); }
+}
+.derby-horse-lean {
+  transform-origin: center bottom;
+  animation: derby-horse-lean-anim 0.19s ease-in-out infinite;
+}
+@keyframes derby-horse-stride-anim {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(3px); }
+}
+.derby-horse-stride {
+  animation: derby-horse-stride-anim 0.19s ease-in-out infinite;
+}
+.derby-horse-rig {
+  will-change: transform;
+}
+@keyframes derby-gate-dust-burst {
+  0% { opacity: 0; transform: scaleX(0.4) scaleY(0.6); }
+  25% { opacity: 0.85; transform: scaleX(1.2) scaleY(1); }
+  100% { opacity: 0; transform: scaleX(2.2) scaleY(0.4) translateX(40px); }
+}
+.derby-gate-dust {
+  background: radial-gradient(ellipse, rgba(210,180,140,0.75) 0%, rgba(139,105,20,0.45) 40%, transparent 72%);
+  animation: derby-gate-dust-burst 0.9s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes derby-finish-flash-anim {
+  0%, 100% { opacity: 0.15; filter: brightness(1); }
+  50% { opacity: 0.55; filter: brightness(1.4); }
+}
+.derby-finish-flash {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+  animation: derby-finish-flash-anim 0.35s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes derby-gate-door-open {
+  0% { transform: perspective(120px) rotateX(0deg) translateY(0); opacity: 1; }
+  60% { transform: perspective(120px) rotateX(-55deg) translateY(-6px); opacity: 0.6; }
+  100% { transform: perspective(120px) rotateX(-82deg) translateY(-14px); opacity: 0.05; }
+}
+.derby-gate-open .derby-gate-door {
+  transform-origin: bottom center;
+  animation: derby-gate-door-open 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes derby-horse-trail-anim {
+  0% { opacity: 0.35; transform: scaleX(0.6); }
+  100% { opacity: 0; transform: scaleX(1.4) translateX(-8px); }
+}
+.derby-horse-trail {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+  animation: derby-horse-trail-anim 0.28s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes derby-dust-puff-anim {
+  0% { transform: translateX(-50%) scale(0.6); opacity: 0.5; }
+  100% { transform: translateX(-50%) scale(1.4); opacity: 0; }
+}
+.derby-dust-puff {
+  background: radial-gradient(ellipse, rgba(139,105,20,0.6) 0%, transparent 70%);
+  animation: derby-dust-puff-anim 0.35s ease-out infinite;
+}
+@keyframes derby-track-motion-anim {
+  from { background-position: 0 0; }
+  to { background-position: 60px 0; }
+}
+.derby-track-motion {
+  background: repeating-linear-gradient(90deg, transparent 0, transparent 24px, rgba(255,255,255,0.04) 24px, rgba(255,255,255,0.04) 26px);
+  animation: derby-track-motion-anim 0.35s linear infinite;
+}
+@keyframes derby-leader-pulse-anim {
+  0%, 100% { box-shadow: 0 0 4px rgba(250,204,21,0.6); }
+  50% { box-shadow: 0 0 10px rgba(250,204,21,0.9); }
+}
+.derby-leader-pulse {
+  animation: derby-leader-pulse-anim 0.8s ease-in-out infinite;
+}
+.derby-chase-track {
+  box-shadow: inset 0 4px 20px rgba(0,0,0,0.15);
+}
+@keyframes derby-cloud-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(24px); }
+}
+@keyframes derby-cloud-drift-slow {
+  from { transform: translateX(0); }
+  to { transform: translateX(-18px); }
+}
+.derby-cloud-drift {
+  animation: derby-cloud-drift 28s ease-in-out infinite alternate;
+}
+.derby-cloud-drift-slow {
+  animation: derby-cloud-drift-slow 36s ease-in-out infinite alternate;
+}
+@keyframes derby-bird-fly {
+  from { transform: translateX(-10vw) translateY(0); }
+  50% { transform: translateX(50vw) translateY(-4px); }
+  to { transform: translateX(110vw) translateY(2px); }
+}
+.derby-bird-fly {
+  animation: derby-bird-fly 24s linear infinite;
+  pointer-events: none;
+}
+@keyframes derby-lane-dash-move {
+  from { transform: translateY(0); }
+  to { transform: translateY(8px); }
+}
+.derby-lane-dash {
+  animation: derby-lane-dash-move 0.5s linear infinite;
+}
+
+/* ── Derby broadcast & lane clarity ─────────────────────────────── */
+@keyframes derby-cam-cut-in {
+  0% { opacity: 0; transform: scale(1.04); filter: blur(4px); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+.derby-cam-cut {
+  animation: derby-cam-cut-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.derby-phase-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.55) 100%);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(8px);
+  max-width: min(280px, 72vw);
+  animation: derby-phase-pop 0.45s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+}
+.derby-phase-banner-compact {
+  padding: 4px 8px;
+  max-width: min(200px, 65vw);
+}
+.derby-phase-banner-live {
+  border-color: rgba(250, 204, 21, 0.35);
+  box-shadow: 0 0 20px rgba(250, 204, 21, 0.12);
+}
+@keyframes derby-phase-pop {
+  0% { opacity: 0; transform: translateY(-8px) scale(0.95); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.derby-phase-cam {
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(250, 204, 21, 0.9);
+}
+.derby-phase-title {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #fff;
+  line-height: 1.2;
+}
+.derby-phase-banner-compact .derby-phase-title {
+  font-size: 9px;
+}
+.derby-phase-sub {
+  font-size: 8px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.55);
+  line-height: 1.3;
+}
+.derby-live-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.85);
+  border: 1px solid rgba(255,255,255,0.2);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #fff;
+}
+.derby-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  animation: derby-live-blink 0.9s ease-in-out infinite;
+}
+@keyframes derby-live-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+.derby-leader-ticker {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.65);
+  border: 1px solid rgba(250, 204, 21, 0.3);
+  backdrop-filter: blur(6px);
+  animation: derby-ticker-slide 0.5s ease-out forwards;
+}
+@keyframes derby-ticker-slide {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.derby-lane-row {
+  transition: background 0.2s ease;
+}
+.derby-lane-row-pick,
+.derby-chase-column-pick {
+  /* removed — pick highlight is horse glow only */
+}
+.derby-chase-wind {
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 24px,
+    rgba(255,255,255,0.06) 24px,
+    rgba(255,255,255,0.06) 26px
+  );
+  animation: derby-chase-wind-move 0.35s linear infinite;
+}
+@keyframes derby-chase-wind-move {
+  from { background-position: 0 0; }
+  to { background-position: 0 40px; }
+}
+@keyframes derby-aerial-scan-move {
+  from { background-position: 0 0; }
+  to { background-position: 0 60px; }
+}
+.derby-aerial-scene {
+  box-shadow: inset 0 0 40px rgba(0,0,0,0.25);
+}
+.derby-lane-gate {
+  pointer-events: none;
+}
+.derby-aerial-scan {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 8px,
+    rgba(255,255,255,0.04) 8px,
+    rgba(255,255,255,0.04) 10px
+  );
+  animation: derby-aerial-scan-move 0.6s linear infinite;
+}
+.derby-winner-glow {
+  filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.7));
+}
+.brightness-115 {
+  filter: brightness(1.15);
+}
+.derby-finish-title {
+  font-family: var(--font-display, system-ui);
+  font-size: clamp(12px, 3vw, 16px);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.35em;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+  animation: derby-finish-title-pop 0.6s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+}
+@keyframes derby-finish-title-pop {
+  0% { opacity: 0; transform: scale(0.8); letter-spacing: 0.1em; }
+  100% { opacity: 1; transform: scale(1); letter-spacing: 0.35em; }
+}
+@keyframes derby-finish-horse-in {
+  0% { opacity: 0; transform: translateY(24px) scale(0.85); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes derby-finish-horse-slide {
+  0% { opacity: 0; transform: translateX(-48px) translateY(8px) scale(0.82); }
+  70% { opacity: 1; transform: translateX(6px) translateY(-2px) scale(1.02); }
+  100% { opacity: 1; transform: translateX(0) translateY(0) scale(1); }
+}
+@keyframes derby-finish-winner-cross {
+  0% { opacity: 0; transform: translateX(-72px) translateY(6px) scale(0.75); }
+  55% { opacity: 1; transform: translateX(10px) translateY(-6px) scale(1.12); }
+  75% { transform: translateX(-4px) translateY(-2px) scale(1.06); }
+  100% { opacity: 1; transform: translateX(0) translateY(0) scale(1); }
+}
+.derby-finish-horse-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.derby-finish-horse-slide {
+  animation: derby-finish-horse-slide 0.7s cubic-bezier(0.22, 1.1, 0.36, 1) both;
+}
+.derby-finish-winner-cross {
+  animation: derby-finish-winner-cross 0.95s cubic-bezier(0.22, 1.2, 0.36, 1) both,
+    derby-winner-pulse 1.4s ease-in-out 1s infinite;
+}
+.derby-finish-horse {
+  animation: derby-finish-horse-in 0.55s cubic-bezier(0.34, 1.3, 0.64, 1) both;
+}
+.derby-finish-winner {
+  animation: derby-finish-horse-in 0.65s cubic-bezier(0.34, 1.4, 0.64, 1) both,
+    derby-winner-pulse 1.2s ease-in-out 0.6s infinite;
+}
+@keyframes derby-winner-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.derby-finish-winner-glow-ring {
+  filter: drop-shadow(0 0 12px rgba(250, 204, 21, 0.75));
+  animation: derby-finish-glow-ring 1.2s ease-in-out 0.8s infinite;
+}
+@keyframes derby-finish-glow-ring {
+  0%, 100% { filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.6)); }
+  50% { filter: drop-shadow(0 0 18px rgba(255, 200, 50, 1)); }
+}
+.derby-finish-winner-dust {
+  background: radial-gradient(ellipse, rgba(210,180,140,0.8) 0%, rgba(139,105,20,0.4) 50%, transparent 75%);
+  animation: derby-finish-dust-burst 0.8s ease-out 0.5s both;
+}
+@keyframes derby-finish-dust-burst {
+  0% { opacity: 0; transform: translateX(-50%) scaleX(0.3); }
+  40% { opacity: 0.9; transform: translateX(-50%) scaleX(1.4); }
+  100% { opacity: 0.35; transform: translateX(-50%) scaleX(1.8); }
+}
+@keyframes derby-finish-flash-burst {
+  0% { opacity: 0.95; background: #fff; }
+  15% { opacity: 0.7; }
+  100% { opacity: 0; background: transparent; }
+}
+.derby-finish-flash-burst {
+  animation: derby-finish-flash-burst 0.55s ease-out forwards;
+}
+@keyframes derby-finish-shutter {
+  0% { box-shadow: inset 0 0 0 0 rgba(0,0,0,0); }
+  8% { box-shadow: inset 0 0 80px 20px rgba(0,0,0,0.35); }
+  100% { box-shadow: inset 0 0 0 0 rgba(0,0,0,0); }
+}
+.derby-finish-shutter {
+  animation: derby-finish-shutter 0.45s ease-out forwards;
+}
+@keyframes derby-finish-spotlight-pulse {
+  0%, 100% { opacity: 0.35; transform: translateX(-50%) scaleX(1); }
+  50% { opacity: 0.55; transform: translateX(-50%) scaleX(1.08); }
+}
+.derby-finish-spotlight {
+  background: radial-gradient(ellipse at center bottom, rgba(255,220,100,0.45) 0%, rgba(250,204,21,0.15) 40%, transparent 70%);
+  animation: derby-finish-spotlight-pulse 2s ease-in-out 0.6s infinite;
+}
+@keyframes derby-finish-winner-banner-in {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-20px) scale(0.85); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+.derby-finish-winner-banner {
+  animation: derby-finish-winner-banner-in 0.65s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+  z-index: 25;
+}
+@keyframes derby-finish-winner-stamp-in {
+  0% { opacity: 0; transform: translateX(-50%) scale(1.8); filter: blur(4px); }
+  55% { opacity: 1; transform: translateX(-50%) scale(0.92); filter: blur(0); }
+  100% { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+.derby-finish-winner-stamp {
+  animation: derby-finish-winner-stamp-in 0.5s cubic-bezier(0.22, 1.3, 0.36, 1) both;
+}
+@keyframes derby-finish-captured-badge-in {
+  0% { opacity: 0; transform: scale(0.8); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.derby-finish-captured-badge {
+  animation: derby-finish-captured-badge-in 0.4s ease-out 0.2s both;
+}
+@keyframes derby-finish-ribbon-pop {
+  0% { opacity: 0; transform: scale(0) rotate(-12deg); }
+  70% { transform: scale(1.15) rotate(3deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+.derby-finish-ribbon-wrap {
+  animation: derby-finish-ribbon-pop 0.5s cubic-bezier(0.34, 1.5, 0.64, 1) both;
+}
+.derby-finish-ribbon-gold {
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.6);
+}
+@keyframes derby-finish-gap-tag-in {
+  0% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.derby-finish-gap-tag {
+  animation: derby-finish-gap-tag-in 0.35s ease-out both;
+}
+@keyframes derby-finish-trophy-bounce {
+  0%, 100% { transform: translateY(0) rotate(-5deg); }
+  50% { transform: translateY(-6px) rotate(5deg); }
+}
+.derby-finish-trophy-bounce {
+  animation: derby-finish-trophy-bounce 0.8s ease-in-out 0.7s infinite;
+}
+@keyframes derby-finish-trophy-spin {
+  0% { transform: rotate(-20deg) scale(0.5); opacity: 0; }
+  60% { transform: rotate(8deg) scale(1.15); opacity: 1; }
+  100% { transform: rotate(0) scale(1); opacity: 1; }
+}
+.derby-finish-trophy-spin {
+  animation: derby-finish-trophy-spin 0.6s cubic-bezier(0.34, 1.5, 0.64, 1) 0.9s both;
+}
+@keyframes derby-finish-wire-spark {
+  0% { opacity: 0; transform: scale(0.5); }
+  30% { opacity: 1; transform: scale(1.2); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+.derby-finish-wire-spark {
+  background: radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(250,204,21,0.5) 30%, transparent 70%);
+  animation: derby-finish-wire-spark 0.7s ease-out 0.55s both;
+}
+@keyframes derby-finish-line-glow-pulse {
+  0%, 100% { opacity: 0.4; box-shadow: 0 0 4px rgba(255,255,255,0.3); }
+  50% { opacity: 0.9; box-shadow: 0 0 12px rgba(255,255,255,0.6); }
+}
+.derby-finish-line-glow {
+  animation: derby-finish-line-glow-pulse 1.5s ease-in-out infinite;
+}
+@keyframes derby-finish-line-label-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.derby-finish-line-label {
+  animation: derby-finish-line-label-in 0.5s ease-out 0.4s both;
+}
+@keyframes derby-finish-track-shine {
+  from { background-position: -100% 0; }
+  to { background-position: 200% 0; }
+}
+.derby-finish-track-shine {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+  background-size: 50% 100%;
+  animation: derby-finish-track-shine 2.5s ease-in-out infinite;
+}
+@keyframes derby-finish-crowd-cheer {
+  0%, 100% { transform: translateY(0); opacity: 0.45; }
+  25% { transform: translateY(-3px); opacity: 0.55; }
+  75% { transform: translateY(-1px); opacity: 0.5; }
+}
+.derby-finish-crowd {
+  animation: derby-finish-crowd-cheer 0.6s ease-in-out infinite;
+}
+.derby-confetti-piece-gold {
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+}
+.derby-finish-scene {
+  background: #1a1a2e;
+}
+.derby-finish-post-wrap {
+  animation: derby-finish-post-snap 0.5s cubic-bezier(0.34, 1.5, 0.64, 1) 0.35s both;
+}
+.derby-finish-post {
+  animation: derby-finish-post-snap 0.4s cubic-bezier(0.34, 1.5, 0.64, 1) forwards;
+}
+@keyframes derby-finish-post-snap {
+  0% { transform: scaleY(0.3); opacity: 0.5; }
+  100% { transform: scaleY(1); opacity: 1; }
+}
+@keyframes derby-confetti-fall {
+  0% { transform: translateY(-10%) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+}
+.derby-confetti-piece {
+  position: absolute;
+  top: -8px;
+  width: 6px;
+  height: 10px;
+  border-radius: 1px;
+  opacity: 0.9;
+  animation: derby-confetti-fall 2.2s ease-in forwards;
+}
+.derby-lane-row-leading {
+  background: linear-gradient(90deg, rgba(250,204,21,0.1) 0%, transparent 60%) !important;
+  box-shadow: inset 0 0 0 1px rgba(250, 204, 21, 0.2);
+}
+.derby-chase-column-leading {
+  background: linear-gradient(180deg, rgba(250,204,21,0.12) 0%, transparent 80%) !important;
+  box-shadow: inset 0 0 0 1px rgba(250, 204, 21, 0.3);
+}
+.derby-horse-leading {
+  filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.45));
+}
+.derby-horse-trailing {
+  filter: saturate(0.75) brightness(0.88);
+}
+.derby-finish-wire {
+  box-shadow: 0 0 12px rgba(255,255,255,0.5);
+  animation: derby-finish-wire-pulse 1s ease-in-out infinite;
+}
+@keyframes derby-finish-wire-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+.derby-finish-loser {
+  opacity: 0.92;
+}
+
+/* ── Live wire runout (track cam) ───────────────────────────────── */
+@keyframes derby-wire-cross-spark {
+  0% { transform: scale(0.4); opacity: 0; filter: brightness(2); }
+  35% { transform: scale(1.15); opacity: 1; filter: brightness(1.4); }
+  100% { transform: scale(1); opacity: 1; filter: brightness(1); }
+}
+.derby-wire-cross-spark {
+  animation: derby-wire-cross-spark 0.55s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+}
+@keyframes derby-wire-horse-surge {
+  0% { transform: translateX(-50%) scale(0.92); filter: brightness(1); }
+  40% { transform: translateX(-50%) scale(1.06); filter: brightness(1.25); }
+  100% { transform: translateX(-50%) scale(1); filter: brightness(1); }
+}
+.derby-wire-horse-cross {
+  animation: derby-wire-horse-surge 0.5s cubic-bezier(0.22, 1.1, 0.36, 1) both;
+}
+.derby-wire-place-badge {
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+}
+@keyframes derby-wire-cam-label-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.derby-wire-cam-label {
+  animation: derby-wire-cam-label-in 0.4s ease-out both;
+}
+@keyframes derby-wire-status-pulse {
+  0%, 100% { opacity: 0.85; transform: translateX(-50%) scale(1); }
+  50% { opacity: 1; transform: translateX(-50%) scale(1.02); }
+}
+.derby-wire-status-banner {
+  animation: derby-wire-status-pulse 1.6s ease-in-out infinite;
+}
+.derby-wire-cam-vignette {
+  background: radial-gradient(ellipse 55% 80% at 88% 50%, transparent 30%, rgba(0,0,0,0.35) 100%);
+}
+@keyframes derby-jumbotron-glow-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.65; }
+}
+.derby-jumbotron-glow {
+  animation: derby-jumbotron-glow-pulse 2s ease-in-out infinite;
+}
+.derby-grandstand {
+  box-shadow: inset 0 -4px 12px rgba(0,0,0,0.4);
+}
+
+.derby-face-emoji {
+  animation: derby-face-pop 0.5s cubic-bezier(0.34, 1.5, 0.64, 1) both;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+}
+@keyframes derby-face-pop {
+  0% { transform: scale(0); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes derby-sad-tear-drop {
+  0%, 100% { transform: translateY(0); opacity: 0.7; }
+  50% { transform: translateY(3px); opacity: 0.3; }
+}
+.derby-sad-tear {
+  animation: derby-sad-tear-drop 1.2s ease-in-out infinite;
+}
+@keyframes derby-winner-star-spin {
+  0%, 100% { transform: rotate(0deg) scale(1); opacity: 1; }
+  50% { transform: rotate(180deg) scale(1.2); opacity: 0.8; }
+}
+.derby-winner-star {
+  animation: derby-winner-star-spin 1.5s ease-in-out infinite;
+}
+
+
+
+/* ── Chicken Road visual board ───────────────────────────────────── */
+@keyframes cr-chicken-hop-anim {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  25% { transform: translateY(-4px) scale(1.05, 0.95); }
+  45% { transform: translateY(-14px) scale(0.95, 1.08); }
+  65% { transform: translateY(-6px) scale(1.02, 0.98); }
+  85% { transform: translateY(-2px) scale(1, 1); }
+}
+.cr-chicken-hop {
+  animation: cr-chicken-hop-anim 0.55s cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+.cr-chicken-track {
+  transition: left 0.58s cubic-bezier(0.22, 1.05, 0.36, 1);
+  will-change: left;
+}
+.cr-chicken-glide.cr-chicken-track {
+  transition-timing-function: cubic-bezier(0.22, 1.15, 0.36, 1);
+}
+.cr-chicken-glide-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+@keyframes cr-chicken-dust-anim {
+  0% { opacity: 0.5; transform: translateX(-50%) scale(0.5); }
+  100% { opacity: 0; transform: translateX(-50%) scale(1.6); }
+}
+.cr-chicken-dust {
+  background: radial-gradient(ellipse, rgba(139,105,20,0.55) 0%, transparent 70%);
+  animation: cr-chicken-dust-anim 0.45s ease-out forwards;
+}
+@keyframes cr-chicken-bust-anim {
+  0% { transform: translateX(-50%) rotate(0deg); }
+  30% { transform: translateX(-50%) rotate(-15deg) translateY(-8px); }
+  100% { transform: translateX(-50%) rotate(75deg) translateY(12px) scale(0.85); opacity: 0.35; }
+}
+.cr-chicken-bust {
+  animation: cr-chicken-bust-anim 0.65s ease-out forwards;
+}
+@keyframes cr-chicken-run-anim {
+  0% { transform: translateX(0) translateY(0) rotate(0deg); }
+  20% { transform: translateX(4px) translateY(-5px) rotate(4deg); }
+  40% { transform: translateX(10px) translateY(-1px) rotate(1deg); }
+  60% { transform: translateX(16px) translateY(-4px) rotate(-2deg); }
+  80% { transform: translateX(22px) translateY(0) rotate(2deg); }
+  100% { transform: translateX(28px) translateY(-2px) rotate(0deg); }
+}
+.cr-chicken-run {
+  animation: cr-chicken-run-anim 0.38s ease-in-out infinite;
+}
+@keyframes cr-chicken-leg-left-anim {
+  0%, 100% { transform: rotate(-22deg); }
+  50% { transform: rotate(28deg); }
+}
+@keyframes cr-chicken-leg-right-anim {
+  0%, 100% { transform: rotate(28deg); }
+  50% { transform: rotate(-22deg); }
+}
+.cr-chicken-run .cr-chicken-leg-left {
+  transform-origin: 20px 48px;
+  animation: cr-chicken-leg-left-anim 0.19s ease-in-out infinite;
+}
+.cr-chicken-run .cr-chicken-leg-right {
+  transform-origin: 36px 48px;
+  animation: cr-chicken-leg-right-anim 0.19s ease-in-out infinite;
+}
+@keyframes cr-manhole-tap-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.55));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(96, 165, 250, 0.95)) drop-shadow(0 0 24px rgba(59, 130, 246, 0.45));
+    transform: scale(1.08);
+  }
+}
+.cr-manhole-tap-target {
+  animation: cr-manhole-tap-pulse 1.1s ease-in-out infinite;
+  z-index: 25;
+  touch-action: manipulation;
+}
+.cr-manhole-tap-target:active {
+  transform: scale(0.96);
+}
+@keyframes cr-manhole-tap-hint-anim {
+  0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.85; }
+  50% { transform: translateX(-50%) translateY(-3px); opacity: 1; }
+}
+.cr-manhole-tap-hint {
+  animation: cr-manhole-tap-hint-anim 0.75s ease-in-out infinite;
+}
+@keyframes cr-chicken-spawn-anim {
+  0% { transform: scale(0.2) translateY(12px); opacity: 0; }
+  70% { transform: scale(1.08) translateY(-4px); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.cr-chicken-spawn {
+  animation: cr-chicken-spawn-anim 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes cr-manhole-burst-anim {
+  0%, 100% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+.cr-manhole-burst {
+  background: radial-gradient(ellipse, #ffcc00 0%, #ff5500 45%, #ff0000 65%, transparent 80%);
+  animation: cr-manhole-burst-anim 0.35s ease-in-out infinite;
+  filter: blur(2px);
+}
+/* One-shot car pass — Stake-style, only on active lane cross */
+@keyframes cr-car-pass-once {
+  0% { transform: translateY(-120%); opacity: 0; }
+  8% { opacity: 1; }
+  92% { opacity: 1; }
+  100% { transform: translateY(220%); opacity: 0; }
+}
+@keyframes cr-car-pass-once-reverse {
+  0% { transform: translateY(220%); opacity: 0; }
+  8% { opacity: 1; }
+  92% { opacity: 1; }
+  100% { transform: translateY(-120%); opacity: 0; }
+}
+.cr-car-pass-once {
+  animation: cr-car-pass-once 0.85s ease-in forwards;
+  pointer-events: none;
+}
+.cr-car-pass-once-reverse {
+  animation: cr-car-pass-once-reverse 0.85s ease-in forwards;
+  pointer-events: none;
+}
+@keyframes cr-car-bust-shake {
+  0%, 100% { transform: translateX(-50%) rotate(0deg); }
+  25% { transform: translateX(-52%) rotate(-2deg); }
+  75% { transform: translateX(-48%) rotate(2deg); }
+}
+.cr-car-bust-shake {
+  animation: cr-car-bust-shake 0.3s ease-in-out 3;
+}
+@keyframes cr-barrier-pop-anim {
+  0% { transform: scale(0.3) translateY(20px); opacity: 0; }
+  60% { transform: scale(1.08) translateY(-4px); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.cr-barrier-pop {
+  animation: cr-barrier-pop-anim 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes cr-manhole-fire-anim {
+  0%, 100% { opacity: 0.5; transform: translateX(-50%) scaleX(0.9); }
+  50% { opacity: 0.9; transform: translateX(-50%) scaleX(1.1); }
+}
+.cr-manhole-fire {
+  background: radial-gradient(ellipse, #ff6b00 0%, #ff3300 40%, transparent 70%);
+  animation: cr-manhole-fire-anim 0.6s ease-in-out infinite;
+}
+.cr-fire-intense {
+  background: radial-gradient(ellipse, #ffaa00 0%, #ff4400 35%, #ff0000 55%, transparent 75%);
+  animation: cr-manhole-fire-anim 0.4s ease-in-out infinite;
+}
+@keyframes cr-manhole-ember-anim {
+  0%, 100% { opacity: 0.35; transform: translateX(-50%) scale(0.85); }
+  50% { opacity: 0.65; transform: translateX(-50%) scale(1); }
+}
+.cr-manhole-ember {
+  background: radial-gradient(ellipse, #ff7700 0%, #ff3300 50%, transparent 72%);
+  animation: cr-manhole-ember-anim 1.1s ease-in-out infinite;
+}
+@keyframes cr-manhole-sparks-anim {
+  0% { opacity: 0; transform: translateX(-50%) translateY(0) scale(0.5); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-18px) scale(1.2); }
+}
+.cr-manhole-sparks {
+  background: radial-gradient(circle, #ffdd00 0%, #ff6600 40%, transparent 70%);
+  animation: cr-manhole-sparks-anim 0.7s ease-out infinite;
+}
+/* Continuous ambient traffic — Stake-style always-on cars */
+@keyframes cr-car-ambient-down-anim {
+  0% { transform: translate(-50%, -130%); opacity: 0; }
+  6% { opacity: 0.75; }
+  94% { opacity: 0.75; }
+  100% { transform: translate(-50%, 230%); opacity: 0; }
+}
+@keyframes cr-car-ambient-up-anim {
+  0% { transform: translate(-50%, 230%); opacity: 0; }
+  6% { opacity: 0.75; }
+  94% { opacity: 0.75; }
+  100% { transform: translate(-50%, -130%); opacity: 0; }
+}
+.cr-car-ambient-down {
+  animation: cr-car-ambient-down-anim 2.8s linear infinite;
+  top: 0;
+  bottom: auto;
+  height: 100%;
+}
+.cr-car-ambient-up {
+  animation: cr-car-ambient-up-anim 2.8s linear infinite;
+  top: 0;
+  bottom: auto;
+  height: 100%;
+}
+@keyframes cr-car-headlight-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.75; }
+}
+.cr-car-headlight-glow {
+  animation: cr-car-headlight-pulse 1.4s ease-in-out infinite;
+}
+@keyframes cr-car-wheel-spin-anim {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.cr-car-wheel-spin {
+  transform-origin: center;
+  animation: cr-car-wheel-spin-anim 0.35s linear infinite;
+}
+.cr-car-ambient-motion {
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));
+}
+/* Stake-style car crash impact */
+@keyframes cr-impact-flash-anim {
+  0% { opacity: 0; }
+  15% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+.cr-impact-flash {
+  background: radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,100,0,0.4) 40%, transparent 70%);
+  animation: cr-impact-flash-anim 0.35s ease-out forwards;
+}
+@keyframes cr-impact-shockwave-anim {
+  0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0.8; }
+  100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+}
+.cr-impact-shockwave {
+  animation: cr-impact-shockwave-anim 0.45s ease-out forwards;
+  background: radial-gradient(circle, rgba(255,200,0,0.5) 0%, transparent 70%);
+}
+@keyframes cr-car-crash-slam-down {
+  0% { transform: translate(-50%, -180%); opacity: 0; }
+  30% { opacity: 1; }
+  55% { transform: translate(-50%, 0) scale(1.1); }
+  70% { transform: translate(-50%, -4px) scale(1); }
+  100% { transform: translate(-50%, 0) scale(1); }
+}
+@keyframes cr-car-crash-slam-up {
+  0% { transform: translate(-50%, 180%); opacity: 0; }
+  30% { opacity: 1; }
+  55% { transform: translate(-50%, 0) scale(1.1); }
+  70% { transform: translate(-50%, 4px) scale(1); }
+  100% { transform: translate(-50%, 0) scale(1); }
+}
+.cr-car-crash-slam-down { animation: cr-car-crash-slam-down 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.cr-car-crash-slam-up { animation: cr-car-crash-slam-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+@keyframes cr-chicken-knockback-anim {
+  0% { transform: translate(-50%, 0) rotate(0deg); opacity: 1; }
+  40% { transform: translate(-50%, -20px) rotate(-25deg) scale(1.05); }
+  100% { transform: translate(-50%, 40px) rotate(90deg) scale(0.7); opacity: 0.2; }
+}
+.cr-chicken-knockback {
+  animation: cr-chicken-knockback-anim 0.55s ease-out 0.15s forwards;
+}
+@keyframes cr-crash-debris-anim {
+  0% { transform: translate(-50%, 0) rotate(var(--debris-angle, 0deg)) translateY(0); opacity: 1; }
+  100% { transform: translate(-50%, 0) rotate(var(--debris-angle, 0deg)) translateY(-40px); opacity: 0; }
+}
+.cr-crash-debris {
+  animation: cr-crash-debris-anim 0.45s ease-out forwards;
+}
+@keyframes cr-crash-text-anim {
+  0% { transform: translate(-50%, 0) scale(0.5); opacity: 0; }
+  30% { transform: translate(-50%, -8px) scale(1.2); opacity: 1; }
+  100% { transform: translate(-50%, -16px) scale(1); opacity: 0; }
+}
+.cr-crash-text {
+  animation: cr-crash-text-anim 0.6s ease-out 0.1s forwards;
+  text-shadow: 0 0 8px #ff0000, 0 2px 4px #000;
+}
+/* Barrier drop from above */
+@keyframes cr-barrier-drop-anim {
+  0% { transform: translate(-50%, -120%); opacity: 0; }
+  60% { transform: translate(-50%, 4px); opacity: 1; }
+  75% { transform: translate(-50%, -6px); }
+  100% { transform: translate(-50%, 0); }
+}
+.cr-barrier-drop {
+  animation: cr-barrier-drop-anim 0.4s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+}
+@keyframes cr-barrier-dust-anim {
+  0% { transform: translate(-50%, 0) scale(0.5); opacity: 0.6; }
+  100% { transform: translate(-50%, 0) scale(1.8); opacity: 0; }
+}
+.cr-barrier-dust {
+  background: radial-gradient(ellipse, rgba(139,105,20,0.5) 0%, transparent 70%);
+  animation: cr-barrier-dust-anim 0.35s ease-out 0.35s forwards;
+}
+@keyframes cr-light-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.6); }
+}
+.cr-light-glow-red { animation: cr-light-pulse 1.2s ease-in-out infinite; }
+.cr-light-glow-yellow { animation: cr-light-pulse 0.8s ease-in-out infinite; }
+.cr-light-glow-green { animation: cr-light-pulse 1s ease-in-out infinite; }
+.cr-lanes-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.2) transparent;
+}
+.cr-lane-active {
+  box-shadow: inset 0 0 24px rgba(74, 158, 255, 0.15);
+  background: linear-gradient(180deg, #4a5568 0%, #526178 50%, #4a5568 100%) !important;
+}
+@keyframes cr-lane-cleared-flash-anim {
+  0% { box-shadow: inset 0 0 30px rgba(104, 211, 145, 0.45); }
+  100% { box-shadow: inset 0 0 0 transparent; }
+}
+.cr-lane-cleared-flash {
+  animation: cr-lane-cleared-flash-anim 0.7s ease-out forwards;
+}
+@keyframes cr-lane-asphalt-shimmer-anim {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 40px; }
+}
+.cr-lane-asphalt-shimmer {
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 8px,
+    rgba(255,255,255,0.03) 8px,
+    rgba(255,255,255,0.03) 10px
+  );
+  animation: cr-lane-asphalt-shimmer-anim 1.2s linear infinite;
+}
+@keyframes cr-car-speed-trail-anim {
+  0%, 100% { opacity: 0.15; transform: scaleY(0.8); }
+  50% { opacity: 0.35; transform: scaleY(1.1); }
+}
+.cr-car-speed-trail {
+  background: linear-gradient(180deg, transparent, rgba(255,255,255,0.2), transparent);
+  animation: cr-car-speed-trail-anim 0.4s ease-in-out infinite;
+}
+@keyframes cr-manhole-burst-ring-anim {
+  0% { transform: scale(0.6); opacity: 0.8; border-width: 3px; }
+  100% { transform: scale(2.2); opacity: 0; border-width: 1px; }
+}
+.cr-manhole-burst-ring {
+  border: 2px solid rgba(255, 140, 0, 0.7);
+  animation: cr-manhole-burst-ring-anim 0.55s ease-out forwards;
+}
+@keyframes cr-board-shake-anim {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-4px) rotate(-0.3deg); }
+  30% { transform: translateX(4px) rotate(0.3deg); }
+  45% { transform: translateX(-3px); }
+  60% { transform: translateX(3px); }
+}
+.cr-board-shake {
+  animation: cr-board-shake-anim 0.45s ease-out;
+}
+@keyframes cr-win-confetti-fall {
+  0% { transform: translateY(-10%) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(120vh) rotate(720deg); opacity: 0; }
+}
+.cr-win-confetti {
+  animation: cr-win-confetti-fall 2.2s ease-in forwards;
+  top: -4%;
+}
+@keyframes cr-win-title-pop-anim {
+  0% { transform: translateX(-50%) scale(0.5); opacity: 0; }
+  60% { transform: translateX(-50%) scale(1.08); opacity: 1; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+.cr-win-title-pop {
+  animation: cr-win-title-pop-anim 0.65s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+}
+.cr-win-celebration {
+  animation: cr-win-celebration-fade 3s ease-out forwards;
+}
+@keyframes cr-win-celebration-fade {
+  0%, 75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes cr-city-window-flicker-anim {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.75; }
+}
+.cr-city-window-flicker {
+  animation: cr-city-window-flicker-anim 2.4s ease-in-out infinite;
+}
+@keyframes cr-impact-spark-anim {
+  0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0.9; }
+  100% { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+}
+.cr-impact-spark {
+  background: radial-gradient(circle, rgba(255,255,200,0.6) 0%, rgba(255,80,0,0.3) 40%, transparent 70%);
+  animation: cr-impact-spark-anim 0.4s ease-out forwards;
+}
+
+/* ── Cover art: race horses ──────────────────────────────────────── */
+@keyframes cover-race-gallop {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+@keyframes cover-race-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-28px); }
+}
+
+/* ── Cover art: chicken road ─────────────────────────────────────── */
+/* ── Cover art: chicken road ─────────────────────────────────────── */
+@keyframes cover-chicken-hop {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-6px); }
+  60% { transform: translateY(-3px); }
+}
+@keyframes cover-car-drive {
+  from { transform: translateX(-40px); }
+  to { transform: translateX(360px); }
+}
+.cover-chicken-hop {
+  animation: cover-chicken-hop 0.6s ease-in-out infinite;
+}
+.cover-car-drive {
+  animation: cover-car-drive 3s linear infinite;
+}
+.cover-race-gallop {
+  animation: cover-race-gallop 0.4s ease-in-out infinite;
+}
+
 /* ── Plinko ball drop ────────────────────────────────────────────── */
 @keyframes plinko-drop {
   0%   { top: 0; opacity: 1; }
@@ -1283,6 +2375,203 @@ body {
   }
 }
 
+.game-card-btn {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE GAME OVERLAY — fixed fullscreen popup
+═══════════════════════════════════════════════════════════════ */
+.mobile-game-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background: hsl(var(--background));
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mobile-game-overlay-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(12px);
+  flex-shrink: 0;
+}
+
+.mobile-game-overlay-back,
+.mobile-game-overlay-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mobile-game-overlay-close {
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mobile-game-overlay-title {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.mobile-game-overlay-title h1 {
+  font-family: var(--font-display, inherit);
+  font-size: 14px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-game-overlay-title p {
+  font-size: 10px;
+  font-family: monospace;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 2px;
+}
+
+.mobile-game-overlay-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 215, 0, 0.04) 0%, transparent 60%);
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-game-overlay-body > * {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 767px) {
+  .game-mobile-bets-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    padding: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.5);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .game-mobile-bets-panel {
+    max-height: 30vh;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE GAME SHELL — fullscreen play area, no scroll
+═══════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  .game-mobile-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  .game-mobile-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    flex-shrink: 0;
+  }
+
+  .game-mobile-viewport {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 4px;
+  }
+
+  /* Viewport inherits mobile-game-play-area sizing inside the shell */
+  .game-mobile-viewport.mobile-game-play-area {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    flex: 1;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .game-mobile-bets-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    padding: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.5);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .game-mobile-bets-panel {
+    max-height: 30vh;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════
    GAME MOBILE RESPONSIVE OVERRIDES
 ═══════════════════════════════════════════════════════════════ */
@@ -1291,16 +2580,29 @@ body {
 .slot-game,
 .bj-game-root,
 .cf-game-root,
+.cf-root,
 .mines-game-root,
 .dice-game-root,
+.dice-container,
 .crash-game-root,
 .plinko-game-root,
+.plinko-root,
 .roulette-game-root,
 .keno-game-root,
-.hilo-game-root {
+.hilo-game-root,
+.chicken-road-game-root {
   max-width: 100%;
   box-sizing: border-box;
   overflow-x: hidden;
+}
+
+.chicken-road-play-area {
+  min-height: 360px;
+}
+
+.chicken-road-play-area .cr-stake-board {
+  min-height: 340px;
+  height: 100%;
 }
 
 /* Classic Slots — mobile overrides */
@@ -1374,21 +2676,406 @@ body {
   }
 }
 
-/* Ensure game page doesn't overflow on mobile */
-@media (max-width: 1024px) {
-  /* Global Game Stacking */
+/* Mobile game layout — compact mirror of each game's desktop DOM order */
+@media (max-width: 767px) {
+  .mobile-game-play-area {
+    height: clamp(380px, 68dvh, 560px);
+    min-height: 380px;
+    max-height: 68dvh;
+    overflow: hidden;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: radial-gradient(ellipse at 50% 0%, rgba(255, 215, 0, 0.04) 0%, transparent 60%);
+    box-sizing: border-box;
+  }
+
+  .mobile-game-play-area > *,
+  .mobile-game-play-area > * > * {
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Column layout — game on top, compact bets underneath */
+  .mobile-game-play-area .bj-game-root,
+  .mobile-game-play-area .cf-root,
+  .mobile-game-play-area .cf-game-root,
+  .mobile-game-play-area .mines-game-root,
+  .mobile-game-play-area .crash-game-root,
+  .mobile-game-play-area .roulette-game-root,
+  .mobile-game-play-area .keno-game-root,
+  .mobile-game-play-area .hilo-game-root,
+  .mobile-game-play-area .plinko-root,
+  .mobile-game-play-area .plinko-game-root,
+  .mobile-game-play-area .chicken-road-game-root {
+    display: flex !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    padding: 4px !important;
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+  }
+
+  .mobile-game-play-area .bj-game-root,
+  .mobile-game-play-area .cf-root,
+  .mobile-game-play-area .mines-game-root,
+  .mobile-game-play-area .plinko-root {
+    flex-direction: column !important;
+  }
+
+  .mobile-game-play-area .bj-table-area,
+  .mobile-game-play-area .bj-controls-bar,
+  .mobile-game-play-area .cf-coin-area,
+  .mobile-game-play-area .cf-bet-panel,
+  .mobile-game-play-area .mines-grid-container,
+  .mobile-game-play-area .mines-bet-panel,
+  .mobile-game-play-area .plinko-board-area,
+  .mobile-game-play-area .plinko-bet-panel,
+  .mobile-game-play-area .crash-chart-area,
+  .mobile-game-play-area .crash-bet-panel,
+  .mobile-game-play-area .roulette-wheel-area,
+  .mobile-game-play-area .roulette-bet-panel,
+  .mobile-game-play-area .keno-grid-area,
+  .mobile-game-play-area .keno-bet-panel,
+  .mobile-game-play-area .hilo-card-area,
+  .mobile-game-play-area .hilo-bet-panel,
+  .mobile-game-play-area .chicken-road-bet-panel,
+  .mobile-game-play-area .chicken-road-play-area {
+    order: unset !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    position: static !important;
+  }
+
+  /* Play areas — top, flexible height */
+  .mobile-game-play-area .bj-table-area,
+  .mobile-game-play-area .cf-coin-area,
+  .mobile-game-play-area .mines-grid-container,
+  .mobile-game-play-area .crash-chart-area,
+  .mobile-game-play-area .roulette-wheel-area,
+  .mobile-game-play-area .keno-grid-area,
+  .mobile-game-play-area .hilo-card-area,
+  .mobile-game-play-area .plinko-board-area,
+  .mobile-game-play-area .chicken-road-play-area {
+    order: 1 !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    min-height: 140px !important;
+    padding: 4px !important;
+    overflow: hidden !important;
+  }
+
+  /* Bet panels — bottom, compact */
+  .mobile-game-play-area .bj-controls-bar,
+  .mobile-game-play-area .cf-bet-panel,
+  .mobile-game-play-area .mines-bet-panel,
+  .mobile-game-play-area .crash-bet-panel,
+  .mobile-game-play-area .roulette-bet-panel,
+  .mobile-game-play-area .keno-bet-panel,
+  .mobile-game-play-area .hilo-bet-panel,
+  .mobile-game-play-area .plinko-bet-panel,
+  .mobile-game-play-area .chicken-road-bet-panel,
+  .mobile-game-play-area .betting-panel {
+    order: 2 !important;
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    padding: 8px !important;
+    gap: 6px !important;
+    overflow: visible !important;
+    font-size: 11px !important;
+    border-radius: 8px !important;
+  }
+
+  .mobile-game-play-area .crash-live-grid {
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    gap: 4px !important;
+  }
+
+  .mobile-game-play-area .crash-sha-col {
+    display: none !important;
+  }
+
+  .mobile-game-play-area .crash-feed-col {
+    max-height: 28% !important;
+    overflow: hidden !important;
+  }
+
+  /* Blackjack mobile — full-width bet panel below felt (Mines-style) */
+  .mobile-game-play-area .bj-game-root--mobile {
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  .mobile-game-play-area .bj-game-root--mobile .bj-controls-bar,
+  .mobile-game-play-area .bj-game-root--mobile .bj-bet-panel {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    order: 2 !important;
+  }
+
+  .mobile-game-play-area .bj-game-root--mobile .bj-table-area {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    order: 1 !important;
+  }
+
+  .mobile-game-play-area .bj-game-root--mobile .bj-pf-panel {
+    display: none !important;
+  }
+
+  .mobile-game-play-area .bj-game-root--mobile .bj-bet-mult {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 3px !important;
+  }
+
+  .mobile-game-play-area .bj-game-root--mobile .bj-action-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 3px !important;
+  }
+
+  /* ── Dice Live: bets below dice on phone (Mines-style) ── */
+  .mobile-game-play-area.mobile-game--dice > * > *,
+  .mobile-game-play-area.mobile-game--dice .w-full {
+    padding: 0 !important;
+  }
+
+  .mobile-game-play-area .dice-container {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    height: 100% !important;
+    padding: 3px !important;
+  }
+
+  .mobile-game-play-area .betting-panel {
+    order: 2 !important;
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    grid-column: unset !important;
+    grid-row: unset !important;
+  }
+
+  .mobile-game-play-area .dice-display {
+    order: 1 !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    grid-column: unset !important;
+    grid-row: unset !important;
+    padding: 3px !important;
+  }
+
+  .mobile-game-play-area .live-feed {
+    order: 3 !important;
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    grid-column: unset !important;
+    grid-row: unset !important;
+    max-height: 48px !important;
+    overflow: hidden !important;
+    padding: 2px !important;
+  }
+
+  .mobile-game-play-area .sha-display {
+    display: none !important;
+  }
+
+  .mobile-game-play-area .dice-size {
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  .mobile-game-play-area .result-text {
+    font-size: 22px !important;
+  }
+
+  .mobile-game-play-area .dice-display {
+    min-height: unset !important;
+    gap: 8px !important;
+  }
+
+  /* ── Blackjack: component handles layout via bj-game-root--mobile ── */
+
+  /* ── Coinflip ── */
+  .mobile-game-play-area .cf-coin-area {
+    min-height: 0 !important;
+    padding: 4px !important;
+  }
+
+  .mobile-game-play-area .cf-coin-wrap {
+    --coin-size: clamp(52px, 16vw, 80px) !important;
+  }
+
+  .mobile-game-play-area .cf-stats-mobile {
+    display: none !important;
+  }
+
+  /* ── Crash ── */
+  .mobile-game-play-area .crash-chart-area {
+    padding: 3px !important;
+  }
+
+  .mobile-game-play-area .crash-chart-area .font-mono {
+    font-size: 1.5rem !important;
+    line-height: 1 !important;
+  }
+
+  .mobile-game-play-area .crash-bet-panel {
+    gap: 3px !important;
+  }
+
+  .mobile-game-play-area .crash-bet-panel .h-14 {
+    height: 36px !important;
+    min-height: 36px !important;
+    font-size: 10px !important;
+  }
+
+  /* ── Roulette: component handles layout via roulette-game-root--mobile ── */
+
+
+  /* ── Mines ── */
+  .mobile-game-play-area .mines-grid-container {
+    padding: 3px !important;
+    gap: 4px !important;
+  }
+
+  .mobile-game-play-area .mines-bet-panel > div:first-child {
+    display: none !important;
+  }
+
+  .mobile-game-play-area .mines-bet-panel {
+    gap: 3px !important;
+  }
+
+  /* ── Keno / HiLo ── */
+  .mobile-game-play-area .keno-grid-area,
+  .mobile-game-play-area .hilo-card-area {
+    padding: 3px !important;
+    gap: 4px !important;
+  }
+
+  .mobile-game-play-area .keno-bet-panel .h-14,
+  .mobile-game-play-area .hilo-bet-panel .h-14 {
+    height: 34px !important;
+    min-height: 34px !important;
+    font-size: 9px !important;
+  }
+
+  /* ── Plinko ── */
+  .mobile-game-play-area .plinko-board-area {
+    padding: 3px !important;
+  }
+
+  /* ── Chicken Road: board on top, compact bets below ── */
+  .mobile-game-play-area .chicken-road-bet-panel {
+    padding: 8px !important;
+    gap: 6px !important;
+  }
+
+  .mobile-game-play-area .chicken-road-bet-panel .space-y-4 {
+    gap: 6px !important;
+  }
+
+  .mobile-game-play-area .chicken-road-bet-panel .space-y-4 > * + * {
+    margin-top: 6px !important;
+  }
+  .mobile-game-play-area .chicken-road-bet-panel .grid-cols-2 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 2px !important;
+  }
+
+  .mobile-game-play-area .chicken-road-bet-panel button,
+  .mobile-game-play-area .chicken-road-bet-panel .text-2xl {
+    font-size: 10px !important;
+  }
+
+  .mobile-game-play-area .cr-board-root,
+  .mobile-game-play-area .cr-pixi-board {
+    max-height: 100% !important;
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+
+  .mobile-game-play-area .cr-board-root > div,
+  .mobile-game-play-area .cr-pixi-board > div:first-child {
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 180px !important;
+  }
+
+  .mobile-game-play-area .cr-lane-col {
+    min-width: 44px !important;
+    max-width: 56px !important;
+  }
+
+  /* ── Global compact controls — readable touch targets in bet panels */
+  .mobile-game-play-area [class$="-bet-panel"] input,
+  .mobile-game-play-area [class$="-bet-panel"] select,
+  .mobile-game-play-area .bj-controls-bar input,
+  .mobile-game-play-area .betting-panel input,
+  .mobile-game-play-area .betting-panel select {
+    font-size: 12px !important;
+    padding: 6px 8px !important;
+    min-height: 32px !important;
+  }
+
+  .mobile-game-play-area [class$="-bet-panel"] label,
+  .mobile-game-play-area .bj-controls-bar label,
+  .mobile-game-play-area .betting-panel label {
+    font-size: 9px !important;
+  }
+
+  .mobile-game-play-area [class$="-bet-panel"] button,
+  .mobile-game-play-area .bj-controls-bar button,
+  .mobile-game-play-area .betting-panel button {
+    font-size: 10px !important;
+    min-height: 32px !important;
+  }
+
+  .mobile-game-play-area .gap-8,
+  .mobile-game-play-area .gap-6,
+  .mobile-game-play-area .gap-5,
+  .mobile-game-play-area .gap-4 {
+    gap: 3px !important;
+  }
+
+  .mobile-game-play-area .p-6,
+  .mobile-game-play-area .p-4 {
+    padding: 4px !important;
+  }
+}
+
+/* Tablet — stack game panels only on non-overlay pages */
+@media (max-width: 1024px) and (min-width: 768px) {
   .bj-game-root,
   .cf-game-root,
+  .cf-root,
   .mines-game-root,
   .dice-game-root,
+  .dice-container,
   .crash-game-root,
   .plinko-game-root,
+  .plinko-root,
   .roulette-game-root,
   .keno-game-root,
-  .hilo-game-root {
+  .hilo-game-root,
+  .chicken-road-game-root {
     flex-direction: column-reverse !important;
     align-items: stretch !important;
-    gap: 16px !important;
+    gap: 10px !important;
   }
 
   /* Game Panels */
@@ -1409,6 +3096,7 @@ body {
   /* Table Areas */
   .bj-table-area,
   .cf-table-area,
+  .cf-coin-area,
   .mines-grid-container,
   .dice-display-area,
   .crash-chart-area,
@@ -1421,34 +3109,353 @@ body {
     order: 2 !important;
   }
 
-  /* Compact blackjack card sizes on mobile */
   .bj-card-container {
     width: clamp(55px, 15vw, 85px) !important;
     height: clamp(75px, 20vw, 118px) !important;
   }
 
   .bj-table-area {
-    padding: 40px 10px !important;
-    gap: 30px !important;
-    min-height: 400px !important;
+    padding: 20px 8px !important;
+    gap: 16px !important;
+    min-height: auto !important;
   }
 
-  /* Roulette number grid on mobile */
   .roulette-number-grid {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
   }
 
-  /* Plinko board scaling */
   .plinko-board svg {
     max-width: 100% !important;
     height: auto !important;
   }
 }
 
+/* Mobile game compact overrides */
+@media (max-width: 767px) {
+  .game-mobile-viewport .bj-game-root,
+  .game-mobile-viewport .cf-root,
+  .game-mobile-viewport .mines-game-root,
+  .game-mobile-viewport .crash-game-root,
+  .game-mobile-viewport .roulette-game-root,
+  .game-mobile-viewport .keno-game-root,
+  .game-mobile-viewport .hilo-game-root,
+  .game-mobile-viewport .plinko-root,
+  .game-mobile-viewport .dice-container {
+    padding: 4px !important;
+    gap: 8px !important;
+  }
+
+  .game-mobile-viewport .cf-coin-area {
+    min-height: 140px !important;
+    padding: 8px 6px !important;
+  }
+
+  .game-mobile-viewport .cf-coin-wrap {
+    transform: scale(0.68) !important;
+    transform-origin: center center !important;
+  }
+
+  .game-mobile-viewport .mines-bet-panel {
+    width: 100% !important;
+    position: static !important;
+    padding: 8px !important;
+  }
+
+  .game-mobile-viewport .mines-grid-container {
+    padding: 8px 6px !important;
+  }
+
+  .game-mobile-viewport .roulette-wheel-area {
+    min-height: 160px !important;
+    padding: 6px !important;
+  }
+
+  .game-mobile-viewport .roulette-bet-panel {
+    padding: 8px !important;
+    gap: 6px !important;
+  }
+
+  .game-mobile-viewport .roulette-number-picker {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .game-mobile-viewport .chicken-road-play-area {
+    min-height: 180px !important;
+  }
+
+  .game-mobile-viewport .cr-board-root,
+  .game-mobile-viewport .cr-pixi-board {
+    min-height: 180px !important;
+    max-height: 42dvh !important;
+  }
+}
+
+/* DGC Derby — mobile: track on top, compact controls below */
+@media (max-width: 767px) {
+  .race-mobile-shell {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    width: 100%;
+  }
+
+  .race-mobile-track-wrap {
+    flex: 1 1 0;
+    min-height: 42dvh;
+    max-height: 58dvh;
+    display: flex;
+    flex-direction: column;
+    padding: 4px 6px 0;
+    overflow: hidden;
+  }
+
+  .race-mobile-track-wrap .race-track-card {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .race-mobile-track-wrap .derby-track-scene {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 200px !important;
+    height: 100% !important;
+    width: 100% !important;
+  }
+
+  .race-mobile-track-wrap .derby-track-scene > * {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .race-mobile-track-wrap .derby-side-scene,
+  .race-mobile-track-wrap .derby-front-scene,
+  .race-mobile-track-wrap .derby-aerial-scene {
+    min-height: 100% !important;
+    height: 100% !important;
+  }
+
+  .race-mobile-track-wrap .derby-pick-glow {
+    animation-duration: 1.8s;
+  }
+
+  .race-mobile-track-wrap .derby-gate-door {
+    opacity: 0.75;
+  }
+
+  .race-mobile-controls {
+    flex: 0 0 auto;
+    padding: 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom, 6px));
+    max-height: 42vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .race-mobile-controls .race-horse-strip {
+    overflow: hidden;
+  }
+
+  .race-horse-strip .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .race-horse-strip .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  .race-result-card {
+    margin: 0 6px 4px;
+  }
+
+  /* Legacy class — keep for any cached builds */
+  .race-mobile-page .derby-track-scene {
+    min-height: 200px !important;
+    height: 42dvh !important;
+  }
+
+  .game-mobile-viewport .crash-chart-area {
+    min-height: 160px !important;
+    padding: 12px !important;
+  }
+
+  .game-mobile-viewport .crash-chart-area .font-mono {
+    font-size: 3rem !important;
+  }
+
+  .game-mobile-viewport .bj-bet-panel,
+  .game-mobile-viewport .cf-bet-panel,
+  .game-mobile-viewport .mines-bet-panel,
+  .game-mobile-viewport .crash-bet-panel,
+  .game-mobile-viewport .roulette-bet-panel,
+  .game-mobile-viewport .keno-bet-panel,
+  .game-mobile-viewport .hilo-bet-panel,
+  .game-mobile-viewport .plinko-bet-panel,
+  .game-mobile-viewport .dice-bet-panel {
+    padding: 10px !important;
+    gap: 8px !important;
+  }
+
+  .game-mobile-viewport .dice-container {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .game-mobile-viewport .dice-size {
+    width: 60px !important;
+    height: 60px !important;
+  }
+
+  .game-mobile-viewport .result-text {
+    font-size: 32px !important;
+  }
+}
+
 /* Crash game mobile — reduce chart height */
 @media (max-width: 767px) {
   .crash-chart-area {
-    min-height: 280px !important;
+    min-height: 200px !important;
+  }
+}
+
+/* ── Mobile landscape — games use side-by-side layout (no scroll for bets) ── */
+@media (max-width: 932px) and (orientation: landscape) {
+  .race-mobile-shell {
+    flex-direction: row;
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+
+  .race-mobile-shell .game-mobile-header {
+    display: none;
+  }
+
+  .race-mobile-track-wrap {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: none;
+    height: 100%;
+    padding: 4px;
+  }
+
+  .race-mobile-controls {
+    flex: 0 0 220px;
+    max-height: none;
+    height: 100%;
+    overflow-y: auto;
+    border-left: 1px solid hsl(var(--border) / 0.4);
+    padding: 6px 4px;
+  }
+
+  .race-mobile-controls .race-horse-strip .flex {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .race-mobile-controls .race-horse-btn {
+    min-width: 44px !important;
+  }
+
+  .mobile-game-play-area .chicken-road-game-root {
+    flex-direction: row !important;
+    height: calc(100dvh - 48px);
+    max-height: calc(100dvh - 48px);
+    overflow: hidden;
+  }
+
+  .mobile-game-play-area .chicken-road-play-area {
+    flex: 1 1 0 !important;
+    min-width: 0;
+    min-height: 0;
+    order: 0 !important;
+  }
+
+  .mobile-game-play-area .chicken-road-bet-panel {
+    flex: 0 0 200px !important;
+    width: 200px !important;
+    max-height: 100%;
+    overflow-y: auto;
+    order: 1 !important;
+  }
+
+  .mobile-game-play-area .cr-stake-board {
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+
+  .mobile-game-play-area .cr-stake-board > .relative {
+    min-height: 0 !important;
+    height: calc(100% - 36px) !important;
+  }
+
+  .game-mobile-viewport {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .game-mobile-viewport .chicken-road-play-area,
+  .game-mobile-viewport .cr-board-root,
+  .game-mobile-viewport .cr-pixi-board {
+    min-height: 0 !important;
+    max-height: none !important;
+    height: 100% !important;
+  }
+
+  /* Table games — side-by-side in landscape (board left, bets right) */
+  .mobile-game-play-area .bj-game-root--mobile,
+  .mobile-game-play-area .mines-game-root,
+  .mobile-game-play-area .cf-root,
+  .mobile-game-play-area .plinko-root,
+  .mobile-game-play-area .crash-game-root,
+  .mobile-game-play-area .roulette-game-root--mobile,
+  .mobile-game-play-area .keno-game-root,
+  .mobile-game-play-area .hilo-game-root {
+    flex-direction: row !important;
+    height: calc(100dvh - 48px) !important;
+    max-height: calc(100dvh - 48px) !important;
+    overflow: hidden !important;
+  }
+
+  .mobile-game-play-area .bj-game-root--mobile .bj-table-area,
+  .mobile-game-play-area .mines-grid-container,
+  .mobile-game-play-area .cf-coin-area,
+  .mobile-game-play-area .plinko-board-area,
+  .mobile-game-play-area .crash-chart-area,
+  .mobile-game-play-area .roulette-wheel-area,
+  .mobile-game-play-area .keno-grid-area,
+  .mobile-game-play-area .hilo-card-area {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    order: 0 !important;
+    max-height: 100% !important;
+  }
+
+  .mobile-game-play-area .bj-controls-bar,
+  .mobile-game-play-area .mines-bet-panel,
+  .mobile-game-play-area .cf-bet-panel,
+  .mobile-game-play-area .plinko-bet-panel,
+  .mobile-game-play-area .crash-bet-panel,
+  .mobile-game-play-area .roulette-bet-panel,
+  .mobile-game-play-area .keno-bet-panel,
+  .mobile-game-play-area .hilo-bet-panel,
+  .mobile-game-play-area .betting-panel {
+    flex: 0 0 200px !important;
+    width: 200px !important;
+    max-width: 200px !important;
+    max-height: 100% !important;
+    overflow-y: auto !important;
+    order: 1 !important;
   }
 }

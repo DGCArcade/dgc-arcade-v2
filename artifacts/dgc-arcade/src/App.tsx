@@ -3,9 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout/app-layout";
+import { MobileGameProvider } from "@/hooks/use-mobile-game";
 import { useEffect, Suspense, lazy, useMemo, useRef, type ReactNode } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { usePlatformSettings } from "@/hooks/use-platform-settings";
+import { useSessionLimit } from "@/hooks/use-session-limit";
 
 // Lazy load heavy pages for better initial load
 const Home = lazy(() => import("@/pages/home"));
@@ -18,6 +20,7 @@ const Profile = lazy(() => import("@/pages/profile"));
 const Admin = lazy(() => import("@/pages/admin"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const RacePage = lazy(() => import("@/pages/race"));
+const RaceDisabled = lazy(() => import("@/pages/race-disabled"));
 const TermsPage = lazy(() => import("@/pages/terms"));
 const PrivacyPage = lazy(() => import("@/pages/privacy"));
 const ResponsibleGamblingPage = lazy(() => import("@/pages/responsible-gambling"));
@@ -28,15 +31,22 @@ const Maintenance = lazy(() => import("@/pages/maintenance"));
 const ProvablyFairPage = lazy(() => import("./pages/provably-fair"));
 const InstantPayoutsPage = lazy(() => import("./pages/instant-payouts"));
 const CryptoNativePage = lazy(() => import("./pages/crypto-native"));
-const ResetPasswordPage = lazy(() => import("./pages/reset-password"));
+const DebugSentryPage = lazy(() => import("@/pages/debug-sentry"));
+const DepositSuccessPage = lazy(() => import("@/pages/deposit-success"));
+const DepositFailedPage = lazy(() => import("@/pages/deposit-failed"));
+
+function SessionLimitWatcher() {
+  useSessionLimit();
+  return null;
+}
 
 // Gate: if user is logged in but email not verified, block game access and force verification
 function EmailVerifiedGate({ children }: { children: ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, isInitialAuthLoading } = useAuth();
   const fired = useRef(false);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isInitialAuthLoading) return;
     const unverified = user && !(user as any).emailVerified;
     if (unverified && !fired.current) {
       fired.current = true;
@@ -45,9 +55,15 @@ function EmailVerifiedGate({ children }: { children: ReactNode }) {
     if (!unverified) {
       fired.current = false;
     }
-  }, [user, isLoading]);
+  }, [user, isInitialAuthLoading]);
 
-  if (isLoading) return null;
+  if (isInitialAuthLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-primary" />
+      </div>
+    );
+  }
   if (user && !(user as any).emailVerified) {
     return (
       <div className="flex flex-col items-center justify-center py-32 text-center gap-4">
@@ -141,25 +157,25 @@ function Router() {
         <Switch>
           <Route path="/" component={Home} />
           
-          {/* Feature Gated Routes — also require email verification */}
+          {/* Games — open to everyone; betting requires login + verified email */}
           <Route path="/games">
-            {settings.gamesEnabled ? <EmailVerifiedGate><Games /></EmailVerifiedGate> : <NotFound />}
+            {settings.gamesEnabled ? <Games /> : <NotFound />}
           </Route>
           
           <Route path="/slots">
-            {settings.slotsEnabled ? <EmailVerifiedGate><SlotsPage /></EmailVerifiedGate> : <NotFound />}
+            {settings.slotsEnabled ? <SlotsPage /> : <NotFound />}
           </Route>
           
           <Route path="/slots/:slug">
-            {settings.slotsEnabled ? <EmailVerifiedGate><SlotGamePage /></EmailVerifiedGate> : <NotFound />}
+            {settings.slotsEnabled ? <SlotGamePage /> : <NotFound />}
           </Route>
           
           <Route path="/games/:gameId">
-            {settings.gamesEnabled ? <EmailVerifiedGate><GamePage /></EmailVerifiedGate> : <NotFound />}
+            {settings.gamesEnabled ? <GamePage /> : <NotFound />}
           </Route>
           
           <Route path="/race">
-            {settings.raceEnabled ? <EmailVerifiedGate><RacePage /></EmailVerifiedGate> : <NotFound />}
+            {settings.raceEnabled ? <EmailVerifiedGate><RacePage /></EmailVerifiedGate> : <RaceDisabled />}
           </Route>
           
           <Route path="/leaderboard">
@@ -181,10 +197,15 @@ function Router() {
           <Route path="/provably-fair" component={ProvablyFairPage} />
           <Route path="/instant-payouts" component={InstantPayoutsPage} />
           <Route path="/crypto-native" component={CryptoNativePage} />
-          
-          {/* Password Reset — public, no auth needed */}
-          <Route path="/reset-password" component={ResetPasswordPage} />
 
+          <Route path="/deposit/success" component={DepositSuccessPage} />
+          <Route path="/deposit/failed" component={DepositFailedPage} />
+
+          {/* Hidden owner-only Sentry smoke test — not linked in nav */}
+          <Route path="/debug-sentry">
+            {isOwner ? <DebugSentryPage /> : <NotFound />}
+          </Route>
+          
           {/* Catch-all 404 */}
           <Route component={NotFound} />
         </Switch>
@@ -197,10 +218,13 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
+        <SessionLimitWatcher />
+        <MobileGameProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+          <Toaster />
+        </MobileGameProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

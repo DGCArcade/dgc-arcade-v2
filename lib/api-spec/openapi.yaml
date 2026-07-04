@@ -357,6 +357,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /transactions/withdraw/otp:
+    post:
+      operationId: requestWithdrawalOtp
+      tags: [transactions]
+      summary: Send email verification code required before withdrawal
+      responses:
+        "200":
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Email not verified or invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Cooldown active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ── Leaderboard & Stats ───────────────────────────────────────────────
   /leaderboard:
     get:
@@ -608,6 +639,9 @@ components:
           type: string
         address:
           type: string
+        otpCode:
+          type: string
+          description: Email step-up code from POST /transactions/withdraw/otp
 
     Transaction:
       type: object

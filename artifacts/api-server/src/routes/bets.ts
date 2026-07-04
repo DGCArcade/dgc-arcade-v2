@@ -3,6 +3,7 @@ import { db, usersTable, gamesTable, betsTable } from "@workspace/db";
 import { eq, desc, gte, sql, and } from "drizzle-orm";
 import { BetBody, ListBetsQueryParams } from "@workspace/api-zod";
 import { requireAuth, optionalAuth } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import { recordTournamentWager } from "../lib/tournament-tracker.js";
@@ -10,6 +11,9 @@ import { contributeToJackpot, tryJackpotWin } from "./jackpot.js";
 import { recordLedgerStandalone } from "../services/ledger.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 import { diceRoundManager } from "../lib/dice-round-manager.js";
+import { logBetActivity } from "../services/activity-log.js";
+import { getRequestContext } from "../lib/request-context.js";
+import { checkWagerLimits } from "../services/gambling-limits.js";
 
 export const betsRouter = Router();
 
@@ -60,7 +64,8 @@ function resolveBet(
   seed: number,
   serverSeed: string,
   clientSeedStr: string,
-  meta: Record<string, unknown> | null
+  meta: Record<string, unknown> | null,
+  nonce: number,
 ): BetResolution {
   switch (gameSlug) {
     case "coinflip": {
@@ -157,13 +162,8 @@ function resolveBet(
       };
     }
 
-    case "crash": {
-      const crashPoint = Math.max(1.0, 1 / (1 - seed * (1 - houseEdge)));
-      const cashoutAt = (meta?.cashoutAt as number) ?? 1.5;
-      const won = cashoutAt <= crashPoint;
-      const multiplier = won ? cashoutAt : 0;
-      return { won, multiplier, payout: won ? amount * cashoutAt : 0, resultMeta: { crashPoint } };
-    }
+    case "crash":
+      throw new Error("Crash must be played via /api/crash/live/bet");
 
     case "roulette": {
       const pocket = Math.floor(seed * 37); // 0-36
@@ -194,17 +194,29 @@ function resolveBet(
     }
 
     case "hilo": {
-      // A card is drawn (1-13), player guesses higher/lower than a threshold
       const card = Math.floor(seed * 13) + 1;
-      const guess = (meta?.guess as string) ?? "higher";
-      const threshold = Number(meta?.threshold ?? 7);
+      let guess = (meta?.guess as string) ?? "higher";
+      if (meta?.pick === "hi") guess = "higher";
+      if (meta?.pick === "lo") guess = "lower";
+      let threshold = Number(meta?.threshold ?? 7);
+      if (meta?.currentRank != null && meta?.currentRank !== "") {
+        const RANKS = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
+        const idx = RANKS.indexOf(String(meta.currentRank));
+        if (idx >= 0) threshold = idx + 1;
+      }
       let won = false;
       if (guess === "higher") { won = card > threshold; }
       else if (guess === "lower") { won = card < threshold; }
-      else { won = card === threshold; } // exact = 13x
+      else { won = card === threshold; }
       const winChance = guess === "exact" ? 1/13 : guess === "higher" ? (13 - threshold) / 13 : (threshold - 1) / 13;
       const multiplier = won ? Math.max(1.01, (1 - houseEdge) / Math.max(0.01, winChance)) : 0;
-      return { won, multiplier, payout: won ? amount * multiplier : 0, resultMeta: { card, guess, threshold } };
+      const suitIdx = Math.floor(getOutcomeN(serverSeed, clientSeedStr, "hilo-suit", nonce) * 4);
+      const SUITS = ["♠","♥","♦","♣"];
+      const RANKS = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
+      return {
+        won, multiplier, payout: won ? amount * multiplier : 0,
+        resultMeta: { card, drawnRank: RANKS[card - 1], suit: SUITS[suitIdx], guess, threshold },
+      };
     }
 
     case "keno": {
@@ -233,9 +245,13 @@ function resolveBet(
       const pickCount = Math.min(10, Math.max(1, picks.length));
       const table = kenoTable[pickCount] ?? [0, 3];
       const baseMultiplier = table[Math.min(matches, table.length - 1)] ?? 0;
+      const matchedNumbers = picks.filter(p => drawn.includes(p));
       const multiplier = baseMultiplier * (1 - houseEdge);
       const won = multiplier > 0;
-      return { won, multiplier, payout: won ? amount * multiplier : 0, resultMeta: { drawn, matches, picks } };
+      return {
+        won, multiplier, payout: won ? amount * multiplier : 0,
+        resultMeta: { drawn, matchCount: matches, matchedNumbers, picks },
+      };
     }
 
     case "dice": {
@@ -250,36 +266,28 @@ function resolveBet(
       return { won, multiplier, payout: won ? amount * multiplier : 0, resultMeta: { roll, target, mode: over ? "over" : "under" } };
     }
 
-    case "mines": {
-      // Resolved as a single call with random mine grid
-      const mineCount = Number(meta?.mineCount ?? 5);
-      const safeClicks = Number(meta?.safeClicks ?? 3);
-      const totalCells = 25;
-      // Build mine grid
-      const positions: number[] = [];
-      for (let i = 0; positions.length < mineCount; i++) {
-        const pos = Math.floor(getOutcomeN(serverSeed, clientSeedStr, "mines", i) * totalCells);
-        if (!positions.includes(pos)) positions.push(pos);
-      }
-      // Calculate multiplier for N safe clicks in 25 grid with M mines
-      let probability = 1;
-      for (let i = 0; i < safeClicks; i++) {
-        probability *= (totalCells - mineCount - i) / (totalCells - i);
-      }
-      const multiplier = safeClicks > 0 ? Math.max(0, (1 - houseEdge) / probability) : 1;
-      const won = true; // always resolve as win for single-call
-      return { won, multiplier, payout: amount * multiplier, resultMeta: { minePositions: positions, safeClicks } };
-    }
+    case "mines":
+      throw new Error("Mines must be played via /api/mines session endpoints");
 
-    default: {
-      const won = seed < 0.5 * (1 - houseEdge);
-      return { won, multiplier: won ? 2 : 0, payout: won ? amount * 2 : 0 };
-    }
+    case "blackjack":
+      throw new Error("Blackjack must be played via /api/blackjack session endpoints");
+
+    case "chicken-road":
+      throw new Error("Chicken Road must be played via /api/chicken-road session endpoints");
+
+    case "race":
+      throw new Error("Horse Race must be played via /api/race/run");
+
+    case "plinko":
+      throw new Error("Plinko is not yet available");
+
+    default:
+      throw new Error(`Unknown game slug: ${gameSlug}`);
   }
 }
 
 // POST /api/bets
-betsRouter.post("/", requireAuth, async (req, res) => {
+betsRouter.post("/", requireAuth, requireLocationVerified, async (req, res) => {
   const parsed = BetBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input" });
@@ -304,6 +312,12 @@ betsRouter.post("/", requireAuth, async (req, res) => {
 
     if (!game || !game.active) { res.status(404).json({ error: "Game not found or inactive" }); return; }
 
+    const SESSION_ONLY_SLUGS = new Set(["mines", "blackjack", "chicken-road", "crash"]);
+    if (SESSION_ONLY_SLUGS.has(game.slug)) {
+      res.status(400).json({ error: "This game must be played through its dedicated session API." });
+      return;
+    }
+
     const minBet = parseFloat(game.minBet);
     const maxBet = parseFloat(game.maxBet);
     const houseEdge = parseFloat(game.houseEdge);
@@ -311,6 +325,13 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       res.status(400).json({ error: `Bet must be between ${minBet} and ${maxBet}` });
       return;
     }
+
+    const limitCheck = await checkWagerLimits(user.id, amount);
+    if (!limitCheck.ok) {
+      res.status(403).json({ error: limitCheck.error, code: limitCheck.code });
+      return;
+    }
+
     // Standardized balance deduction (crypto-first, live prices)
     let newBalanceAfterDeduct: number;
     try {
@@ -325,23 +346,28 @@ betsRouter.post("/", requireAuth, async (req, res) => {
     const nonce = user.totalBets + 1;
     
     const seedValue = getOutcome(serverSeed, clientSeedStr, game.slug, nonce);
-    const { won, multiplier, payout, resultMeta } = resolveBet(
-      game.slug, amount, houseEdge, seedValue, serverSeed, clientSeedStr,
-      (meta as Record<string, unknown>) ?? null
-    );
+    let won: boolean, multiplier: number, payout: number, resultMeta: Record<string, unknown> | undefined;
+    try {
+      ({ won, multiplier, payout, resultMeta } = resolveBet(
+        game.slug, amount, houseEdge, seedValue, serverSeed, clientSeedStr,
+        (meta as Record<string, unknown>) ?? null, nonce
+      ));
+    } catch (err: any) {
+      await creditBalance(user.id, amount);
+      res.status(400).json({ error: err.message || "Unsupported game" });
+      return;
+    }
 
     // If this is a dice game, add it to the live round feed
     if (game.slug === "dice") {
       try {
         diceRoundManager.addBetToRound({
-          betId: 0, // Placeholder
+          betId: 0,
           userId: user.id,
           username: user.username,
           amount,
           target: Number((meta as any)?.target ?? 50),
           mode: (meta as any)?.mode === "under" ? "under" : "over",
-          won,
-          payout,
         });
       } catch (err) {
         // Silently fail if betting window is closed, it just won't show in live feed
@@ -368,9 +394,21 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       serverSeedHash,
       clientSeed: clientSeedStr,
       nonce,
-      meta: { ...resultMeta, userMeta: meta },
+      meta: { ...resultMeta, userMeta: meta, username: user.username },
     }).returning();
     clearLiveFeedCaches();
+
+    logBetActivity({
+      userId: user.id,
+      username: user.username,
+      ctx: getRequestContext(req),
+      betId: bet.id,
+      gameSlug: game.slug,
+      amount,
+      payout,
+      won,
+      multiplier,
+    });
 
     const newBalance = finalBalance;
 

@@ -1,5 +1,6 @@
 import { ReactNode, useState, useEffect } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/use-auth";
 import { AlertTriangle } from "lucide-react";
 import { Navbar } from "./navbar";
@@ -14,10 +15,15 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  const [location] = useLocation();
+  const isMobile = useIsMobile();
   const { user, isAuthenticated } = useAuth();
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
   const [verificationRequired, setVerificationRequired] = useState(false);
   const showEmailNotice = isAuthenticated && (user as any)?.email && !(user as any)?.emailVerified && !verificationModalOpen;
+  const isGamePlayPage = /^\/games\/\d+/.test(location) || /^\/slots\/[^/]+/.test(location) || location === "/race";
+  const mobileGameMode = isMobile && isGamePlayPage;
+  const mobileCompactFooter = mobileGameMode;
 
   // Listen for verification modal open events (optional or required)
   useEffect(() => {
@@ -48,11 +54,15 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           )}
           <Navbar />
-          <main className="flex-1 w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-3 md:py-8 pb-20 md:pb-8 flex flex-col overflow-x-hidden">
+          <main className={`flex-1 w-full mx-auto flex flex-col overflow-x-hidden min-h-0 ${
+            mobileGameMode
+              ? "max-w-full px-0 py-0 pb-0 overflow-hidden [&>*]:flex-1 [&>*]:min-h-0"
+              : "max-w-7xl px-2 sm:px-4 md:px-6 lg:px-8 py-3 md:py-8 pb-20 md:pb-8"
+          }`}>
             {children}
           </main>
 
-          <footer className="border-t border-border/30 mt-auto bg-black/60 backdrop-blur-md">
+          <footer className={`border-t border-border/30 mt-auto bg-black/60 backdrop-blur-md ${mobileCompactFooter ? "hidden md:block" : ""}`}>
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
                 <div className="col-span-2 md:col-span-1">
@@ -122,13 +132,33 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div>
             </div>
           </footer>
+
+          {/* Compact mobile footer on game pages */}
+          {mobileCompactFooter && (
+            <footer className="border-t border-border/30 bg-black/80 backdrop-blur-md md:hidden shrink-0">
+              <div className="px-3 py-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[9px] text-muted-foreground">
+                <Link href="/games" className="hover:text-foreground">Games</Link>
+                <span>·</span>
+                <Link href="/terms" className="hover:text-foreground">Terms</Link>
+                <span>·</span>
+                <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
+                <span>·</span>
+                <Link href="/provably-fair" className="hover:text-foreground">Provably Fair</Link>
+                <span>·</span>
+                <span>© {new Date().getFullYear()} DGC Arcade</span>
+              </div>
+            </footer>
+          )}
           <AuthModal />
           <VerificationModal
             open={verificationModalOpen}
             required={verificationRequired}
             onClose={() => { setVerificationModalOpen(false); setVerificationRequired(false); }}
           />
-          <BottomNav />
+          {!mobileGameMode && <BottomNav />}
+          {mobileGameMode && (
+            <div className="md:hidden shrink-0 h-14" aria-hidden="true" />
+          )}
         </div>
       </div>
     </LocationGate>

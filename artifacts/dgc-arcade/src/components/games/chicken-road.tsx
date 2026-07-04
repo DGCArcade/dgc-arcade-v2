@@ -1,85 +1,48 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { getListBetsQueryKey } from "@workspace/api-client-react";
+import { getListBetsQueryKey, getGetMeQueryKey } from "@workspace/api-client-react";
 import type { Game } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { ChickenRoadBoard, type CrossAnim, type HazardType } from "./chicken-road/chicken-road-board-view";
+import { ProvablyFairPanel } from "./provably-fair-panel";
+import {
+  STAKE_TIERS,
+  getStakeMultiplierTable,
+  normalizeStakeTier,
+  type StakeTier,
+} from "@/lib/chicken-road-stake-math";
+import {
+  playChickenCluck,
+  playCrossSuccess,
+  playChickenBust,
+  playCarPass,
+  playBarrierClang,
+  playManholeIgnite,
+  playChickenSpawn,
+  startChickenRoadAmbience,
+  stopChickenRoadAmbience,
+  playCarCrash,
+} from "@/lib/chicken-road-sounds";
+
+const CAR_ANIM_MS = 850;
+const BARRIER_MS = 500;
+const CAR_IMPACT_MS = 800;
+const MANHOLE_BUST_MS = 700;
+const CHICKEN_GLIDE_MS = 580;
 
 function getToken() { return localStorage.getItem("dgc_token"); }
 function authHeaders() { return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }; }
 
-const TIER_LABELS = {
-  easy: { label: "Easy", cars: 1, safe: 4, color: "text-green-400" },
-  medium: { label: "Medium", cars: 2, safe: 3, color: "text-yellow-400" },
-  hard: { label: "Hard", cars: 3, safe: 2, color: "text-orange-400" },
-  extreme: { label: "Extreme", cars: 4, safe: 1, color: "text-red-400" },
-} as const;
-
-type Tier = keyof typeof TIER_LABELS;
-
-const LANES = 10;
-const TILES = 5;
-
-// Multiplier sequences per tier
-function getMultiplier(tier: Tier, step: number): number {
-  const safeTiles = TIER_LABELS[tier].safe;
-  let m = 1.0;
-  for (let i = 0; i <= step; i++) {
-    m = (m * (TILES / safeTiles)) * 0.99;
-  }
-  return m;
+function shouldShowNearMiss(sessionId: number, lane: number): boolean {
+  return ((sessionId * 17 + lane * 31) % 5) === 0;
 }
 
-// Sound engine
-function playSound(type: "safe" | "bust" | "cashout" | "start") {
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    switch (type) {
-      case "safe":
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(800, now);
-        osc.frequency.exponentialRampToValueAtTime(1400, now + 0.08);
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-        osc.start(now); osc.stop(now + 0.2);
-        break;
-      case "bust":
-        osc.type = "sawtooth";
-        osc.frequency.setValueAtTime(200, now);
-        osc.frequency.exponentialRampToValueAtTime(30, now + 0.5);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.5);
-        osc.start(now); osc.stop(now + 0.5);
-        break;
-      case "cashout":
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(600, now);
-        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.3);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-        osc.start(now); osc.stop(now + 0.4);
-        break;
-      case "start":
-        osc.type = "square";
-        osc.frequency.setValueAtTime(300, now);
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-        osc.start(now); osc.stop(now + 0.15);
-        break;
-    }
-  } catch (_) {}
-}
-
-interface TileState {
-  status: "hidden" | "safe" | "car" | "revealed-car";
+function delay(ms: number) {
+  return new Promise<void>(r => setTimeout(r, ms));
 }
 
 interface ChickenRoadProps { game: Game }
@@ -93,37 +56,99 @@ export function ChickenRoad(props: ChickenRoadProps) {
 }
 
 function ChickenRoadGame({ game }: ChickenRoadProps) {
-  const { user, requireAuth } = useAuth();
+  const { requireAuth } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
   const minBet = parseFloat(String(game.minBet ?? 0.01));
   const maxBet = parseFloat(String(game.maxBet ?? 1_000_000));
+  const animLock = useRef(false);
 
-  const [amount, setAmount] = useState<number>(minBet);
-  const [tier, setTier] = useState<Tier>("medium");
+  const [amount, setAmount] = useState(minBet);
+  const [tier, setTier] = useState<StakeTier>("medium");
+  const [maxLanes, setMaxLanes] = useState<number>(STAKE_TIERS.medium.maxSteps);
   const [sessionId, setSessionId] = useState<number | null>(null);
-  const [serverSeedHash, setServerSeedHash] = useState<string>("");
-  const [serverSeed, setServerSeed] = useState<string>(""); // revealed after game
-  const [clientSeed, setClientSeed] = useState<string>("chicken-road");
-  const [currentLane, setCurrentLane] = useState<number>(0); // next lane to play
-  const [multiplier, setMultiplier] = useState<number>(1);
-  const [payout, setPayout] = useState<number>(0);
+  const [serverSeedHash, setServerSeedHash] = useState("");
+  const [serverSeed, setServerSeed] = useState("");
+  const [clientSeed, setClientSeed] = useState("chicken-road");
+  const [nonce, setNonce] = useState(1);
+  const [currentLane, setCurrentLane] = useState(0);
+  const [multiplier, setMultiplier] = useState(1);
+  const [payout, setPayout] = useState(0);
   const [status, setStatus] = useState<"idle" | "active" | "won" | "lost">("idle");
-  const [grid, setGrid] = useState<TileState[][]>(() =>
-    Array.from({ length: LANES }, () => Array.from({ length: TILES }, () => ({ status: "hidden" as const })))
-  );
-  const [revealedMatrix, setRevealedMatrix] = useState<number[][] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [hopping, setHopping] = useState(false);
+  const [chickenVisible, setChickenVisible] = useState(false);
+  const [bustLane, setBustLane] = useState<number | undefined>();
+  const [bustHazard, setBustHazard] = useState<HazardType | undefined>();
+  const [crossAnim, setCrossAnim] = useState<CrossAnim>(null);
+  const [hopStripIndex, setHopStripIndex] = useState<number | undefined>();
+  const [laneMultipliers, setLaneMultipliers] = useState(() => getStakeMultiplierTable("medium"));
 
-  const resetGrid = useCallback(() => {
-    setGrid(Array.from({ length: LANES }, () => Array.from({ length: TILES }, () => ({ status: "hidden" as const }))));
-    setRevealedMatrix(null);
+  useEffect(() => {
+    fetch("/api/chicken-road/config")
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!data?.tiers) return;
+        const tierData = data.tiers.find((t: { tier: string }) => t.tier === tier);
+        if (tierData) {
+          setMaxLanes(tierData.maxSteps);
+          setLaneMultipliers(tierData.multipliers);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setMaxLanes(STAKE_TIERS[tier].maxSteps);
+    setLaneMultipliers(getStakeMultiplierTable(tier));
+    fetch("/api/chicken-road/config")
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        const tierData = data?.tiers?.find((t: { tier: string }) => t.tier === tier);
+        if (tierData?.multipliers) setLaneMultipliers(tierData.multipliers);
+        if (tierData?.maxSteps) setMaxLanes(tierData.maxSteps);
+      })
+      .catch(() => {});
+  }, [tier]);
+
+  useEffect(() => {
+    if (status === "idle" || status === "active") {
+      startChickenRoadAmbience();
+    } else {
+      stopChickenRoadAmbience();
+    }
+    return () => stopChickenRoadAmbience();
+  }, [status]);
+
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+    fetch("/api/chicken-road/session", { headers: authHeaders() })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!data?.session) return;
+        const s = data.session;
+        setSessionId(s.sessionId);
+        setServerSeedHash(s.serverSeedHash ?? "");
+        setServerSeed("");
+        setClientSeed(s.clientSeed ?? "chicken-road");
+        setNonce(s.nonce ?? 1);
+        setCurrentLane(s.currentLane ?? 0);
+        setMultiplier(s.currentMultiplier ?? 1);
+        const resumedTier = normalizeStakeTier(s.tier ?? "medium");
+        setTier(resumedTier);
+        setMaxLanes(s.maxSteps ?? STAKE_TIERS[resumedTier].maxSteps);
+        setLaneMultipliers(s.multipliers ?? getStakeMultiplierTable(resumedTier));
+        setStatus("active");
+        setChickenVisible(true);
+      })
+      .catch(() => {});
   }, []);
 
   const startGame = () => {
     requireAuth(async () => {
       if (amount < minBet || amount > maxBet) {
-        toast({ title: "Invalid bet", description: `Bet must be between $${minBet} and $${maxBet}`, variant: "destructive" });
+        toast({ title: "Invalid bet", variant: "destructive" });
         return;
       }
       setLoading(true);
@@ -134,89 +159,131 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
           body: JSON.stringify({ gameId: game.id, amount, tier, clientSeed }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to start game");
+        if (!res.ok) throw new Error(data.error || "Failed to start");
 
         setSessionId(data.sessionId);
         setServerSeedHash(data.serverSeedHash);
         setServerSeed("");
+        setNonce(data.nonce ?? 1);
         setCurrentLane(0);
         setMultiplier(1);
         setPayout(0);
+        setBustLane(undefined);
+        setBustHazard(undefined);
+        setCrossAnim(null);
         setStatus("active");
-        resetGrid();
-        playSound("start");
+        setMaxLanes(data.maxSteps ?? STAKE_TIERS[tier].maxSteps);
+        setLaneMultipliers(data.multipliers ?? getStakeMultiplierTable(tier));
+
+        setChickenVisible(true);
+        playChickenSpawn();
+        playChickenCluck();
         qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
-      } catch (err: any) {
-        toast({ title: "Error", description: err.message, variant: "destructive" });
+        qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      } catch (err: unknown) {
+        toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
       } finally {
         setLoading(false);
       }
     });
   };
 
-  const pickTile = async (laneIndex: number, tileIndex: number) => {
-    if (status !== "active" || laneIndex !== currentLane || loading) return;
+  const crossLane = useCallback(async () => {
+    if (status !== "active" || loading || !sessionId || animLock.current) return;
+    animLock.current = true;
     setLoading(true);
+
+    const lane = currentLane;
+    const carDir: "down" | "up" = lane % 2 === 0 ? "down" : "up";
+
+    setCrossAnim({ lane, phase: carDir === "down" ? "car-down" : "car-up", carDirection: carDir });
+    playCarPass();
+
     try {
-      const res = await fetch("/api/chicken-road/progress", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ sessionId, laneIndex, tileIndex }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to progress");
+      const [data] = await Promise.all([
+        fetch("/api/chicken-road/progress", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ sessionId, laneIndex: lane }),
+        }).then(async r => {
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || "Failed to cross");
+          return d;
+        }),
+        delay(CAR_ANIM_MS),
+      ]);
 
-      const newGrid = grid.map(row => [...row]);
-
-      if (data.isCar) {
-        // Bust
-        newGrid[laneIndex][tileIndex] = { status: "car" };
-        // Reveal all cars from the matrix
-        if (data.matrix) {
-          setRevealedMatrix(data.matrix);
-          data.matrix.forEach((laneCars: number[], li: number) => {
-            if (li !== laneIndex) {
-              laneCars.forEach((ti: number) => {
-                newGrid[li][ti] = { status: "revealed-car" };
-              });
-            }
-          });
+      if (data.isDeath) {
+        const hazard: HazardType = data.hazardType === "manhole" ? "manhole" : "car";
+        if (hazard === "car") {
+          setCrossAnim({ lane, phase: "car-impact", carDirection: carDir });
+          playCarCrash();
+          await delay(CAR_IMPACT_MS);
+        } else {
+          setCrossAnim({ lane, phase: "manhole-fire", carDirection: carDir });
+          playManholeIgnite();
+          await delay(MANHOLE_BUST_MS);
         }
-        setGrid(newGrid);
+        setBustLane(lane);
+        setBustHazard(hazard);
         setStatus("lost");
+        setCrossAnim(null);
         setServerSeed(data.serverSeed || "");
-        playSound("bust");
-        toast({ title: "BUST! 🚗💥", description: "You got hit. Better luck next time.", variant: "destructive" });
-        qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
+        playChickenBust();
+        toast({
+          title: hazard === "car" ? "Hit by a car!" : "Manhole collapsed!",
+          variant: "destructive",
+        });
       } else {
-        // Safe
-        newGrid[laneIndex][tileIndex] = { status: "safe" };
-        setGrid(newGrid);
-        const newMultiplier = getMultiplier(tier, laneIndex);
-        setMultiplier(newMultiplier);
+        const nearMiss = shouldShowNearMiss(sessionId, lane);
+        if (nearMiss) {
+          setCrossAnim({ lane, phase: "barrier", carDirection: carDir });
+          playBarrierClang();
+          await delay(BARRIER_MS);
+        }
+
+        setHopping(true);
+        setHopStripIndex(lane);
+        playCrossSuccess();
+        playChickenCluck();
+
+        const newMult = data.multiplier ?? 1;
+        setMultiplier(newMult);
+        setCrossAnim(null);
 
         if (data.status === "won") {
-          // Completed all lanes
+          setCurrentLane(maxLanes);
+          setHopStripIndex(maxLanes - 1);
+          await delay(CHICKEN_GLIDE_MS);
           setStatus("won");
           setPayout(data.payout);
           setServerSeed(data.serverSeed || "");
-          playSound("cashout");
-          toast({ title: `🏆 WINNER! ${newMultiplier.toFixed(3)}x`, description: `You crossed all 10 lanes! Payout: $${data.payout?.toFixed(2)}` });
-          qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
+          toast({
+            title: `Cleared all ${maxLanes} lanes!`,
+            description: `Payout: $${Number(data.payout).toFixed(2)}`,
+          });
         } else {
-          setCurrentLane(laneIndex + 1);
-          playSound("safe");
+          setCurrentLane(lane + 1);
+          await delay(CHICKEN_GLIDE_MS);
         }
       }
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
+    } catch (err: unknown) {
+      setCrossAnim(null);
+      setHopStripIndex(undefined);
+      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        setHopping(false);
+        setHopStripIndex(undefined);
+      }, CHICKEN_GLIDE_MS + 80);
+      animLock.current = false;
     }
-  };
+  }, [status, loading, sessionId, currentLane, maxLanes, toast, qc]);
 
   const cashout = async () => {
-    if (status !== "active" || currentLane === 0 || loading) return;
+    if (status !== "active" || currentLane === 0 || loading || !sessionId || animLock.current) return;
     setLoading(true);
     try {
       const res = await fetch("/api/chicken-road/settle", {
@@ -226,47 +293,59 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to cashout");
-
       setStatus("won");
       setPayout(data.payout);
       setServerSeed(data.serverSeed || "");
-      playSound("cashout");
-      toast({ title: `💰 Cashed Out! ${data.multiplier?.toFixed(3)}x`, description: `Payout: $${data.payout?.toFixed(2)}` });
+      playCrossSuccess();
+      toast({ title: `Cashed out ${data.multiplier?.toFixed(2)}×`, description: `$${Number(data.payout).toFixed(2)}` });
       qc.invalidateQueries({ queryKey: getListBetsQueryKey({ limit: 10 }) });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
-  const isIdle = status === "idle" || status === "won" || status === "lost";
+  const resetToIdle = () => {
+    setStatus("idle");
+    setChickenVisible(false);
+    setCurrentLane(0);
+    setMultiplier(1);
+    setPayout(0);
+    setSessionId(null);
+    setServerSeed("");
+    setServerSeedHash("");
+    setBustLane(undefined);
+    setBustHazard(undefined);
+    setCrossAnim(null);
+    setHopStripIndex(undefined);
+  };
+
+  const isIdle = status === "idle";
+  const isEnded = status === "won" || status === "lost";
+  const canConfigure = isIdle || isEnded;
+  const netGain = status === "active" && currentLane > 0 ? amount * (multiplier - 1) : payout > 0 ? payout - amount : 0;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6">
-      {/* Controls Panel */}
-      <div className="lg:w-72 shrink-0 space-y-4 bg-card border border-border rounded-xl p-4">
+    <div className="chicken-road-game-root flex flex-col lg:flex-row gap-4 md:gap-6">
+      <div className="chicken-road-bet-panel order-2 lg:order-none lg:w-72 shrink-0 space-y-4 bg-card border border-border rounded-xl p-4">
+        <div className="flex gap-1 p-1 bg-secondary/50 rounded-lg">
+          <button type="button" className="flex-1 text-xs font-bold uppercase py-1.5 rounded-md bg-primary text-primary-foreground">
+            Manual
+          </button>
+        </div>
+
         <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Bet Amount</label>
-          <Input
-            type="number"
-            value={amount}
-            min={minBet}
-            max={maxBet}
-            step={0.01}
-            disabled={!isIdle}
-            onChange={e => setAmount(parseFloat(e.target.value) || minBet)}
-            className="font-mono"
-          />
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Amount</label>
+          <Input type="number" value={amount} min={minBet} max={maxBet} step={0.01} disabled={!canConfigure}
+            onChange={e => setAmount(parseFloat(e.target.value) || minBet)} className="font-mono" />
           <div className="grid grid-cols-4 gap-1">
             {[0.5, 2, 5, 10].map(mult => (
-              <button
-                key={mult}
-                disabled={!isIdle}
+              <button key={mult} type="button" disabled={!canConfigure}
                 onClick={() => setAmount(prev => Math.min(maxBet, Math.max(minBet, parseFloat((prev * mult).toFixed(2)))))}
-                className="text-xs font-bold bg-secondary hover:bg-secondary/80 border border-border rounded px-1 py-1 transition-colors disabled:opacity-40"
-              >
-                {mult === 0.5 ? "½" : `${mult}x`}
+                className="text-xs font-bold bg-secondary border border-border rounded py-1 disabled:opacity-40">
+                {mult === 0.5 ? "½" : `${mult}×`}
               </button>
             ))}
           </div>
@@ -275,176 +354,104 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Difficulty</label>
           <div className="grid grid-cols-2 gap-2">
-            {(Object.keys(TIER_LABELS) as Tier[]).map(t => (
-              <button
-                key={t}
-                disabled={!isIdle}
-                onClick={() => setTier(t)}
-                className={`text-xs font-bold border rounded px-2 py-2 transition-colors disabled:opacity-40 ${
-                  tier === t
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-secondary border-border hover:bg-secondary/80"
-                }`}
-              >
-                <span className={TIER_LABELS[t].color}>{TIER_LABELS[t].label}</span>
-                <div className="text-muted-foreground font-mono text-[10px]">{TIER_LABELS[t].cars} Car{TIER_LABELS[t].cars > 1 ? "s" : ""}</div>
+            {(Object.keys(STAKE_TIERS) as StakeTier[]).map(t => (
+              <button key={t} type="button" disabled={!canConfigure} onClick={() => setTier(t)}
+                className={`text-xs font-bold border rounded px-2 py-2 disabled:opacity-40 text-left ${
+                  tier === t ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border"
+                }`}>
+                <span>{STAKE_TIERS[t].label}</span>
+                <div className={`font-mono text-[9px] ${tier === t ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                  {STAKE_TIERS[t].desc}
+                </div>
               </button>
             ))}
           </div>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Client Seed</label>
-          <Input
-            value={clientSeed}
-            disabled={!isIdle}
-            onChange={e => setClientSeed(e.target.value || "chicken-road")}
-            className="font-mono text-xs"
-          />
-        </div>
-
-        {/* Multiplier Preview */}
-        <div className="bg-secondary/50 rounded-lg p-3 border border-border space-y-1">
-          <div className="text-xs text-muted-foreground uppercase tracking-wider">Next Lane Multiplier</div>
-          <div className="font-mono font-black text-2xl text-primary">
-            {status === "active" ? getMultiplier(tier, currentLane).toFixed(3) : getMultiplier(tier, 0).toFixed(3)}x
+        {status === "active" && currentLane > 0 && (
+          <div className="bg-secondary/50 rounded-lg p-3 border border-border">
+            <div className="text-[10px] text-muted-foreground uppercase">Total Net Gain ({multiplier.toFixed(2)}×)</div>
+            <div className="font-mono font-black text-xl text-green-400">${netGain.toFixed(2)}</div>
           </div>
-          {status === "active" && currentLane > 0 && (
-            <div className="text-xs text-muted-foreground">Current: <span className="text-foreground font-mono">{multiplier.toFixed(3)}x</span></div>
-          )}
-        </div>
-
-        {isIdle ? (
-          <Button
-            className="w-full font-bold uppercase tracking-wider"
-            onClick={startGame}
-            disabled={loading}
-          >
-            {loading ? "Starting..." : "🐔 Start Game"}
-          </Button>
-        ) : (
-          <Button
-            className="w-full font-bold uppercase tracking-wider"
-            variant="outline"
-            onClick={cashout}
-            disabled={loading || currentLane === 0}
-          >
-            {loading ? "Processing..." : `💰 Cashout ${multiplier.toFixed(3)}x`}
-          </Button>
         )}
 
-        {/* Result */}
+        {isIdle ? (
+          <Button className="w-full font-display font-black uppercase h-12 text-base bg-blue-600 hover:bg-blue-500" onClick={startGame} disabled={loading}>
+            {loading ? "…" : "Play"}
+          </Button>
+        ) : status === "active" ? (
+          <div className="space-y-2">
+            <Button className="w-full font-display font-black uppercase h-11 bg-blue-600 hover:bg-blue-500 text-white"
+              onClick={cashout} disabled={loading || currentLane === 0}>
+              Cashout {multiplier.toFixed(2)}×
+            </Button>
+            <Button className="w-full font-display font-black uppercase h-12" onClick={crossLane} disabled={loading}>
+              {loading ? "Crossing…" : "Go"}
+            </Button>
+          </div>
+        ) : isEnded ? (
+          <Button className="w-full font-display font-black uppercase h-12" onClick={resetToIdle}>
+            Play Again
+          </Button>
+        ) : null}
+
         {status === "won" && payout > 0 && (
           <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 text-center">
-            <div className="text-xs text-green-400 uppercase tracking-wider font-bold">Won</div>
+            <div className="text-xs text-green-400 uppercase font-bold">Won</div>
             <div className="text-2xl font-black font-mono text-green-400">${payout.toFixed(2)}</div>
           </div>
         )}
         {status === "lost" && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-center">
-            <div className="text-xs text-red-400 uppercase tracking-wider font-bold">Busted</div>
-            <div className="text-sm text-muted-foreground font-mono">-${amount.toFixed(2)}</div>
+            <div className="text-xs text-red-400 uppercase font-bold">Busted</div>
           </div>
         )}
+
+        {serverSeed && sessionId && (
+          <ProvablyFairPanel
+            serverSeedHash={serverSeedHash}
+            serverSeed={serverSeed}
+            clientSeed={clientSeed}
+            nonce={nonce}
+            verifyPath={`/api/chicken-road/verify/${sessionId}`}
+            gameName="Chicken Road"
+          />
+        )}
+
+        <p className="text-[9px] text-muted-foreground leading-relaxed">
+          98% RTP · Provably fair · Fisher-Yates death placement on 20 positions. Cash out anytime after your first safe cross.
+        </p>
       </div>
 
-      {/* Game Grid */}
-      <div className="flex-1 space-y-3">
-        {/* Provably Fair Hash Display */}
-        {serverSeedHash && (
-          <div className="bg-secondary/50 border border-border rounded-lg p-3 text-xs font-mono break-all">
-            <span className="text-muted-foreground uppercase tracking-wider font-bold mr-2">Server Seed Hash (SHA-256):</span>
-            <span className="text-primary">{serverSeedHash}</span>
-          </div>
+      <div className="chicken-road-play-area order-1 lg:order-none flex-1 min-w-0 min-h-[360px] space-y-2">
+        {serverSeedHash && !serverSeed && sessionId && (
+          <ProvablyFairPanel
+            variant="compact"
+            serverSeedHash={serverSeedHash}
+            clientSeed={clientSeed}
+            nonce={nonce}
+            verifyPath={`/api/chicken-road/verify/${sessionId}`}
+            gameName="Chicken Road"
+          />
         )}
-        {serverSeed && (
-          <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 text-xs font-mono break-all">
-            <span className="text-green-400 uppercase tracking-wider font-bold mr-2">Revealed Server Seed:</span>
-            <span className="text-foreground">{serverSeed}</span>
-          </div>
-        )}
-
-        {/* Lane Grid */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          {/* Header */}
-          <div className="grid grid-cols-[auto_1fr] gap-2 px-4 py-2 border-b border-border bg-secondary/30">
-            <div className="text-xs text-muted-foreground font-mono w-12">Lane</div>
-            <div className="grid grid-cols-5 gap-2 text-xs text-muted-foreground font-mono text-center">
-              {[0, 1, 2, 3, 4].map(i => <div key={i}>T{i + 1}</div>)}
-            </div>
-          </div>
-
-          {/* Lanes */}
-          <div className="divide-y divide-border/50">
-            {Array.from({ length: LANES }, (_, laneIdx) => {
-              const isCurrentLane = status === "active" && laneIdx === currentLane;
-              const isPastLane = currentLane > laneIdx;
-              const isFutureLane = status === "active" && laneIdx > currentLane;
-              const laneMultiplier = getMultiplier(tier, laneIdx);
-
-              return (
-                <div
-                  key={laneIdx}
-                  className={`grid grid-cols-[auto_1fr] gap-2 px-4 py-3 transition-colors ${
-                    isCurrentLane ? "bg-primary/5 border-l-2 border-l-primary" : ""
-                  } ${isFutureLane ? "opacity-50" : ""}`}
-                >
-                  <div className="flex flex-col justify-center w-12">
-                    <div className="text-xs font-mono text-muted-foreground">L{laneIdx + 1}</div>
-                    <div className="text-[10px] font-mono text-primary/70">{laneMultiplier.toFixed(2)}x</div>
-                  </div>
-                  <div className="grid grid-cols-5 gap-2">
-                    {Array.from({ length: TILES }, (_, tileIdx) => {
-                      const tile = grid[laneIdx][tileIdx];
-                      const isClickable = isCurrentLane && !loading;
-
-                      return (
-                        <button
-                          key={tileIdx}
-                          disabled={!isClickable}
-                          onClick={() => pickTile(laneIdx, tileIdx)}
-                          className={`
-                            aspect-square rounded-lg border text-lg font-bold transition-all
-                            ${tile.status === "hidden" && isClickable ? "bg-secondary border-border hover:bg-primary/20 hover:border-primary hover:scale-105 cursor-pointer" : ""}
-                            ${tile.status === "hidden" && !isClickable ? "bg-secondary/30 border-border/30 cursor-not-allowed" : ""}
-                            ${tile.status === "safe" ? "bg-green-500/20 border-green-500/50 text-green-400" : ""}
-                            ${tile.status === "car" ? "bg-red-500/30 border-red-500/60 text-red-400 animate-pulse" : ""}
-                            ${tile.status === "revealed-car" ? "bg-red-500/10 border-red-500/30 text-red-400/50" : ""}
-                          `}
-                        >
-                          {tile.status === "safe" && "✅"}
-                          {tile.status === "car" && "🚗"}
-                          {tile.status === "revealed-car" && "🚗"}
-                          {tile.status === "hidden" && isClickable && "?"}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Multiplier table */}
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Multiplier Progression ({TIER_LABELS[tier].label})</div>
-          <div className="grid grid-cols-5 gap-2 text-xs font-mono">
-            {Array.from({ length: LANES }, (_, i) => (
-              <div
-                key={i}
-                className={`text-center p-2 rounded border ${
-                  i < currentLane && status === "active" ? "bg-green-500/10 border-green-500/30 text-green-400" :
-                  i === currentLane && status === "active" ? "bg-primary/10 border-primary/50 text-primary" :
-                  "bg-secondary/30 border-border/30 text-muted-foreground"
-                }`}
-              >
-                <div className="text-[10px] text-muted-foreground">L{i + 1}</div>
-                <div className="font-bold">{getMultiplier(tier, i).toFixed(2)}x</div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ChickenRoadBoard
+          lanes={maxLanes}
+          currentLane={currentLane}
+          status={status}
+          multipliers={laneMultipliers}
+          hopping={hopping}
+          chickenVisible={chickenVisible}
+          bustLane={bustLane}
+          bustHazard={bustHazard}
+          crossAnim={crossAnim}
+          previewMode={status === "idle"}
+          onCrossNext={crossLane}
+          canCross={status === "active" && !loading}
+          crossLoading={loading}
+          betAmount={amount}
+          tier={tier}
+          chickenStripIndex={hopStripIndex}
+        />
       </div>
     </div>
   );

@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+import { ProvablyFairPanel } from "./provably-fair-panel";
+
 interface CrashProps {
   game: Game;
 }
@@ -26,6 +28,7 @@ export function Crash({ game }: CrashProps) {
   const [currentMultiplier, setCurrentMultiplier] = useState(1.0);
   const [finalMultiplier, setFinalMultiplier] = useState(0);
   const [win, setWin] = useState<boolean | null>(null);
+  const [pf, setPf] = useState<{ betId?: number; serverSeedHash?: string; serverSeed?: string; clientSeed?: string; nonce?: number }>({});
   
   const animationRef = useRef<number | undefined>(undefined);
   const startTimeRef = useRef<number | undefined>(undefined);
@@ -74,19 +77,16 @@ export function Crash({ game }: CrashProps) {
         },
         {
           onSuccess: (data) => {
-            // The server determines the crash point and whether they won
-            // We simulate the graph climbing
-            
-            // Derive a fake crash point based on the result
-            let crashPoint = 0;
-            if (data.won) {
-              // They won, so crash point is >= cashoutAt
-              crashPoint = cashoutAt + Math.random() * (cashoutAt * 0.5);
-            } else {
-              // They lost, so crash point is < cashoutAt
-              crashPoint = 1.0 + Math.random() * (cashoutAt - 1.0);
-            }
-            
+            const meta = data.bet.meta as Record<string, unknown>;
+            const crashPoint = Math.max(1.01, Number(meta?.crashPoint ?? 1.5));
+
+            setPf({
+              betId: data.bet.id,
+              serverSeedHash: data.bet.serverSeedHash ?? undefined,
+              serverSeed: data.bet.serverSeed ?? undefined,
+              clientSeed: data.bet.clientSeed ?? undefined,
+              nonce: data.bet.nonce ?? undefined,
+            });
             setFinalMultiplier(crashPoint);
             
             // Start the visual climb
@@ -221,6 +221,8 @@ export function Crash({ game }: CrashProps) {
         >
           {gameState === "playing" ? "Playing..." : "Place Bet"}
         </Button>
+
+        <ProvablyFairPanel {...pf} />
       </div>
     </div>
   );

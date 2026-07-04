@@ -1,215 +1,505 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthModal } from "@/hooks/use-auth-modal";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { formatCurrency } from "@/lib/format";
-import { ChevronLeft, Trophy, Star, Zap } from "lucide-react";
+import { ChevronLeft, Trophy, Zap, Video } from "lucide-react";
+import { ProvablyFairPanel } from "@/components/games/provably-fair-panel";
+import { startHorseGallopLoop, stopHorseGallopLoop, playRaceStartBugle, playRaceFinishCheer, playGateOpenClang, startCrowdAmbience, stopCrowdAmbience } from "@/lib/horse-gallop-sound";
+import { DerbyHorsePicker } from "@/components/games/derby/derby-horse-picker";
+import {
+  DerbySideView,
+  DerbyFrontChaseView,
+  DerbyAerialView,
+  DerbyFinishView,
+  TRACK_LEN,
+  type CameraAngle,
+  type RacerProgress,
+} from "@/components/games/derby/derby-track-views";
+import {
+  getAutoCamera,
+  getLeaderProgress,
+  getRacePhase,
+  type RacePhase,
+} from "@/components/games/derby/derby-broadcast";
+import {
+  computeRaceProgress,
+  RACE_GATE_MS,
+  TRACK_SCROLL_PCT,
+} from "@/components/games/derby/derby-race-animation";
 
 function getToken() { return typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null; }
 
 const RACERS = [
-  { id: 1, name: "Blaze",   color: "#ef4444", bg: "bg-red-500/20",    border: "border-red-500", emoji: "🔴" },
-  { id: 2, name: "Thunder", color: "#f59e0b", bg: "bg-yellow-500/20", border: "border-yellow-500", emoji: "🟡" },
-  { id: 3, name: "Shadow",  color: "#8b5cf6", bg: "bg-purple-500/20", border: "border-purple-500", emoji: "🟣" },
-  { id: 4, name: "Storm",   color: "#06b6d4", bg: "bg-cyan-500/20",   border: "border-cyan-500", emoji: "🔵" },
-  { id: 5, name: "Bolt",    color: "#22c55e", bg: "bg-green-500/20",  border: "border-green-500", emoji: "🟢" },
-  { id: 6, name: "Phantom", color: "#ec4899", bg: "bg-pink-500/20",   border: "border-pink-500", emoji: "🩷" },
+  { id: 1, name: "Blaze",   body: "#8B3A2A", coat: "#C44B33", mane: "#3D1810", silk: "#FF6B6B", num: "1" },
+  { id: 2, name: "Thunder", body: "#7A4A12", coat: "#C47A1A", mane: "#3D2508", silk: "#FFD166", num: "2" },
+  { id: 3, name: "Shadow",  body: "#2D1F4E", coat: "#4A3570", mane: "#120A24", silk: "#B794F6", num: "3" },
+  { id: 4, name: "Storm",   body: "#1A4A52", coat: "#2A7A8A", mane: "#0A2830", silk: "#67E8F9", num: "4" },
+  { id: 5, name: "Bolt",    body: "#1A4A28", coat: "#2A7A42", mane: "#0A2818", silk: "#6EE7A0", num: "5" },
+  { id: 6, name: "Phantom", body: "#4A1A38", coat: "#7A2A5A", mane: "#280A1E", silk: "#F9A8D4", num: "6" },
 ];
 
-type RaceResult = { won: boolean; winnerRacerId: number; finishOrder: number[]; playerPlace: number; multiplier: number; payout: number; profit: number; newBalance: number; };
-type TrackProgress = { racerId: number; pct: number; done: boolean };
+const CAMERAS: { id: CameraAngle; label: string; mobileLabel?: string }[] = [
+  { id: "side", label: "Side", mobileLabel: "Track" },
+  { id: "front", label: "Chase", mobileLabel: "Lanes" },
+  { id: "aerial", label: "Aerial", mobileLabel: "Aerial" },
+  { id: "finish", label: "Finish", mobileLabel: "Finish" },
+];
+
+const MOBILE_CAMERAS: CameraAngle[] = ["front", "side", "finish"];
+
+type RaceResult = {
+  betId: number; won: boolean; winnerRacerId: number; finishOrder: number[];
+  playerPlace: number; multiplier: number; payout: number; profit: number;
+  newBalance: number; serverSeedHash: string; serverSeed: string; clientSeed: string; nonce: number;
+};
 
 export default function RacePage() {
+  const isMobile = useIsMobile();
   const { user, isAuthenticated } = useAuth();
   const { open } = useAuthModal();
-  const openLogin = () => open("login");
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  // Blaze pre-selected so the Start Race button is immediately active
   const [selectedRacer, setSelectedRacer] = useState<number | null>(1);
   const [betAmount, setBetAmount] = useState("1");
   const [racing, setRacing] = useState(false);
   const [result, setResult] = useState<RaceResult | null>(null);
-  const [trackProgress, setTrackProgress] = useState<TrackProgress[]>(RACERS.map(r => ({ racerId: r.id, pct: 0, done: false })));
-  const animRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [progress, setProgress] = useState<RacerProgress[]>(RACERS.map(r => ({ racerId: r.id, progress: 0, done: false })));
+  const [camera, setCamera] = useState<CameraAngle>(() => (typeof window !== "undefined" && window.innerWidth < 768 ? "front" : "side"));
+  const [cameraX, setCameraX] = useState(0);
+  const [racePhase, setRacePhase] = useState<RacePhase>("gate");
+  const [camFade, setCamFade] = useState(0);
+  const [finishOrder, setFinishOrder] = useState<number[] | null>(null);
+  const [liveWireFinish, setLiveWireFinish] = useState(false);
+  const animRef = useRef<number | null>(null);
+  const startRef = useRef(0);
+  const resultRef = useRef<RaceResult | null>(null);
+  const finishOrderRef = useRef<number[]>([]);
+  const finishTriggeredRef = useRef(false);
+  const liveWireFinishRef = useRef(false);
+  const gallopStarted = useRef(false);
+  const cameraRef = useRef(0);
+  const manualCameraRef = useRef(false);
+  const lastAutoCamRef = useRef<CameraAngle | null>(null);
+  const [liveFair, setLiveFair] = useState<{
+    betId: number;
+    serverSeedHash: string;
+    clientSeed: string;
+    nonce: number;
+    serverSeed?: string;
+  } | null>(null);
 
-  function resetRace() {
+  const resetRace = useCallback(() => {
     setResult(null);
-    setTrackProgress(RACERS.map(r => ({ racerId: r.id, pct: 0, done: false })));
-  }
+    resultRef.current = null;
+    setProgress(RACERS.map(r => ({ racerId: r.id, progress: 0, done: false })));
+    setCameraX(0);
+    cameraRef.current = 0;
+    setCamera(isMobile ? "front" : "side");
+    setRacePhase("gate");
+    manualCameraRef.current = false;
+    lastAutoCamRef.current = null;
+    setLiveFair(null);
+    setFinishOrder(null);
+    setLiveWireFinish(false);
+    liveWireFinishRef.current = false;
+    finishOrderRef.current = [];
+    finishTriggeredRef.current = false;
+    gallopStarted.current = false;
+    stopHorseGallopLoop();
+    stopCrowdAmbience();
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (isMobile && camera === "aerial") setCamera("front");
+  }, [isMobile, camera]);
+
+  const visibleCameras = isMobile ? CAMERAS.filter(c => MOBILE_CAMERAS.includes(c.id)) : CAMERAS;
 
   async function runRace() {
-    if (!isAuthenticated) { openLogin(); return; }
-    if (!selectedRacer) { toast({ title: "Pick a racer!", variant: "destructive" }); return; }
+    if (!isAuthenticated) { open("login"); return; }
+    if (!selectedRacer) { toast({ title: "Pick a horse!", variant: "destructive" }); return; }
     const amt = parseFloat(betAmount);
     if (isNaN(amt) || amt <= 0) { toast({ title: "Invalid bet", variant: "destructive" }); return; }
     resetRace();
     setRacing(true);
+    manualCameraRef.current = false;
+    lastAutoCamRef.current = null;
+    if (isMobile) setCamera("front");
+
     const token = getToken();
     let res: RaceResult;
     try {
       const r = await fetch("/api/race/run", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ betAmount: amt, racerId: selectedRacer }),
       });
       if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Race failed"); }
       res = await r.json();
+      resultRef.current = res;
+      setLiveFair({
+        betId: res.betId,
+        serverSeedHash: res.serverSeedHash,
+        clientSeed: res.clientSeed,
+        nonce: res.nonce,
+      });
     } catch (e: unknown) {
       setRacing(false);
       toast({ title: "Error", description: (e as Error).message, variant: "destructive" });
       return;
     }
 
-    const finishOrder = res.finishOrder;
-    const racerSpeeds: Record<number, number> = {};
-    RACERS.forEach(r => { racerSpeeds[r.id] = 0.8 + Math.random() * 0.8; });
-    racerSpeeds[finishOrder[0]] = 1.8 + Math.random() * 0.4;
-    let progress: Record<number, number> = {};
-    RACERS.forEach(r => { progress[r.id] = 0; });
-    let finishedCount = 0;
+    finishOrderRef.current = res.finishOrder;
+    setFinishOrder(res.finishOrder);
+    finishTriggeredRef.current = false;
 
-    animRef.current = setInterval(() => {
-      RACERS.forEach(r => {
-        if (progress[r.id] >= 100) return;
-        progress[r.id] = Math.min(100, progress[r.id] + racerSpeeds[r.id] * (0.7 + Math.random() * 0.6));
-        if (progress[r.id] >= 100) { finishedCount++; }
-      });
-      setTrackProgress(RACERS.map(r => ({ racerId: r.id, pct: progress[r.id], done: progress[r.id] >= 100 })));
-      if (finishedCount >= RACERS.length) {
-        clearInterval(animRef.current!);
-        setResult(res);
-        setRacing(false);
-        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    startRef.current = performance.now();
+    playRaceStartBugle();
+    startCrowdAmbience();
+
+    const tick = (now: number) => {
+      const elapsed = now - startRef.current;
+      if (elapsed > RACE_GATE_MS && !gallopStarted.current) {
+        gallopStarted.current = true;
+        playGateOpenClang();
+        startHorseGallopLoop();
       }
-    }, 50);
+
+      const { progress: next, winnerDone, allDone } = computeRaceProgress(
+        elapsed,
+        finishOrderRef.current,
+        TRACK_LEN,
+      );
+      setProgress(next);
+
+      const leaderProg = getLeaderProgress(next);
+      const phase = getRacePhase(leaderProg, true, allDone, liveWireFinishRef.current);
+      setRacePhase(phase);
+
+      if (!manualCameraRef.current) {
+        const autoCam = getAutoCamera(phase, isMobile, liveWireFinishRef.current);
+        if (autoCam !== lastAutoCamRef.current) {
+          lastAutoCamRef.current = autoCam;
+          setCamFade(f => f + 1);
+          setCamera(autoCam);
+        }
+      }
+
+      const finishPan = TRACK_SCROLL_PCT * 0.58;
+      const targetCam = liveWireFinishRef.current
+        ? finishPan + (leaderProg / TRACK_LEN) * 6
+        : Math.min(leaderProg * 0.52, TRACK_LEN * 0.52);
+      cameraRef.current += (targetCam - cameraRef.current) * (liveWireFinishRef.current ? 0.14 : 0.09);
+      setCameraX(cameraRef.current);
+
+      if (winnerDone && !finishTriggeredRef.current) {
+        finishTriggeredRef.current = true;
+        liveWireFinishRef.current = true;
+        setLiveWireFinish(true);
+        stopCrowdAmbience();
+        playRaceFinishCheer();
+        setRacing(false);
+        setResult(resultRef.current);
+        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+        setLiveFair(prev =>
+          prev ? { ...prev, serverSeed: resultRef.current?.serverSeed } : null,
+        );
+        if (!manualCameraRef.current) {
+          lastAutoCamRef.current = "side";
+          setCamFade(f => f + 1);
+          setCamera("side");
+        }
+      }
+
+      if (allDone) {
+        stopHorseGallopLoop();
+        stopCrowdAmbience();
+        if (liveWireFinishRef.current) {
+          liveWireFinishRef.current = false;
+          setLiveWireFinish(false);
+        }
+        return;
+      }
+
+      animRef.current = requestAnimationFrame(tick);
+    };
+    animRef.current = requestAnimationFrame(tick);
   }
 
-  useEffect(() => () => { if (animRef.current) clearInterval(animRef.current); }, []);
-  const selectedRacerData = RACERS.find(r => r.id === selectedRacer);
+  useEffect(() => () => {
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+    stopHorseGallopLoop();
+    stopCrowdAmbience();
+  }, []);
+
+  const isAnimating = racing || liveWireFinish;
+
+  const viewProps = {
+    racers: RACERS,
+    progress,
+    racing: isAnimating,
+    liveWireFinish,
+    finishOrder: finishOrder ?? result?.finishOrder ?? undefined,
+    winnerId: result?.winnerRacerId ?? finishOrder?.[0],
+    selectedRacer,
+    compact: isMobile,
+    phase: racePhase,
+    camera,
+  };
+
+  function renderCameraView(angle: CameraAngle) {
+    if (angle === "aerial") return <DerbyAerialView {...viewProps} camera={angle} />;
+    if (angle === "front") return <DerbyFrontChaseView {...viewProps} camera={angle} />;
+    if (angle === "finish") {
+      return (
+        <DerbyFinishView
+          racers={RACERS}
+          progress={progress}
+          finishOrder={finishOrder ?? result?.finishOrder}
+          winnerId={result?.winnerRacerId ?? finishOrder?.[0]}
+          compact={isMobile}
+          liveSequential={liveWireFinish}
+        />
+      );
+    }
+    return (
+      <DerbySideView
+        {...viewProps}
+        camera={angle}
+        cameraX={cameraX}
+        winnerId={result?.winnerRacerId ?? finishOrder?.[0]}
+        showResult={!!result || liveWireFinish}
+      />
+    );
+  }
+
+  function renderCamera() {
+    return (
+      <div key={camFade} className="absolute inset-0 derby-cam-cut">
+        {renderCameraView(camera)}
+      </div>
+    );
+  }
+
+  const previewCamera: CameraAngle =
+    !isAnimating && !result && camera === "finish" ? "side" : camera;
+
+  const trackCard = (
+    <Card className="race-track-card bg-card border-border p-0 overflow-hidden flex flex-col min-h-0 h-full">
+      <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/40 bg-secondary/30 shrink-0">
+        <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <Video className="w-3 h-3" /> Camera
+        </div>
+        <div className="flex gap-1 flex-wrap justify-end">
+          {visibleCameras.map(c => (
+            <button key={c.id} type="button"
+              onClick={() => {
+                manualCameraRef.current = true;
+                setCamFade(f => f + 1);
+                setCamera(c.id);
+              }}
+              disabled={c.id === "finish" && !result && !isAnimating}
+              className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-all ${camera === c.id ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary/60 text-muted-foreground hover:text-foreground"} disabled:opacity-40`}>
+              {isMobile ? (c.mobileLabel ?? c.label) : c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="relative flex-1 min-h-[200px] derby-track-scene">
+        <div className="absolute inset-0 overflow-hidden">
+          {!isAnimating && !result ? (
+            <div className="absolute inset-0 derby-cam-cut">
+              {renderCameraView(previewCamera)}
+            </div>
+          ) : (
+            renderCamera()
+          )}
+        </div>
+      </div>
+      {(isAnimating || (result && !isMobile)) && liveFair && (
+        <div className="px-2 py-1 border-t border-border/30 bg-secondary/15 shrink-0">
+          <ProvablyFairPanel
+            betId={liveFair.betId}
+            serverSeedHash={liveFair.serverSeedHash}
+            serverSeed={liveFair.serverSeed ?? result?.serverSeed}
+            clientSeed={liveFair.clientSeed}
+            nonce={liveFair.nonce}
+            verifyPath={`/api/race/verify/${liveFair.betId}`}
+            variant={isMobile ? (isAnimating ? "inline" : "compact") : isAnimating ? "inline" : "full"}
+          />
+        </div>
+      )}
+      {isAnimating && (
+        <div className="px-2 py-1 border-t border-border/30 bg-black/40 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="live-dot w-2 h-2 rounded-full bg-green-400" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-green-400">
+              {liveWireFinish ? "Wire" : "Live"}
+            </span>
+          </div>
+          <span className="text-[8px] font-mono text-white/50 truncate">
+            {liveWireFinish
+              ? "Horses crossing — Race unlocked"
+              : `${Math.round(getLeaderProgress(progress))}m · Auto cam`}
+          </span>
+        </div>
+      )}
+    </Card>
+  );
+
+  const resultCard = result ? (
+    <Card className={`race-result-card border p-2 sm:p-3 shrink-0 ${result.won ? "border-green-500/60 bg-green-500/5" : "border-destructive/40 bg-destructive/5"}`}>
+      <div className="flex items-center justify-between mb-1.5 sm:mb-2 gap-2">
+        <h3 className="font-display font-black uppercase tracking-widest text-xs sm:text-sm flex items-center gap-1.5">
+          {result.won ? <><Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400" /> Winner!</> : `Finished #${result.playerPlace}`}
+        </h3>
+        <Button variant="outline" size="sm" className="h-6 sm:h-7 text-[9px] sm:text-[10px] px-2" onClick={resetRace} disabled={racing}>Again</Button>
+      </div>
+      <div className="grid grid-cols-3 gap-1 text-center">
+        <div className="bg-secondary/50 rounded-lg p-1 sm:p-1.5">
+          <div className={`font-mono font-black text-xs sm:text-sm ${result.profit >= 0 ? "text-green-400" : "text-destructive"}`}>{result.profit >= 0 ? "+" : ""}{formatCurrency(result.profit)}</div>
+          <div className="text-[8px] sm:text-[9px] text-muted-foreground uppercase">Profit</div>
+        </div>
+        <div className="bg-secondary/50 rounded-lg p-1 sm:p-1.5">
+          <div className="font-mono font-black text-xs sm:text-sm text-primary">{result.multiplier.toFixed(2)}×</div>
+          <div className="text-[8px] sm:text-[9px] text-muted-foreground uppercase">Mult</div>
+        </div>
+        <div className="bg-secondary/50 rounded-lg p-1 sm:p-1.5">
+          <div className="font-mono font-black text-xs sm:text-sm">{formatCurrency(result.newBalance)}</div>
+          <div className="text-[8px] sm:text-[9px] text-muted-foreground uppercase">Balance</div>
+        </div>
+      </div>
+      {isMobile && (
+        <div className="mt-2 pt-2 border-t border-border/30">
+          <ProvablyFairPanel
+            betId={result.betId}
+            serverSeedHash={result.serverSeedHash}
+            serverSeed={result.serverSeed}
+            clientSeed={result.clientSeed}
+            nonce={result.nonce}
+            verifyPath={`/api/race/verify/${result.betId}`}
+            variant="compact"
+          />
+        </div>
+      )}
+      {result && !isMobile && (
+        <div className="mt-3 pt-3 border-t border-border/40">
+          <ProvablyFairPanel
+            betId={result.betId}
+            serverSeedHash={result.serverSeedHash}
+            serverSeed={result.serverSeed}
+            clientSeed={result.clientSeed}
+            nonce={result.nonce}
+            verifyPath={`/api/race/verify/${result.betId}`}
+            variant="full"
+          />
+        </div>
+      )}
+    </Card>
+  ) : null;
+
+  const horsePicker = (compact: boolean) => (
+    <DerbyHorsePicker
+      racers={RACERS}
+      selectedId={selectedRacer}
+      onSelect={setSelectedRacer}
+      disabled={racing}
+      compact={compact}
+    />
+  );
+
+  const betControls = (compact: boolean) => (
+    <div className={compact ? "space-y-2" : "space-y-4"}>
+      {horsePicker(compact)}
+      <div className={compact ? "flex gap-2 items-end" : ""}>
+        <div className={compact ? "flex-1 min-w-0" : ""}>
+          <label className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-1">Bet (USD)</label>
+          <Input type="number" min="0.01" step="0.01" value={betAmount} onChange={e => setBetAmount(e.target.value)} disabled={racing} className="font-mono bg-secondary border-border h-9 text-sm" />
+          {user && !compact && (
+            <p className="text-xs text-muted-foreground font-mono mt-1.5">
+              Balance: <span className="text-primary font-bold">{formatCurrency(user.balance)}</span>
+            </p>
+          )}
+        </div>
+        <Button
+          className={`font-display font-black uppercase tracking-widest shadow-lg shrink-0 ${compact ? "h-9 px-4 text-xs" : "w-full text-base h-12"}`}
+          disabled={racing}
+          onClick={runRace}
+        >
+          <Zap className="w-4 h-4" /> {racing ? "Racing…" : compact ? "Race" : "START RACE"}
+        </Button>
+      </div>
+      {user && compact && (
+        <p className="text-[10px] text-muted-foreground font-mono text-center">
+          Balance: <span className="text-primary font-bold">{formatCurrency(user.balance)}</span>
+        </p>
+      )}
+    </div>
+  );
+
+  const desktopControlsPanel = (
+    <Card className="bg-card border-border p-4 md:p-5 space-y-4">
+      {betControls(false)}
+    </Card>
+  );
+
+  if (isMobile) {
+    return (
+      <div className="race-mobile-shell">
+        <div className="game-mobile-header">
+          <Link href="/games" className="inline-flex items-center text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors shrink-0">
+            <ChevronLeft className="w-4 h-4" /> Back
+          </Link>
+          <div className="min-w-0 flex-1 text-center px-2">
+            <h1 className="font-display font-black text-sm uppercase tracking-widest truncate">🏇 DGC Derby</h1>
+            <p className="text-[10px] text-muted-foreground font-mono">First place pays 5.5×</p>
+          </div>
+          <div className="w-12 shrink-0" />
+        </div>
+
+        <div className="race-mobile-track-wrap">
+          {trackCard}
+        </div>
+
+        {resultCard}
+
+        <div className="race-mobile-controls">
+          <Card className="bg-card border-border p-2.5 space-y-2">
+            {betControls(true)}
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex items-center gap-3">
+    <div className="race-desktop-page space-y-3 max-w-7xl mx-auto px-2 md:px-4 pb-4 min-h-0">
+      <div className="flex flex-wrap items-center gap-3 shrink-0">
         <Link href="/games">
-          <button className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
+          <button type="button" className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
             <ChevronLeft className="w-4 h-4" /> Games
           </button>
         </Link>
-        <h1 className="font-display font-black text-3xl uppercase tracking-widest">🏇 Horse Racing</h1>
+        <div>
+          <h1 className="font-display font-black text-2xl md:text-3xl uppercase tracking-widest">🏇 DGC Derby</h1>
+          <p className="text-xs text-muted-foreground font-mono mt-0.5">Pick 1 of 6 horses · 1st place pays 5.5×</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="bg-card border-border p-5 space-y-5">
-          <div>
-            <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-3">Pick Your Racer</div>
-            <div className="grid grid-cols-2 gap-2">
-              {RACERS.map(r => (
-                <button key={r.id} disabled={racing} onClick={() => setSelectedRacer(r.id)}
-                  className={`flex items-center gap-2 p-2.5 rounded-lg border transition-all font-bold text-sm ${selectedRacer === r.id ? `${r.bg} ${r.border} border-2` : "border-border/50 hover:border-border bg-secondary/30"} disabled:opacity-50 disabled:cursor-not-allowed`}>
-                  <span>{r.emoji}</span><span>{r.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="text-xs uppercase tracking-widest font-bold text-muted-foreground block mb-2">Bet Amount (USD)</label>
-            <Input type="number" min="0.01" step="0.01" value={betAmount} onChange={e => setBetAmount(e.target.value)} disabled={racing} className="font-mono bg-secondary border-border" />
-            <div className="grid grid-cols-4 gap-1.5 mt-2">
-              {[1, 5, 10, 25].map(v => (
-                <button key={v} onClick={() => setBetAmount(String(v))} disabled={racing}
-                  className="flex-1 text-xs font-bold bg-secondary/60 hover:bg-secondary rounded-lg py-1.5 border border-border/50 hover:border-border transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                  ${v}
-                </button>
-              ))}
-            </div>
-            {user && <p className="text-xs text-muted-foreground font-mono mt-1.5">Balance: <span className="text-primary font-bold">{formatCurrency(user.balance)}</span></p>}
-          </div>
-          <Button className="w-full font-display font-black uppercase tracking-widest text-base h-12" disabled={racing} onClick={runRace}>
-            <Zap className="w-5 h-5" /> {racing ? "Racing…" : "START RACE"}
-          </Button>
-          {selectedRacerData && !racing && (
-            <div className="text-xs text-center text-muted-foreground font-mono">
-              Betting on <span style={{ color: selectedRacerData.color }} className="font-bold">{selectedRacerData.emoji} {selectedRacerData.name}</span>
-            </div>
-          )}
-        </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 md:gap-6 min-h-0">
+        <div className="lg:col-span-2">{desktopControlsPanel}</div>
 
-        <div className="lg:col-span-2 space-y-4">
-          <Card className="bg-card border-border p-5">
-            <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-4">Live Track</div>
-            <div className="space-y-3">
-              {RACERS.map(r => {
-                const prog = trackProgress.find(p => p.racerId === r.id);
-                const pct = prog?.pct ?? 0;
-                const isWinner = result?.winnerRacerId === r.id;
-                const isMyPick = r.id === selectedRacer;
-                return (
-                  <div key={r.id} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs font-bold">
-                      <span className={`flex items-center gap-1.5 ${isMyPick ? "text-foreground" : "text-muted-foreground"}`}>
-                        {r.emoji} {r.name}
-                        {isMyPick && <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full uppercase tracking-wider">Your pick</span>}
-                        {isWinner && <Trophy className="w-3.5 h-3.5 text-yellow-400" />}
-                      </span>
-                      <span className="font-mono text-[10px] text-muted-foreground">{Math.round(pct)}%</span>
-                    </div>
-                    <div className="w-full h-3 rounded-full bg-secondary overflow-hidden border border-border/30">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: r.color, boxShadow: pct > 0 ? `0 0 6px ${r.color}80` : "none" }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-
-          {result && (
-            <Card className={`border-2 p-5 ${result.won ? "border-green-500/60 bg-green-500/5" : "border-destructive/40 bg-destructive/5"}`}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  {result.won ? <Trophy className="w-5 h-5 text-yellow-400" /> : <Star className="w-5 h-5 text-muted-foreground" />}
-                  <h3 className="font-display font-black uppercase tracking-widest text-lg">{result.won ? "Winner! 🏆" : `Finished #${result.playerPlace}`}</h3>
-                </div>
-                <Button variant="outline" size="sm" className="font-bold uppercase text-xs" onClick={resetRace} disabled={racing}>Race Again</Button>
-              </div>
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="bg-secondary/50 rounded-lg p-2.5">
-                  <div className={`font-mono font-black text-lg ${result.profit >= 0 ? "text-green-400" : "text-destructive"}`}>{result.profit >= 0 ? "+" : ""}{formatCurrency(result.profit)}</div>
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Profit</div>
-                </div>
-                <div className="bg-secondary/50 rounded-lg p-2.5">
-                  <div className="font-mono font-black text-lg text-primary">{result.multiplier}×</div>
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Multiplier</div>
-                </div>
-                <div className="bg-secondary/50 rounded-lg p-2.5">
-                  <div className="font-mono font-black text-lg">{formatCurrency(result.newBalance)}</div>
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">New Balance</div>
-                </div>
-              </div>
-              <div className="mt-3 text-xs text-muted-foreground font-mono text-center">
-                Finish order: {result.finishOrder.map(id => { const r = RACERS.find(x => x.id === id); return r ? r.emoji + " " + r.name : ""; }).join(" → ")}
-              </div>
-            </Card>
-          )}
-
-          {!result && !racing && (
-            <Card className="bg-secondary/20 border-border/50 p-4">
-              <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-3">How it works</div>
-              <div className="space-y-2">
-                {[["🐴 Pick a Horse","Choose one of 6 racers to bet on"],["💰 Set Your Bet","Enter how much you want to wager"],["🏁 Watch Them Race","Hit START and watch all 6 horses race to the finish"],["🏆 Win Up To 4×","1st pays 4×, 2nd pays 2.5×, 3rd pays 1.5×"]].map(([title, desc]) => (
-                  <div key={String(title)} className="flex gap-3 items-start">
-                    <div><strong className="text-foreground text-xs">{title}</strong><br /><span className="text-muted-foreground text-xs">{desc}</span></div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
+        <div className="lg:col-span-3 space-y-2 min-h-0">
+          <div className="min-h-[280px] h-[32rem] lg:h-[36rem]">{trackCard}</div>
+          {resultCard}
         </div>
       </div>
     </div>

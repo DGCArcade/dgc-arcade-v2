@@ -1,119 +1,102 @@
 /**
- * Chicken Road Provably Fair Verification Script
- * 
- * You can run this script directly in your browser console to verify 
- * that your Chicken Road game was provably fair and not tampered with.
- * 
- * Instructions:
- * 1. Open your browser console (F12 or Ctrl+Shift+I)
- * 2. Copy and paste this entire script
- * 3. Call verifyChickenRoad() with your game details
- * 
- * Example:
- * verifyChickenRoad("server_seed_here", "client_seed_here", 1, "medium")
+ * Chicken Road provably fair verifier — matches api-server chicken-road-engine.ts
+ * Fisher-Yates on 20 positions · HMAC-SHA512(serverSeed, clientSeed:nonce:chicken-road)
  */
-
-async function verifyChickenRoad(serverSeed, clientSeed, nonce, tier) {
+(function () {
+  const POSITIONS = 20;
+  const RTP = 0.98;
   const TIER_CONFIGS = {
-    easy: { cars: 1, safe: 4 },
-    medium: { cars: 2, safe: 3 },
-    hard: { cars: 3, safe: 2 },
-    extreme: { cars: 4, safe: 1 },
+    easy: { deaths: 1, label: "Easy", maxSteps: 19 },
+    medium: { deaths: 3, label: "Medium", maxSteps: 17 },
+    hard: { deaths: 5, label: "Hard", maxSteps: 15 },
+    extreme: { deaths: 10, label: "Expert", maxSteps: 10 },
+    expert: { deaths: 10, label: "Expert", maxSteps: 10 },
   };
 
-  const LANES = 10;
-  const TILES_PER_LANE = 5;
-
-  if (!TIER_CONFIGS[tier]) {
-    console.error(`Invalid tier: ${tier}. Must be easy, medium, hard, or extreme.`);
-    return;
+  function normalizeTier(tier) {
+    const aliases = {
+      low: "easy", easy: "easy", medium: "medium", high: "hard", hard: "hard",
+      max: "extreme", extreme: "extreme", expert: "extreme",
+    };
+    const key = aliases[String(tier).toLowerCase()];
+    if (!key) throw new Error("Invalid tier");
+    return key;
   }
 
-  const carsPerLane = TIER_CONFIGS[tier].cars;
-  const message = `${clientSeed}:${nonce}`;
+  async function sha256Hex(input) {
+    const data = new TextEncoder().encode(input);
+    const hash = await crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+  }
 
-  console.log("==========================================");
-  console.log("🐔 CHICKEN ROAD VERIFICATION 🐔");
-  console.log("==========================================");
-  console.log(`Server Seed: ${serverSeed}`);
-  console.log(`Client Seed: ${clientSeed}`);
-  console.log(`Nonce:       ${nonce}`);
-  console.log(`Tier:        ${tier} (${carsPerLane} Cars per lane)`);
-  console.log("------------------------------------------");
-
-  // Helper to generate HMAC-SHA512 in the browser
   async function hmacSha512(key, msg) {
     const enc = new TextEncoder();
-    const keyData = enc.encode(key);
-    const msgData = enc.encode(msg);
-
     const cryptoKey = await crypto.subtle.importKey(
-      "raw", keyData, { name: "HMAC", hash: "SHA-512" }, false, ["sign"]
+      "raw", enc.encode(key), { name: "HMAC", hash: "SHA-512" }, false, ["sign"],
     );
-
-    const signature = await crypto.subtle.sign("HMAC", cryptoKey, msgData);
-    return Array.from(new Uint8Array(signature))
-      .map(b => b.toString(16).padStart(2, "0"))
-      .join("");
+    const sig = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(msg));
+    return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
   }
 
-  try {
-    const hash = await hmacSha512(serverSeed, message);
-    console.log(`HMAC-SHA512 Hash:\n${hash}\n`);
-
-    const matrix = [];
+  function createHmacByteStream(serverSeed, message) {
+    let hash = null;
     let hashIndex = 0;
+    let round = 0;
 
-    for (let lane = 0; lane < LANES; lane++) {
-      const laneCars = [];
-      
-      while (laneCars.length < carsPerLane) {
-        if (hashIndex + 8 > hash.length) {
-          const rehash = await hmacSha512(serverSeed, message + ":" + lane + ":" + laneCars.length);
-          const segment = rehash.substring(0, 8);
-          const intValue = parseInt(segment, 16);
-          const pos = intValue % TILES_PER_LANE;
-          
-          if (!laneCars.includes(pos)) {
-            laneCars.push(pos);
-          }
-          break;
+    return async function nextInt(max) {
+      if (max <= 0) return 0;
+      if (!hash || hashIndex + 8 > hash.length) {
+        if (!hash) {
+          hash = await hmacSha512(serverSeed, message);
+        } else {
+          round += 1;
+          hash = await hmacSha512(serverSeed, `${message}:r${round}`);
         }
-        
-        const segment = hash.substring(hashIndex, hashIndex + 8);
-        hashIndex += 8;
-        
-        const intValue = parseInt(segment, 16);
-        const pos = intValue % TILES_PER_LANE;
-        
-        if (!laneCars.includes(pos)) {
-          laneCars.push(pos);
-        }
+        hashIndex = 0;
       }
-      
-      laneCars.sort((a, b) => a - b);
-      matrix.push(laneCars);
-    }
-
-    console.log("DETERMINISTIC GRID RESULT:");
-    console.log("(0 = Leftmost Tile, 4 = Rightmost Tile)\n");
-
-    for (let i = 0; i < LANES; i++) {
-      const laneStr = Array.from({ length: TILES_PER_LANE }, (_, tileIdx) => {
-        return matrix[i].includes(tileIdx) ? "🚗" : "✅";
-      }).join(" ");
-      
-      console.log(`Lane ${i.toString().padStart(2, "0")}: ${laneStr}  (Cars at: ${matrix[i].join(", ")})`);
-    }
-    
-    console.log("\n==========================================");
-    console.log("Verification Complete. If this matches your");
-    console.log("game history, the result was mathematically");
-    console.log("fair and pre-determined before you played.");
-    console.log("==========================================");
-
-    return matrix;
-  } catch (err) {
-    console.error("Verification failed:", err);
+      const segment = hash.substring(hashIndex, hashIndex + 8);
+      hashIndex += 8;
+      return parseInt(segment, 16) % max;
+    };
   }
-}
+
+  async function generateLayout(serverSeed, clientSeed, nonce, tier) {
+    const deaths = TIER_CONFIGS[tier].deaths;
+    const message = `${clientSeed}:${nonce}:chicken-road`;
+    const nextInt = createHmacByteStream(serverSeed, message);
+
+    const indices = Array.from({ length: POSITIONS }, (_, i) => i);
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = await nextInt(i + 1);
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+
+    const deathSteps = indices.slice(0, deaths).sort((a, b) => a - b);
+    const hazardTypes = {};
+    for (const step of deathSteps) {
+      hazardTypes[step] = (await nextInt(2)) === 0 ? "car" : "manhole";
+    }
+    return { deathSteps, hazardTypes };
+  }
+
+  async function verifyChickenRoad(serverSeed, clientSeed, nonce, tier, expectedHash) {
+    const normalized = normalizeTier(tier);
+    const serverSeedHash = await sha256Hex(serverSeed);
+    const layout = await generateLayout(serverSeed, clientSeed, nonce, normalized);
+    const hashValid = !expectedHash || expectedHash.toLowerCase() === serverSeedHash;
+
+    return {
+      valid: hashValid,
+      serverSeedHash,
+      hashValid,
+      tier: normalized,
+      tierLabel: TIER_CONFIGS[normalized].label,
+      rtp: RTP,
+      ...layout,
+      algorithm:
+        "Fisher-Yates on 20 positions via HMAC-SHA512(serverSeed, clientSeed:nonce:chicken-road); SHA-256 commit",
+    };
+  }
+
+  window.verifyChickenRoad = verifyChickenRoad;
+})();

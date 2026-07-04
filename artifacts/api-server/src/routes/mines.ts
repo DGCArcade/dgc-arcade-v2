@@ -2,10 +2,12 @@ import { Router } from "express";
 import { db, usersTable, gamesTable, betsTable, minesSessionsTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
+import { requireLocationVerified } from "../middlewares/location.js";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import { recordTournamentWager } from "../lib/tournament-tracker.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
+import { checkWagerLimits } from "../services/gambling-limits.js";
 
 export const minesRouter = Router();
 
@@ -63,7 +65,7 @@ function calcMultiplier(
 }
 
 // POST /api/mines/start
-minesRouter.post("/start", requireAuth, async (req, res) => {
+minesRouter.post("/start", requireAuth, requireLocationVerified, async (req, res) => {
   const { gameId, amount, mineCount = 5, gridSize: rawGridSize = 24, clientSeed: rawClientSeed } = req.body;
 
   if (!gameId || !amount || amount <= 0) {
@@ -90,6 +92,12 @@ minesRouter.post("/start", requireAuth, async (req, res) => {
     const { totalBalance } = await getUserBalance(user.id);
     if (totalBalance < amount) {
       res.status(400).json({ error: "Insufficient balance" });
+      return;
+    }
+
+    const limitCheck = await checkWagerLimits(user.id, amount);
+    if (!limitCheck.ok) {
+      res.status(403).json({ error: limitCheck.error, code: limitCheck.code });
       return;
     }
 
@@ -152,7 +160,7 @@ minesRouter.post("/start", requireAuth, async (req, res) => {
 });
 
 // POST /api/mines/reveal
-minesRouter.post("/reveal", requireAuth, async (req, res) => {
+minesRouter.post("/reveal", requireAuth, requireLocationVerified, async (req, res) => {
   const { sessionId, cell } = req.body;
   if (sessionId == null || cell == null) {
     res.status(400).json({ error: "sessionId and cell required" });
@@ -232,7 +240,7 @@ minesRouter.post("/reveal", requireAuth, async (req, res) => {
 });
 
 // POST /api/mines/cashout
-minesRouter.post("/cashout", requireAuth, async (req, res) => {
+minesRouter.post("/cashout", requireAuth, requireLocationVerified, async (req, res) => {
   const { sessionId } = req.body;
   try {
     const [session] = await db.select().from(minesSessionsTable)
