@@ -607,6 +607,7 @@ export function Blackjack({ game }: BlackjackProps) {
           justify-content: center !important;
           gap: 4px !important;
           order: 1 !important;
+          aspect-ratio: 4/3 !important;
         }
         .bj-game-root--mobile .bj-table-deco {
           display: block !important;

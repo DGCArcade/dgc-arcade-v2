@@ -32,6 +32,11 @@ export function useChickenMotor(
 
   useEffect(() => {
     if (!enabled) return;
+    
+    // If target hasn't really changed, don't restart the motor
+    if (Math.abs(displayLeftRef.current - targetLeft) < 0.1 && !hopping) {
+      return;
+    }
 
     let raf = 0;
     const fromLeft = displayLeftRef.current;

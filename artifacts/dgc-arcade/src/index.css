@@ -2679,9 +2679,9 @@ body {
 /* Mobile game layout — compact mirror of each game's desktop DOM order */
 @media (max-width: 767px) {
   .mobile-game-play-area {
-    height: clamp(380px, 68dvh, 560px);
+    height: calc(100dvh - 120px);
     min-height: 380px;
-    max-height: 68dvh;
+    max-height: 600px;
     overflow: hidden;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);

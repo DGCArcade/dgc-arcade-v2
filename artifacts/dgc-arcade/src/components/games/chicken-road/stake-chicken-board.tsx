@@ -347,8 +347,9 @@ export function StakeChickenBoard({
     const laneCenter =
       measuredCenters?.lanes[scrollTargetLane] ??
       SIDEWALK_W + scrollTargetLane * laneWidth + laneWidth / 2;
-    const sidewalkW = measuredCenters?.sidewalk != null ? measuredCenters.sidewalk * 2 : SIDEWALK_W;
-    const target = Math.max(0, laneCenter - sidewalkW - el.clientWidth / 2 + laneWidth / 2);
+    
+    // Improved mobile auto-scroll logic: keep the chicken centered in the viewport
+    const target = Math.max(0, laneCenter - el.clientWidth / 2);
     el.scrollTo({ left: target, behavior: "smooth" });
   }, [scrollTargetLane, laneWidth, chickenVisible, onSidewalk, measuredCenters]);
 
