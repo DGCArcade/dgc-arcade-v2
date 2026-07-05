@@ -56,7 +56,7 @@ export function HiLo({ game }: HiLoProps) {
   const [history, setHistory] = useState<{won:boolean;rank:string;suit:string;mult:number}[]>([]);
   const [pf, setPf] = useState<{ betId?: number; serverSeedHash?: string; serverSeed?: string; clientSeed?: string; nonce?: number }>({});
 
-  const deal = (pick: "hi"|"lo") => {
+  const deal = (pick: "hi"|"lo"|"equal") => {
     requireAuth(() => {
       if (!user || amount > user.balance) { toast({ title:"Insufficient balance", variant:"destructive" }); return; }
       setShowResult(false);
@@ -153,16 +153,23 @@ export function HiLo({ game }: HiLoProps) {
         )}
 
         {currentCard && !placeBet.isPending && (
-          <div className="flex gap-6">
-            <Button size="lg" className="min-w-[120px] h-14 font-black text-lg uppercase bg-green-700 hover:bg-green-600 flex flex-col"
-              onClick={()=>deal("hi")} disabled={placeBet.isPending || currentRankVal >= 12}>
-              <ChevronUp className="w-5 h-5"/>
-              Hi <span className="text-xs font-normal opacity-70">{Math.round(hiOdds*100)}%</span>
-            </Button>
-            <Button size="lg" className="min-w-[120px] h-14 font-black text-lg uppercase bg-red-700 hover:bg-red-600 flex flex-col"
-              onClick={()=>deal("lo")} disabled={placeBet.isPending || currentRankVal <= 0}>
-              <ChevronDown className="w-5 h-5"/>
-              Lo <span className="text-xs font-normal opacity-70">{Math.round(loOdds*100)}%</span>
+          <div className="flex flex-col gap-4 w-full max-w-sm">
+            <div className="flex gap-4">
+              <Button size="lg" className="flex-1 h-14 font-black text-lg uppercase bg-green-700 hover:bg-green-600 flex flex-col"
+                onClick={()=>deal("hi")} disabled={placeBet.isPending || currentRankVal >= 12}>
+                <ChevronUp className="w-5 h-5"/>
+                Hi <span className="text-xs font-normal opacity-70">{Math.round(hiOdds*100)}%</span>
+              </Button>
+              <Button size="lg" className="flex-1 h-14 font-black text-lg uppercase bg-red-700 hover:bg-red-600 flex flex-col"
+                onClick={()=>deal("lo")} disabled={placeBet.isPending || currentRankVal <= 0}>
+                <ChevronDown className="w-5 h-5"/>
+                Lo <span className="text-xs font-normal opacity-70">{Math.round(loOdds*100)}%</span>
+              </Button>
+            </div>
+            <Button size="lg" className="w-full h-12 font-black text-base uppercase bg-zinc-700 hover:bg-zinc-600 flex flex-col"
+              onClick={()=>deal("equal")} disabled={placeBet.isPending}>
+              <span className="text-lg">=</span>
+              Equal <span className="text-xs font-normal opacity-70">12x Payout</span>
             </Button>
           </div>
         )}

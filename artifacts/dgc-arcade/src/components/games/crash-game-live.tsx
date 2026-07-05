@@ -162,11 +162,11 @@ export function CrashGameLive({ game }: CrashGameLiveProps) {
           .crash-live-grid { display: grid; grid-template-columns: 260px 1fr 240px; gap: 12px; min-height: 420px; }
         }
         @media (max-width: 767px) {
-          .crash-live-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto auto; gap: 6px; height: 100%; min-height: 0; }
-          .crash-bet-col { grid-column: 1; grid-row: 1 / 3; }
-          .crash-chart-col { grid-column: 2; grid-row: 1; }
-          .crash-feed-col { grid-column: 2; grid-row: 2; }
-          .crash-sha-col { grid-column: 1 / 3; grid-row: 3; }
+          .crash-live-grid { display: flex; flex-direction: column; gap: 6px; height: 100%; min-height: 0; overflow-y: auto; padding-bottom: 20px; }
+          .crash-bet-col { order: 2; flex-shrink: 0; }
+          .crash-chart-col { order: 1; flex: 0 0 160px; }
+          .crash-feed-col { order: 3; flex: 1 0 180px; min-height: 180px; }
+          .crash-sha-col { order: 4; flex-shrink: 0; }
         }
       `}</style>
 
@@ -204,8 +204,11 @@ export function CrashGameLive({ game }: CrashGameLiveProps) {
             <p className="text-[10px] text-muted-foreground font-mono">Balance: <span className="text-primary font-bold">{formatCurrency(user.balance)}</span></p>
           )}
           <Button onClick={placeLiveBet} disabled={!bettingActive || placing || myBetPlaced}
-            className="w-full font-display font-black uppercase tracking-widest mt-auto h-10 text-sm">
-            {myBetPlaced ? "Bet Locked In" : placing ? "Placing…" : bettingActive ? "Place Bet" : "Wait…"}
+            className={`w-full font-display font-black uppercase tracking-widest mt-auto h-10 text-sm transition-all duration-300 ${
+              myBetPlaced ? "bg-green-600 hover:bg-green-600 text-white shadow-[0_0_15px_rgba(22,163,74,0.4)]" : 
+              bettingActive ? "bg-primary hover:bg-primary/90" : "bg-muted text-muted-foreground"
+            }`}>
+            {myBetPlaced ? "✓ Bet Active" : placing ? "Placing…" : bettingActive ? "Place Bet" : "Waiting for Next Round"}
           </Button>
         </div>
 

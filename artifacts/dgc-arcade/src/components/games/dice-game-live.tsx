@@ -235,23 +235,27 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
       const animate = setInterval(() => {
         setDiceValue(Math.floor(Math.random() * 6) + 1);
         frames++;
-        if (frames > 15) clearInterval(animate);
-      }, 100);
+        if (frames > 25) clearInterval(animate);
+      }, 80);
 
       placeBet.mutate({ data: { gameId: game.id, amount, meta: { target, mode } } }, {
         onSuccess: (data) => {
-          clearInterval(animate);
-          const meta = data.bet.meta as Record<string, unknown>;
-          const roll = meta?.roll as number ?? 50;
-          const finalDice = Math.max(1, Math.min(6, Math.ceil(roll / (100 / 6))));
-          setDiceValue(finalDice);
-          setResult(roll);
-          setWon(data.won);
-          setPayout(data.payout);
-          setBettingOnNext(false);
-          qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
-          qc.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
-          qc.invalidateQueries({ queryKey: getListBetsQueryKey() });
+          // Keep animating for a moment to build suspense
+          setTimeout(() => {
+            clearInterval(animate);
+            const meta = data.bet.meta as Record<string, unknown>;
+            const roll = meta?.roll as number ?? 50;
+            // Precise dice mapping: 1-16=1, 17-33=2, 34-50=3, 51-66=4, 67-83=5, 84-100=6
+            const finalDice = Math.max(1, Math.min(6, Math.ceil(roll / (100 / 6))));
+            setDiceValue(finalDice);
+            setResult(roll);
+            setWon(data.won);
+            setPayout(data.payout);
+            setBettingOnNext(false);
+            qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+            qc.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
+            qc.invalidateQueries({ queryKey: getListBetsQueryKey() });
+          }, 800);
         },
         onError: (err) => {
           clearInterval(animate);

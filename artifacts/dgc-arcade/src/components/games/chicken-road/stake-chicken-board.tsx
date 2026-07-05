@@ -348,10 +348,13 @@ export function StakeChickenBoard({
       measuredCenters?.lanes[scrollTargetLane] ??
       SIDEWALK_W + scrollTargetLane * laneWidth + laneWidth / 2;
     
-    // Improved mobile auto-scroll logic: keep the chicken centered in the viewport
-    const target = Math.max(0, laneCenter - el.clientWidth / 2);
-    el.scrollTo({ left: target, behavior: "smooth" });
-  }, [scrollTargetLane, laneWidth, chickenVisible, onSidewalk, measuredCenters]);
+    // Final mobile auto-scroll fix: strictly center the chicken and prevent it from leaving the frame
+    const viewportWidth = el.clientWidth;
+    if (viewportWidth > 0) {
+      const target = Math.max(0, laneCenter - viewportWidth / 2);
+      el.scrollTo({ left: target, behavior: "smooth" });
+    }
+  }, [scrollTargetLane, laneWidth, chickenVisible, onSidewalk, measuredCenters, scrollRef.current?.clientWidth]);
 
   useEffect(() => {
     const board = boardRef.current;

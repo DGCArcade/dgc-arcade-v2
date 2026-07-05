@@ -229,14 +229,16 @@ export function Coinflip({ game }: CoinflipProps) {
       <style>{`
         /* ── Responsive layout ── */
         @media (max-width: 1024px) {
-          .cf-root { flex-direction: column !important; padding: 6px !important; gap: 8px !important; }
-          .cf-coin-area { order: 1 !important; width: 100% !important; min-height: 160px !important; padding: 12px 10px !important; }
-          .cf-bet-panel { order: 2 !important; width: 100% !important; position: static !important; }
-          .cf-coin-wrap { transform: scale(0.72); transform-origin: center center; }
-          /* Stats row visible below coin on mobile */
-          .cf-stats-mobile { display: flex !important; }
-          /* Stats row in bet panel hidden on mobile (avoid duplication) */
+          .cf-root { flex-direction: column !important; padding: 4px !important; gap: 6px !important; height: 100% !important; overflow: hidden !important; }
+          .cf-coin-area { order: 1 !important; width: 100% !important; flex: 1 1 auto !important; min-height: 120px !important; padding: 10px !important; }
+          .cf-bet-panel { order: 2 !important; width: 100% !important; flex: 0 0 auto !important; padding: 8px !important; gap: 6px !important; }
+          .cf-coin-wrap { transform: scale(0.55); transform-origin: center center; }
+          .cf-stats-mobile { display: flex !important; margin-top: -20px !important; }
           .cf-stats-panel { display: none !important; }
+          .cf-choice-group { flex-direction: row !important; gap: 4px !important; }
+          .cf-choice-btn { height: 32px !important; font-size: 10px !important; }
+          .cf-flip-btn { height: 40px !important; font-size: 12px !important; }
+          .cf-amount-input { height: 32px !important; font-size: 12px !important; }
         }
         @media (min-width: 1025px) {
           .cf-stats-mobile { display: none !important; }

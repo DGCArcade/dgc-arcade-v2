@@ -285,8 +285,8 @@ function PlayingCard({ card, hidden, delay = 0, dealFrom, isMobile }: {
 
   return (
     <div ref={cardRef} className="bj-card-container" style={{
-      width: isMobile ? "clamp(55px, 15vw, 85px)" : 85, 
-      height: isMobile ? "clamp(75px, 20vw, 118px)" : 118, 
+      width: isMobile ? "clamp(48px, 13vw, 70px)" : 85, 
+      height: isMobile ? "clamp(66px, 18vw, 98px)" : 118, 
       borderRadius: 8, position: "relative",
       perspective: 1000,
     }}>
@@ -601,13 +601,13 @@ export function Blackjack({ game }: BlackjackProps) {
           min-height: 0 !important;
           width: 100% !important;
           max-height: none !important;
-          padding: 6px 4px !important;
+          padding: 12px 4px !important;
           border-width: 2px !important;
           border-radius: 10px !important;
-          justify-content: center !important;
-          gap: 4px !important;
+          justify-content: space-around !important;
+          gap: 8px !important;
           order: 1 !important;
-          aspect-ratio: 4/3 !important;
+          aspect-ratio: 1/1 !important;
         }
         .bj-game-root--mobile .bj-table-deco {
           display: block !important;
@@ -643,8 +643,8 @@ export function Blackjack({ game }: BlackjackProps) {
           top: 4px !important;
         }
         .bj-game-root--mobile .bj-card-container {
-          width: 42px !important;
-          height: 58px !important;
+          width: clamp(48px, 13vw, 70px) !important;
+          height: clamp(66px, 18vw, 98px) !important;
         }
         .bj-game-root--mobile .bj-card-container .bj-card-front-rank { font-size: 12px !important; }
         .bj-game-root--mobile .bj-card-container .bj-card-front-suit-sm { font-size: 10px !important; }

@@ -55,20 +55,24 @@ export function Roulette({ game }: RouletteProps) {
           const currentActualRotation = rotation % 360;
           const targetFinalAngle = (360 - targetAngle) % 360;
           const extraRotation = (targetFinalAngle - currentActualRotation + 360) % 360;
+          // Ensure the wheel spins at least 5 full rotations (1800 deg) plus the distance to the target pocket
           const wheelDelta = 1800 + extraRotation;
           const newRot = rotation + wheelDelta;
           setRotation(newRot);
-          setBallRotation(prev => prev - wheelDelta * 1.2);
+          
+          // Ball spins in the opposite direction and slightly faster for realism
+          const ballDelta = 2160 + (360 - extraRotation); 
+          setBallRotation(prev => prev - ballDelta);
 
           setTimeout(() => {
             setSpinning(false);
             setResult(pocket);
             setWin(data.won);
             setPayout(data.payout);
-            setBallRotation(prev => {
-              const mod = ((prev % 360) + 360) % 360;
-              return prev - mod;
-            });
+            
+            // Normalize rotations to keep numbers manageable
+            setRotation(newRot % 360);
+            setBallRotation(prevBall => (prevBall - ballDelta) % 360);
             qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
             qc.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
             qc.invalidateQueries({ queryKey: getListBetsQueryKey() });
@@ -173,8 +177,8 @@ export function Roulette({ game }: RouletteProps) {
           max-height: 100% !important;
         }
         .roulette-game-root--mobile .roulette-wheel-svg {
-          max-width: min(100%, 180px) !important;
-          max-height: min(100%, 180px) !important;
+          max-width: min(100%, 160px) !important;
+          max-height: min(100%, 160px) !important;
         }
         .roulette-game-root--mobile .roulette-result-badge {
           width: 36px !important;
@@ -222,16 +226,19 @@ export function Roulette({ game }: RouletteProps) {
           margin-top: 4px !important;
         }
         .roulette-game-root--mobile .roulette-number-picker {
-          max-height: none !important;
-          overflow: visible !important;
-          grid-template-columns: repeat(10, minmax(0, 1fr)) !important;
-          gap: 2px !important;
+          max-height: 120px !important;
+          overflow-y: auto !important;
+          grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+          gap: 4px !important;
+          padding: 4px !important;
+          background: rgba(0,0,0,0.2) !important;
+          border-radius: 8px !important;
         }
         .roulette-game-root--mobile .roulette-number-picker button {
           width: 100% !important;
-          height: 20px !important;
-          min-height: 20px !important;
-          font-size: 7px !important;
+          height: 32px !important;
+          min-height: 32px !important;
+          font-size: 11px !important;
           padding: 0 !important;
         }
         .roulette-game-root--mobile .roulette-pf-panel { display: none !important; }

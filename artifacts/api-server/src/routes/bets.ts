@@ -198,17 +198,21 @@ function resolveBet(
       let guess = (meta?.guess as string) ?? "higher";
       if (meta?.pick === "hi") guess = "higher";
       if (meta?.pick === "lo") guess = "lower";
+      if (meta?.pick === "equal") guess = "exact";
+
       let threshold = Number(meta?.threshold ?? 7);
       if (meta?.currentRank != null && meta?.currentRank !== "") {
         const RANKS = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
         const idx = RANKS.indexOf(String(meta.currentRank));
         if (idx >= 0) threshold = idx + 1;
       }
+
       let won = false;
       if (guess === "higher") { won = card > threshold; }
       else if (guess === "lower") { won = card < threshold; }
       else { won = card === threshold; }
-      const winChance = guess === "exact" ? 1/13 : guess === "higher" ? (13 - threshold) / 13 : (threshold - 1) / 13;
+
+      const winChance = (guess === "exact" || guess === "equal") ? 1/13 : guess === "higher" ? (13 - threshold) / 13 : (threshold - 1) / 13;
       const multiplier = won ? Math.max(1.01, (1 - houseEdge) / Math.max(0.01, winChance)) : 0;
       const suitIdx = Math.floor(getOutcomeN(serverSeed, clientSeedStr, "hilo-suit", nonce) * 4);
       const SUITS = ["♠","♥","♦","♣"];
