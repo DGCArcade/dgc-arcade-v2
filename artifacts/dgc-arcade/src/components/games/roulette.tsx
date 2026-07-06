@@ -109,7 +109,10 @@ export function Roulette({ game }: RouletteProps) {
           //   C + R ≡ 0 (mod 360)  ⟹  R ≡ −C ≡ 360 − C (mod 360).
           // We add 1440° (4 full extra rotations) for a satisfying visual spin.
           const pocketCenterDeg = ((idx + 0.5) / 37) * 360;          // C
-          const wheelDelta = ((360 - pocketCenterDeg) % 360);         // 0–360
+          const currentWheelMod = ((rotation % 360) + 360) % 360;    // current wheel position mod 360
+          // We want: (C + currentWheelMod + wheelDelta) % 360 = 0
+          // => wheelDelta = (360 - C - currentWheelMod) % 360
+          const wheelDelta = ((360 - pocketCenterDeg - currentWheelMod + 360) % 360); // 0–360
           const spinAmount = 1440 + wheelDelta;                        // ≥ 4 full rotations
           const newRot = rotation + spinAmount;
 
