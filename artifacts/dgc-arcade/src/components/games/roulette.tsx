@@ -107,19 +107,15 @@ export function Roulette({ game }: RouletteProps) {
           // To land the pocket CENTER under the pointer, we need to offset by half a sector.
           // This ensures the ball lands in the middle of the pocket, not on the edge.
           const halfSector = sectorDeg / 2;
-          const targetAngle = idx * sectorDeg + halfSector;
+          const pocketAngle = idx * sectorDeg + halfSector;
           
-          // Wheel spin: pointer is at top (0deg). Rotate wheel so pocket center lands under pointer.
-          // Add 1440deg (4 full rotations) for visual flair, then subtract the target angle.
-          const newRot = rotation + 1440 - targetAngle;
+          // Spin amount: 1440 degrees (4 rotations) plus the angle to bring pocket to top
+          const spinAmount = 1440 + (360 - (pocketAngle % 360));
+          const newRot = rotation + spinAmount;
           
 	          setRotation(newRot);
-          // Ball spins opposite direction but MUST end at a clean multiple of 360 to land at top.
-          // Calculate how many full rotations to add so the ball ends at 0 (mod 360).
-          // Ball final position = -(newRot) + ballSpins*360, we want this ≡ 0 (mod 360)
-          // So: ballSpins*360 ≡ newRot (mod 360)
-          // The ball needs to rotate backward by the same amount as the wheel rotates forward.
-          const ballNewRot = -newRot + Math.floor(newRot / 360) * 360;
+          // Ball rotates opposite direction by the same amount
+          const ballNewRot = ballRotation - spinAmount;
           setBallRotation(ballNewRot);
 	
 	          setTimeout(() => {
@@ -201,7 +197,7 @@ export function Roulette({ game }: RouletteProps) {
         transformOrigin: `${cx}px ${cy}px`,
         transition: spinning ? `transform 4s cubic-bezier(0.15, 0, 0.2, 1)` : "none",
       }}>
-        <circle cx={cx} cy={cy - r} r="4" fill="white" stroke="#ccc" strokeWidth="1"
+        <circle cx={cx} cy={cy - 82} r="4" fill="white" stroke="#ccc" strokeWidth="1"
           style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.5))" }}/>
       </g>
       {/* Pointer */}
