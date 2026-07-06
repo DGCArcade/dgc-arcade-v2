@@ -365,15 +365,15 @@ export function StakeChickenBoard({
 
   // Fix: Ensure chicken snaps to current position when hopping starts to avoid "weird animation jump"
   useEffect(() => {
-    if (hopping) {
-      // Small delay to let the state update propagate
-      const timer = setTimeout(() => {
-        if (boardRef.current) {
-           // This helps the motor pick up from the correct start point
-        }
-      }, 0);
-      return () => clearTimeout(timer);
-    }
+    if (!hopping) return;
+    
+    // Small delay to let the state update propagate
+    const timer = setTimeout(() => {
+      if (boardRef.current) {
+         // This helps the motor pick up from the correct start point
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [hopping]);
 
   useEffect(() => {
