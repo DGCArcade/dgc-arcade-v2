@@ -337,19 +337,7 @@ export function StakeChickenBoard({
       y: area ? area.clientHeight * (crossAnim.phase === "manhole-fire" ? 0.72 : 0.42) : 300,
     });
     setBurstId(id => id + 1);
-  }, [crossAnim?.lane, crossAnim?.phase, laneWidth]);
-
-  // Track scroll position so chicken stays pinned to its sewer during manual scroll
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      setScrollLeft(el.scrollLeft);
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, []);
-
+    }, [crossAnim?.lane, crossAnim?.phase, laneWidth]);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !chickenVisible) return;
