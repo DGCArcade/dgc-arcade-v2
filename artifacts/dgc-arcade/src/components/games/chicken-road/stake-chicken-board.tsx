@@ -276,7 +276,6 @@ export function StakeChickenBoard({
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [burstId, setBurstId] = useState(0);
   const [burstOrigin, setBurstOrigin] = useState({ x: 200, y: 300 });
-  const [scrollLeft, setScrollLeft] = useState(0);
 
   const onSidewalk = isActive && currentLane === 0 && !hopping;
 
@@ -452,11 +451,12 @@ export function StakeChickenBoard({
           </div>
         </div>
 
+        {/* Chicken stays fixed on screen, only moves when hopping to next sewer */}
         {chickenVisible && (
           <div
             className="absolute z-30 pointer-events-none"
             style={{
-              left: `${motor.left + scrollLeft}px`,
+              left: `${motor.left}px`,
               bottom: `${28 + motor.liftY}px`,
               transform: `translateX(-50%) scale(${motor.scaleX}, ${motor.scaleY})`,
               transformOrigin: "center bottom",
