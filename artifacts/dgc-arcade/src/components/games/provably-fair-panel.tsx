@@ -111,7 +111,7 @@ export function ProvablyFairPanel({
         Provably Fair · SHA-256
       </div>
       <p className="text-[9px] text-muted-foreground leading-relaxed">
-        SHA-256 commit is published before play. After {gameName}, verify the revealed seed matches the hash and reproduces death placement.
+        SHA-256 commit is published before play. After {gameName}, verify the revealed seed matches the hash and reproduces the game result.
       </p>
       {serverSeedHash && (
         <div>

@@ -224,23 +224,24 @@ export function Coinflip({ game }: CoinflipProps) {
     : "none";
 
   return (
-    <div className="cf-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "flex-start", boxSizing: "border-box" }}>
+    <div className="cf-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "stretch", boxSizing: "border-box", minHeight: "600px" }}>
 
       <style>{`
         /* ── Responsive layout ── */
         @media (max-width: 1024px) {
-          .cf-root { flex-direction: column !important; padding: 4px !important; gap: 6px !important; height: 100% !important; overflow: hidden !important; }
-          .cf-coin-area { order: 1 !important; width: 100% !important; flex: 1 1 auto !important; min-height: 120px !important; padding: 10px !important; }
-          .cf-bet-panel { order: 2 !important; width: 100% !important; flex: 0 0 auto !important; padding: 8px !important; gap: 6px !important; }
-          .cf-coin-wrap { transform: scale(0.55); transform-origin: center center; }
-          .cf-stats-mobile { display: flex !important; margin-top: -20px !important; }
+          .cf-root { flex-direction: column !important; padding: 4px !important; gap: 8px !important; height: auto !important; min-height: 0 !important; }
+          .cf-coin-area { order: 1 !important; width: 100% !important; flex: 0 0 auto !important; min-height: 250px !important; padding: 30px 10px !important; }
+          .cf-bet-panel { order: 2 !important; width: 100% !important; flex: 0 0 auto !important; padding: 16px !important; gap: 10px !important; position: static !important; }
+          .cf-coin-wrap { transform: scale(0.75); transform-origin: center center; margin: 10px 0 !important; }
+          .cf-stats-mobile { display: flex !important; margin-top: 0 !important; }
           .cf-stats-panel { display: none !important; }
-          .cf-choice-group { flex-direction: row !important; gap: 4px !important; }
-          .cf-choice-btn { height: 32px !important; font-size: 10px !important; }
-          .cf-flip-btn { height: 40px !important; font-size: 12px !important; }
-          .cf-amount-input { height: 32px !important; font-size: 12px !important; }
+          .cf-choice-group { flex-direction: row !important; gap: 8px !important; }
+          .cf-choice-btn { height: 48px !important; font-size: 12px !important; }
+          .cf-flip-btn { height: 52px !important; font-size: 14px !important; }
+          .cf-pf-mobile { display: block !important; }
         }
         @media (min-width: 1025px) {
+          .cf-pf-mobile { display: none !important; }
           .cf-stats-mobile { display: none !important; }
           .cf-stats-panel  { display: flex !important; }
         }
@@ -288,16 +289,16 @@ export function Coinflip({ game }: CoinflipProps) {
         className="cf-coin-area"
         style={{
           flex: 1, minWidth: 0,
-          borderRadius: 20,
-          background: "radial-gradient(ellipse at 50% 38%, rgba(255,255,255,0.04) 0%, rgba(0,0,0,0) 70%)",
-          border: "1.5px solid rgba(255,255,255,0.07)",
-          backdropFilter: "blur(6px)",
+          borderRadius: 24,
+          background: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          backdropFilter: "blur(12px)",
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          gap: 20,
-          padding: "40px 24px",
+          gap: 30,
+          padding: "60px 24px",
           position: "relative",
           overflow: "hidden",
-          transition: "box-shadow 0.5s ease",
+          transition: "all 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
           boxShadow: coinAreaGlow,
           animation: win === true ? "cf-win-pulse 2.2s ease-in-out infinite" : win === false ? "cf-lose-pulse 2.2s ease-in-out infinite" : "none",
         }}
@@ -378,6 +379,20 @@ export function Coinflip({ game }: CoinflipProps) {
             </div>
           ))}
         </div>
+
+        {/* SHA-256 Hash display (Compact for mobile, visible for transparency) */}
+        {(serverSeedHash || betId) && (
+          <div className="cf-pf-mobile" style={{ position: "relative", zIndex: 5, width: "100%", maxWidth: 450, marginTop: 20 }}>
+            <ProvablyFairPanel
+              betId={betId ?? undefined}
+              serverSeedHash={serverSeedHash}
+              clientSeed={clientSeed ?? undefined}
+              nonce={nonce ?? undefined}
+              variant="compact"
+              gameName="coinflip"
+            />
+          </div>
+        )}
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
@@ -507,22 +522,11 @@ export function Coinflip({ game }: CoinflipProps) {
             boxShadow: isFlipping || placeBet.isPending ? "none" : `0 4px 20px ${accent}55`,
             opacity: isFlipping || placeBet.isPending ? 0.48 : 1,
             transition: "all 0.16s", fontFamily: "'Outfit', sans-serif",
-            marginTop: "auto",
+            marginTop: "20px",
           }}
         >
           {isFlipping ? "Flipping…" : "Flip Coin"}
         </button>
-
-        {(serverSeedHash || betId) && (
-          <ProvablyFairPanel
-            betId={betId ?? undefined}
-            serverSeedHash={serverSeedHash}
-            clientSeed={clientSeed ?? undefined}
-            nonce={nonce ?? undefined}
-            variant={betId ? "full" : "compact"}
-            gameName="coinflip"
-          />
-        )}
 
       </div>
     </div>

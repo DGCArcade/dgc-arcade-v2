@@ -181,13 +181,14 @@ gamesRouter.get("/slot-themes/:slug", async (req, res) => {
 // GET /api/games/by-slug/:slug — look up a game by its slug
 gamesRouter.get("/by-slug/:slug", async (req, res) => {
   try {
+    const settings = await getPlatformSettings();
     const [game] = await db
       .select()
       .from(gamesTable)
       .where(eq(gamesTable.slug, req.params.slug))
       .limit(1);
-    if (!game) {
-      res.status(404).json({ error: "Game not found" });
+    if (!game || !isGameSlugEnabled(settings, req.params.slug)) {
+      res.status(404).json({ error: "Game not found or disabled" });
       return;
     }
     res.json(formatGame(game));

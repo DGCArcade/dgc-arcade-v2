@@ -167,30 +167,54 @@ function resolveBet(
 
     case "roulette": {
       const pocket = Math.floor(seed * 37); // 0-36
-      const betType = (meta?.betType as string) ?? "color";
-      const betValue = meta?.betValue;
-      let won = false;
-      let multiplier = 0;
-      if (betType === "number") {
-        won = pocket === Number(betValue);
-        multiplier = won ? 35 * (1 - houseEdge) : 0;
-      } else if (betType === "color") {
-        if (betValue === "green") { won = pocket === 0; multiplier = won ? 14 * (1 - houseEdge) : 0; }
-        else if (betValue === "red") { won = pocket !== 0 && ROULETTE_RED.has(pocket); multiplier = won ? 2 * (1 - houseEdge) : 0; }
-        else { won = pocket !== 0 && !ROULETTE_RED.has(pocket); multiplier = won ? 2 * (1 - houseEdge) : 0; }
-      } else if (betType === "evenodd") {
-        if (pocket === 0) { won = false; }
-        else { won = betValue === "even" ? pocket % 2 === 0 : pocket % 2 !== 0; }
-        multiplier = won ? 2 * (1 - houseEdge) : 0;
-      } else if (betType === "dozen") {
-        const dozen = Math.ceil(pocket / 12);
-        won = pocket !== 0 && dozen === Number(betValue);
-        multiplier = won ? 3 * (1 - houseEdge) : 0;
-      } else if (betType === "half") {
-        won = pocket !== 0 && (betValue === "low" ? pocket <= 18 : pocket >= 19);
-        multiplier = won ? 2 * (1 - houseEdge) : 0;
-      }
-      return { won, multiplier, payout: won ? amount * multiplier : 0, resultMeta: { pocket, betType, betValue } };
+      const multiBets = (meta?.bets as Array<{ betType: string; betValue: any }>) ?? [];
+      
+      // If no multi-bets, fallback to single bet for backward compatibility
+      const betsToProcess = multiBets.length > 0 
+        ? multiBets 
+        : [{ betType: (meta?.betType as string) ?? "color", betValue: meta?.betValue }];
+
+      let totalPayout = 0;
+      const results = betsToProcess.map(b => {
+        let won = false;
+        let mult = 0;
+        const { betType, betValue } = b;
+
+        if (betType === "number") {
+          won = pocket === Number(betValue);
+          mult = won ? 36 : 0; // Standard European payout is 35:1 (36x total)
+        } else if (betType === "color") {
+          if (betValue === "green") { won = pocket === 0; mult = won ? 36 : 0; }
+          else if (betValue === "red") { won = pocket !== 0 && ROULETTE_RED.has(pocket); mult = won ? 2 : 0; }
+          else { won = pocket !== 0 && !ROULETTE_RED.has(pocket); mult = won ? 2 : 0; }
+        } else if (betType === "evenodd") {
+          if (pocket === 0) { won = false; }
+          else { won = betValue === "even" ? pocket % 2 === 0 : pocket % 2 !== 0; }
+          mult = won ? 2 : 0;
+        } else if (betType === "dozen") {
+          const dozen = Math.ceil(pocket / 12);
+          won = pocket !== 0 && dozen === Number(betValue);
+          mult = won ? 3 : 0;
+        } else if (betType === "half") {
+          won = pocket !== 0 && (betValue === "low" ? pocket <= 18 : pocket >= 19);
+          mult = won ? 2 : 0;
+        }
+
+        // Apply house edge to the individual bet payout
+        const payout = won ? (amount / betsToProcess.length) * mult * (1 - houseEdge) : 0;
+        totalPayout += payout;
+        return { betType, betValue, won, payout };
+      });
+
+      const won = totalPayout > 0;
+      const finalMultiplier = totalPayout / amount;
+
+      return { 
+        won, 
+        multiplier: finalMultiplier, 
+        payout: totalPayout, 
+        resultMeta: { pocket, results } 
+      };
     }
 
     case "hilo": {
@@ -282,8 +306,38 @@ function resolveBet(
     case "race":
       throw new Error("Horse Race must be played via /api/race/run");
 
-    case "plinko":
-      throw new Error("Plinko is not yet available");
+    case "plinko": {
+      // Standard Plinko logic: random path down a pyramid of pins
+      // 0 = left, 1 = right
+      const rows = Number(meta?.rows ?? 8);
+      const path: number[] = [];
+      let currentBucket = 0;
+      for (let i = 0; i < rows; i++) {
+        const step = getOutcomeN(serverSeed, clientSeedStr, "plinko", nonce * 100 + i) < 0.5 ? 0 : 1;
+        path.push(step);
+        currentBucket += step;
+      }
+      
+      // Bucket multipliers for 8 rows (standard Plinko)
+      const multipliers8 = [10, 3, 2, 1.5, 1, 1.5, 2, 3, 10];
+      const multipliers12 = [24, 10, 5, 2, 1.2, 0.5, 0.2, 0.5, 1.2, 2, 5, 10, 24];
+      const multipliers16 = [110, 41, 10, 5, 3, 1.5, 1, 0.5, 0.2, 0.5, 1, 1.5, 3, 5, 10, 41, 110];
+      
+      let table = multipliers8;
+      if (rows === 12) table = multipliers12;
+      else if (rows === 16) table = multipliers16;
+      
+      const baseMult = table[currentBucket] ?? 1;
+      const multiplier = baseMult * (1 - houseEdge);
+      const won = multiplier > 1;
+      
+      return {
+        won,
+        multiplier,
+        payout: amount * multiplier,
+        resultMeta: { bucket: currentBucket, path, rows }
+      };
+    }
 
     default:
       throw new Error(`Unknown game slug: ${gameSlug}`);

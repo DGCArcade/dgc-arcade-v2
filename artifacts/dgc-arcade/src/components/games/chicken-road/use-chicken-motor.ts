@@ -27,7 +27,7 @@ export function useChickenMotor(
 
   useEffect(() => {
     displayLeftRef.current = targetLeft;
-    setState(s => ({ ...s, left: targetLeft }));
+    setState(s => ({ ...s, left: targetLeft, liftY: 0 }));
   }, [enabled]);
 
   useEffect(() => {
@@ -45,21 +45,20 @@ export function useChickenMotor(
 
     const tick = (now: number) => {
       const rawT = Math.min(1, (now - start) / GLIDE_MS);
-      const eased = elasticOut(rawT);
+      // Use sineOut for a smoother, non-bouncing glide if the user complains about jumping
+      const eased = rawT; // Direct movement, no elastic bounce
       const left = fromLeft + (targetLeft - fromLeft) * eased;
       displayLeftRef.current = left;
 
-      // Progress through the hop arc (0 = launch, 1 = land) — not remaining distance.
       const hopArc = rawT;
       let scaleX: number;
       let scaleY: number;
-      let liftY = 0;
+      let liftY = 0; // Removed vertical lift to stop "jumping freakout"
 
       if (hopping && rawT < 1) {
         const squish = squishStretch(hopArc);
         scaleX = squish.scaleX;
         scaleY = squish.scaleY;
-        liftY = -Math.sin(rawT * Math.PI) * 20;
       } else {
         const breath = idleBreath(now);
         scaleX = breath.scaleX;
@@ -73,12 +72,11 @@ export function useChickenMotor(
       } else {
         glidingRef.current = false;
         displayLeftRef.current = targetLeft;
-        setState({
+        setState(s => ({
+          ...s,
           left: targetLeft,
-          scaleX: 1,
-          scaleY: 1,
           liftY: 0,
-        });
+        }));
       }
     };
 

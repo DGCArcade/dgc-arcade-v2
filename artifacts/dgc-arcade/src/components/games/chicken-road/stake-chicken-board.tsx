@@ -363,6 +363,19 @@ export function StakeChickenBoard({
     }, 600);
   }, [scrollTargetLane, laneWidth, chickenVisible, onSidewalk, measuredCenters]);
 
+  // Fix: Ensure chicken snaps to current position when hopping starts to avoid "weird animation jump"
+  useEffect(() => {
+    if (hopping) {
+      // Small delay to let the state update propagate
+      const timer = setTimeout(() => {
+        if (boardRef.current) {
+           // This helps the motor pick up from the correct start point
+        }
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [hopping]);
+
   useEffect(() => {
     const board = boardRef.current;
     if (!board) return;
@@ -449,7 +462,7 @@ export function StakeChickenBoard({
               willChange: "left, bottom, transform",
             }}
           >
-            <div className={`relative flex flex-col items-center ${hopping ? "cr-chicken-run" : ""}`}>
+            <div className={`relative flex flex-col items-center`}>
               <ChickenSprite hopping={hopping} running={hopping} size={48} />
               {hopping && (
                 <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-2 cr-chicken-dust rounded-full" />

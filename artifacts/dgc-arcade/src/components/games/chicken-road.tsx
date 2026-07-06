@@ -73,7 +73,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
   const qc = useQueryClient();
   const accent = useAccent();
   const minBet = parseFloat(String(game.minBet ?? 0.01));
-  const maxBet = parseFloat(String(game.maxBet ?? 1_000_000));
+  const maxBet = parseFloat(String(game.maxBet ?? 1000));
   const animLock = useRef(false);
 
   const [amount, setAmount] = useState(minBet);

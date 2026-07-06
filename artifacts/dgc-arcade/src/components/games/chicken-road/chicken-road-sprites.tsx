@@ -11,7 +11,7 @@ export function ChickenSprite({
   facing?: "left" | "right";
 }) {
   const flip = facing === "left" ? "scaleX(-1)" : undefined;
-  const animClass = running ? "cr-chicken-run" : hopping ? "cr-chicken-hop" : "";
+  const animClass = running ? "cr-chicken-run" : ""; // Removed cr-chicken-hop as it conflicts with useChickenMotor.ts JS animation
   return (
     <svg viewBox="0 0 56 64" width={size} height={size * 1.14} className={animClass} style={{ transform: flip }}>
       <ellipse cx="28" cy="58" rx="12" ry="3" fill="#000" opacity="0.25" />

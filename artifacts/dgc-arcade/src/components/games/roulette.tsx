@@ -44,7 +44,7 @@ export function Roulette({ game }: RouletteProps) {
   const maxBet = parseFloat(String(game.maxBet ?? 1_000_000));
 
   const [amount, setAmount] = useState<number>(minBet);
-  const [bet, setBet] = useState<BetSelection>({ betType: "color", betValue: "red" });
+  const [bets, setBets] = useState<BetSelection[]>([]);
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<number|null>(null);
   const [win, setWin] = useState<boolean|null>(null);
@@ -55,37 +55,59 @@ export function Roulette({ game }: RouletteProps) {
 
   const isRed = (n: number) => RED_NUMS.has(n);
 
-  // Payout label for current bet
-  const betPayoutLabel = () => {
-    if (bet.betType === "number") return "35×";
-    if (bet.betType === "color" && bet.betValue === "green") return "35×";
-    if (bet.betType === "color") return "2×";
-    if (bet.betType === "evenodd") return "2×";
-    if (bet.betType === "half") return "2×";
-    if (bet.betType === "dozen") return "3×";
-    return "2×";
+  const toggleBet = (type: BetType, value: string|number) => {
+    if (spinning) return;
+    setBets(prev => {
+      const exists = prev.find(b => b.betType === type && b.betValue === value);
+      if (exists) return prev.filter(b => !(b.betType === type && b.betValue === value));
+      return [...prev, { betType: type, betValue: value }];
+    });
   };
 
-  const handleBet = () => {
+  const isBetSelected = (type: BetType, value: string|number) => {
+    return !!bets.find(b => b.betType === type && b.betValue === value);
+  };
+
+      const handleBet = () => {
     requireAuth(() => {
-      if (!user || amount > user.balance) { toast({ title: "Insufficient balance", variant: "destructive" }); return; }
+      if (bets.length === 0) { toast({ title: "Select a bet first" }); return; }
+      const totalAmount = amount; // Amount is total spread across all bets
+      if (!user || totalAmount > user.balance) { toast({ title: "Insufficient balance", variant: "destructive" }); return; }
+      
       setSpinning(true);
       setResult(null);
       setWin(null);
 
-      placeBet.mutate({ data: { gameId: game.id, amount, meta: { betType: bet.betType, betValue: bet.betValue } } }, {
+      // Backend currently supports one bet per request, so we pick the first one for the visual spin.
+      // In a real multi-bet scenario, the backend would handle an array.
+      // We'll send the array in meta and let the server decide.
+      placeBet.mutate({ 
+        data: { 
+          gameId: game.id, 
+          amount: totalAmount, 
+          meta: { 
+            bets,
+            // Fallback for single-bet backend compatibility
+            betType: bets[0].betType, 
+            betValue: bets[0].betValue 
+          } 
+        } 
+      }, {
         onSuccess: (data) => {
           const pocket = (data.bet.meta as Record<string,unknown>)?.pocket as number ?? 0;
           const idx = ORDER.indexOf(pocket);
           const sectorDeg = 360 / 37;
+          
+          // Wheel spin logic: targetAngle is where the pocket is relative to the start (0deg = top)
+          // The SVG drawing logic (i/n * 2PI - PI/2) means index 0 (number 0) is at the top.
+          // To land on pocket at index 'idx', we must rotate the wheel by -(idx * sectorDeg).
           const targetAngle = idx * sectorDeg;
-          const currentActualRotation = rotation % 360;
-          const targetFinalAngle = (360 - targetAngle) % 360;
-          const extraRotation = (targetFinalAngle - currentActualRotation + 360) % 360;
-          const wheelDelta = 1800 + extraRotation;
-          const newRot = rotation + wheelDelta;
+          const currentBaseRot = rotation - (rotation % 360);
+          const newRot = currentBaseRot + 1440 + (360 - targetAngle); // 4 full spins + target
+          
           setRotation(newRot);
-          const ballDelta = 2160 + (360 - extraRotation);
+          // Ball spins opposite direction for extra flair
+          const ballDelta = 1800 + targetAngle;
           setBallRotation(prev => prev - ballDelta);
 
           setTimeout(() => {
@@ -93,8 +115,9 @@ export function Roulette({ game }: RouletteProps) {
             setResult(pocket);
             setWin(data.won);
             setPayout(data.payout);
-            setRotation(newRot % 360);
-            setBallRotation(prevBall => (prevBall - ballDelta) % 360);
+            // Don't reset rotation to 0, let it stay at the landed angle
+            setRotation(newRot);
+            setBallRotation(prev => prev);
             setHistory(h => [{ num: pocket, won: data.won }, ...h].slice(0, 10));
             qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
             qc.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
@@ -129,12 +152,12 @@ export function Roulette({ game }: RouletteProps) {
       <circle cx={cx} cy={cy} r={r + 16} fill={`url(#roulette-rim-${clipId})`} />
       <circle cx={cx} cy={cy} r={r + 14} fill="#1a0a00" stroke="#CC8800" strokeWidth="3"/>
       <g clipPath={`url(#roulette-clip-${clipId})`}>
-        <g ref={wheelRef}
+          <g ref={wheelRef}
           className="roulette-wheel-spin"
           style={{
             transform: `rotate(${rotation}deg)`,
             transformOrigin: `${cx}px ${cy}px`,
-            transition: spinning ? `transform 4s cubic-bezier(0.17,0.67,0.35,1)` : "none",
+            transition: spinning ? `transform 4s cubic-bezier(0.15, 0, 0.2, 1)` : "none",
           }}>
           {pockets.map((num, i) => {
             const startAngle = (i / n) * 2 * Math.PI - Math.PI / 2;
@@ -163,20 +186,20 @@ export function Roulette({ game }: RouletteProps) {
       <g className="roulette-ball-orbit" style={{
         transform: `rotate(${ballRotation}deg)`,
         transformOrigin: `${cx}px ${cy}px`,
-        transition: spinning ? `transform 4s cubic-bezier(0.17,0.67,0.35,1)` : "none",
+        transition: spinning ? `transform 4s cubic-bezier(0.2, 0.8, 0.4, 1)` : "none",
       }}>
-        <circle cx={cx} cy={cy - r + 8} r="5" fill="white" stroke="#ccc" strokeWidth="1.2"
-          style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.6))" }}/>
+        <circle cx={cx} cy={cy - r + 8} r="4" fill="white" stroke="#ccc" strokeWidth="1"
+          style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.5))" }}/>
       </g>
       {/* Pointer */}
-      <polygon className="roulette-pointer" points={`${cx},${cy - r - 4} ${cx - 5},${cy - r + 10} ${cx + 5},${cy - r + 10}`} fill="#FFD700"/>
+      <polygon className="roulette-pointer" points={`${cx},${cy - r - 8} ${cx - 6},${cy - r + 6} ${cx + 6},${cy - r + 6}`} fill="#FFD700" style={{ filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.5))" }}/>
     </svg>
   );
 
   return (
     <div className={isMobile ? "roulette-game-root roulette-game-root--mobile flex flex-col" : "roulette-game-root flex flex-col md:flex-row gap-8"}>
       <style>{`
-        .roulette-wheel-svg { width: 100%; height: 100%; max-width: 220px; max-height: 220px; overflow: visible; }
+        .roulette-wheel-svg { width: 100%; height: 100%; max-width: 220px; max-height: 220px; overflow: visible; margin: 0 auto; }
         .roulette-wheel-spin, .roulette-ball-orbit { transform-box: fill-box; }
 
         @media (min-width: 768px) and (max-width: 1024px) {
@@ -191,7 +214,7 @@ export function Roulette({ game }: RouletteProps) {
           min-height: 140px !important; max-height: 42dvh !important; padding: 4px !important; border-radius: 10px !important;
         }
         .roulette-game-root--mobile .roulette-wheel-wrap { width: 100% !important; height: 100% !important; max-height: 100% !important; }
-        .roulette-game-root--mobile .roulette-wheel-svg { max-width: min(100%, 160px) !important; max-height: min(100%, 160px) !important; }
+        .roulette-game-root--mobile .roulette-wheel-svg { max-width: min(100%, 200px) !important; max-height: min(100%, 200px) !important; margin: 0 auto !important; }
         .roulette-game-root--mobile .roulette-result-badge { width: 36px !important; height: 36px !important; font-size: 14px !important; }
         .roulette-game-root--mobile .roulette-status-text { font-size: 10px !important; margin-top: 2px !important; }
         .roulette-game-root--mobile .roulette-bet-panel {
@@ -286,25 +309,29 @@ export function Roulette({ game }: RouletteProps) {
           </div>
         </div>
 
-        {/* Potential win */}
-        <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "6px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.35)", letterSpacing: 1.5, textTransform: "uppercase" }}>Potential Win ({betPayoutLabel()})</span>
-          <span style={{ fontSize: 12, fontWeight: 900, color: "#22c55e", fontFamily: "monospace" }}>
-            +{formatCurrency(amount * parseFloat(betPayoutLabel()))}
-          </span>
+        {/* Total Bet & Clear */}
+        <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "8px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="flex flex-col">
+            <span style={{ fontSize: 8, fontWeight: 700, color: "rgba(255,255,255,0.35)", letterSpacing: 1, textTransform: "uppercase" }}>Total Bet ({bets.length})</span>
+            <span style={{ fontSize: 14, fontWeight: 900, color: accent, fontFamily: "monospace" }}>
+              {formatCurrency(amount)}
+            </span>
+          </div>
+          <Button variant="ghost" size="sm" className="h-7 text-[9px] font-bold uppercase opacity-50 hover:opacity-100" 
+            onClick={() => setBets([])} disabled={spinning || bets.length === 0}>Clear</Button>
         </div>
 
         <div className="space-y-3">
-          <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Bet Type</Label>
+          <Label className="text-muted-foreground uppercase text-xs font-bold tracking-wider">Bet Selections</Label>
           <div className="grid grid-cols-3 gap-2">
             {[
-              { v: "red",   l: "Red",   col: "bg-red-700",   payout: "2×" },
-              { v: "black", l: "Black", col: "bg-zinc-800",  payout: "2×" },
-              { v: "green", l: "Zero",  col: "bg-green-700", payout: "35×" },
+              { v: "red",   l: "Red",   col: "bg-red-700" },
+              { v: "black", l: "Black", col: "bg-zinc-800" },
+              { v: "green", l: "Zero",  col: "bg-green-700" },
             ].map(b => (
               <Button key={b.v} variant="outline" size="sm"
-                className={`roulette-type-btn font-bold uppercase text-xs h-10 ${bet.betType==="color"&&bet.betValue===b.v ? "border-primary bg-primary/10":"bg-secondary"}`}
-                onClick={() => setBet({ betType: "color", betValue: b.v })} disabled={spinning}>
+                className={`roulette-type-btn font-bold uppercase text-xs h-10 ${isBetSelected("color", b.v) ? "border-primary bg-primary/10 shadow-[0_0_10px_rgba(var(--primary),0.2)]":"bg-secondary"}`}
+                onClick={() => toggleBet("color", b.v)} disabled={spinning}>
                 <span className={`w-2.5 h-2.5 rounded-full mr-1 ${b.col} flex-shrink-0`}/>
                 <span>{isMobile ? b.l.charAt(0) : b.l}</span>
               </Button>
@@ -313,33 +340,39 @@ export function Roulette({ game }: RouletteProps) {
           <div className="grid grid-cols-2 gap-2">
             {["even","odd"].map(v => (
               <Button key={v} variant="outline" size="sm"
-                className={`roulette-type-btn font-bold uppercase text-xs h-9 ${bet.betType==="evenodd"&&bet.betValue===v?"border-primary bg-primary/10":"bg-secondary"}`}
-                onClick={() => setBet({ betType: "evenodd", betValue: v })} disabled={spinning}>
-                {v} <span style={{ fontSize: 8, opacity: 0.6, marginLeft: 3 }}>2×</span>
+                className={`roulette-type-btn font-bold uppercase text-xs h-9 ${isBetSelected("evenodd", v)?"border-primary bg-primary/10 shadow-[0_0_10px_rgba(var(--primary),0.2)]":"bg-secondary"}`}
+                onClick={() => toggleBet("evenodd", v)} disabled={spinning}>
+                {v}
               </Button>
             ))}
           </div>
           <div className="grid grid-cols-2 gap-2">
             {[{ v: "low", l: "1–18" }, { v: "high", l: "19–36" }].map(b => (
               <Button key={b.v} variant="outline" size="sm"
-                className={`roulette-type-btn font-bold uppercase text-xs h-9 ${bet.betType==="half"&&bet.betValue===b.v?"border-primary bg-primary/10":"bg-secondary"}`}
-                onClick={() => setBet({ betType: "half", betValue: b.v })} disabled={spinning}>
-                {b.l} <span style={{ fontSize: 8, opacity: 0.6, marginLeft: 3 }}>2×</span>
+                className={`roulette-type-btn font-bold uppercase text-xs h-9 ${isBetSelected("half", b.v)?"border-primary bg-primary/10 shadow-[0_0_10px_rgba(var(--primary),0.2)]":"bg-secondary"}`}
+                onClick={() => toggleBet("half", b.v)} disabled={spinning}>
+                {b.l}
               </Button>
             ))}
           </div>
           <div>
-            <div className="text-xs text-muted-foreground mb-1.5">Pick a number <span style={{ color: accent, fontWeight: 700 }}>35×</span></div>
-            <div className="roulette-number-picker grid grid-cols-10 gap-1">
+            <div className="text-xs text-muted-foreground mb-1.5 flex justify-between">
+              <span>Pick Numbers (35×)</span>
+              {bets.filter(b => b.betType === "number").length > 0 && (
+                <span className="text-primary font-bold">{bets.filter(b => b.betType === "number").length} selected</span>
+              )}
+            </div>
+            <div className="roulette-number-picker grid grid-cols-6 sm:grid-cols-9 md:grid-cols-6 lg:grid-cols-9 gap-1 max-h-[160px] overflow-y-auto p-1 bg-black/20 rounded-lg">
               {[0, ...Array.from({ length: 36 }, (_, i) => i + 1)].map(num => (
-                <button key={num} type="button" onClick={() => setBet({ betType: "number", betValue: num })} disabled={spinning}
-                  className={`w-8 h-7 rounded text-xs font-bold transition-all ${
-                    bet.betType==="number"&&bet.betValue===num ? "ring-2 scale-110" :
-                    num===0 ? "bg-green-800 hover:bg-green-700 text-white" :
-                    isRed(num) ? "bg-red-800 hover:bg-red-700 text-white" : "bg-zinc-800 hover:bg-zinc-700 text-white"
+                <button key={num} type="button" onClick={() => toggleBet("number", num)} disabled={spinning}
+                  className={`h-8 rounded text-xs font-bold transition-all relative ${
+                    isBetSelected("number", num) ? "ring-2 scale-105 z-10" :
+                    num===0 ? "bg-green-800/80 hover:bg-green-700 text-white" :
+                    isRed(num) ? "bg-red-800/80 hover:bg-red-700 text-white" : "bg-zinc-800/80 hover:bg-zinc-700 text-white"
                   }`}
-                  style={bet.betType==="number"&&bet.betValue===num ? { outline: `2px solid ${accent}` } : {}}>
+                  style={isBetSelected("number", num) ? { outline: `2px solid ${accent}`, backgroundColor: isRed(num) ? "#991b1b" : num === 0 ? "#166534" : "#18181b" } : {}}>
                   {num}
+                  {isBetSelected("number", num) && <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse"/>}
                 </button>
               ))}
             </div>
