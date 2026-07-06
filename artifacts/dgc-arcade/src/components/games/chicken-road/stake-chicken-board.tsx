@@ -276,6 +276,7 @@ export function StakeChickenBoard({
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [burstId, setBurstId] = useState(0);
   const [burstOrigin, setBurstOrigin] = useState({ x: 200, y: 300 });
+  const [scrollLeft, setScrollLeft] = useState(0);
 
   const onSidewalk = isActive && currentLane === 0 && !hopping;
 
@@ -338,6 +339,17 @@ export function StakeChickenBoard({
     });
     setBurstId(id => id + 1);
   }, [crossAnim?.lane, crossAnim?.phase, laneWidth]);
+
+  // Track scroll position so chicken stays pinned to its sewer during manual scroll
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      setScrollLeft(el.scrollLeft);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -444,7 +456,7 @@ export function StakeChickenBoard({
           <div
             className="absolute z-30 pointer-events-none"
             style={{
-              left: `${motor.left}px`,
+              left: `${motor.left + scrollLeft}px`,
               bottom: `${28 + motor.liftY}px`,
               transform: `translateX(-50%) scale(${motor.scaleX}, ${motor.scaleY})`,
               transformOrigin: "center bottom",
