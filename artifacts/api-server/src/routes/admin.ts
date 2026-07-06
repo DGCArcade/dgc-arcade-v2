@@ -2284,6 +2284,11 @@ adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
         .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value } });
     }
     invalidatePlatformSettingsCache();
+    
+    // Also invalidate public games cache if disabledGameSlugs changed
+    if (updates.disabledGameSlugs !== undefined) {
+      invalidatePublicGamesCache();
+    }
 
     const settings = await getPlatformSettings();
     res.json({ success: true, settings });

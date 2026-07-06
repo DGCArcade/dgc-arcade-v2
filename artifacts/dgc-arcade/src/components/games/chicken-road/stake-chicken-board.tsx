@@ -354,7 +354,14 @@ export function StakeChickenBoard({
       const target = Math.max(0, laneCenter - viewportWidth / 2);
       el.scrollTo({ left: target, behavior: "smooth" });
     }
-  }, [scrollTargetLane, laneWidth, chickenVisible, onSidewalk, measuredCenters, scrollRef.current?.clientWidth]);
+    // Ensure scroll completes even on high lane indices
+    setTimeout(() => {
+      if (el && viewportWidth > 0) {
+        const target = Math.max(0, laneCenter - viewportWidth / 2);
+        el.scrollLeft = target;
+      }
+    }, 600);
+  }, [scrollTargetLane, laneWidth, chickenVisible, onSidewalk, measuredCenters]);
 
   useEffect(() => {
     const board = boardRef.current;

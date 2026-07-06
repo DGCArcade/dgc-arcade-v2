@@ -458,8 +458,15 @@ blackjackRouter.post("/action", requireAuth, requireLocationVerified, async (req
       res.json({
         handId: hand.id,
         playerHand: splitState,
+        isSplit: true,
+        splitHands: splitState.hands,
+        activeHandIndex: splitState.activeHandIndex,
+        splitStatuses: splitState.statuses,
         dealerHand: [dealerHand[0], { suit: "?", rank: "?" }],
+        playerTotal: 0,
+        dealerTotal: null,
         status: "active",
+        payout: 0,
         balance: totalBalance,
         currency: usedCurrency,
         serverSeedHash, clientSeed, nonce,
@@ -564,9 +571,18 @@ async function handleSplitAction(req: any, res: any, hand: any, user: any, state
 
   const { totalBalance } = await getUserBalance(user.id);
   res.json({
-    handId: hand.id, playerHand: state,
+    handId: hand.id,
+    playerHand: state,
+    isSplit: true,
+    splitHands: state.hands,
+    activeHandIndex: state.activeHandIndex,
+    splitStatuses: state.statuses,
     dealerHand: [{ suit: "?", rank: "?" }, { suit: "?", rank: "?" }],
-    status: "active", payout: 0, balance: totalBalance,
+    playerTotal: 0,
+    dealerTotal: null,
+    status: "active",
+    payout: 0,
+    balance: totalBalance,
     currency,
     serverSeedHash, clientSeed, nonce,
   });
@@ -606,8 +622,18 @@ async function finishSplitHand(res: any, hand: any, user: any, state: SplitState
   });
 
   res.json({
-    handId: hand.id, playerHand: state, dealerHand,
-    status: "completed", payout: totalPayout, balance: finalBalance,
+    handId: hand.id,
+    playerHand: state,
+    isSplit: true,
+    splitHands: state.hands,
+    activeHandIndex: state.activeHandIndex,
+    splitStatuses: state.statuses,
+    dealerHand,
+    playerTotal: 0,
+    dealerTotal: handTotal(dealerHand),
+    status: "split_complete",
+    payout: totalPayout,
+    balance: finalBalance,
     currency,
     serverSeedHash, clientSeed, nonce,
   });
