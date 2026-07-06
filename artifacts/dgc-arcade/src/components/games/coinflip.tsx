@@ -224,20 +224,20 @@ export function Coinflip({ game }: CoinflipProps) {
     : "none";
 
   return (
-    <div className="cf-root" style={{ display: "flex", flexDirection: "row", gap: 12, width: "100%", padding: "12px", alignItems: "stretch", boxSizing: "border-box", minHeight: "600px" }}>
+    <div className="cf-root" style={{ display: "flex", flexDirection: "row", gap: 16, width: "100%", padding: "16px", alignItems: "stretch", boxSizing: "border-box", minHeight: "600px" }}>
 
       <style>{`
         /* ── Responsive layout ── */
         @media (max-width: 1024px) {
-          .cf-root { flex-direction: column !important; padding: 4px !important; gap: 8px !important; height: auto !important; min-height: 0 !important; }
-          .cf-coin-area { order: 1 !important; width: 100% !important; flex: 0 0 auto !important; min-height: 250px !important; padding: 30px 10px !important; }
-          .cf-bet-panel { order: 2 !important; width: 100% !important; flex: 0 0 auto !important; padding: 16px !important; gap: 10px !important; position: static !important; }
-          .cf-coin-wrap { transform: scale(0.75); transform-origin: center center; margin: 10px 0 !important; }
+          .cf-root { flex-direction: column !important; padding: 8px !important; gap: 12px !important; height: auto !important; min-height: 0 !important; }
+          .cf-coin-area { order: 1 !important; width: 100% !important; flex: 0 0 auto !important; min-height: 280px !important; padding: 40px 16px !important; }
+          .cf-bet-panel { order: 2 !important; width: 100% !important; flex: 0 0 auto !important; padding: 20px !important; gap: 14px !important; position: static !important; }
+          .cf-coin-wrap { transform: scale(0.8); transform-origin: center center; margin: 12px 0 !important; }
           .cf-stats-mobile { display: flex !important; margin-top: 0 !important; }
           .cf-stats-panel { display: none !important; }
-          .cf-choice-group { flex-direction: row !important; gap: 8px !important; }
-          .cf-choice-btn { height: 48px !important; font-size: 12px !important; }
-          .cf-flip-btn { height: 52px !important; font-size: 14px !important; }
+          .cf-choice-group { flex-direction: row !important; gap: 10px !important; }
+          .cf-choice-btn { height: 52px !important; font-size: 13px !important; }
+          .cf-flip-btn { height: 56px !important; font-size: 15px !important; margin-top: 24px !important; }
           .cf-pf-mobile { display: block !important; }
         }
         @media (min-width: 1025px) {
@@ -274,11 +274,15 @@ export function Coinflip({ game }: CoinflipProps) {
         }
 
         /* ── Button hover states ── */
-        .cf-choice-btn:hover:not(:disabled) { filter: brightness(1.12); transform: scale(1.02); }
-        .cf-choice-btn:active:not(:disabled) { transform: scale(0.97); }
-        .cf-mult:hover:not(:disabled) { background: rgba(255,255,255,0.12) !important; color: #fff !important; }
-        .cf-flip-btn:hover:not(:disabled) { filter: brightness(1.12); transform: scale(1.02); }
-        .cf-flip-btn:active:not(:disabled) { transform: scale(0.97); }
+        .cf-choice-btn { transition: all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .cf-choice-btn:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3) !important; }
+        .cf-choice-btn:active:not(:disabled) { transform: translateY(0px); }
+        .cf-mult { transition: all 0.14s; }
+        .cf-mult:hover:not(:disabled) { background: rgba(255,255,255,0.14) !important; color: #fff !important; transform: translateY(-1px); }
+        .cf-mult:active:not(:disabled) { transform: translateY(0px); }
+        .cf-flip-btn { transition: all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .cf-flip-btn:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,0.4) !important; }
+        .cf-flip-btn:active:not(:disabled) { transform: translateY(-1px); }
         .cf-pf-toggle:hover { opacity: 0.85; }
       `}</style>
 
@@ -289,13 +293,13 @@ export function Coinflip({ game }: CoinflipProps) {
         className="cf-coin-area"
         style={{
           flex: 1, minWidth: 0,
-          borderRadius: 24,
-          background: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)",
-          border: "1px solid rgba(255,255,255,0.1)",
-          backdropFilter: "blur(12px)",
+          borderRadius: 28,
+          background: "linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)",
+          border: "1.5px solid rgba(255,255,255,0.12)",
+          backdropFilter: "blur(16px)",
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          gap: 30,
-          padding: "60px 24px",
+          gap: 32,
+          padding: "64px 28px",
           position: "relative",
           overflow: "hidden",
           transition: "all 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -400,24 +404,24 @@ export function Coinflip({ game }: CoinflipProps) {
       ══════════════════════════════════════════════════════════════════════ */}
       <div className="cf-bet-panel" style={{
         width: "100%", flexShrink: 0,
-        background: "rgba(8,12,26,0.88)",
-        border: "1.5px solid rgba(255,255,255,0.07)",
-        borderRadius: 14, padding: "14px",
-        display: "flex", flexDirection: "column", gap: 12,
-        backdropFilter: "blur(14px)",
+        background: "linear-gradient(135deg, rgba(8,12,26,0.92) 0%, rgba(15,17,40,0.88) 100%)",
+        border: "1.5px solid rgba(255,255,255,0.09)",
+        borderRadius: 18, padding: "18px",
+        display: "flex", flexDirection: "column", gap: 14,
+        backdropFilter: "blur(16px)",
         position: "sticky", top: 80,
-      }}>
+      }>
 
         {/* Panel title */}
-        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 3, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: 8 }}>
-          Place Your Bet
+        <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: 3.5, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", textAlign: "center", borderBottom: "1.5px solid rgba(255,255,255,0.08)", paddingBottom: 10 }}>
+          💰 Place Your Bet
         </div>
 
         {/* Bet amount */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>Bet Amount</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2.2, color: "rgba(255,255,255,0.52)", textTransform: "uppercase" }}>Bet Amount</label>
           <div style={{ position: "relative" }}>
-            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.28)", fontFamily: "monospace", fontSize: 13, fontWeight: 700, pointerEvents: "none" }}>$</span>
+            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.35)", fontFamily: "monospace", fontSize: 14, fontWeight: 800, pointerEvents: "none" }}>$</span>
             <input
               type="text" inputMode="decimal"
               value={amountStr}
@@ -425,16 +429,16 @@ export function Coinflip({ game }: CoinflipProps) {
               onBlur={handleAmountBlur}
               disabled={isFlipping}
               style={{
-                width: "100%", paddingLeft: 25, paddingRight: 10, paddingTop: 9, paddingBottom: 9,
-                fontSize: 13, fontWeight: 700, fontFamily: "monospace",
-                background: "rgba(255,255,255,0.05)",
-                border: `1.5px solid ${isFlipping ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.11)"}`,
+                width: "100%", paddingLeft: 28, paddingRight: 12, paddingTop: 11, paddingBottom: 11,
+                fontSize: 14, fontWeight: 700, fontFamily: "monospace",
+                background: "rgba(255,255,255,0.06)",
+                border: `1.5px solid ${isFlipping ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.13)"}`,
                 borderRadius: 8, color: "#fff", outline: "none",
                 opacity: isFlipping ? 0.55 : 1, boxSizing: "border-box",
               }}
             />
           </div>
-          <div style={{ display: "flex", gap: 4 }}>
+          <div style={{ display: "flex", gap: 5 }}>
             {[
               { l: "MIN", fn: () => setAmt(minBet) },
               { l: "0.1", fn: () => setAmt(0.1) },
@@ -444,9 +448,9 @@ export function Coinflip({ game }: CoinflipProps) {
             ].map(({ l, fn }) => (
               <button key={l} onClick={fn} disabled={isFlipping} className="cf-mult"
                 style={{
-                  flex: 1, padding: "8px 6px", borderRadius: 7, fontSize: 9, fontWeight: 700, letterSpacing: 1.2,
-                  textTransform: "uppercase", background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.6)",
+                  flex: 1, padding: "10px 8px", borderRadius: 8, fontSize: 10, fontWeight: 800, letterSpacing: 1.3,
+                  textTransform: "uppercase", background: "rgba(255,255,255,0.07)",
+                  border: "1.5px solid rgba(255,255,255,0.11)", color: "rgba(255,255,255,0.65)",
                   cursor: isFlipping ? "not-allowed" : "pointer", transition: "all 0.14s",
                   opacity: isFlipping ? 0.38 : 1,
                 }}>{l}</button>
@@ -455,19 +459,19 @@ export function Coinflip({ game }: CoinflipProps) {
         </div>
 
         {/* Side chooser */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>Choose Side</label>
-          <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2.2, color: "rgba(255,255,255,0.52)", textTransform: "uppercase" }}>Choose Side</label>
+          <div style={{ display: "flex", gap: 8 }}>
             {[
               { side: "heads" as const, label: "⬆ Heads", color: accent },
               { side: "tails" as const, label: "⬇ Tails", color: "#64748b" },
             ].map(({ side, label, color }) => (
               <button key={side} onClick={() => setChoice(side)} disabled={isFlipping} className="cf-choice-btn"
                 style={{
-                  flex: 1, padding: "11px 8px", borderRadius: 10, fontSize: 11, fontWeight: 900, letterSpacing: 1.5,
+                  flex: 1, padding: "13px 10px", borderRadius: 12, fontSize: 12, fontWeight: 900, letterSpacing: 1.6,
                   textTransform: "uppercase",
-                  background: choice === side ? `${color}cc` : "rgba(255,255,255,0.06)",
-                  border: `2px solid ${choice === side ? color : "rgba(255,255,255,0.1)"}`,
+                  background: choice === side ? `${color}dd` : "rgba(255,255,255,0.07)",
+                  border: `2.5px solid ${choice === side ? color : "rgba(255,255,255,0.12)"}`,
                   color: choice === side ? "#000" : "rgba(255,255,255,0.6)",
                   cursor: isFlipping ? "not-allowed" : "pointer", transition: "all 0.16s",
                   opacity: isFlipping ? 0.38 : 1,
@@ -501,9 +505,9 @@ export function Coinflip({ game }: CoinflipProps) {
         </div>
 
         {/* Potential win */}
-        <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "8px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.35)", letterSpacing: 1.5, textTransform: "uppercase" }}>Potential Win</span>
-          <span style={{ fontSize: 13, fontWeight: 900, color: "#22c55e", fontFamily: "monospace" }}>
+        <div style={{ background: "linear-gradient(135deg, rgba(34,197,94,0.08) 0%, rgba(34,197,94,0.03) 100%)", borderRadius: 10, padding: "11px 13px", display: "flex", justifyContent: "space-between", alignItems: "center", border: "1.5px solid rgba(34,197,94,0.15)" }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: "rgba(34,197,94,0.65)", letterSpacing: 1.8, textTransform: "uppercase" }}>🎯 Potential Win</span>
+          <span style={{ fontSize: 14, fontWeight: 900, color: "#22c55e", fontFamily: "monospace" }}>
             +{formatCurrency(amount * 2)}
           </span>
         </div>
@@ -514,18 +518,18 @@ export function Coinflip({ game }: CoinflipProps) {
           disabled={isFlipping || placeBet.isPending}
           className="cf-flip-btn"
           style={{
-            padding: "14px 20px", borderRadius: 10, fontWeight: 900, fontSize: 13, letterSpacing: 3,
+            padding: "16px 24px", borderRadius: 12, fontWeight: 900, fontSize: 14, letterSpacing: 3.2,
             textTransform: "uppercase",
-            background: `linear-gradient(140deg, ${accent}ee, ${accent}aa)`,
+            background: `linear-gradient(140deg, ${accent}f0, ${accent}b8)`,
             color: "#000", border: "none",
             cursor: isFlipping || placeBet.isPending ? "not-allowed" : "pointer",
-            boxShadow: isFlipping || placeBet.isPending ? "none" : `0 4px 20px ${accent}55`,
-            opacity: isFlipping || placeBet.isPending ? 0.48 : 1,
-            transition: "all 0.16s", fontFamily: "'Outfit', sans-serif",
-            marginTop: "20px",
+            boxShadow: isFlipping || placeBet.isPending ? "none" : `0 6px 28px ${accent}66`,
+            opacity: isFlipping || placeBet.isPending ? 0.52 : 1,
+            transition: "all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1)", fontFamily: "'Outfit', sans-serif",
+            marginTop: "24px",
           }}
         >
-          {isFlipping ? "Flipping…" : "Flip Coin"}
+          {isFlipping ? "🎲 Flipping…" : "🎲 Flip Coin"}
         </button>
 
       </div>
