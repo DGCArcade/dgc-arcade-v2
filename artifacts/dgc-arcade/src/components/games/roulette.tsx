@@ -103,13 +103,13 @@ export function Roulette({ game }: RouletteProps) {
           // The SVG draws sector i with its CENTER at angle:
           //   C = ((i + 0.5) / n) * 360  degrees from the top (12 o'clock), clockwise.
           // The pointer sits at the top (angle 0).
-          // When the wheel rotates clockwise by R degrees, a point originally at
-          // angle A moves to angle (A − R).  For the pocket center to reach the
-          // pointer we need:  C − R ≡ 0 (mod 360)  ⟹  R ≡ C (mod 360).
+          // In CSS, positive rotation = clockwise. When the wheel rotates by +R,
+          // a point originally at angle A moves to angle (A + R) mod 360.
+          // For the pocket center to reach the pointer we need:
+          //   C + R ≡ 0 (mod 360)  ⟹  R ≡ −C ≡ 360 − C (mod 360).
           // We add 1440° (4 full extra rotations) for a satisfying visual spin.
           const pocketCenterDeg = ((idx + 0.5) / 37) * 360;          // C
-          const currentWheelMod = ((rotation % 360) + 360) % 360;    // prevRot mod 360
-          const wheelDelta = (pocketCenterDeg - currentWheelMod + 360) % 360; // 0–360
+          const wheelDelta = ((360 - pocketCenterDeg) % 360);         // 0–360
           const spinAmount = 1440 + wheelDelta;                        // ≥ 4 full rotations
           const newRot = rotation + spinAmount;
 
