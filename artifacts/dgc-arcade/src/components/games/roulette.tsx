@@ -102,13 +102,15 @@ export function Roulette({ game }: RouletteProps) {
           // The SVG drawing logic (i/n * 2PI - PI/2) means index 0 (number 0) is at the top.
           // To land on pocket at index 'idx', we must rotate the wheel by -(idx * sectorDeg).
           const targetAngle = idx * sectorDeg;
-          // Accumulate from current rotation so the wheel never jumps back
-          const newRot = rotation + 1440 + ((360 - (rotation % 360) + (360 - targetAngle)) % 360); // 4 full spins + land on pocket
+          // Wheel spin: pointer is at top (0deg). Rotate wheel so pocket at idx lands under pointer.
+          // Add 1440deg (4 full rotations) for visual flair, then subtract the target index angle.
+          const newRot = rotation + 1440 - targetAngle;
           
           setRotation(newRot);
-          // Ball spins opposite direction for extra flair
-          const ballDelta = 1800 + targetAngle;
-          setBallRotation(prev => prev - ballDelta);
+          // Ball spins opposite direction and lands at the same pocket.
+          // If wheel rotates by newRot, ball must rotate by -newRot to end at the same spot.
+          const ballNewRot = -newRot;
+          setBallRotation(ballNewRot);
 
           setTimeout(() => {
             setSpinning(false);
