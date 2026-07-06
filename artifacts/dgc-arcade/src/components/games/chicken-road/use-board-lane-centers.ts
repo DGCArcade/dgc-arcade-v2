@@ -52,13 +52,14 @@ export function useBoardLaneCenters(
 
     // Debounce scroll events to avoid constant re-measurement feedback loop
     // that causes the chicken to micro-shake side-to-side
+    // Increased debounce to 150ms to reduce measurement drift during active scrolling
     let scrollTimeout: NodeJS.Timeout | null = null;
     const onScroll = () => {
       if (scrollTimeout) clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
         measure();
         scrollTimeout = null;
-      }, 100);
+      }, 150);
     };
 
     scroll?.addEventListener("scroll", onScroll, { passive: true });

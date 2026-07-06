@@ -352,8 +352,9 @@ export function StakeChickenBoard({
     const viewportWidth = el.clientWidth;
     if (viewportWidth > 0) {
       const target = Math.max(0, laneCenter - viewportWidth / 2);
-      // Only scroll if significantly different to avoid constant re-triggers
-      if (Math.abs(el.scrollLeft - target) > 5) {
+      // Increased threshold from 5px to 10px to prevent constant micro-scrolls
+      // that cause measurement drift and chicken bouncing
+      if (Math.abs(el.scrollLeft - target) > 10) {
         el.scrollTo({ left: target, behavior: "smooth" });
       }
     }

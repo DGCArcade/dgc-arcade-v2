@@ -34,8 +34,8 @@ export function useChickenMotor(
     if (!enabled) return;
     
     // If target hasn't really changed, don't restart the motor.
-    // Increased threshold to 2px to prevent micro-jitter from measurement drift during scroll.
-    if (Math.abs(displayLeftRef.current - targetLeft) < 2 && !hopping) {
+    // Increased threshold to 5px to prevent micro-jitter from measurement drift during scroll.
+    if (Math.abs(displayLeftRef.current - targetLeft) < 5 && !hopping) {
       return;
     }
 
@@ -90,6 +90,8 @@ export function useChickenMotor(
     let raf = 0;
     const tick = (now: number) => {
       if (glidingRef.current) return;
+      // Only apply idle breathing if position hasn't settled yet
+      // to avoid continuous micro-movements that cause bouncing
       const breath = idleBreath(now);
       setState(s => ({
         ...s,
