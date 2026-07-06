@@ -103,12 +103,12 @@ function LiveBettorFeed({ bets, label, showResults }: { bets: any[]; label: stri
   return (
     <div className="space-y-2 h-full flex flex-col">
       <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{label}</div>
-      <div className="space-y-2 overflow-y-auto flex-1">
+      <div className="space-y-1 overflow-y-auto flex-1">
         {bets.length === 0 ? (
-          <div className="text-center text-muted-foreground text-xs py-4">No bets yet</div>
+          <div className="text-center text-muted-foreground text-xs py-1">No bets yet</div>
         ) : (
           bets.map((bet, i) => (
-            <div key={i} className="flex items-center justify-between text-xs p-2 rounded"
+            <div key={i} className="flex items-center justify-between text-xs p-1 rounded"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
               <div className="flex-1 min-w-0">
                 <div className="font-mono font-bold text-white truncate">{bet.username}</div>
@@ -257,15 +257,15 @@ export function DiceGameLive({ game }: DiceGameLiveProps) {
         }
         /* MOBILE */
         @media (max-width: 767px) {
-          .dice-container { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto auto; gap: 8px; }
-          .betting-panel { grid-column: 1; grid-row: 1 / 3; padding: 12px; }
-          .dice-display { grid-column: 2; grid-row: 1; padding: 12px; }
-          .live-feed { grid-column: 2; grid-row: 2; padding: 12px; }
-          .sha-display { grid-column: 1 / 3; grid-row: 3; padding: 12px; display: none; }
-          .dice-size { width: 80px; height: 80px; }
-          .result-text { font-size: 40px; }
-          .label-text { font-size: 10px; }
-          .button-text { font-size: 11px; }
+          .dice-container { display: flex; flex-direction: column; gap: 8px; max-height: 100dvh; overflow-y: auto; }
+          .betting-panel { padding: 12px; order: 2; flex-shrink: 0; }
+          .dice-display { padding: 12px; order: 1; flex-shrink: 0; }
+          .live-feed { padding: 8px; order: 3; flex-shrink: 0; max-height: 140px; }
+          .sha-display { padding: 12px; display: none; }
+          .dice-size { width: 70px; height: 70px; }
+          .result-text { font-size: 36px; }
+          .label-text { font-size: 9px; }
+          .button-text { font-size: 10px; }
         }
         @keyframes dice-bounce {
           0%, 100% { transform: translateY(0) scale(1); }

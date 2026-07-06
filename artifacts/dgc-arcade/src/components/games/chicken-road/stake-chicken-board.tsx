@@ -348,19 +348,15 @@ export function StakeChickenBoard({
       measuredCenters?.lanes[scrollTargetLane] ??
       SIDEWALK_W + scrollTargetLane * laneWidth + laneWidth / 2;
     
-    // Final mobile auto-scroll fix: strictly center the chicken and prevent it from leaving the frame
+    // Smooth scroll to center the chicken without jitter
     const viewportWidth = el.clientWidth;
     if (viewportWidth > 0) {
       const target = Math.max(0, laneCenter - viewportWidth / 2);
-      el.scrollTo({ left: target, behavior: "smooth" });
-    }
-    // Ensure scroll completes even on high lane indices
-    setTimeout(() => {
-      if (el && viewportWidth > 0) {
-        const target = Math.max(0, laneCenter - viewportWidth / 2);
-        el.scrollLeft = target;
+      // Only scroll if significantly different to avoid constant re-triggers
+      if (Math.abs(el.scrollLeft - target) > 5) {
+        el.scrollTo({ left: target, behavior: "smooth" });
       }
-    }, 600);
+    }
   }, [scrollTargetLane, laneWidth, chickenVisible, onSidewalk, measuredCenters]);
 
   // Fix: Ensure chicken snaps to current position when hopping starts to avoid "weird animation jump"
