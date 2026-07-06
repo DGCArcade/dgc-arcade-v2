@@ -410,7 +410,7 @@ export function Coinflip({ game }: CoinflipProps) {
         display: "flex", flexDirection: "column", gap: 14,
         backdropFilter: "blur(16px)",
         position: "sticky", top: 80,
-      }>
+      }}>
 
         {/* Panel title */}
         <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: 3.5, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", textAlign: "center", borderBottom: "1.5px solid rgba(255,255,255,0.08)", paddingBottom: 10 }}>
