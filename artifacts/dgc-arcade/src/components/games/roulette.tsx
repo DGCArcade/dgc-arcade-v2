@@ -13,8 +13,8 @@ import { Label } from "@/components/ui/label";
 import { ProvablyFairPanel } from "./provably-fair-panel";
 
 const RED_NUMS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
-// European Roulette wheel order: clockwise starting from top (0 degrees)
-const ORDER = [0,26,3,35,12,28,7,29,18,22,9,31,14,20,1,33,16,24,5,10,23,8,30,11,36,13,27,6,34,17,25,2,21,4,19,15,32];
+// European Roulette wheel order: official clockwise sequence starting from 0
+const ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
 
 type BetType = "number"|"color"|"evenodd"|"dozen"|"half";
 interface BetSelection { betType: BetType; betValue: string|number }
@@ -72,7 +72,8 @@ export function Roulette({ game }: RouletteProps) {
       const handleBet = () => {
     requireAuth(() => {
       if (bets.length === 0) { toast({ title: "Select a bet first" }); return; }
-      const totalAmount = amount; // Amount is total spread across all bets
+      // Each bet selection is a separate bet at the specified amount
+      const totalAmount = amount * bets.length;
       if (!user || totalAmount > user.balance) { toast({ title: "Insufficient balance", variant: "destructive" }); return; }
       
       setSpinning(true);
@@ -197,7 +198,7 @@ export function Roulette({ game }: RouletteProps) {
         transformOrigin: `${cx}px ${cy}px`,
         transition: spinning ? `transform 4s cubic-bezier(0.2, 0.8, 0.4, 1)` : "none",
       }}>
-        <circle cx={cx} cy={cy - r + 8} r="4" fill="white" stroke="#ccc" strokeWidth="1"
+        <circle cx={cx} cy={cy - r} r="4" fill="white" stroke="#ccc" strokeWidth="1"
           style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.5))" }}/>
       </g>
       {/* Pointer */}
@@ -323,7 +324,7 @@ export function Roulette({ game }: RouletteProps) {
           <div className="flex flex-col">
             <span style={{ fontSize: 8, fontWeight: 700, color: "rgba(255,255,255,0.35)", letterSpacing: 1, textTransform: "uppercase" }}>Total Bet ({bets.length})</span>
             <span style={{ fontSize: 14, fontWeight: 900, color: accent, fontFamily: "monospace" }}>
-              {formatCurrency(amount)}
+              {formatCurrency(amount * bets.length)}
             </span>
           </div>
           <Button variant="ghost" size="sm" className="h-7 text-[9px] font-bold uppercase opacity-50 hover:opacity-100" 
