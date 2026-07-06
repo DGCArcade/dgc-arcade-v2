@@ -98,24 +98,35 @@ export function Roulette({ game }: RouletteProps) {
         onSuccess: (data) => {
           const pocket = (data.bet.meta as Record<string,unknown>)?.pocket as number ?? 0;
           const idx = ORDER.indexOf(pocket);
-          const sectorDeg = 360 / 37;
-          
-          // Wheel spin logic: targetAngle is where the pocket is relative to the start (0deg = top)
-          // The SVG drawing logic (i/n * 2PI - PI/2) means index 0 (number 0) is at the top.
-          // To land on pocket at index 'idx', we must rotate the wheel by -(idx * sectorDeg).
-          // Wheel spin logic: The SVG draws sectors with edges at (i/n)*360 degrees.
-          // To land the pocket CENTER under the pointer, we need to offset by half a sector.
-          // This ensures the ball lands in the middle of the pocket, not on the edge.
-          const halfSector = sectorDeg / 2;
-          const pocketAngle = idx * sectorDeg + halfSector;
-          
-          // Spin amount: 1440 degrees (4 rotations) plus the angle to bring pocket to top
-          const spinAmount = 1440 + (360 - (pocketAngle % 360));
+
+          // ── Wheel spin ──────────────────────────────────────────────────────────
+          // The SVG draws sector i with its CENTER at angle:
+          //   C = ((i + 0.5) / n) * 360  degrees from the top (12 o'clock), clockwise.
+          // The pointer sits at the top (angle 0).
+          // When the wheel rotates clockwise by R degrees, a point originally at
+          // angle A moves to angle (A − R).  For the pocket center to reach the
+          // pointer we need:  C − R ≡ 0 (mod 360)  ⟹  R ≡ C (mod 360).
+          // We add 1440° (4 full extra rotations) for a satisfying visual spin.
+          const pocketCenterDeg = ((idx + 0.5) / 37) * 360;          // C
+          const currentWheelMod = ((rotation % 360) + 360) % 360;    // prevRot mod 360
+          const wheelDelta = (pocketCenterDeg - currentWheelMod + 360) % 360; // 0–360
+          const spinAmount = 1440 + wheelDelta;                        // ≥ 4 full rotations
           const newRot = rotation + spinAmount;
-          
-	          setRotation(newRot);
-          // Ball rotates opposite direction by the same amount
-          const ballNewRot = ballRotation - spinAmount;
+
+          // ── Ball orbit ──────────────────────────────────────────────────────────
+          // The ball SVG element sits at (cx, cy−82) inside its orbit group.
+          // The orbit group rotates by ballRotation degrees (clockwise = positive).
+          // Ball angle from top = ballRotation mod 360.
+          // We want the ball to end exactly at the TOP (angle 0) so it sits in the
+          // pocket (which the wheel has brought to the top).
+          // Strategy: spin the ball counter-clockwise by an amount whose mod-360
+          // value equals the current ballRotation mod 360, so the net mod-360 = 0.
+          // We keep at least 4 full rotations for the visual effect.
+          const currentBallMod = ((ballRotation % 360) + 360) % 360;  // prevBallRot mod 360
+          const ballSpinAmount = 1440 + currentBallMod;               // always ≥ 4 rotations
+          const ballNewRot = ballRotation - ballSpinAmount;            // counter-clockwise
+
+          setRotation(newRot);
           setBallRotation(ballNewRot);
 	
 	          setTimeout(() => {
