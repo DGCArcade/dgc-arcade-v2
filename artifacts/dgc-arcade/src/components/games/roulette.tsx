@@ -102,8 +102,8 @@ export function Roulette({ game }: RouletteProps) {
           // The SVG drawing logic (i/n * 2PI - PI/2) means index 0 (number 0) is at the top.
           // To land on pocket at index 'idx', we must rotate the wheel by -(idx * sectorDeg).
           const targetAngle = idx * sectorDeg;
-          const currentBaseRot = rotation - (rotation % 360);
-          const newRot = currentBaseRot + 1440 + (360 - targetAngle); // 4 full spins + target
+          // Accumulate from current rotation so the wheel never jumps back
+          const newRot = rotation + 1440 + ((360 - (rotation % 360) + (360 - targetAngle)) % 360); // 4 full spins + land on pocket
           
           setRotation(newRot);
           // Ball spins opposite direction for extra flair
@@ -199,8 +199,8 @@ export function Roulette({ game }: RouletteProps) {
   return (
     <div className={isMobile ? "roulette-game-root roulette-game-root--mobile flex flex-col" : "roulette-game-root flex flex-col md:flex-row gap-8"}>
       <style>{`
-        .roulette-wheel-svg { width: 100%; height: 100%; max-width: 280px; max-height: 280px; overflow: visible; margin: 0 auto; display: block; }
-        .roulette-wheel-spin, .roulette-ball-orbit { transform-box: fill-box; }
+        .roulette-wheel-svg { width: 100%; height: 100%; max-width: 280px; max-height: 280px; overflow: hidden; margin: 0 auto; display: block; }
+        .roulette-wheel-spin, .roulette-ball-orbit { transform-box: view-box; }
 
         @media (min-width: 768px) and (max-width: 1024px) {
           .roulette-game-root:not(.roulette-game-root--mobile) { flex-direction: column-reverse !important; gap: 12px !important; }
