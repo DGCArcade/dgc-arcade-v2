@@ -403,7 +403,7 @@ export function Coinflip({ game }: CoinflipProps) {
           BET PANEL  (right / full-width on mobile)
       ══════════════════════════════════════════════════════════════════════ */}
       <div className="cf-bet-panel" style={{
-        width: "100%", flexShrink: 0,
+        width: "380px", flexShrink: 0,
         background: "linear-gradient(135deg, rgba(8,12,26,0.92) 0%, rgba(15,17,40,0.88) 100%)",
         border: "1.5px solid rgba(255,255,255,0.09)",
         borderRadius: 18, padding: "18px",
