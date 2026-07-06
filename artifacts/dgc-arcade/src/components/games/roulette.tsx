@@ -114,10 +114,13 @@ export function Roulette({ game }: RouletteProps) {
           const newRot = rotation + 1440 - targetAngle;
           
 	          setRotation(newRot);
-	          // Ball spins opposite direction and lands at the same pocket.
-	          // If wheel rotates by newRot, ball must rotate by -newRot to end at the same spot.
-	          const ballNewRot = -newRot;
-	          setBallRotation(ballNewRot);
+          // Ball spins opposite direction but MUST end at a clean multiple of 360 to land at top.
+          // Calculate how many full rotations to add so the ball ends at 0 (mod 360).
+          // Ball final position = -(newRot) + ballSpins*360, we want this ≡ 0 (mod 360)
+          // So: ballSpins*360 ≡ newRot (mod 360)
+          // The ball needs to rotate backward by the same amount as the wheel rotates forward.
+          const ballNewRot = -newRot + Math.floor(newRot / 360) * 360;
+          setBallRotation(ballNewRot);
 	
 	          setTimeout(() => {
 	            setSpinning(false);
@@ -196,7 +199,7 @@ export function Roulette({ game }: RouletteProps) {
       <g className="roulette-ball-orbit" style={{
         transform: `rotate(${ballRotation}deg)`,
         transformOrigin: `${cx}px ${cy}px`,
-        transition: spinning ? `transform 4s cubic-bezier(0.2, 0.8, 0.4, 1)` : "none",
+        transition: spinning ? `transform 4s cubic-bezier(0.15, 0, 0.2, 1)` : "none",
       }}>
         <circle cx={cx} cy={cy - r} r="4" fill="white" stroke="#ccc" strokeWidth="1"
           style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.5))" }}/>
