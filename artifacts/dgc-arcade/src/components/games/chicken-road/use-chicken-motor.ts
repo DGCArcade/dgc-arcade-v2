@@ -33,8 +33,9 @@ export function useChickenMotor(
   useEffect(() => {
     if (!enabled) return;
     
-    // If target hasn't really changed, don't restart the motor
-    if (Math.abs(displayLeftRef.current - targetLeft) < 0.1 && !hopping) {
+    // If target hasn't really changed, don't restart the motor.
+    // Increased threshold to 2px to prevent micro-jitter from measurement drift during scroll.
+    if (Math.abs(displayLeftRef.current - targetLeft) < 2 && !hopping) {
       return;
     }
 

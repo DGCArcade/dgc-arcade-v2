@@ -50,13 +50,25 @@ export function useBoardLaneCenters(
       if (el) ro.observe(el);
     });
 
-    scroll?.addEventListener("scroll", measure, { passive: true });
+    // Debounce scroll events to avoid constant re-measurement feedback loop
+    // that causes the chicken to micro-shake side-to-side
+    let scrollTimeout: NodeJS.Timeout | null = null;
+    const onScroll = () => {
+      if (scrollTimeout) clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        measure();
+        scrollTimeout = null;
+      }, 100);
+    };
+
+    scroll?.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", measure);
 
     return () => {
       ro.disconnect();
-      scroll?.removeEventListener("scroll", measure);
+      scroll?.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", measure);
+      if (scrollTimeout) clearTimeout(scrollTimeout);
     };
   }, [measure, laneCount, laneRefs, playRowRef, scrollRef, sidewalkRef]);
 
