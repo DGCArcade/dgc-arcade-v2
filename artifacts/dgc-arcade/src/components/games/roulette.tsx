@@ -199,7 +199,7 @@ export function Roulette({ game }: RouletteProps) {
   return (
     <div className={isMobile ? "roulette-game-root roulette-game-root--mobile flex flex-col" : "roulette-game-root flex flex-col md:flex-row gap-8"}>
       <style>{`
-        .roulette-wheel-svg { width: 100%; height: 100%; max-width: 220px; max-height: 220px; overflow: visible; margin: 0 auto; }
+        .roulette-wheel-svg { width: 100%; height: 100%; max-width: 280px; max-height: 280px; overflow: visible; margin: 0 auto; display: block; }
         .roulette-wheel-spin, .roulette-ball-orbit { transform-box: fill-box; }
 
         @media (min-width: 768px) and (max-width: 1024px) {
@@ -241,7 +241,7 @@ export function Roulette({ game }: RouletteProps) {
       `}</style>
 
       {/* Wheel Area */}
-      <div className="roulette-wheel-area flex-1 bg-secondary border border-border rounded-xl p-4 md:p-6 flex flex-col items-center justify-center min-h-[240px] md:min-h-[440px] gap-3">
+      <div className="roulette-wheel-area flex-1 bg-secondary border border-border rounded-xl p-4 md:p-8 flex flex-col items-center justify-center min-h-[240px] md:min-h-[500px] gap-4">
         <div className="roulette-wheel-wrap relative w-full h-full flex items-center justify-center min-h-0">
           {wheelSvg}
           {result !== null && !spinning && (

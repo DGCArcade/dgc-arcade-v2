@@ -32,8 +32,8 @@ function useAccent() {
 function CardFace({ rank, suit, animate, size = "normal" }: { rank: string; suit: string; animate?: boolean; size?: "normal" | "small" }) {
   const red = isRed(suit);
   const clr = red ? "#dc2626" : "#1a1a2e";
-  const w = size === "small" ? 56 : 80;
-  const h = size === "small" ? 78 : 112;
+  const w = size === "small" ? 64 : 90;
+  const h = size === "small" ? 90 : 126;
   return (
     <div className={animate ? "hilo-card-deal" : ""} style={{
       width: w, height: h, borderRadius: 10, background: "#fafafa",
@@ -55,8 +55,8 @@ function CardFace({ rank, suit, animate, size = "normal" }: { rank: string; suit
 }
 
 function CardBack({ size = "normal" }: { size?: "normal" | "small" }) {
-  const w = size === "small" ? 56 : 80;
-  const h = size === "small" ? 78 : 112;
+  const w = size === "small" ? 64 : 90;
+  const h = size === "small" ? 90 : 126;
   return (
     <div style={{
       width: w, height: h, borderRadius: 10, overflow: "hidden",

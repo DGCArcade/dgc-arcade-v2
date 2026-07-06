@@ -283,8 +283,8 @@ function PlayingCard({ card, hidden, delay = 0, dealFrom, isMobile }: {
 
   return (
     <div ref={cardRef} className="bj-card-container" style={{
-      width: isMobile ? "clamp(48px, 13vw, 70px)" : 85, 
-      height: isMobile ? "clamp(66px, 18vw, 98px)" : 118, 
+      width: isMobile ? "clamp(56px, 15vw, 80px)" : 85, 
+      height: isMobile ? "clamp(78px, 20vw, 112px)" : 118, 
       borderRadius: 8, position: "relative",
       perspective: 1000,
     }}>
