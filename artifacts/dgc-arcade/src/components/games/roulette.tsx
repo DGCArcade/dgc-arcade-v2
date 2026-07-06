@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label";
 import { ProvablyFairPanel } from "./provably-fair-panel";
 
 const RED_NUMS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
-const ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+// European Roulette wheel order: clockwise starting from top (0 degrees)
+const ORDER = [0,26,3,35,12,28,7,29,18,22,9,31,14,20,1,33,16,24,5,10,23,8,30,11,36,13,27,6,34,17,25,2,21,4,19,15,32];
 
 type BetType = "number"|"color"|"evenodd"|"dozen"|"half";
 interface BetSelection { betType: BetType; betValue: string|number }
@@ -111,21 +112,22 @@ export function Roulette({ game }: RouletteProps) {
           // Add 1440deg (4 full rotations) for visual flair, then subtract the target angle.
           const newRot = rotation + 1440 - targetAngle;
           
-          setRotation(newRot);
-          // Ball spins opposite direction and lands at the same pocket.
-          // If wheel rotates by newRot, ball must rotate by -newRot to end at the same spot.
-          const ballNewRot = -newRot;
-          setBallRotation(ballNewRot);
-
-          setTimeout(() => {
-            setSpinning(false);
-            setResult(pocket);
-            setWin(data.won);
-            setPayout(data.payout);
-            // Don't reset rotation to 0, let it stay at the landed angle
-            setRotation(newRot);
-            setBallRotation(prev => prev);
-            setHistory(h => [{ num: pocket, won: data.won }, ...h].slice(0, 10));
+	          setRotation(newRot);
+	          // Ball spins opposite direction and lands at the same pocket.
+	          // If wheel rotates by newRot, ball must rotate by -newRot to end at the same spot.
+	          const ballNewRot = -newRot;
+	          setBallRotation(ballNewRot);
+	
+	          setTimeout(() => {
+	            setSpinning(false);
+	            // CRITICAL: Only set the result and reveal the winner AFTER the animation completes
+	            setResult(pocket);
+	            setWin(data.won);
+	            setPayout(data.payout);
+	            // Keep the final rotations
+	            setRotation(newRot);
+	            setBallRotation(ballNewRot);
+	            setHistory(h => [{ num: pocket, won: data.won }, ...h].slice(0, 10));
             qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
             qc.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
             qc.invalidateQueries({ queryKey: getListBetsQueryKey() });
