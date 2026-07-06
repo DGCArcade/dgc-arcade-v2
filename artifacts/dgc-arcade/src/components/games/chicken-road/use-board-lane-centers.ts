@@ -1,11 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type BoardLaneCenters = {
   sidewalk: number;
   lanes: number[];
 };
 
-/** Measure sewer / sidewalk centers relative to the play row (for chicken positioning). */
+/**
+ * Measures sewer / sidewalk centers relative to the play row (for chicken positioning).
+ *
+ * Stability improvements:
+ * - Scroll events are debounced at 200 ms (up from 150 ms) to avoid the
+ *   measure -> targetLeft change -> motor glide -> scroll -> measure loop
+ *   that caused the chicken to oscillate at sewer 5-6.
+ * - A "scroll-in-progress" lock suppresses ResizeObserver callbacks while
+ *   the container is actively scrolling, preventing mid-scroll measurements
+ *   from feeding stale positions back into the motor.
+ * - Measurements are only committed when all lane refs are present and the
+ *   scroll container has been stable for the full debounce window.
+ */
 export function useBoardLaneCenters(
   playRowRef: React.RefObject<HTMLElement | null>,
   sidewalkRef: React.RefObject<HTMLElement | null>,
@@ -14,8 +26,14 @@ export function useBoardLaneCenters(
   scrollRef: React.RefObject<HTMLElement | null>,
 ) {
   const [centers, setCenters] = useState<BoardLaneCenters | null>(null);
+  // True while a smooth-scroll is in progress -- suppresses ResizeObserver.
+  const scrollingRef = useRef(false);
+  const scrollEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const measure = useCallback(() => {
+    // Don't measure while the container is scrolling -- positions are mid-flight.
+    if (scrollingRef.current) return;
+
     const row = playRowRef.current;
     const sidewalk = sidewalkRef.current;
     if (!row || !sidewalk) return;
@@ -27,49 +45,52 @@ export function useBoardLaneCenters(
     const lanes: number[] = [];
     for (let i = 0; i < laneCount; i++) {
       const el = laneRefs.current[i];
-      if (!el) continue;
+      if (!el) return; // Bail if any lane ref is missing -- partial data is worse than none.
       const r = el.getBoundingClientRect();
       lanes[i] = r.left + r.width / 2 - rowRect.left;
     }
 
-    if (lanes.length === laneCount) {
-      setCenters({ sidewalk: sidewalkCenter, lanes });
-    }
+    // Only update state when we have a complete, stable measurement.
+    setCenters({ sidewalk: sidewalkCenter, lanes });
   }, [laneCount, laneRefs, playRowRef, sidewalkRef]);
 
   useEffect(() => {
-    measure();
+    // Initial measurement after mount.
+    const initialTimer = setTimeout(measure, 50);
+
     const row = playRowRef.current;
     const scroll = scrollRef.current;
-    if (!row) return;
+    if (!row) return () => clearTimeout(initialTimer);
 
-    const ro = new ResizeObserver(() => measure());
+    // ResizeObserver: only fires when not scrolling.
+    const ro = new ResizeObserver(() => {
+      if (!scrollingRef.current) measure();
+    });
     ro.observe(row);
     if (sidewalkRef.current) ro.observe(sidewalkRef.current);
-    laneRefs.current.forEach(el => {
-      if (el) ro.observe(el);
-    });
+    laneRefs.current.forEach(el => { if (el) ro.observe(el); });
 
-    // Debounce scroll events to avoid constant re-measurement feedback loop
-    // that causes the chicken to micro-shake side-to-side
-    // Increased debounce to 150ms to reduce measurement drift during active scrolling
-    let scrollTimeout: NodeJS.Timeout | null = null;
+    // Scroll handler: mark scrolling, debounce the remeasure.
+    const SCROLL_DEBOUNCE_MS = 200;
     const onScroll = () => {
-      if (scrollTimeout) clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(() => {
+      scrollingRef.current = true;
+      if (scrollEndTimerRef.current) clearTimeout(scrollEndTimerRef.current);
+      scrollEndTimerRef.current = setTimeout(() => {
+        scrollingRef.current = false;
         measure();
-        scrollTimeout = null;
-      }, 150);
+        scrollEndTimerRef.current = null;
+      }, SCROLL_DEBOUNCE_MS);
     };
 
     scroll?.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", measure);
 
     return () => {
+      clearTimeout(initialTimer);
+      if (scrollEndTimerRef.current) clearTimeout(scrollEndTimerRef.current);
       ro.disconnect();
       scroll?.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", measure);
-      if (scrollTimeout) clearTimeout(scrollTimeout);
     };
   }, [measure, laneCount, laneRefs, playRowRef, scrollRef, sidewalkRef]);
 

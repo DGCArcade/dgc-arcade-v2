@@ -292,7 +292,11 @@ export function StakeChickenBoard({
       ? chickenStripIndex
       : settledStripIndex;
 
-  const { centers: measuredCenters } = useBoardLaneCenters(
+  // useBoardLaneCenters is kept for its side-effect: it observes lane DOM elements
+  // and triggers a remeasure after scroll settles (used by the scroll-lock in the hook).
+  // We no longer use the measured centers for targetLeft or scroll calculations --
+  // those now use the stable fixed-geometry formula to prevent oscillation.
+  useBoardLaneCenters(
     playRowRef,
     sidewalkRef,
     lanes,
@@ -300,17 +304,16 @@ export function StakeChickenBoard({
     scrollRef,
   );
 
-  const fallbackLeft =
+  // Use the fixed-geometry fallback as the primary target for the motor.
+  // measuredCenters uses getBoundingClientRect() which is affected by scroll position --
+  // during a smooth-scroll, those values oscillate, causing the chicken to bounce
+  // back and forth between sewers (the "tweaking out" bug at sewer 5-6).
+  // The fallback (SIDEWALK_W + index * LANE_W + LANE_W/2) is scroll-independent
+  // and gives a stable, predictable target.
+  const targetLeft =
     positionStripIndex < 0
       ? SIDEWALK_W / 2
       : SIDEWALK_W + positionStripIndex * laneWidth + laneWidth / 2;
-
-  const targetLeft =
-    measuredCenters && positionStripIndex >= 0 && measuredCenters.lanes[positionStripIndex] != null
-      ? measuredCenters.lanes[positionStripIndex]
-      : measuredCenters && positionStripIndex < 0
-        ? measuredCenters.sidewalk
-        : fallbackLeft;
 
   const scrollTargetLane = positionStripIndex;
 
@@ -344,34 +347,23 @@ export function StakeChickenBoard({
       return;
     }
     if (scrollTargetLane < 0) return;
-    const laneCenter =
-      measuredCenters?.lanes[scrollTargetLane] ??
-      SIDEWALK_W + scrollTargetLane * laneWidth + laneWidth / 2;
-    
-    // Smooth scroll to center the chicken without jitter
+    // Use the fixed fallback calculation only -- never use measuredCenters here.
+    // Using measuredCenters creates a feedback loop:
+    //   scroll -> remeasure -> new measuredCenters -> this effect re-runs -> scroll again
+    // That loop is exactly what caused the chicken to oscillate at sewer 5-6.
+    const laneCenter = SIDEWALK_W + scrollTargetLane * laneWidth + laneWidth / 2;
     const viewportWidth = el.clientWidth;
     if (viewportWidth > 0) {
       const target = Math.max(0, laneCenter - viewportWidth / 2);
-      // Increased threshold from 5px to 10px to prevent constant micro-scrolls
-      // that cause measurement drift and chicken bouncing
-      if (Math.abs(el.scrollLeft - target) > 10) {
+      // 20 px threshold: large enough to ignore measurement noise, small enough
+      // to keep the chicken visually centred.
+      if (Math.abs(el.scrollLeft - target) > 20) {
         el.scrollTo({ left: target, behavior: "smooth" });
       }
     }
-  }, [scrollTargetLane, laneWidth, chickenVisible, onSidewalk, measuredCenters]);
+  }, [scrollTargetLane, laneWidth, chickenVisible, onSidewalk]);
 
-  // Fix: Ensure chicken snaps to current position when hopping starts to avoid "weird animation jump"
-  useEffect(() => {
-    if (!hopping) return;
-    
-    // Small delay to let the state update propagate
-    const timer = setTimeout(() => {
-      if (boardRef.current) {
-         // This helps the motor pick up from the correct start point
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [hopping]);
+    // (Removed: empty hopping effect that served no purpose)
 
   useEffect(() => {
     const board = boardRef.current;

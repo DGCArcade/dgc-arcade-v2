@@ -2298,27 +2298,44 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   MOBILE / iOS / ANDROID GLOBAL IMPROVEMENTS
+   CROSS-DEVICE GLOBAL IMPROVEMENTS
+   Targets: macOS Safari, iOS (all versions), Android Chrome/WebView,
+            Windows Chrome/Edge/Firefox, older devices.
+   NOTE: Slots (.slot-game) are intentionally excluded from
+         game-specific overrides below per project requirements.
 ═══════════════════════════════════════════════════════════════ */
 
-/* Smooth scrolling everywhere */
+/* -- Base HTML/Body ------------------------------------------- */
 html {
+  /* Smooth scrolling on all platforms */
   scroll-behavior: smooth;
+  /* Prevent iOS Safari from auto-scaling text on orientation change */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Use dynamic viewport height (accounts for mobile browser chrome) */
+  min-height: 100dvh;
+}
+body {
+  /* Prevent horizontal scroll on all devices */
+  overflow-x: hidden;
+  /* Smooth font rendering on macOS / iOS Retina */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Dynamic viewport height */
+  min-height: 100dvh;
 }
 
-/* Remove iOS tap highlight on interactive elements */
-button, a, [role="button"] {
+/* -- Touch & Interaction -------------------------------------- */
+/* Remove iOS/Android tap highlight on all interactive elements */
+button, a, [role="button"], input, select, textarea, label {
   -webkit-tap-highlight-color: transparent;
 }
-
-/* Prevent horizontal overflow on the root */
-body {
-  overflow-x: hidden;
+/* Prevent double-tap zoom on iOS/Android game controls */
+button, a, [role="button"] {
+  touch-action: manipulation;
 }
 
-/* Safe-area insets for notched devices (iPhone X+, Android notch) */
+/* -- Safe-area insets (iPhone notch / Dynamic Island / Android punch-hole) */
 .safe-area-top {
   padding-top: env(safe-area-inset-top, 0px);
 }
@@ -2332,18 +2349,25 @@ body {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
-/* Improve touch scrolling on iOS */
+/* -- Scrollable containers ------------------------------------ */
+/* Momentum scrolling on iOS (legacy -webkit- needed for iOS < 13) */
 .overflow-y-auto, .overflow-x-auto, .overflow-y-scroll, .overflow-x-scroll {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Prevent text selection on game buttons */
-.game-btn, .spin-btn {
+/* -- Text selection on non-slot game elements ----------------- */
+.game-btn, .spin-btn,
+.cr-stake-board, .cr-stake-lane,
+.bj-game-root, .cf-game-root,
+.mines-game-root, .crash-game-root,
+.roulette-game-root, .keno-game-root,
+.hilo-game-root, .plinko-game-root,
+.dice-game-root, .chicken-road-game-root {
   user-select: none;
   -webkit-user-select: none;
 }
 
-/* Fix 100vh on mobile browsers (address bar height) */
+/* -- Dynamic viewport height utilities ------------------------ */
 .h-screen-safe {
   height: 100dvh;
 }
@@ -2351,18 +2375,6 @@ body {
   min-height: 100dvh;
 }
 
-/* Input zoom prevention on iOS (font-size >= 16px prevents auto-zoom) */
-@media (max-width: 640px) {
-  input[type="text"],
-  input[type="email"],
-  input[type="password"],
-  input[type="number"],
-  input[type="search"],
-  select,
-  textarea {
-    font-size: 16px !important;
-  }
-}
 
 .game-card-btn {
   display: block;

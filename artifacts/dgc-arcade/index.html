@@ -2,38 +2,115 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+
+    <!--
+      Viewport: initial-scale=1 (no zoom lock), viewport-fit=cover for iPhone notch/Dynamic Island.
+      maximum-scale=5 allows pinch-zoom accessibility on older iOS/Android.
+      shrink-to-fit=no prevents Safari 9 from shrinking the layout.
+    -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no, viewport-fit=cover"
     />
+
+    <!-- iOS / macOS Safari PWA & status bar -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="DGC Arcade" />
+
+    <!-- Android Chrome PWA -->
     <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Theme colour — matches the dark background across Chrome (Android), Safari (iOS 15+), Edge -->
+    <meta name="theme-color" content="#05030a" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#05030a" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#05030a" />
+
+    <!-- Prevent IE/Edge from using Compatibility View -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <!-- Disable automatic phone-number detection (iOS Safari) -->
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- Disable automatic address/email detection (iOS Safari) -->
+    <meta name="format-detection" content="address=no, email=no" />
+
+    <!-- Older Android / Windows Phone -->
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="MobileOptimized" content="320" />
+
+    <!-- Referrer policy -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
     <title>DGC Arcade</title>
     <meta
       name="description"
       content="DGC Arcade — Provably fair crypto gaming. Play coinflip, crash, dice, slots, blackjack and more. Instant crypto deposits and withdrawals."
     />
     <meta name="robots" content="index, follow" />
+
+    <!-- Open Graph -->
     <meta property="og:title" content="DGC Arcade" />
     <meta
       property="og:description"
       content="DGC Arcade — Provably fair crypto gaming. Play coinflip, crash, dice, slots, blackjack and more. Instant crypto deposits and withdrawals."
     />
     <meta property="og:type" content="website" />
+
+    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="DGC Arcade" />
     <meta
       name="twitter:description"
       content="DGC Arcade — Provably fair crypto gaming. Play coinflip, crash, dice, slots, blackjack and more. Instant crypto deposits and withdrawals."
     />
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- Preconnect for Google Fonts (reduces latency on all devices) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+
+    <!--
+      Critical inline styles applied before React hydrates.
+      Prevents flash of unstyled content and layout shift on all platforms.
+    -->
+    <style>
+      /* Prevent FOUC and layout shift on all browsers */
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #05030a;
+        color: #f8fafc;
+        /* Use dynamic viewport height so mobile browser chrome doesn't clip content */
+        min-height: 100dvh;
+        /* Prevent horizontal scroll on all devices */
+        overflow-x: hidden;
+        /* Smooth font rendering on macOS / iOS */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        /* Prevent text inflation on Android */
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      /* Remove iOS tap highlight globally */
+      * {
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* Respect safe-area insets (iPhone notch / Dynamic Island / Android punch-hole) */
+      #root {
+        min-height: 100dvh;
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        padding-left: env(safe-area-inset-left, 0px);
+        padding-right: env(safe-area-inset-right, 0px);
+        box-sizing: border-box;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
