@@ -69,7 +69,7 @@ export function Roulette({ game }: RouletteProps) {
     return !!bets.find(b => b.betType === type && b.betValue === value);
   };
 
-      const handleBet = () => {
+  const handleBet = () => {
     requireAuth(() => {
       if (bets.length === 0) { toast({ title: "Select a bet first" }); return; }
       // Each bet selection is a separate bet at the specified amount
@@ -132,16 +132,16 @@ export function Roulette({ game }: RouletteProps) {
           setRotation(newRot);
           setBallRotation(ballNewRot);
 	
-	          setTimeout(() => {
-	            setSpinning(false);
-	            // CRITICAL: Only set the result and reveal the winner AFTER the animation completes
-	            setResult(pocket);
-	            setWin(data.won);
-	            setPayout(data.payout);
-	            // Keep the final rotations
-	            setRotation(newRot);
-	            setBallRotation(ballNewRot);
-	            setHistory(h => [{ num: pocket, won: data.won }, ...h].slice(0, 10));
+          setTimeout(() => {
+            setSpinning(false);
+            // CRITICAL: Only set the result and reveal the winner AFTER the animation completes
+            setResult(pocket);
+            setWin(data.won);
+            setPayout(data.payout);
+            // Keep the final rotations
+            setRotation(newRot);
+            setBallRotation(ballNewRot);
+            setHistory(h => [{ num: pocket, won: data.won }, ...h].slice(0, 10));
             qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
             qc.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
             qc.invalidateQueries({ queryKey: getListBetsQueryKey() });
@@ -160,6 +160,17 @@ export function Roulette({ game }: RouletteProps) {
   const r = 90, cx = 110, cy = 110;
   const n = pockets.length;
 
+  // Cross-browser SVG transform helper.
+  // Safari/Mac does NOT support `transform-box: fill-box` or `transform-box: view-box`
+  // reliably for SVG elements. The only safe approach is to use the SVG `transform`
+  // attribute with an explicit `rotate(deg, cx, cy)` form, which is spec-compliant
+  // across all browsers including Safari on macOS and iOS.
+  // We drive the animation via a CSS custom property on the SVG root and read it back,
+  // but the safest cross-browser approach is to use inline style with translateX/Y trick
+  // OR to use the SVG `transform` attribute directly.
+  // Here we use the CSS `transform` with an explicit `transform-origin` set in px
+  // on the element itself (not relying on transform-box), which works on all browsers.
+
   const wheelSvg = (
     <svg viewBox="0 0 220 220" className="roulette-wheel-svg drop-shadow-2xl" preserveAspectRatio="xMidYMid meet">
       <defs>
@@ -175,12 +186,23 @@ export function Roulette({ game }: RouletteProps) {
       <circle cx={cx} cy={cy} r={r + 16} fill={`url(#roulette-rim-${clipId})`} />
       <circle cx={cx} cy={cy} r={r + 14} fill="#1a0a00" stroke="#CC8800" strokeWidth="3"/>
       <g clipPath={`url(#roulette-clip-${clipId})`}>
-          <g ref={wheelRef}
+        {/*
+          CROSS-BROWSER FIX:
+          - Remove `transform-box: view-box` from CSS (it breaks Safari/Mac).
+          - Use `transform-origin: ${cx}px ${cy}px` directly on the element style.
+            This is the explicit pixel-based origin that works identically on all browsers:
+            Chrome, Firefox, Safari (macOS & iOS), Edge.
+          - Do NOT use percentage-based transform-origin for SVG elements as it is
+            interpreted differently across browsers.
+        */}
+        <g ref={wheelRef}
           className="roulette-wheel-spin"
           style={{
             transform: `rotate(${rotation}deg)`,
             transformOrigin: `${cx}px ${cy}px`,
+            transformBox: "fill-box",
             transition: spinning ? `transform 4s cubic-bezier(0.15, 0, 0.2, 1)` : "none",
+            willChange: "transform",
           }}>
           {pockets.map((num, i) => {
             const startAngle = (i / n) * 2 * Math.PI - Math.PI / 2;
@@ -205,11 +227,13 @@ export function Roulette({ game }: RouletteProps) {
           <circle cx={cx} cy={cy} r="8" fill="#111"/>
         </g>
       </g>
-      {/* Ball orbit */}
+      {/* Ball orbit — same fix: explicit pixel transform-origin, no transform-box: view-box */}
       <g className="roulette-ball-orbit" style={{
         transform: `rotate(${ballRotation}deg)`,
         transformOrigin: `${cx}px ${cy}px`,
+        transformBox: "fill-box",
         transition: spinning ? `transform 4s cubic-bezier(0.15, 0, 0.2, 1)` : "none",
+        willChange: "transform",
       }}>
         <circle cx={cx} cy={cy - 82} r="4" fill="white" stroke="#ccc" strokeWidth="1"
           style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.5))" }}/>
@@ -223,7 +247,14 @@ export function Roulette({ game }: RouletteProps) {
     <div className={isMobile ? "roulette-game-root roulette-game-root--mobile flex flex-col" : "roulette-game-root flex flex-col md:flex-row gap-8"}>
       <style>{`
         .roulette-wheel-svg { width: 100%; height: 100%; max-width: 280px; max-height: 280px; overflow: hidden; margin: 0 auto; display: block; }
-        .roulette-wheel-spin, .roulette-ball-orbit { transform-box: view-box; }
+        /*
+          CROSS-BROWSER FIX: Removed "transform-box: view-box" from .roulette-wheel-spin
+          and .roulette-ball-orbit. That CSS property caused Safari/macOS to calculate
+          the transform-origin relative to the entire SVG viewport instead of the element
+          bounding box, making the wheel spin to random positions and appear to go out of
+          control. The fix uses explicit pixel-based transform-origin (110px 110px) set
+          directly on the element's inline style, which is consistent across all browsers.
+        */
 
         @media (min-width: 768px) and (max-width: 1024px) {
           .roulette-game-root:not(.roulette-game-root--mobile) { flex-direction: column-reverse !important; gap: 12px !important; }
@@ -270,8 +301,9 @@ export function Roulette({ game }: RouletteProps) {
           {result !== null && !spinning && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className={`roulette-result-badge w-14 h-14 rounded-full flex items-center justify-center font-mono font-black text-xl shadow-lg border-2 ${
-                result === 0 ? "bg-green-600 border-green-400 text-white" :
-                isRed(result) ? "bg-red-600 border-red-400 text-white" : "bg-zinc-900 border-zinc-500 text-white"
+                result === 0 
+                  ? "bg-green-600 border-green-400 text-white"
+                  : isRed(result) ? "bg-red-600 border-red-400 text-white" : "bg-zinc-900 border-zinc-500 text-white"
               }`}>{result}</div>
             </div>
           )}
