@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useId } from "react";
+import { useState, useEffect, useRef, useId, useCallback } from "react";
 import { Game } from "@workspace/api-client-react";
 import { usePlaceBet, getGetMeQueryKey, getListRecentBetsAllQueryKey, getListBetsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -19,6 +19,10 @@ const ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,
 type BetType = "number"|"color"|"evenodd"|"dozen"|"half";
 interface BetSelection { betType: BetType; betValue: string|number }
 
+// SVG center coordinates — must match cx/cy in the SVG below
+const CX = 110, CY = 110;
+const SPIN_DURATION = 4000; // ms
+
 function useAccent() {
   const [id, setId] = useState<ThemeId>(getTheme());
   useEffect(() => {
@@ -27,6 +31,47 @@ function useAccent() {
     return () => window.removeEventListener("dgc-theme-change", h);
   }, []);
   return THEMES.find(t => t.id === id)?.accent ?? "#FFD700";
+}
+
+// Cubic-bezier easing matching CSS cubic-bezier(0.15, 0, 0.2, 1)
+// Approximated via a simple ease-out curve for rAF animation
+function easeOut(t: number): number {
+  // cubic-bezier(0.15, 0, 0.2, 1) approximation
+  return 1 - Math.pow(1 - t, 3);
+}
+
+// Animate an SVG element's `transform` attribute using rAF.
+// Uses `rotate(deg, cx, cy)` — the SVG-spec way to rotate around a point.
+// This works identically on ALL browsers (Chrome, Safari macOS/iOS, Firefox, Edge)
+// because it never touches CSS transform-origin or transform-box.
+function animateSvgRotation(
+  el: SVGGElement,
+  fromDeg: number,
+  toDeg: number,
+  duration: number,
+  cx: number,
+  cy: number,
+  onDone?: () => void
+): () => void {
+  const start = performance.now();
+  let rafId: number;
+
+  function frame(now: number) {
+    const elapsed = now - start;
+    const t = Math.min(elapsed / duration, 1);
+    const easedT = easeOut(t);
+    const current = fromDeg + (toDeg - fromDeg) * easedT;
+    el.setAttribute("transform", `rotate(${current}, ${cx}, ${cy})`);
+    if (t < 1) {
+      rafId = requestAnimationFrame(frame);
+    } else {
+      el.setAttribute("transform", `rotate(${toDeg}, ${cx}, ${cy})`);
+      onDone?.();
+    }
+  }
+
+  rafId = requestAnimationFrame(frame);
+  return () => cancelAnimationFrame(rafId);
 }
 
 interface RouletteProps { game: Game }
@@ -38,6 +83,9 @@ export function Roulette({ game }: RouletteProps) {
   const placeBet = usePlaceBet();
   const accent = useAccent();
   const wheelRef = useRef<SVGGElement>(null);
+  const ballRef = useRef<SVGGElement>(null);
+  const cancelWheelAnim = useRef<(() => void) | null>(null);
+  const cancelBallAnim  = useRef<(() => void) | null>(null);
   const isMobile = useIsMobile();
   const clipId = useId().replace(/:/g, "");
 
@@ -50,11 +98,22 @@ export function Roulette({ game }: RouletteProps) {
   const [result, setResult] = useState<number|null>(null);
   const [win, setWin] = useState<boolean|null>(null);
   const [payout, setPayout] = useState(0);
-  const [rotation, setRotation] = useState(0);
-  const [ballRotation, setBallRotation] = useState(0);
+  // Track the current resting rotation angles (used as `from` for next spin)
+  const rotationRef    = useRef(0);
+  const ballRotRef     = useRef(0);
   const [history, setHistory] = useState<{ num: number; won: boolean }[]>([]);
 
   const isRed = (n: number) => RED_NUMS.has(n);
+
+  // Set the SVG transform attribute to the resting position on mount
+  useEffect(() => {
+    if (wheelRef.current) {
+      wheelRef.current.setAttribute("transform", `rotate(${rotationRef.current}, ${CX}, ${CY})`);
+    }
+    if (ballRef.current) {
+      ballRef.current.setAttribute("transform", `rotate(${ballRotRef.current}, ${CX}, ${CY})`);
+    }
+  }, []);
 
   const toggleBet = (type: BetType, value: string|number) => {
     if (spinning) return;
@@ -72,7 +131,6 @@ export function Roulette({ game }: RouletteProps) {
   const handleBet = () => {
     requireAuth(() => {
       if (bets.length === 0) { toast({ title: "Select a bet first" }); return; }
-      // Each bet selection is a separate bet at the specified amount
       const totalAmount = amount * bets.length;
       if (!user || totalAmount > user.balance) { toast({ title: "Insufficient balance", variant: "destructive" }); return; }
       
@@ -80,16 +138,12 @@ export function Roulette({ game }: RouletteProps) {
       setResult(null);
       setWin(null);
 
-      // Backend currently supports one bet per request, so we pick the first one for the visual spin.
-      // In a real multi-bet scenario, the backend would handle an array.
-      // We'll send the array in meta and let the server decide.
       placeBet.mutate({ 
         data: { 
           gameId: game.id, 
           amount: totalAmount, 
           meta: { 
             bets,
-            // Fallback for single-bet backend compatibility
             betType: bets[0].betType, 
             betValue: bets[0].betValue 
           } 
@@ -99,54 +153,57 @@ export function Roulette({ game }: RouletteProps) {
           const pocket = (data.bet.meta as Record<string,unknown>)?.pocket as number ?? 0;
           const idx = ORDER.indexOf(pocket);
 
-          // ── Wheel spin ──────────────────────────────────────────────────────────
-          // The SVG draws sector i with its CENTER at angle:
-          //   C = ((i + 0.5) / n) * 360  degrees from the top (12 o'clock), clockwise.
-          // The pointer sits at the top (angle 0).
-          // In CSS, positive rotation = clockwise. When the wheel rotates by +R,
-          // a point originally at angle A moves to angle (A + R) mod 360.
-          // For the pocket center to reach the pointer we need:
-          //   C + R ≡ 0 (mod 360)  ⟹  R ≡ −C ≡ 360 − C (mod 360).
-          // We add 1440° (4 full extra rotations) for a satisfying visual spin.
-          const pocketCenterDeg = ((idx + 0.5) / 37) * 360;          // C
-          const currentWheelMod = ((rotation % 360) + 360) % 360;    // current wheel position mod 360
-          // We want: (C + currentWheelMod + wheelDelta) % 360 = 0
-          // => wheelDelta = (360 - C - currentWheelMod) % 360
-          const wheelDelta = ((360 - pocketCenterDeg - currentWheelMod + 360) % 360); // 0–360
-          const spinAmount = 1440 + wheelDelta;                        // ≥ 4 full rotations
-          const newRot = rotation + spinAmount;
+          // ── Wheel target angle ──────────────────────────────────────────────
+          // Sector i has its center at ((i + 0.5) / 37) * 360 degrees from top.
+          // We need that center to end up at the pointer (top = 0°).
+          // So: newRot ≡ -(pocketCenter) (mod 360), plus extra full rotations.
+          const pocketCenterDeg = ((idx + 0.5) / 37) * 360;
+          const currentWheelMod = ((rotationRef.current % 360) + 360) % 360;
+          const wheelDelta = ((360 - pocketCenterDeg - currentWheelMod + 360) % 360);
+          const newRot = rotationRef.current + 1440 + wheelDelta;
 
-          // ── Ball orbit ──────────────────────────────────────────────────────────
-          // The ball SVG element sits at (cx, cy−82) inside its orbit group.
-          // The orbit group rotates by ballRotation degrees (clockwise = positive).
-          // Ball angle from top = ballRotation mod 360.
-          // We want the ball to end exactly at the TOP (angle 0) so it sits in the
-          // pocket (which the wheel has brought to the top).
-          // Strategy: spin the ball counter-clockwise by an amount whose mod-360
-          // value equals the current ballRotation mod 360, so the net mod-360 = 0.
-          // We keep at least 4 full rotations for the visual effect.
-          const currentBallMod = ((ballRotation % 360) + 360) % 360;  // prevBallRot mod 360
-          const ballSpinAmount = 1440 + currentBallMod;               // always ≥ 4 rotations
-          const ballNewRot = ballRotation - ballSpinAmount;            // counter-clockwise
+          // ── Ball target angle ───────────────────────────────────────────────
+          // Ball orbits counter-clockwise; we want it to end at the top (0°).
+          const currentBallMod = ((ballRotRef.current % 360) + 360) % 360;
+          const newBallRot = ballRotRef.current - (1440 + currentBallMod);
 
-          setRotation(newRot);
-          setBallRotation(ballNewRot);
-	
-          setTimeout(() => {
-            setSpinning(false);
-            // CRITICAL: Only set the result and reveal the winner AFTER the animation completes
-            setResult(pocket);
-            setWin(data.won);
-            setPayout(data.payout);
-            // Keep the final rotations
-            setRotation(newRot);
-            setBallRotation(ballNewRot);
-            setHistory(h => [{ num: pocket, won: data.won }, ...h].slice(0, 10));
-            qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
-            qc.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
-            qc.invalidateQueries({ queryKey: getListBetsQueryKey() });
-            if (data.won) toast({ title: `Win! +${formatCurrency(data.payout)}`, className: "bg-green-500 text-white" });
-          }, 4000);
+          // Cancel any in-progress animations
+          cancelWheelAnim.current?.();
+          cancelBallAnim.current?.();
+
+          // Animate using rAF + SVG transform attribute (zero CSS transforms)
+          if (wheelRef.current) {
+            cancelWheelAnim.current = animateSvgRotation(
+              wheelRef.current,
+              rotationRef.current,
+              newRot,
+              SPIN_DURATION,
+              CX, CY
+            );
+          }
+          if (ballRef.current) {
+            cancelBallAnim.current = animateSvgRotation(
+              ballRef.current,
+              ballRotRef.current,
+              newBallRot,
+              SPIN_DURATION,
+              CX, CY,
+              () => {
+                // Animation complete
+                rotationRef.current = newRot;
+                ballRotRef.current  = newBallRot;
+                setSpinning(false);
+                setResult(pocket);
+                setWin(data.won);
+                setPayout(data.payout);
+                setHistory(h => [{ num: pocket, won: data.won }, ...h].slice(0, 10));
+                qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+                qc.invalidateQueries({ queryKey: getListRecentBetsAllQueryKey() });
+                qc.invalidateQueries({ queryKey: getListBetsQueryKey() });
+                if (data.won) toast({ title: `Win! +${formatCurrency(data.payout)}`, className: "bg-green-500 text-white" });
+              }
+            );
+          }
         },
         onError: (err) => {
           setSpinning(false);
@@ -157,25 +214,14 @@ export function Roulette({ game }: RouletteProps) {
   };
 
   const pockets = ORDER;
-  const r = 90, cx = 110, cy = 110;
+  const r = 90;
   const n = pockets.length;
-
-  // Cross-browser SVG transform helper.
-  // Safari/Mac does NOT support `transform-box: fill-box` or `transform-box: view-box`
-  // reliably for SVG elements. The only safe approach is to use the SVG `transform`
-  // attribute with an explicit `rotate(deg, cx, cy)` form, which is spec-compliant
-  // across all browsers including Safari on macOS and iOS.
-  // We drive the animation via a CSS custom property on the SVG root and read it back,
-  // but the safest cross-browser approach is to use inline style with translateX/Y trick
-  // OR to use the SVG `transform` attribute directly.
-  // Here we use the CSS `transform` with an explicit `transform-origin` set in px
-  // on the element itself (not relying on transform-box), which works on all browsers.
 
   const wheelSvg = (
     <svg viewBox="0 0 220 220" className="roulette-wheel-svg drop-shadow-2xl" preserveAspectRatio="xMidYMid meet">
       <defs>
         <clipPath id={`roulette-clip-${clipId}`}>
-          <circle cx={cx} cy={cy} r={r + 6} />
+          <circle cx={CX} cy={CY} r={r + 6} />
         </clipPath>
         <radialGradient id={`roulette-rim-${clipId}`} cx="50%" cy="50%" r="50%">
           <stop offset="0%" stopColor="#CC8800" />
@@ -183,38 +229,27 @@ export function Roulette({ game }: RouletteProps) {
         </radialGradient>
       </defs>
       {/* Outer rim */}
-      <circle cx={cx} cy={cy} r={r + 16} fill={`url(#roulette-rim-${clipId})`} />
-      <circle cx={cx} cy={cy} r={r + 14} fill="#1a0a00" stroke="#CC8800" strokeWidth="3"/>
+      <circle cx={CX} cy={CY} r={r + 16} fill={`url(#roulette-rim-${clipId})`} />
+      <circle cx={CX} cy={CY} r={r + 14} fill="#1a0a00" stroke="#CC8800" strokeWidth="3"/>
       <g clipPath={`url(#roulette-clip-${clipId})`}>
         {/*
-          CROSS-BROWSER FIX:
-          - Remove `transform-box: view-box` from CSS (it breaks Safari/Mac).
-          - Use `transform-origin: ${cx}px ${cy}px` directly on the element style.
-            This is the explicit pixel-based origin that works identically on all browsers:
-            Chrome, Firefox, Safari (macOS & iOS), Edge.
-          - Do NOT use percentage-based transform-origin for SVG elements as it is
-            interpreted differently across browsers.
+          SVG-NATIVE ROTATION: The `transform` attribute uses `rotate(deg, cx, cy)`
+          which is the SVG spec way to rotate around a point. This works on ALL
+          browsers without any CSS transform-origin or transform-box.
+          The rAF animation directly updates this attribute — no CSS involved.
         */}
-        <g ref={wheelRef}
-          className="roulette-wheel-spin"
-          style={{
-            transform: `rotate(${rotation}deg)`,
-            transformOrigin: `${cx}px ${cy}px`,
-            transformBox: "fill-box",
-            transition: spinning ? `transform 4s cubic-bezier(0.15, 0, 0.2, 1)` : "none",
-            willChange: "transform",
-          }}>
+        <g ref={wheelRef} transform={`rotate(0, ${CX}, ${CY})`}>
           {pockets.map((num, i) => {
             const startAngle = (i / n) * 2 * Math.PI - Math.PI / 2;
             const endAngle = ((i + 1) / n) * 2 * Math.PI - Math.PI / 2;
-            const x1 = cx + r * Math.cos(startAngle), y1 = cy + r * Math.sin(startAngle);
-            const x2 = cx + r * Math.cos(endAngle),   y2 = cy + r * Math.sin(endAngle);
+            const x1 = CX + r * Math.cos(startAngle), y1 = CY + r * Math.sin(startAngle);
+            const x2 = CX + r * Math.cos(endAngle),   y2 = CY + r * Math.sin(endAngle);
             const fill = num === 0 ? "#00AA44" : isRed(num) ? "#CC1111" : "#111";
             const midAngle = (startAngle + endAngle) / 2;
-            const tx = cx + (r - 14) * Math.cos(midAngle), ty = cy + (r - 14) * Math.sin(midAngle);
+            const tx = CX + (r - 14) * Math.cos(midAngle), ty = CY + (r - 14) * Math.sin(midAngle);
             return (
               <g key={i}>
-                <path d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z`}
+                <path d={`M${CX},${CY} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z`}
                   fill={fill} stroke="#2a2a2a" strokeWidth="0.5"/>
                 <text x={tx} y={ty} textAnchor="middle" dominantBaseline="middle"
                   fontSize="5" fontWeight="bold" fill="white" transform={`rotate(${(startAngle+endAngle)/2*180/Math.PI+90},${tx},${ty})`}>
@@ -223,23 +258,17 @@ export function Roulette({ game }: RouletteProps) {
               </g>
             );
           })}
-          <circle cx={cx} cy={cy} r="18" fill="#CC8800" stroke="#FFD700" strokeWidth="2"/>
-          <circle cx={cx} cy={cy} r="8" fill="#111"/>
+          <circle cx={CX} cy={CY} r="18" fill="#CC8800" stroke="#FFD700" strokeWidth="2"/>
+          <circle cx={CX} cy={CY} r="8" fill="#111"/>
         </g>
       </g>
-      {/* Ball orbit — same fix: explicit pixel transform-origin, no transform-box: view-box */}
-      <g className="roulette-ball-orbit" style={{
-        transform: `rotate(${ballRotation}deg)`,
-        transformOrigin: `${cx}px ${cy}px`,
-        transformBox: "fill-box",
-        transition: spinning ? `transform 4s cubic-bezier(0.15, 0, 0.2, 1)` : "none",
-        willChange: "transform",
-      }}>
-        <circle cx={cx} cy={cy - 82} r="4" fill="white" stroke="#ccc" strokeWidth="1"
+      {/* Ball orbit — same SVG-native approach */}
+      <g ref={ballRef} transform={`rotate(0, ${CX}, ${CY})`}>
+        <circle cx={CX} cy={CY - 82} r="4" fill="white" stroke="#ccc" strokeWidth="1"
           style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.5))" }}/>
       </g>
-      {/* Pointer */}
-      <polygon className="roulette-pointer" points={`${cx},${cy - r - 8} ${cx - 6},${cy - r + 6} ${cx + 6},${cy - r + 6}`} fill="#FFD700" style={{ filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.5))" }}/>
+      {/* Pointer — static, never rotated */}
+      <polygon points={`${CX},${CY - r - 8} ${CX - 6},${CY - r + 6} ${CX + 6},${CY - r + 6}`} fill="#FFD700" style={{ filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.5))" }}/>
     </svg>
   );
 
@@ -247,14 +276,6 @@ export function Roulette({ game }: RouletteProps) {
     <div className={isMobile ? "roulette-game-root roulette-game-root--mobile flex flex-col" : "roulette-game-root flex flex-col md:flex-row gap-8"}>
       <style>{`
         .roulette-wheel-svg { width: 100%; height: 100%; max-width: 280px; max-height: 280px; overflow: hidden; margin: 0 auto; display: block; }
-        /*
-          CROSS-BROWSER FIX: Removed "transform-box: view-box" from .roulette-wheel-spin
-          and .roulette-ball-orbit. That CSS property caused Safari/macOS to calculate
-          the transform-origin relative to the entire SVG viewport instead of the element
-          bounding box, making the wheel spin to random positions and appear to go out of
-          control. The fix uses explicit pixel-based transform-origin (110px 110px) set
-          directly on the element's inline style, which is consistent across all browsers.
-        */
 
         @media (min-width: 768px) and (max-width: 1024px) {
           .roulette-game-root:not(.roulette-game-root--mobile) { flex-direction: column-reverse !important; gap: 12px !important; }
