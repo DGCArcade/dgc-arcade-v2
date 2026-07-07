@@ -84,7 +84,6 @@ function ManholeHoverDeck({
 }) {
   const chance = getSurvivalChancePercent(tier, currentLane, laneIndex + 1);
   const payout = betAmount * multiplier;
-
   return (
     <div
       className="absolute z-50 pointer-events-none bg-card/95 border border-primary/40 p-2.5 rounded-lg shadow-2xl flex flex-col gap-1 text-[11px] font-mono tracking-tight w-48 backdrop-blur-md"
@@ -92,19 +91,15 @@ function ManholeHoverDeck({
     >
       <div className="flex justify-between border-b border-border pb-1">
         <span className="text-muted-foreground font-sans text-[10px]">Sewer step</span>
-        <span className="text-primary font-bold">#{laneIndex + 1}</span>
+        <span className="text-primary font-bold">#${laneIndex + 1}</span>
       </div>
       <div className="flex justify-between">
         <span className="text-muted-foreground font-sans text-[10px]">Success chance</span>
-        <span className="text-green-400 font-bold">{chance.toFixed(6)}%</span>
+        <span className="text-green-400 font-bold">${chance.toFixed(6)}%</span>
       </div>
       <div className="flex justify-between">
-        <span className="text-muted-foreground font-sans text-[10px]">At step payout</span>
-        <span className="text-yellow-400 font-bold">${payout.toFixed(2)}</span>
-      </div>
-      <div className="flex justify-between">
-        <span className="text-muted-foreground font-sans text-[10px]">Multiplier</span>
-        <span className="text-foreground font-bold">{multiplier.toFixed(2)}×</span>
+        <span className="text-muted-foreground font-sans text-[10px]">Est. Payout</span>
+        <span className="text-primary font-bold">$${payout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
       </div>
     </div>
   );
@@ -112,14 +107,17 @@ function ManholeHoverDeck({
 
 function WinCelebration() {
   return (
-    <div className="absolute inset-0 z-40 pointer-events-none cr-win-celebration overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-t from-green-500/20 via-transparent to-primary/10" />
-      {Array.from({ length: 24 }).map((_, i) => (
-        <span
+    <div className="absolute inset-0 z-40 pointer-events-none overflow-hidden">
+      {Array.from({ length: 40 }).map((_, i) => (
+        <div
           key={i}
-          className="cr-win-confetti absolute w-1.5 h-1.5 rounded-sm"
+          className="absolute w-1.5 h-1.5 rounded-full cr-confetti"
           style={{
-            left: `${(i * 17 + 5) % 100}%`,
+            left: `${Math.random() * 100}%`,
+            top: `${-10 - Math.random() * 20}%`,
+            opacity: 0.8,
+            scale: `${0.5 + Math.random()}`,
+            rotate: `${Math.random() * 360}deg`,
             backgroundColor: ["#68D391", "#63B3ED", "#F6E05E", "#FC8181", "#B794F6"][i % 5],
             animationDelay: `${(i % 8) * 0.08}s`,
           }}
@@ -164,6 +162,7 @@ function LaneStrip({
 }) {
   const variants = ["sedan", "suv", "truck"] as const;
   const variant = variants[laneIndex % 3];
+
   const isCrossing = crossAnim?.lane === laneIndex;
   const showCar = isCrossing && crossAnim.phase === "car-down";
   const showCarUp = isCrossing && crossAnim.phase === "car-up";
@@ -171,9 +170,11 @@ function LaneStrip({
   const showCarImpact = isCrossing && crossAnim.phase === "car-impact";
   const showManholeBurst = isCrossing && crossAnim.phase === "manhole-fire";
   const isBust = bustLane === laneIndex && state === "bust";
+
   const hideAmbient = isCrossing && (
     crossAnim.phase === "car-down" || crossAnim.phase === "car-up" || crossAnim.phase === "car-impact"
   );
+
   const justCleared = state === "past" && crossAnim === null;
 
   return (
@@ -185,7 +186,7 @@ function LaneStrip({
       } ${justCleared ? "cr-lane-cleared-flash" : ""}`}>
         <div className="absolute left-1/2 top-3 bottom-3 w-0 border-l border-dashed border-white/12" />
         <div className="absolute inset-0 cr-lane-asphalt-shimmer pointer-events-none opacity-30" />
-
+        
         <AmbientLaneTraffic
           laneIndex={laneIndex}
           active={trafficActive}
@@ -198,16 +199,20 @@ function LaneStrip({
             <CarSprite color={getCarColor(laneIndex)} variant={variant} size={42} direction="down" />
           </div>
         )}
+
         {showCarUp && (
           <div className="absolute left-1/2 -translate-x-1/2 cr-car-pass-once-reverse z-10">
             <div className="cr-car-speed-trail absolute inset-0 -z-10" />
             <CarSprite color={getCarColor(laneIndex + 1)} variant={variants[(laneIndex + 1) % 3]} size={38} direction="up" />
           </div>
         )}
+
         {showBarrier && <BarrierDropEffect size={42} />}
+
         {showCarImpact && (
           <CarCrashEffect laneIndex={laneIndex} direction={crossAnim.carDirection} />
         )}
+
         {showManholeBurst && (
           <div className="absolute left-1/2 bottom-[20%] -translate-x-1/2 z-20">
             <div className="cr-manhole-burst w-16 h-12 rounded-full" />
@@ -220,6 +225,7 @@ function LaneStrip({
             <CarSprite color="#E74C3C" variant="sedan" size={44} direction="down" />
           </div>
         )}
+
         {isBust && bustHazard === "manhole" && (
           <div className="absolute left-1/2 bottom-[18%] -translate-x-1/2 z-20">
             <div className="cr-manhole-burst w-20 h-14 rounded-full" />
@@ -257,15 +263,16 @@ export function StakeChickenBoard({
   bustHazard,
   crossAnim,
   onCrossNext,
-  canCross = false,
-  crossLoading = false,
+  canCross,
+  crossLoading,
   betAmount = 0,
-  tier = "medium",
+  tier,
   chickenStripIndex,
-}: StakeChickenBoardProps) {
+  laneWidth = LANE_W,
+}: StakeChickenBoardProps & { laneWidth?: number }) {
   const isActive = status === "active";
-  const trafficActive = status === "idle" || status === "active";
-  const laneWidth = LANE_W;
+  const trafficActive = isActive || status === "lost";
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const playAreaRef = useRef<HTMLDivElement>(null);
@@ -276,6 +283,7 @@ export function StakeChickenBoard({
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [burstId, setBurstId] = useState(0);
   const [burstOrigin, setBurstOrigin] = useState({ x: 200, y: 300 });
+  const [viewportWidth, setViewportWidth] = useState(0);
 
   const onSidewalk = isActive && currentLane === 0 && !hopping;
 
@@ -292,10 +300,20 @@ export function StakeChickenBoard({
       ? chickenStripIndex
       : settledStripIndex;
 
+  // Track viewport width to enable screen-space fixed chicken positioning
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      if (entries[0]) setViewportWidth(entries[0].contentRect.width);
+    });
+    ro.observe(el);
+    setViewportWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
   // useBoardLaneCenters is kept for its side-effect: it observes lane DOM elements
-  // and triggers a remeasure after scroll settles (used by the scroll-lock in the hook).
-  // We no longer use the measured centers for targetLeft or scroll calculations --
-  // those now use the stable fixed-geometry formula to prevent oscillation.
+  // and triggers a remeasure after scroll settles.
   useBoardLaneCenters(
     playRowRef,
     sidewalkRef,
@@ -304,16 +322,19 @@ export function StakeChickenBoard({
     scrollRef,
   );
 
-  // Use the fixed-geometry fallback as the primary target for the motor.
-  // measuredCenters uses getBoundingClientRect() which is affected by scroll position --
-  // during a smooth-scroll, those values oscillate, causing the chicken to bounce
-  // back and forth between sewers (the "tweaking out" bug at sewer 5-6).
-  // The fallback (SIDEWALK_W + index * LANE_W + LANE_W/2) is scroll-independent
-  // and gives a stable, predictable target.
+  /**
+   * FIX: Decouple chicken from scroll.
+   * Instead of using world-space (SIDEWALK_W + index * LANE_W), we use screen-space.
+   * The chicken stays at a fixed screen coordinate (centered in the viewport).
+   * The board scrolls the lanes underneath the chicken.
+   * This prevents the chicken from "moving with the scroll" (thumb) and 
+   * prevents it from going off-screen.
+   */
+  const CHICKEN_VIEWPORT_X = viewportWidth > 0 ? viewportWidth / 2 : 140;
   const targetLeft =
     positionStripIndex < 0
       ? SIDEWALK_W / 2
-      : SIDEWALK_W + positionStripIndex * laneWidth + laneWidth / 2;
+      : SIDEWALK_W + CHICKEN_VIEWPORT_X;
 
   const scrollTargetLane = positionStripIndex;
 
@@ -324,9 +345,13 @@ export function StakeChickenBoard({
   useEffect(() => {
     if (status !== "lost") return;
     const area = playAreaRef.current;
-    setBurstOrigin({ x: targetLeft, y: area ? area.clientHeight - 52 : 300 });
+    // For the lost burst, we use the world-coordinate so the explosion stays on the sewer
+    const worldX = positionStripIndex < 0 
+      ? SIDEWALK_W / 2 
+      : SIDEWALK_W + positionStripIndex * laneWidth + laneWidth / 2;
+    setBurstOrigin({ x: worldX, y: area ? area.clientHeight - 52 : 300 });
     setBurstId(id => id + 1);
-  }, [status, targetLeft]);
+  }, [status, positionStripIndex, laneWidth]);
 
   useEffect(() => {
     if (crossAnim?.phase !== "car-impact" && crossAnim?.phase !== "manhole-fire") return;
@@ -338,31 +363,28 @@ export function StakeChickenBoard({
     });
     setBurstId(id => id + 1);
     }, [crossAnim?.lane, crossAnim?.phase, laneWidth]);
+
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !chickenVisible) return;
+
     if (onSidewalk) {
       el.scrollTo({ left: 0, behavior: "smooth" });
       return;
     }
+
     if (scrollTargetLane < 0) return;
-    // Use the fixed fallback calculation only -- never use measuredCenters here.
-    // Using measuredCenters creates a feedback loop:
-    //   scroll -> remeasure -> new measuredCenters -> this effect re-runs -> scroll again
-    // That loop is exactly what caused the chicken to oscillate at sewer 5-6.
-    const laneCenter = SIDEWALK_W + scrollTargetLane * laneWidth + laneWidth / 2;
-    const viewportWidth = el.clientWidth;
-    if (viewportWidth > 0) {
-      const target = Math.max(0, laneCenter - viewportWidth / 2);
-      // 20 px threshold: large enough to ignore measurement noise, small enough
-      // to keep the chicken visually centred.
-      if (Math.abs(el.scrollLeft - target) > 20) {
+
+    // Scroll the board so the target lane is centered in the viewport (matching the chicken)
+    const laneWorldX = scrollTargetLane * laneWidth + laneWidth / 2;
+    const viewportW = el.clientWidth;
+    if (viewportW > 0) {
+      const target = Math.max(0, laneWorldX - viewportW / 2);
+      if (Math.abs(el.scrollLeft - target) > 10) {
         el.scrollTo({ left: target, behavior: "smooth" });
       }
     }
   }, [scrollTargetLane, laneWidth, chickenVisible, onSidewalk]);
-
-    // (Removed: empty hopping effect that served no purpose)
 
   useEffect(() => {
     const board = boardRef.current;
@@ -395,7 +417,9 @@ export function StakeChickenBoard({
         }}
       >
       <CitySkyline />
+
       <div ref={playRowRef} className="relative flex h-[min(500px,64vh)] min-h-[340px]">
+        {/* Sidewalk */}
         <div ref={sidewalkRef} className="relative z-10 w-[88px] shrink-0 bg-[#5a6578] border-r border-white/10 flex flex-col items-center pt-3 pb-2">
           <TrafficLight active={isActive ? "green" : status === "lost" ? "red" : "yellow"} />
           <div className="w-12 h-12 mt-2 rounded-full bg-[#276749] border-2 border-[#22543D] shadow-inner" />
@@ -407,6 +431,7 @@ export function StakeChickenBoard({
           <span className="text-[8px] font-bold uppercase text-white/35 tracking-widest mb-2">Start</span>
         </div>
 
+        {/* Lanes scroll area */}
         <div ref={scrollRef} className="flex-1 relative overflow-x-auto overflow-y-hidden cr-lanes-scroll">
           <div className="flex h-full min-w-max relative">
             {Array.from({ length: lanes }, (_, i) => {
@@ -439,7 +464,10 @@ export function StakeChickenBoard({
           </div>
         </div>
 
-        {/* Chicken stays fixed on screen, only moves when hopping to next sewer */}
+        {/* 
+          Chicken stays fixed on screen (relative to the sidewalk), 
+          only moves when hopping to next sewer relative to the board's scroll.
+        */}
         {chickenVisible && (
           <div
             className="absolute z-30 pointer-events-none"
