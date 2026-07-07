@@ -71,7 +71,7 @@ export const usersTable = pgTable("users", {
   sessionLimitMinutes: integer("session_limit_minutes"),
   sessionStartedAt: timestamp("session_started_at", { withTimezone: true }),
   // Specialty Creator Fields
-  commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }), // Override standard tier rate
+  commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }).default("0.0300"), // Override standard tier rate
   displayName: text("display_name"), // Custom display name for creators
 });
 
