@@ -29,16 +29,16 @@ export class SlotRenderer {
     this.isLowEndDevice = this.detectLowEndDevice();
 
     // Optimize PIXI settings for device capability
-    const pixiConfig: PIXI.IApplicationOptions = {
-      background: '#000000',
+    const pixiConfig: Partial<PIXI.IApplicationOptions> = {
+      backgroundColor: 0x000000,
       antialias: !this.isLowEndDevice, // Disable antialias on low-end
-      resolution: this.isLowEndDevice ? 1 : window.devicePixelRatio,
+      resolution: this.isLowEndDevice ? 1 : (window.devicePixelRatio || 1),
       autoDensity: true,
       // Do NOT use resizeTo — it recalculates on every frame (expensive)
       // We'll handle resize manually with throttling
     };
 
-    this.app = new PIXI.Application(pixiConfig);
+    this.app = new PIXI.Application(pixiConfig as any);
 
     // Set initial size
     this.resizeToContainer(containerId);

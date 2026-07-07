@@ -159,18 +159,20 @@ export function useIntersectionObserver(
 export function memoize<T>(
   fn: () => T,
   deps: any[] = []
-): T {
+): () => T {
   let cachedValue: T;
+  let hasCached = false;
   let cachedDeps: any[] = [];
 
-  return (() => {
-    const depsChanged = !cachedDeps.length || deps.some((dep, i) => dep !== cachedDeps[i]);
+  return () => {
+    const depsChanged = !hasCached || deps.some((dep, i) => dep !== cachedDeps[i]);
     if (depsChanged) {
       cachedValue = fn();
-      cachedDeps = deps;
+      cachedDeps = [...deps];
+      hasCached = true;
     }
     return cachedValue;
-  })();
+  };
 }
 
 /**

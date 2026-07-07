@@ -74,6 +74,7 @@ function animateSvgRotation(
       el.setAttribute("transform", `rotate(${toDeg}, ${cx}, ${cy})`);
       onDone?.();
     }
+    return;
   }
 
   rafId = requestAnimationFrame(frame);
