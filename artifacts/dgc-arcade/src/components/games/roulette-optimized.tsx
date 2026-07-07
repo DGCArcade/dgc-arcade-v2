@@ -55,7 +55,7 @@ function animateSvgRotation(
   let lastFrameTime = 0;
   let rafId: number;
 
-  function frame(now: number) {
+  const frame = (now: number) => {
     const elapsed = now - start;
     const timeSinceLastFrame = now - lastFrameTime;
 
@@ -74,8 +74,7 @@ function animateSvgRotation(
       el.setAttribute("transform", `rotate(${toDeg}, ${cx}, ${cy})`);
       onDone?.();
     }
-    return;
-  }
+  };
 
   rafId = requestAnimationFrame(frame);
   return () => cancelAnimationFrame(rafId);
