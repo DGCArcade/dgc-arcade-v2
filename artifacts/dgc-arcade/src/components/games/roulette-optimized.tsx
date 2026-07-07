@@ -116,6 +116,7 @@ const NumberPicker = memo(({
       const timer = setTimeout(() => setShowPicker(true), 500);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [isLowEnd]);
 
   if (!showPicker) {
