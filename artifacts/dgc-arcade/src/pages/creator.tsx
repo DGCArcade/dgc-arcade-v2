@@ -523,16 +523,16 @@ function SpecialtyHub({
               {/* Real-data stats — fetched from /api/creator/analytics */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
                 {[
-                  { label: "Registrations", value: analytics ? String(analytics.registrations) : String(dashboard.activeReferrals + dashboard.pendingReferrals) },
-                  { label: "FTDs", value: analytics ? String(analytics.ftds) : String(dashboard.activeReferrals) },
-                  { label: "Deposited", value: analytics ? formatCurrency(analytics.totalDeposited) : "—" },
-                  { label: "Wagered", value: analytics ? formatCurrency(analytics.totalWagered) : "—" },
-                  { label: "Revenue", value: analytics ? formatCurrency(analytics.revenue) : "—" },
-                  { label: "Deposits", value: analytics ? String(analytics.deposits) : "—" },
-                  { label: "Earned", value: formatCurrency(dashboard.totalCommissionEarned) },
-                  { label: "Rate", value: `${dashboard.commissionPct}%` },
+                  { label: "Registrations", value: analytics ? String(analytics.registrations) : String(dashboard.activeReferrals + dashboard.pendingReferrals), color: "from-blue-500/20" },
+                  { label: "FTDs", value: analytics ? String(analytics.ftds) : String(dashboard.activeReferrals), color: "from-green-500/20" },
+                  { label: "Deposited", value: analytics ? formatCurrency(analytics.totalDeposited) : "—", color: "from-purple-500/20" },
+                  { label: "Wagered", value: analytics ? formatCurrency(analytics.totalWagered) : "—", color: "from-yellow-500/20" },
+                  { label: "Revenue", value: analytics ? formatCurrency(analytics.revenue) : "—", color: "from-orange-500/20" },
+                  { label: "Deposits", value: analytics ? String(analytics.deposits) : "—", color: "from-pink-500/20" },
+                  { label: "Earned", value: formatCurrency(dashboard.totalCommissionEarned), color: "from-primary/20" },
+                  { label: "Rate", value: `${dashboard.commissionPct}%`, color: "from-cyan-500/20" },
                 ].map(s => (
-                  <div key={s.label} className="p-2.5 md:p-3 rounded-xl border border-border/50 bg-secondary/30">
+                  <div key={s.label} className={`p-2.5 md:p-3 rounded-xl border border-border/50 bg-gradient-to-br ${s.color} to-transparent hover:border-primary/50 transition-colors`}>
                     <div className="font-mono font-black text-sm md:text-base truncate">{s.value}</div>
                     <div className="text-[9px] md:text-xs text-muted-foreground uppercase tracking-wider mt-0.5">{s.label}</div>
                   </div>
@@ -540,8 +540,8 @@ function SpecialtyHub({
               </div>
 
               {!analytics && (
-                <div className="text-xs text-muted-foreground text-center py-2">
-                  Click <strong>Refresh Stats</strong> to load real-time analytics from the server.
+                <div className="text-xs text-muted-foreground text-center py-3 px-4 rounded-lg bg-secondary/30 border border-border/30">
+                  💡 Click <strong>Refresh Stats</strong> to load real-time analytics from the server. Your stats update automatically every hour.
                 </div>
               )}
 
@@ -585,27 +585,33 @@ function SpecialtyHub({
                 <p className="text-sm text-muted-foreground">Track your earnings and request your monthly payout below.</p>
               </div>
 
-              {/* Balance breakdown — clearly separated */}
+              {/* Balance breakdown — clearly separated: Real Balance vs Promo Balance */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="p-3 md:p-4 rounded-xl border border-border/50 bg-secondary/30">
-                  <div className="flex items-center gap-2 mb-1.5 md:mb-2">
-                    <div className="w-6 h-6 md:w-7 md:h-7 rounded-lg bg-blue-500/15 border border-blue-500/25 flex items-center justify-center">
-                      <DollarSign className="w-3 md:w-3.5 h-3 md:h-3.5 text-blue-400" />
+                <div className="p-4 md:p-5 rounded-xl border-2 border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-transparent">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-7 h-7 rounded-lg bg-blue-500/20 border border-blue-500/40 flex items-center justify-center">
+                      <DollarSign className="w-4 h-4 text-blue-400" />
                     </div>
-                    <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-muted-foreground">Casino Balance</span>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Real Balance</span>
+                      <p className="text-[9px] text-muted-foreground">Personal gambling funds</p>
+                    </div>
                   </div>
-                  <div className="font-mono font-black text-xl md:text-2xl text-blue-400">{formatCurrency(dashboard.balance)}</div>
-                  <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Your personal gambling balance.</p>
+                  <div className="font-mono font-black text-2xl md:text-3xl text-blue-400 mt-2">{formatCurrency(dashboard.balance)}</div>
+                  <p className="text-[10px] text-muted-foreground mt-2">Use this balance to play games. Winnings are added here.</p>
                 </div>
-                <div className="p-3 md:p-4 rounded-xl border border-green-500/25 bg-green-500/5">
-                  <div className="flex items-center gap-2 mb-1.5 md:mb-2">
-                    <div className="w-6 h-6 md:w-7 md:h-7 rounded-lg bg-green-500/15 border border-green-500/25 flex items-center justify-center">
-                      <BarChart3 className="w-3 md:w-3.5 h-3 md:h-3.5 text-green-400" />
+                <div className="p-4 md:p-5 rounded-xl border-2 border-green-500/30 bg-gradient-to-br from-green-500/10 to-transparent">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-7 h-7 rounded-lg bg-green-500/20 border border-green-500/40 flex items-center justify-center">
+                      <BarChart3 className="w-4 h-4 text-green-400" />
                     </div>
-                    <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-muted-foreground">Creator Earnings</span>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-green-400">Promo Balance</span>
+                      <p className="text-[9px] text-muted-foreground">Commission earnings</p>
+                    </div>
                   </div>
-                  <div className="font-mono font-black text-xl md:text-2xl text-green-400">{formatCurrency(dashboard.promoBalance)}</div>
-                  <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Commission earned from referred players.</p>
+                  <div className="font-mono font-black text-2xl md:text-3xl text-green-400 mt-2">{formatCurrency(dashboard.promoBalance)}</div>
+                  <p className="text-[10px] text-muted-foreground mt-2">Commission earned from referred players. Withdraw monthly.</p>
                 </div>
               </div>
 
@@ -733,12 +739,12 @@ function SpecialtyHub({
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
                 {[
-                  { label: "Total Referred", value: String(dashboard.activeReferrals + dashboard.pendingReferrals) },
-                  { label: "Active Players", value: String(dashboard.activeReferrals) },
-                  { label: "Pending", value: String(dashboard.pendingReferrals) },
-                  { label: "Earned", value: formatCurrency(dashboard.totalCommissionEarned) },
+                  { label: "Total Referred", value: String(dashboard.activeReferrals + dashboard.pendingReferrals), color: "from-blue-500/20 to-transparent" },
+                  { label: "Active Players", value: String(dashboard.activeReferrals), color: "from-green-500/20 to-transparent" },
+                  { label: "Pending", value: String(dashboard.pendingReferrals), color: "from-yellow-500/20 to-transparent" },
+                  { label: "Total Earned", value: formatCurrency(dashboard.totalCommissionEarned), color: "from-purple-500/20 to-transparent" },
                 ].map(s => (
-                  <div key={s.label} className="p-2.5 md:p-3 rounded-xl border border-border/50 bg-secondary/30">
+                  <div key={s.label} className={`p-2.5 md:p-3 rounded-xl border border-border/50 bg-gradient-to-br ${s.color} hover:border-primary/50 transition-colors`}>
                     <div className="font-mono font-black text-sm md:text-base truncate">{s.value}</div>
                     <div className="text-[9px] md:text-xs text-muted-foreground uppercase tracking-wider mt-0.5">{s.label}</div>
                   </div>
@@ -752,28 +758,28 @@ function SpecialtyHub({
                   <p className="text-xs mt-1">Share your link to start building your network.</p>
                 </div>
               ) : (
-                <div className="rounded-xl border border-border/50 overflow-x-auto">
-                  <div className="grid grid-cols-7 text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-4 py-2.5 border-b border-border/50 min-w-[800px]">
+                <div className="rounded-xl border border-border/50 overflow-x-auto scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-secondary/10">
+                  <div className="grid grid-cols-7 text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-4 py-3 border-b border-border/50 min-w-[900px] sticky top-0">
                     <span className="col-span-2">Player</span>
                     <span className="text-right">Deposits</span>
                     <span className="text-right">Wagered</span>
                     <span className="text-right">House Profit</span>
-                    <span className="text-right text-primary">Est. Earn</span>
+                    <span className="text-right text-primary font-bold">Est. Earn</span>
                     <span className="text-right">Status</span>
                   </div>
                   <div className="divide-y divide-border/30">
                     {referrals.map(r => (
-                      <div key={r.id} className="grid grid-cols-7 px-4 py-3 text-sm hover:bg-secondary/20 transition-colors min-w-[800px] items-center">
-                        <div className="col-span-2 flex flex-col">
-                          <span className="font-mono font-bold text-white">@{r.username}</span>
+                      <div key={r.id} className="grid grid-cols-7 px-4 py-3 text-sm hover:bg-primary/5 transition-colors min-w-[900px] items-center">
+                        <div className="col-span-2 flex flex-col gap-0.5">
+                          <span className="font-mono font-bold text-foreground">@{r.username}</span>
                           <span className="text-[10px] text-muted-foreground font-mono">Joined {new Date(r.joinedAt).toLocaleDateString()}</span>
                         </div>
-                        <span className="text-right font-mono text-xs">${(r.totalDeposited || 0).toFixed(2)}</span>
-                        <span className="text-right font-mono text-xs">${(r.totalWagered || 0).toFixed(2)}</span>
-                        <span className="text-right font-mono text-xs text-yellow-400/80">${(r.houseProfit || 0).toFixed(2)}</span>
+                        <span className="text-right font-mono text-xs text-blue-400">${(r.totalDeposited || 0).toFixed(2)}</span>
+                        <span className="text-right font-mono text-xs text-yellow-400">${(r.totalWagered || 0).toFixed(2)}</span>
+                        <span className="text-right font-mono text-xs text-orange-400">${(r.houseProfit || 0).toFixed(2)}</span>
                         <span className="text-right font-mono text-xs font-bold text-primary">${(r.estimatedCommission || 0).toFixed(2)}</span>
                         <div className="text-right">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${r.status === "active" ? "bg-green-500/15 text-green-400" : "bg-yellow-500/15 text-yellow-400"}`}>
+                          <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${r.status === "active" ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"}`}>
                             {r.status}
                           </span>
                         </div>
@@ -787,10 +793,13 @@ function SpecialtyHub({
 
           {/* ── Messages ── */}
           {section === "messages" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="font-bold text-base">Messages</h2>
-                <button onClick={onFetchMessages} className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+            <div className="space-y-5">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h2 className="font-bold text-base mb-1">Messages</h2>
+                  <p className="text-sm text-muted-foreground">Direct messages from the DGC Arcade team and admins.</p>
+                </div>
+                <button onClick={onFetchMessages} className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-secondary">
                   <RefreshCw className="w-3.5 h-3.5" /> Refresh
                 </button>
               </div>
@@ -798,19 +807,25 @@ function SpecialtyHub({
                 <div className="flex flex-col items-center justify-center py-16 text-muted-foreground border border-dashed border-border/50 rounded-2xl">
                   <MessageSquare className="w-12 h-12 mb-3 opacity-30" />
                   <p className="font-mono text-sm">No messages yet.</p>
+                  <p className="text-xs mt-1">Check back later for updates from the team.</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto">
                   {messages.map(m => (
-                    <div key={m.id} className={`p-4 rounded-xl border transition-colors ${m.read ? "border-border/40 bg-secondary/20" : "border-primary/30 bg-primary/5"}`}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="font-bold text-sm">@{m.senderUsername}
-                          <span className="ml-1.5 text-xs text-muted-foreground font-normal">{m.senderRole}</span>
-                        </span>
-                        <span className="text-[10px] text-muted-foreground font-mono">{new Date(m.createdAt).toLocaleString()}</span>
+                    <div key={m.id} className={`p-4 rounded-xl border transition-all ${m.read ? "border-border/40 bg-secondary/20 hover:bg-secondary/30" : "border-primary/50 bg-primary/10 hover:bg-primary/15 shadow-[0_0_12px_rgba(var(--primary),0.1)]"}`}>
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-foreground">@{m.senderUsername}</span>
+                            <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${m.senderRole === "admin" ? "bg-red-500/15 text-red-400" : "bg-blue-500/15 text-blue-400"}`}>
+                              {m.senderRole}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground font-mono">{new Date(m.createdAt).toLocaleString()}</span>
+                        </div>
+                        {!m.read && <div className="w-2 h-2 rounded-full bg-primary animate-pulse flex-shrink-0 mt-1" />}
                       </div>
-                      <p className="text-sm text-muted-foreground leading-relaxed">{m.message}</p>
-                      {!m.read && <div className="mt-2 w-2 h-2 rounded-full bg-primary animate-pulse" />}
+                      <p className="text-sm text-foreground leading-relaxed break-words">{m.message}</p>
                     </div>
                   ))}
                   <div ref={messagesBottomRef} />
