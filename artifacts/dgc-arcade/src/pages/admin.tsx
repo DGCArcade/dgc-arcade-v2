@@ -1244,6 +1244,7 @@ export default function AdminDashboard() {
         { key: "overview", label: "Overview", icon: Activity },
         { key: "owner", label: "Owner Settings", icon: Shield },
         { key: "users", label: "Users", icon: Users },
+        { key: "bank", label: "DGC Bank", icon: DollarSign },
         { key: "bank-dashboard", label: "Live Feed", icon: Activity },
         { key: "transactions", label: "Transactions", icon: List },
         { key: "creators", label: "Creators", icon: Star },
