@@ -22,8 +22,8 @@ export async function getUserBalance(
 ): Promise<UserBalance> {
   const [user, cryptoBalances] = await Promise.all([
     prefetchedStaticBalance !== undefined
-      ? Promise.resolve({ balance: prefetchedStaticBalance })
-      : db.select({ balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, userId)).limit(1).then((rows) => rows[0]),
+      ? Promise.resolve({ balance: prefetchedStaticBalance, accountType: "normal" })
+      : db.select({ balance: usersTable.balance, accountType: usersTable.accountType }).from(usersTable).where(eq(usersTable.id, userId)).limit(1).then((rows) => rows[0]),
     db.select().from(userBalancesTable).where(eq(userBalancesTable.userId, userId)),
   ]);
   if (!user) throw new Error("User not found");
@@ -47,7 +47,9 @@ export async function getUserBalance(
     };
   });
 
-  const staticBalance = parseFloat(user.balance);
+  // Only include static USD balance for specialty creators (accountType === "creator")
+  // Regular users (accountType === "normal" or "player") only have crypto balances
+  const staticBalance = user.accountType === "creator" ? parseFloat(user.balance) : 0;
   return {
     totalBalance: liveTotalUsd + staticBalance,
     staticBalance,
@@ -70,7 +72,7 @@ export async function deductBalance(
     await database.execute(sql`SELECT id FROM user_balances WHERE user_id = ${userId} FOR UPDATE`);
 
     const [lockedUser] = await database
-      .select({ balance: usersTable.balance })
+      .select({ balance: usersTable.balance, accountType: usersTable.accountType })
       .from(usersTable)
       .where(eq(usersTable.id, userId))
       .limit(1);
@@ -95,7 +97,8 @@ export async function deductBalance(
       return { currency: b.currency as string, amount: parseFloat(b.amount), price, usdValue };
     });
 
-    const staticBalance = parseFloat(lockedUser.balance);
+    // Only include USD balance for creators. Regular users only have crypto balances.
+    const staticBalance = lockedUser.accountType === "creator" ? parseFloat(lockedUser.balance) : 0;
     const totalBalance = liveTotalUsd + staticBalance;
 
     if (totalBalance < amount) throw new Error("Insufficient balance");
@@ -126,8 +129,9 @@ export async function deductBalance(
 
     // 2. Fallback to highest balance first if preferred failed or not specified
     if (remainingToDeduct > 0) {
+      // Only include USD balance for creators
       const allBalances = [
-        { currency: "USD", usdValue: staticBalance },
+        ...(lockedUser.accountType === "creator" ? [{ currency: "USD", usdValue: staticBalance }] : []),
         ...balancesWithPrices
       ].sort((a, b) => b.usdValue - a.usdValue);
 
@@ -174,6 +178,9 @@ export async function deductBalance(
  */
 export async function creditBalance(userId: number, amount: number, currency?: string, txn?: any): Promise<number> {
   const doCredit = async (database: any) => {
+    const [user] = await database.select({ accountType: usersTable.accountType }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (!user) throw new Error("User not found");
+    
     await database.execute(sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`);
     if (currency && currency !== "USD") {
       await database.execute(sql`SELECT id FROM user_balances WHERE user_id = ${userId} FOR UPDATE`);
@@ -190,10 +197,14 @@ export async function creditBalance(userId: number, amount: number, currency?: s
           target: [userBalancesTable.userId, userBalancesTable.currency],
           set: { amount: sql`user_balances.amount + ${String(cryptoAmount)}` },
         });
-    } else {
+    } else if (currency === "USD" && user.accountType === "creator") {
+      // Only creators can receive USD balance credits
       await database.update(usersTable)
         .set({ balance: sql`balance + ${amount}` })
         .where(eq(usersTable.id, userId));
+    } else if (currency === "USD" && user.accountType !== "creator") {
+      // Regular users cannot receive USD balance. Convert to crypto or reject.
+      throw new Error("Regular users can only receive cryptocurrency, not USD balance.");
     }
 
     const { totalBalance } = await getUserBalance(userId);
