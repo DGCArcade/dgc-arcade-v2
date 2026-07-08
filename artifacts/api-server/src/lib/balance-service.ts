@@ -62,8 +62,8 @@ export async function getUserBalance(
 export async function deductBalance(
   userId: number, 
   amount: number, 
-  txn?: any, 
-  preferredCurrency?: string
+  preferredCurrency?: string,
+  txn?: any
 ): Promise<{ newBalance: number; usedCurrency: string }> {
   const doDeduct = async (database: any) => {
     await database.execute(sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`);
@@ -170,7 +170,7 @@ export async function deductBalance(
 }
 
 /**
- * Credits an amount to a user's balance. 
+ * Credits an amount to a user's balance.
  */
 export async function creditBalance(userId: number, amount: number, currency?: string, txn?: any): Promise<number> {
   const doCredit = async (database: any) => {

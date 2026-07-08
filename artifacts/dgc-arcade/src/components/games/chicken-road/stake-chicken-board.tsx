@@ -501,7 +501,7 @@ export function StakeChickenBoard({
           laneIndex={hoveredLane}
           currentLane={currentLane}
           betAmount={betAmount}
-          tier={tier}
+          tier={tier ?? "medium"}
           multiplier={multipliers[hoveredLane] ?? 1}
           mouseX={mousePos.x}
           mouseY={mousePos.y}

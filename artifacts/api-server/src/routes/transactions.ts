@@ -921,7 +921,7 @@ transactionsRouter.post("/withdraw", requireAuth, requireLocationVerified, async
 
     // Deduct balance immediately — funds are held while the payout is processed.
     // We pass the currency to ensure the deduction happens from the CORRECT coin.
-    await deductBalance(user.id, amount, undefined, currency);
+    await deductBalance(user.id, amount, currency);
 
     await recordLedger(db, {
       userId: user.id,
