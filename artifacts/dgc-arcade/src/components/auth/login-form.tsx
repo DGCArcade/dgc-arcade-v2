@@ -39,18 +39,18 @@ export function LoginForm() {
 
   const onSubmit = (values: z.infer<typeof loginSchema>) => {
     loginMutation.mutate({ data: values }, {
-      onSuccess: (result) => {
+      onSuccess: (result: any) => {
         setAuthToken(result.token);
         queryClient.setQueryData(getGetMeQueryKey(), result.user);
         notifyAuthLogin();
         void flushPendingGeo();
         toast({ title: "Welcome back", description: "You have successfully logged in." });
         authModal.close();
-        if (result.user.role === "admin" || result.user.username.toLowerCase() === (process.env.REACT_APP_OWNER_USERNAME || "owner")) {
+        if (result.user.role === "admin" || result.user.role === "owner" || result.user.username.toLowerCase() === (process.env.REACT_APP_OWNER_USERNAME || "owner")) {
           setLocation("/admin");
         }
       },
-      onError: (error) => {
+      onError: (error: any) => {
         toast({
           title: "Login failed",
           description: error.data?.error || "An unexpected error occurred",

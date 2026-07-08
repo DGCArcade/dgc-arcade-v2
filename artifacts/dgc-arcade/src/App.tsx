@@ -138,7 +138,7 @@ function ScrollToTop() {
 function Router() {
   const { settings, isLoading: settingsLoading } = usePlatformSettings();
   const { user } = useAuth();
-  const isOwner = user ? (user.username ?? "").toLowerCase() === (process.env.REACT_APP_OWNER_USERNAME || "owner") : false;
+  const isOwner = user ? ((user.username ?? "").toLowerCase() === (process.env.REACT_APP_OWNER_USERNAME || "owner") || (user as any).role === "owner") : false;
 
   if (settingsLoading) return <PageLoader />;
   // Global Maintenance Mode lockout

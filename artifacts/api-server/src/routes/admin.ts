@@ -790,7 +790,8 @@ adminRouter.patch("/users/:id", async (req, res) => {
     .from(usersTable)
     .where(eq(usersTable.id, userId))
     .limit(1);
-  if (isOwnerAccount(target)) {
+  // Only protect owner from other admins. Owner can always modify themselves.
+  if (isOwnerAccount(target) && !(await callerIsOwner(req))) {
     res.status(403).json({ error: "This account is protected and cannot be modified." });
     return;
   }
@@ -922,7 +923,11 @@ adminRouter.delete("/users/:id", async (req, res) => {
       return;
     }
     if (isOwnerAccount(target)) {
-      res.status(403).json({ error: "This account is protected and cannot be deleted." });
+      // Only protect owner from other admins. Owner can always delete themselves if they really want to.
+      if (!(await callerIsOwner(req))) {
+        res.status(403).json({ error: "This account is protected and cannot be deleted." });
+        return;
+      }
       return;
     }
 
@@ -965,7 +970,8 @@ adminRouter.post("/users/:id/reset", async (req, res) => {
     .where(eq(usersTable.id, userId))
     .limit(1);
   if (!target) { res.status(404).json({ error: "User not found" }); return; }
-  if (isOwnerAccount(target)) { res.status(403).json({ error: "This account is protected and cannot be reset." }); return; }
+  // Only protect owner from other admins. Owner can always reset themselves.
+  if (isOwnerAccount(target) && !(await callerIsOwner(req))) { res.status(403).json({ error: "This account is protected and cannot be reset." }); return; }
 
   try {
     const { blackjackHandsTable, minesSessionsTable, dailyBonusClaimsTable } = await import("@workspace/db");
@@ -3030,8 +3036,8 @@ adminRouter.patch("/users/:id/account-type", async (req, res) => {
   const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId)).limit(1);
   if (!target) { res.status(404).json({ error: "User not found" }); return; }
 
-  // Prevent changing the owner account
-  if (isOwnerAccount(target)) {
+  // Prevent other admins from changing the owner account
+  if (isOwnerAccount(target) && !(await callerIsOwner(req))) {
     res.status(403).json({ error: "Cannot modify the owner account" });
     return;
   }

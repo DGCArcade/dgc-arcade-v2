@@ -34,7 +34,7 @@ export function Navbar() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [bonusOpen, setBonusOpen] = useState(false);
   const [vipOpen, setVipOpen] = useState(false);
-  const isOwner = user ? (user.username ?? "").toLowerCase() === (process.env.REACT_APP_OWNER_USERNAME || "owner") : false;
+  const isOwner = user ? ((user.username ?? "").toLowerCase() === (process.env.REACT_APP_OWNER_USERNAME || "owner") || (user as any).role === "owner") : false;
   const isAdmin = user ? (user.role === "admin" || user.role === "owner" || isOwner) : false;
   const isCreator = user?.accountType === "creator" || user?.role === "creator";
   const [bankPinOpen, setBankPinOpen] = useState(false);
@@ -118,14 +118,7 @@ export function Navbar() {
           <Shield className="w-3.5 h-3.5" />Admin
         </Link>
       )}
-      {isAdmin && !isOwner && (
-        <button
-          onClick={() => { setBankPinOpen(true); setBankPin(""); setBankPinError(""); }}
-          className="text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 text-emerald-500/80 hover:text-emerald-400"
-        >
-          <Building2 className="w-3.5 h-3.5" />DGC Bank
-        </button>
-      )}
+      {/* DGC Bank removed from header as requested */}
     </>
   );
 
