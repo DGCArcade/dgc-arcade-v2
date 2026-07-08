@@ -800,7 +800,9 @@ adminRouter.patch("/users/:id", async (req, res) => {
     return;
   }
   // Only the owner can directly set balances — prevents admin balance inflation.
-  if (balance !== undefined && !(await callerIsOwner(req))) {
+  // Exception: owner can always update their own balance
+  const isUpdatingOwnBalance = userId === req.user!.userId;
+  if (balance !== undefined && !isUpdatingOwnBalance && !(await callerIsOwner(req))) {
     res.status(403).json({ error: "Only the owner can set user balances directly." });
     return;
   }
