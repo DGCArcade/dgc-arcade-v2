@@ -857,25 +857,41 @@ adminRouter.patch("/users/:id", async (req, res) => {
 
     // Handle crypto balance update if specified
     if (hasCryptoUpdate) {
+      // Import price service for USD-to-crypto conversion
+      const { getCryptoPrice } = await import("../lib/price-service.js");
+      
+      // Convert USD amount to crypto amount using live price
+      const cryptoPrice = await getCryptoPrice(currency);
+      if (cryptoPrice <= 0) {
+        res.status(400).json({ error: `Cannot fetch price for ${currency}. Please try again.` });
+        return;
+      }
+      const cryptoAmount = balance / cryptoPrice; // Convert USD to crypto
+      
       const [oldCrypto] = await db.select().from(userBalancesTable).where(and(eq(userBalancesTable.userId, userId), eq(userBalancesTable.currency, currency))).limit(1);
       const oldAmt = oldCrypto ? parseFloat(oldCrypto.amount) : 0;
       
       await db.insert(userBalancesTable).values({
         userId,
         currency,
-        amount: String(balance),
+        amount: String(cryptoAmount),
       }).onConflictDoUpdate({
         target: [userBalancesTable.userId, userBalancesTable.currency],
-        set: { amount: String(balance) },
+        set: { amount: String(cryptoAmount) },
       });
+      
+      // Update wager requirement to include the new balance (100% playthrough required)
+      await db.update(usersTable).set({
+        wagerRequirement: sql`coalesce(wager_requirement, 0) + ${balance}`,
+      }).where(eq(usersTable.id, userId));
 
       recordLedgerStandalone({
         userId,
-        amount: balance - oldAmt,
-        balanceBefore: oldAmt,
-        balanceAfter: balance,
+        amount: balance,
+        balanceBefore: oldAmt * cryptoPrice,
+        balanceAfter: (oldAmt + cryptoAmount) * cryptoPrice,
         reason: "admin_adjustment",
-        note: `Admin set ${currency} balance to ${balance} by admin #${req.user!.userId}`,
+        note: `Admin set ${currency} balance to ${cryptoAmount.toFixed(8)} ${currency} (${balance} USD) by admin #${req.user!.userId}. Wager requirement +${balance} USD.`,
       }).catch(() => {});
     }
 

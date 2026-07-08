@@ -991,7 +991,8 @@ export default function AdminDashboard() {
           currency: balanceEdit.currency 
         }),
       });
-      toast({ title: "Balance updated", description: `Set ${balanceEdit.currency} to ${amount}` });
+      const currencyLabel = balanceEdit.currency === "USD" ? "USD" : `${balanceEdit.currency} (worth $${amount})`;
+      toast({ title: "Balance updated", description: `Set ${currencyLabel} with 100% wager requirement` });
       setBalanceEdit(null);
       loadUsers();
     } catch (err: any) {
@@ -1527,6 +1528,9 @@ export default function AdminDashboard() {
                                 <option value="SOL">SOL</option>
                                 <option value="USDT">USDT</option>
                                 <option value="TRX">TRX</option>
+                                <option value="XMR">XMR</option>
+                                <option value="DASH">DASH</option>
+                                <option value="BCH">BCH</option>
                               </select>
                               <Input
                                 className="w-20 h-7 text-xs bg-background border-primary/40 font-mono"
