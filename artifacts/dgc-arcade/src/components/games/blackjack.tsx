@@ -310,16 +310,16 @@ function PlayingCard({ card, hidden, delay = 0, dealFrom, isMobile }: {
           position: "absolute", width: "100%", height: "100%", backfaceVisibility: "hidden",
           borderRadius: 8, background: "#fafafa", border: "1.5px solid #e0e0e0",
           transform: "rotateY(180deg)", boxShadow: "0 8px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3)",
-          padding: 6, display: "flex", flexDirection: "column", justifyContent: "space-between"
+          padding: 4, display: "flex", flexDirection: "column", justifyContent: "space-between", overflow: "hidden"
         }}>
-          <div style={{ textAlign: "left" }}>
-            <div className="bj-card-front-rank" style={{ fontSize: 18, fontWeight: 900, color: clr, lineHeight: 1 }}>{card.rank}</div>
-            <div className="bj-card-front-suit-sm" style={{ fontSize: 14, color: clr, lineHeight: 1 }}>{card.suit}</div>
+          <div style={{ textAlign: "left", minWidth: 0, minHeight: 0 }}>
+            <div className="bj-card-front-rank" style={{ fontSize: 16, fontWeight: 900, color: clr, lineHeight: 0.9, letterSpacing: -0.5 }}>{card.rank}</div>
+            <div className="bj-card-front-suit-sm" style={{ fontSize: 12, color: clr, lineHeight: 0.9 }}>{card.suit}</div>
           </div>
-          <div className="bj-card-front-suit-lg" style={{ alignSelf: "center", fontSize: 32, color: clr, opacity: 0.15 }}>{card.suit}</div>
-          <div style={{ textAlign: "right", transform: "rotate(180deg)" }}>
-            <div className="bj-card-front-rank" style={{ fontSize: 18, fontWeight: 900, color: clr, lineHeight: 1 }}>{card.rank}</div>
-            <div className="bj-card-front-suit-sm" style={{ fontSize: 14, color: clr, lineHeight: 1 }}>{card.suit}</div>
+          <div className="bj-card-front-suit-lg" style={{ alignSelf: "center", fontSize: 28, color: clr, opacity: 0.12, lineHeight: 1 }}>{card.suit}</div>
+          <div style={{ textAlign: "right", transform: "rotate(180deg)", minWidth: 0, minHeight: 0 }}>
+            <div className="bj-card-front-rank" style={{ fontSize: 16, fontWeight: 900, color: clr, lineHeight: 0.9, letterSpacing: -0.5 }}>{card.rank}</div>
+            <div className="bj-card-front-suit-sm" style={{ fontSize: 12, color: clr, lineHeight: 0.9 }}>{card.suit}</div>
           </div>
         </div>
       </div>

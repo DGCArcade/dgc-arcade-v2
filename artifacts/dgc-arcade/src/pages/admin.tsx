@@ -1244,7 +1244,6 @@ export default function AdminDashboard() {
         { key: "overview", label: "Overview", icon: Activity },
         { key: "owner", label: "Owner Settings", icon: Shield },
         { key: "users", label: "Users", icon: Users },
-        { key: "bank", label: "DGC Bank", icon: DollarSign },
         { key: "bank-dashboard", label: "Live Feed", icon: Activity },
         { key: "transactions", label: "Transactions", icon: List },
         { key: "creators", label: "Creators", icon: Star },
@@ -1291,9 +1290,9 @@ export default function AdminDashboard() {
         </Button>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs - Scrollable Tool Section */}
       <div className="w-full overflow-x-auto scrollbar-hide">
-        <div className="flex gap-0.5 bg-secondary/50 rounded-lg p-1 border border-border/40 min-w-max">
+        <div className="flex gap-0.5 bg-secondary/50 rounded-lg p-1 border border-border/40 min-w-max md:flex-wrap md:overflow-visible">
         {TABS.map((tab) => (
           <button
             key={tab.key}
@@ -3470,8 +3469,8 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* DGC Bank PIN — owner only, admin users only */}
-              {isOwner && selectedUser.user.role === "admin" && (
+              {/* DGC Bank PIN — admin users only (NOT for owner) */}
+              {!isOwner && isAdmin && selectedUser.user.role === "admin" && (
                 <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
