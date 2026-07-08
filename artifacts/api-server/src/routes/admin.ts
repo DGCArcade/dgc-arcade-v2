@@ -52,7 +52,7 @@ adminRouter.use(requireAdmin);
 // ── Owner identity ──
 // There is exactly one platform owner, identified by username "fanodgc".
 // Centralized here so owner checks never drift between username/role again.
-const OWNER_USERNAME = "fanodgc";
+const OWNER_USERNAME = process.env.OWNER_USERNAME || "owner";
 async function callerIsOwner(req: { user?: { userId: number } }): Promise<boolean> {
   const [caller] = await db
     .select({ username: usersTable.username, role: usersTable.role })
@@ -624,7 +624,7 @@ adminRouter.post("/create-user", async (req, res) => {
     res.status(400).json({ error: "Valid email is required" });
     return;
   }
-  if (username.toLowerCase() === "fanodgc") {
+  if (username.toLowerCase() === (process.env.OWNER_USERNAME || "owner")) {
     res.status(403).json({ error: "That username is reserved." });
     return;
   }
@@ -707,7 +707,7 @@ adminRouter.post("/create-specialty-creator", async (req, res) => {
     res.status(400).json({ error: "Valid email is required" });
     return;
   }
-  if (username.toLowerCase() === "fanodgc") {
+  if (username.toLowerCase() === (process.env.OWNER_USERNAME || "owner")) {
     res.status(403).json({ error: "That username is reserved." });
     return;
   }
@@ -826,13 +826,18 @@ adminRouter.patch("/users/:id", async (req, res) => {
       updates.dgcBankPinRevealed = false;
     }
 
-    if (Object.keys(updates).length === 0) {
+    // Check if we have any updates for the users table
+    const hasUserUpdates = Object.keys(updates).length > 0;
+    // Check if we have a crypto balance update
+    const hasCryptoUpdate = balance !== undefined && currency !== "USD";
+
+    if (!hasUserUpdates && !hasCryptoUpdate) {
       res.status(400).json({ error: "No fields to update" });
       return;
     }
 
     let updatedUser: any;
-    if (Object.keys(updates).length > 0) {
+    if (hasUserUpdates) {
       [updatedUser] = await db
         .update(usersTable)
         .set(updates)
@@ -848,7 +853,7 @@ adminRouter.patch("/users/:id", async (req, res) => {
     }
 
     // Handle crypto balance update if specified
-    if (balance !== undefined && currency !== "USD") {
+    if (hasCryptoUpdate) {
       const [oldCrypto] = await db.select().from(userBalancesTable).where(and(eq(userBalancesTable.userId, userId), eq(userBalancesTable.currency, currency))).limit(1);
       const oldAmt = oldCrypto ? parseFloat(oldCrypto.amount) : 0;
       
@@ -919,10 +924,16 @@ adminRouter.delete("/users/:id", async (req, res) => {
       return;
     }
 
-    // Delete all related data in correct order
-    await db.delete(transactionsTable).where(eq(transactionsTable.userId, userId));
-    await db.delete(betsTable).where(eq(betsTable.userId, userId));
-    await db.delete(userBalancesTable).where(eq(userBalancesTable.userId, userId));
+    // Delete all related data in correct order (respecting foreign key constraints)
+    // Delete in reverse order of dependencies
+    await db.delete(creatorBankTxnsTable).where(eq(creatorBankTxnsTable.creatorId, userId)).catch(() => {});
+    await db.delete(transactionsTable).where(eq(transactionsTable.userId, userId)).catch(() => {});
+    await db.delete(betsTable).where(eq(betsTable.userId, userId)).catch(() => {});
+    await db.delete(userBalancesTable).where(eq(userBalancesTable.userId, userId)).catch(() => {});
+    await db.delete(activityLogsTable).where(eq(activityLogsTable.userId, userId)).catch(() => {});
+    await db.delete(deviceHistoryTable).where(eq(deviceHistoryTable.userId, userId)).catch(() => {});
+    // Also delete creator bank txns where this user is the recipient
+    await db.delete(creatorBankTxnsTable).where(eq(creatorBankTxnsTable.toUserId, userId)).catch(() => {});
     await db.delete(usersTable).where(eq(usersTable.id, userId));
 
     // Log the action
@@ -2224,7 +2235,7 @@ adminRouter.get("/bank/pending-withdrawals", requireBankSession, async (req, res
 // GET /api/admin/bank/settings — fanodgc only
 adminRouter.get("/bank/settings", requireBankSession, async (req, res) => {
   const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  if (!user || user.username !== "fanodgc") {
+  if (!user || user.username !== (process.env.OWNER_USERNAME || "owner")) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
@@ -2240,7 +2251,7 @@ adminRouter.get("/bank/settings", requireBankSession, async (req, res) => {
 // PUT /api/admin/bank/settings — fanodgc only
 adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
   const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  if (!user || user.username !== "fanodgc") {
+  if (!user || user.username !== (process.env.OWNER_USERNAME || "owner")) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
@@ -3114,7 +3125,7 @@ adminRouter.get("/users/:id/reveal-pin", async (req, res) => {
 adminRouter.get("/users/:id/bank-pin", requireAdmin, async (req, res) => {
   const [caller] = await db.select({ username: usersTable.username, role: usersTable.role })
     .from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  if (!caller || caller.username !== "fanodgc") {
+  if (!caller || caller.username !== (process.env.OWNER_USERNAME || "owner")) {
     res.status(403).json({ error: "Owner only" }); return;
   }
   const targetId = parseInt(String(req.params.id), 10);
@@ -3129,7 +3140,7 @@ adminRouter.get("/users/:id/bank-pin", requireAdmin, async (req, res) => {
 adminRouter.post("/users/:id/regenerate-pin", requireAdmin, async (req, res) => {
   const [caller] = await db.select({ username: usersTable.username })
     .from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  if (!caller || caller.username !== "fanodgc") {
+  if (!caller || caller.username !== (process.env.OWNER_USERNAME || "owner")) {
     res.status(403).json({ error: "Owner only" }); return;
   }
   const targetId = parseInt(String(req.params.id), 10);

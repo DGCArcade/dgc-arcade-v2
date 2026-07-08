@@ -44,10 +44,10 @@ export function verifyToken(token: string): AuthPayload | null {
   }
 }
 
-const OWNER_USERNAME_LOWER = "fanodgc";
+const OWNER_USERNAME = process.env.OWNER_USERNAME || "owner";
 
 export function isOwnerUser(user: AuthPayload): boolean {
-  return user.username.toLowerCase() === OWNER_USERNAME_LOWER || user.role.toLowerCase() === "owner";
+  return user.username.toLowerCase() === OWNER_USERNAME.toLowerCase() || user.role.toLowerCase() === "owner";
 }
 
 /** Platform owner account — never tip, link, ban, or mutate from non-owner paths. */
@@ -55,7 +55,7 @@ export function isProtectedAccount(
   target: { username?: string | null; role?: string | null } | undefined | null,
 ): boolean {
   if (!target) return false;
-  return target.role === "owner" || (target.username ?? "").toLowerCase() === OWNER_USERNAME_LOWER;
+  return target.role === "owner" || (target.username ?? "").toLowerCase() === OWNER_USERNAME.toLowerCase();
 }
 
 async function loadDbUser(userId: number): Promise<DbUserContext | null> {
@@ -176,7 +176,7 @@ export async function requireOwner(req: Request, res: Response, next: NextFuncti
       res.status(403).json({ error: "Account suspended", code: "ACCOUNT_BANNED" });
       return;
     }
-    if (dbUser.role !== "owner" && dbUser.username.toLowerCase() !== OWNER_USERNAME_LOWER) {
+    if (dbUser.role !== "owner" && dbUser.username.toLowerCase() !== OWNER_USERNAME.toLowerCase()) {
       res.status(403).json({ error: "Owner access required" });
       return;
     }

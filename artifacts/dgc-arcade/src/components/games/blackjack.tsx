@@ -610,93 +610,79 @@ export function Blackjack({ game }: BlackjackProps) {
           min-height: 0 !important;
           width: 100% !important;
           max-height: none !important;
-          padding: 12px 4px !important;
-          border-width: 2px !important;
-          border-radius: 10px !important;
+          padding: 8px 2px !important;
+          border-width: 1px !important;
+          border-radius: 8px !important;
           justify-content: space-around !important;
-          gap: 8px !important;
+          gap: 4px !important;
           order: 1 !important;
           aspect-ratio: 1/1 !important;
         }
         .bj-game-root--mobile .bj-table-deco {
-          display: block !important;
-          width: 72% !important;
-          height: 58% !important;
-          top: 18% !important;
-          border-width: 1px !important;
-          opacity: 0.22 !important;
+          display: none !important;
         }
         .bj-game-root--mobile .bj-deck-stack {
-          display: block !important;
-          top: 6px !important;
-          right: 6px !important;
-          width: 36px !important;
-          height: 50px !important;
-          transform: scale(0.55);
-          transform-origin: top right;
+          display: none !important;
         }
         .bj-game-root--mobile .bj-deck-stack > div {
-          width: 36px !important;
-          height: 50px !important;
+          display: none !important;
         }
         .bj-game-root--mobile .bj-table-footer {
-          display: block !important;
-          bottom: 3px !important;
-          font-size: 5px !important;
-          letter-spacing: 0.5px !important;
-          opacity: 0.55 !important;
+          display: none !important;
         }
         .bj-game-root--mobile .bj-table-title {
-          font-size: 7px !important;
-          letter-spacing: 1px !important;
-          top: 4px !important;
+          display: none !important;
         }
         .bj-game-root--mobile .bj-card-container {
-          width: clamp(48px, 13vw, 70px) !important;
-          height: clamp(66px, 18vw, 98px) !important;
+          width: clamp(40px, 11vw, 56px) !important;
+          height: clamp(56px, 15vw, 78px) !important;
         }
-        .bj-game-root--mobile .bj-card-container .bj-card-front-rank { font-size: 12px !important; }
-        .bj-game-root--mobile .bj-card-container .bj-card-front-suit-sm { font-size: 10px !important; }
-        .bj-game-root--mobile .bj-card-container .bj-card-front-suit-lg { font-size: 18px !important; }
-        .bj-game-root--mobile .bj-score-bubble { padding: 4px 8px !important; min-width: 44px !important; }
-        .bj-game-root--mobile .bj-score-value { font-size: 14px !important; }
-        .bj-game-root--mobile .bj-score-label { font-size: 6px !important; margin-bottom: 0 !important; }
+        .bj-game-root--mobile .bj-card-container .bj-card-front-rank { font-size: 10px !important; }
+        .bj-game-root--mobile .bj-card-container .bj-card-front-suit-sm { font-size: 8px !important; }
+        .bj-game-root--mobile .bj-card-container .bj-card-front-suit-lg { font-size: 14px !important; }
+        .bj-game-root--mobile .bj-score-bubble { padding: 2px 6px !important; min-width: 36px !important; }
+        .bj-game-root--mobile .bj-score-value { font-size: 12px !important; }
+        .bj-game-root--mobile .bj-score-label { font-size: 5px !important; margin-bottom: 0 !important; }
         .bj-game-root--mobile .bj-controls-bar {
           flex: 0 0 auto !important;
           width: 100% !important;
           max-width: 100% !important;
           min-width: 0 !important;
-          padding: 6px 8px !important;
-          gap: 4px !important;
+          padding: 4px 6px !important;
+          gap: 3px !important;
           overflow: visible !important;
           order: 2 !important;
+          max-height: 35vh !important;
+          overflow-y: auto !important;
         }
         .bj-game-root--mobile .bj-controls-bar input {
-          font-size: 12px !important;
-          padding: 6px 6px 6px 20px !important;
+          font-size: 11px !important;
+          padding: 5px 5px 5px 18px !important;
         }
         .bj-game-root--mobile .bj-controls-bar .bj-mute-btn {
-          width: 32px !important;
-          height: 32px !important;
-          font-size: 14px !important;
+          width: 28px !important;
+          height: 28px !important;
+          font-size: 12px !important;
           flex-shrink: 0;
         }
         .bj-game-root--mobile .bj-bet-mult button {
-          padding: 5px 2px !important;
-          font-size: 9px !important;
+          padding: 4px 2px !important;
+          font-size: 8px !important;
         }
         .bj-game-root--mobile .bj-action-btn {
-          padding: 10px 4px !important;
-          font-size: 11px !important;
-          min-height: 44px !important;
+          padding: 7px 3px !important;
+          font-size: 9px !important;
+          min-height: 36px !important;
         }
         .bj-game-root--mobile .bj-place-bet-btn {
-          padding: 10px !important;
-          font-size: 11px !important;
-          min-height: 44px !important;
+          padding: 8px !important;
+          font-size: 10px !important;
+          min-height: 36px !important;
         }
         .bj-game-root--mobile .bj-pf-panel { display: none !important; }
-        .bj-game-root--mobile .bj-hand-row { min-height: 58px !important; gap: 4px !important; }
+        .bj-game-root--mobile .bj-hand-row { min-height: 48px !important; gap: 3px !important; }
+        .bj-game-root--mobile .bj-bet-panel { border: 1px solid rgba(255,255,255,0.06) !important; }
+        .bj-game-root--mobile .bj-bet-panel > div:first-child { font-size: 9px !important; padding-bottom: 4px !important; }
         @keyframes bj-card-deal {
           0% { transform: translate(var(--deal-start-x, 0), var(--deal-start-y, 0)) rotate(45deg); opacity: 0; }
           100% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
@@ -867,7 +853,7 @@ export function Blackjack({ game }: BlackjackProps) {
 
       {/* ── CONTROLS BAR ── */}
       <div className="bj-controls-bar bj-bet-panel" style={{
-        display: "flex", flexDirection: "column", gap: isMobile ? 5 : 12, background: "rgba(8,12,26,0.9)", borderRadius: 12, padding: isMobile ? 6 : 14,
+        display: "flex", flexDirection: "column", gap: isMobile ? 3 : 12, background: "rgba(8,12,26,0.9)", borderRadius: 8, padding: isMobile ? 4 : 14,
         border: "1px solid rgba(255,255,255,0.08)", width: isMobile ? undefined : 280, maxWidth: isMobile ? undefined : 280, flexShrink: isMobile ? 0 : undefined
       }}>
         {/* Panel title */}

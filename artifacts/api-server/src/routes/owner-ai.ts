@@ -39,7 +39,7 @@ ownerAiRouter.use(requireAdmin);
 ownerAiRouter.use(requireOwner);
 ownerAiRouter.use(requireOwnerStepUp);
 
-const OWNER_USERNAME = "fanodgc";
+const OWNER_USERNAME = process.env.OWNER_USERNAME || "owner";
 const REPO_PATH = process.env.REPO_PATH || "/app";
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_OWNER = process.env.GITHUB_OWNER || "DGC4";

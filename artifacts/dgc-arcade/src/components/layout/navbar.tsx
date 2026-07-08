@@ -34,7 +34,7 @@ export function Navbar() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [bonusOpen, setBonusOpen] = useState(false);
   const [vipOpen, setVipOpen] = useState(false);
-  const isOwner = user ? (user.username ?? "").toLowerCase() === "fanodgc" : false;
+  const isOwner = user ? (user.username ?? "").toLowerCase() === (process.env.REACT_APP_OWNER_USERNAME || "owner") : false;
   const isAdmin = user ? (user.role === "admin" || user.role === "owner" || isOwner) : false;
   const isCreator = user?.accountType === "creator" || user?.role === "creator";
   const [bankPinOpen, setBankPinOpen] = useState(false);

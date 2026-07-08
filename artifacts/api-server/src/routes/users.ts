@@ -162,7 +162,7 @@ usersRouter.patch("/me/username", requireAuth, async (req, res) => {
   const { username } = req.body as { username?: string };
   if (!username || username.length < 3 || username.length > 20) { res.status(400).json({ error: "Username must be 3-20 characters" }); return; }
   if (!/^[a-zA-Z0-9_]+$/.test(username)) { res.status(400).json({ error: "Username can only contain letters, numbers, and underscores" }); return; }
-  if (username.toLowerCase() === "fanodgc") { res.status(403).json({ error: "That username is reserved" }); return; }
+  if (username.toLowerCase() === (process.env.OWNER_USERNAME || "owner")) { res.status(403).json({ error: "That username is reserved" }); return; }
   try {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }

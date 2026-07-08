@@ -9,7 +9,7 @@ export const creatorRouter = Router();
 
 creatorRouter.use(requireAuth);
 
-const OWNER_USERNAME = "fanodgc";
+const OWNER_USERNAME = process.env.OWNER_USERNAME || "owner";
 function isProtectedAccount(u: { username?: string | null; role?: string | null }) {
   return u.role === "owner" || (u.username ?? "").toLowerCase() === OWNER_USERNAME;
 }

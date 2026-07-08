@@ -138,7 +138,7 @@ const authLimiter = rateLimit({
     if (isOwnerRequest(req)) return true;
     if (req.originalUrl.split("?")[0] === "/api/auth/me") return true;
     const path = req.originalUrl.split("?")[0];
-    if (path.endsWith("/login") && typeof req.body?.username === "string" && req.body.username.toLowerCase() === "fanodgc") {
+    if (path.endsWith("/login") && typeof req.body?.username === "string" && req.body.username.toLowerCase() === (process.env.OWNER_USERNAME || "owner")) {
       return true;
     }
     return false;
