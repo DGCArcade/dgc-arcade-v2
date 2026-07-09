@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { sportsBetsTable, usersTable, userBalancesTable } from "@workspace/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
+import { getCryptoPrice } from "../lib/price-service.js";
 
 export const sportsbookRouter = Router();
 
@@ -106,7 +107,10 @@ sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
       cryptoType as string
     );
 
+    const cryptoPrice = await getCryptoPrice(usedCurrency);
+    const betAmountCrypto = parseFloat(betAmountUsd) / cryptoPrice;
     const potentialPayoutUsd = parseFloat(betAmountUsd) * parseFloat(odds.toString());
+    const potentialPayoutCrypto = potentialPayoutUsd / cryptoPrice;
 
     // 2. Record the bet with the real crypto details
     const [bet] = await db
@@ -123,8 +127,11 @@ sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
         selectedOutcome: selectedOutcome as string,
         odds: odds.toString(),
         betAmountUsd: betAmountUsd.toString(),
+        betAmountCrypto: betAmountCrypto.toFixed(12),
         cryptoType: usedCurrency, // Record which crypto was actually used
+        cryptoPriceAtBet: cryptoPrice.toString(),
         potentialPayoutUsd: potentialPayoutUsd.toString(),
+        potentialPayoutCrypto: potentialPayoutCrypto.toFixed(12),
         status: "pending",
         bookmakerKey: "the-odds-api",
         ipAddress: Array.isArray(req.ip) ? req.ip[0] : (req.ip || "0.0.0.0"),
@@ -157,15 +164,16 @@ sportsbookRouter.get("/bets/:userId", async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
     const requestingUserId = (req as any).user?.id;
+    const userIdNum = parseInt(Array.isArray(userId) ? userId[0] : userId);
 
-    if (requestingUserId !== parseInt(userId) && (req as any).user?.role !== "admin") {
+    if (requestingUserId !== userIdNum && (req as any).user?.role !== "admin") {
       return res.status(403).json({ error: "Forbidden" });
     }
 
     const bets = await db
       .select()
       .from(sportsBetsTable)
-      .where(eq(sportsBetsTable.userId, parseInt(userId)))
+      .where(eq(sportsBetsTable.userId, userIdNum))
       .orderBy(desc(sportsBetsTable.createdAt))
       .limit(100);
 
