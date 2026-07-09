@@ -22,6 +22,7 @@ import { diceLiveRouter } from "./dice-live.js";
 import { crashLiveRouter } from "./crash-live.js";
 import { chickenRoadRouter } from "./chicken-road.js";
 import { casinoRouter } from "./casino.js";
+import { slotsCatalogRouter } from "./slots-catalog.js";
 
 const router: IRouter = Router();
 
@@ -48,5 +49,6 @@ router.use("/dice/live", diceLiveRouter);
 router.use("/crash/live", crashLiveRouter);
 router.use("/chicken-road", chickenRoadRouter);
 router.use("/slots", casinoRouter);
+router.use("/slots", slotsCatalogRouter);
 
 export default router;

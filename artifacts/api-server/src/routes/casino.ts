@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, pool } from "@workspace/db";
-import { usersTable, casinoTransactionsTable } from "@workspace/db/src/schema";
+import { db } from "@workspace/db";
+import { usersTable, casinoTransactionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
@@ -30,7 +30,7 @@ casinoRouter.post("/payments/plisio-webhook", async (req, res) => {
         if (!user) {
           logger.error({ user_id }, "User not found for Plisio deposit");
           tx.rollback();
-          return res.status(404).json({ success: false, message: "User not found" });
+          return;
         }
 
         const newCasinoBalance = parseFloat(user.casinoBalance) + depositAmount;
@@ -49,13 +49,16 @@ casinoRouter.post("/payments/plisio-webhook", async (req, res) => {
         logger.info({ user_id, amount, currency, transaction_id }, "Plisio deposit processed successfully");
         res.json({ success: true, message: "Deposit processed" });
       });
+      return;
     } else {
       logger.warn({ body: req.body }, "Plisio webhook received non-completed status");
       res.status(200).json({ success: true, message: "Transaction status not completed, no action taken" });
+      return;
     }
   } catch (error) {
     logger.error({ error, body: req.body }, "Error processing Plisio webhook");
     res.status(500).json({ success: false, message: "Internal server error" });
+    return;
   }
 });
 
@@ -63,7 +66,7 @@ casinoRouter.post("/payments/plisio-webhook", async (req, res) => {
 casinoRouter.post("/callback", async (req, res) => {
   try {
     // TODO: Implement signature verification using CASINO_SECRET_SIGN
-    const { action, user_id, amount, transaction_id, game_id } = req.body; // Adjust based on actual aggregator payload
+    const { action, user_id, amount, transaction_id } = req.body; // Adjust based on actual aggregator payload
 
     if (!user_id || !action || !amount || !transaction_id) {
       logger.error({ body: req.body }, "Missing required fields in casino callback");
@@ -82,7 +85,7 @@ casinoRouter.post("/callback", async (req, res) => {
       if (!user) {
         logger.error({ user_id }, "User not found for casino callback");
         tx.rollback();
-        return res.status(404).json({ success: false, message: "User not found" });
+        return;
       }
 
       let newCasinoBalance = parseFloat(user.casinoBalance);
@@ -93,7 +96,8 @@ casinoRouter.post("/callback", async (req, res) => {
           if (newCasinoBalance < transactionAmount) {
             logger.warn({ user_id, currentBalance: newCasinoBalance, betAmount: transactionAmount }, "Insufficient funds for bet");
             tx.rollback();
-            return res.status(200).json({ success: false, message: "INSUFFICIENT_FUNDS" });
+            res.status(200).json({ success: false, message: "INSUFFICIENT_FUNDS" });
+            return;
           }
           newCasinoBalance -= transactionAmount;
           transactionType = "BET";
@@ -109,7 +113,7 @@ casinoRouter.post("/callback", async (req, res) => {
         default:
           logger.warn({ action }, "Unknown casino callback action");
           tx.rollback();
-          return res.status(400).json({ success: false, message: "Unknown action" });
+          return;
       }
 
       await tx.update(usersTable)
@@ -126,9 +130,11 @@ casinoRouter.post("/callback", async (req, res) => {
       logger.info({ user_id, action, amount, newCasinoBalance }, "Casino callback processed successfully");
       res.json({ success: true, message: `${action} processed` });
     });
+    return;
   } catch (error) {
     logger.error({ error, body: req.body }, "Error processing casino callback");
     res.status(500).json({ success: false, message: "Internal server error" });
+    return;
   }
 });
 
@@ -149,15 +155,18 @@ casinoRouter.get("/launch", async (req, res) => {
       return res.status(500).json({ success: false, message: "Casino configuration error" });
     }
 
+    // Use a type cast or local variable to avoid TS errors with req.user.id
+    const userId = (req.user as any)?.userId || "guest";
+
     // TODO: Implement actual call to external aggregator's game initializing API
-    // This is a placeholder. The actual implementation will depend on the aggregator's API.
-    // It will likely involve sending a signed request with user_id, game_id, and other parameters.
-    const externalLaunchUrl = `${CASINO_PROVIDER_URL}/launch?game_id=${gameId}&api_key=${CASINO_API_KEY}&merchant_id=${CASINO_MERCHANT_ID}&user_id=${req.user?.id || "guest"}`;
+    const externalLaunchUrl = `${CASINO_PROVIDER_URL}/launch?game_id=${gameId}&api_key=${CASINO_API_KEY}&merchant_id=${CASINO_MERCHANT_ID}&user_id=${userId}`;
 
     logger.info({ gameId, externalLaunchUrl }, "Generated external game launch URL");
     res.json({ success: true, launchUrl: externalLaunchUrl });
+    return;
   } catch (error) {
     logger.error({ error, query: req.query }, "Error generating game launch URL");
     res.status(500).json({ success: false, message: "Internal server error" });
+    return;
   }
 });
