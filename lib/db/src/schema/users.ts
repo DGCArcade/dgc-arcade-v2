@@ -45,6 +45,7 @@ export const usersTable = pgTable("users", {
   accountType: text("account_type").notNull().default("normal"),
   promoBalance: numeric("promo_balance", { precision: 18, scale: 8 }).notNull().default("0"),
   vaultBalance: numeric("vault_balance", { precision: 18, scale: 8 }).notNull().default("0"),
+  casinoBalance: numeric("casino_balance", { precision: 24, scale: 12 }).notNull().default("0"),
   signupBonus: numeric("signup_bonus", { precision: 18, scale: 8 }).notNull().default("100"),
   bonusWagered: numeric("bonus_wagered", { precision: 18, scale: 8 }).notNull().default("0"),
   withdrawalsEnabled: boolean("withdrawals_enabled").notNull().default(true),

@@ -23,6 +23,14 @@ services:
         sync: false
       - key: SITE_URL
         sync: false
+      - key: CASINO_SECRET_SIGN
+        sync: false
+      - key: CASINO_PROVIDER_URL
+        sync: false
+      - key: CASINO_API_KEY
+        sync: false
+      - key: CASINO_MERCHANT_ID
+        sync: false
       - key: API_URL
         sync: false
       - key: NODE_ENV
