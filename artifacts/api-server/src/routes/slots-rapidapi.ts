@@ -1,6 +1,6 @@
-import { Router } from "express";
-import { db } from "@dgc-arcade/db";
-import { usersTable } from "@dgc-arcade/db";
+import { Router, Request, Response } from "express";
+import { db } from "@workspace/db";
+import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
 export const slotsRapidApiRouter = Router();
@@ -12,20 +12,15 @@ export const slotsRapidApiRouter = Router();
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || "";
 const RAPIDAPI_HOST = process.env.RAPIDAPI_SLOT_HOST || "your-slot-provider.p.rapidapi.com";
 
+interface LaunchResponse {
+  gameUrl?: string;
+  launchUrl?: string;
+}
+
 /**
  * POST /api/slots/launch-rapidapi
- * Launch a slot game via RapidAPI slot streamer
- * 
- * Body: {
- *   gameId: string,
- *   gameName: string,
- *   provider: string,
- *   cryptoType: string (e.g., "BTC", "ETH")
- * }
- * 
- * Returns: { launchUrl, sessionId, gameToken }
  */
-slotsRapidApiRouter.post("/launch-rapidapi", async (req, res) => {
+slotsRapidApiRouter.post("/launch-rapidapi", async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
     if (!userId) {
@@ -43,13 +38,13 @@ slotsRapidApiRouter.post("/launch-rapidapi", async (req, res) => {
       .select()
       .from(usersTable)
       .where(eq(usersTable.id, userId))
-      .then((rows) => rows[0]);
+      .then((rows: any[]) => rows[0]);
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Generate session token (used for game communication)
+    // Generate session token
     const sessionId = `${userId}-${gameId}-${Date.now()}`;
     const gameToken = Buffer.from(
       JSON.stringify({
@@ -63,10 +58,6 @@ slotsRapidApiRouter.post("/launch-rapidapi", async (req, res) => {
       })
     ).toString("base64");
 
-    /**
-     * Call RapidAPI Slot Streamer endpoint
-     * This is a generic pattern — adjust the endpoint based on your actual slot provider
-     */
     const rapidApiResponse = await fetch(
       `https://${RAPIDAPI_HOST}/v1/games/launch`,
       {
@@ -93,10 +84,9 @@ slotsRapidApiRouter.post("/launch-rapidapi", async (req, res) => {
       return res.status(502).json({ error: "Failed to launch game via RapidAPI" });
     }
 
-    const rapidApiData = await rapidApiResponse.json();
+    const rapidApiData = (await rapidApiResponse.json()) as LaunchResponse;
 
-    // Return launch URL and session info
-    res.json({
+    return res.json({
       success: true,
       launchUrl: rapidApiData.gameUrl || rapidApiData.launchUrl,
       sessionId,
@@ -106,54 +96,42 @@ slotsRapidApiRouter.post("/launch-rapidapi", async (req, res) => {
     });
   } catch (error) {
     console.error("Error launching RapidAPI slot:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
 /**
  * POST /api/slots/sync-balance
- * Sync user balance after slot spin (called by RapidAPI callback)
- * 
- * Body: {
- *   sessionId: string,
- *   betAmount: number,
- *   winAmount: number,
- *   gameId: string
- * }
  */
-slotsRapidApiRouter.post("/sync-balance", async (req, res) => {
+slotsRapidApiRouter.post("/sync-balance", async (req: Request, res: Response) => {
   try {
-    const { sessionId, betAmount, winAmount, gameId } = req.body;
+    const { sessionId, betAmount, winAmount } = req.body;
 
     if (!sessionId || betAmount === undefined || winAmount === undefined) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Parse sessionId to get userId
     const userId = parseInt(sessionId.split("-")[0]);
 
-    // Fetch user
     const user = await db
       .select()
       .from(usersTable)
       .where(eq(usersTable.id, userId))
-      .then((rows) => rows[0]);
+      .then((rows: any[]) => rows[0]);
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Calculate new balance: deduct bet, add win
     const currentBalance = parseFloat(user.casinoBalance.toString());
     const newBalance = currentBalance - betAmount + winAmount;
 
-    // Update user balance with row lock
     await db
       .update(usersTable)
       .set({ casinoBalance: newBalance })
       .where(eq(usersTable.id, userId));
 
-    res.json({
+    return res.json({
       success: true,
       newBalance,
       betAmount,
@@ -162,22 +140,17 @@ slotsRapidApiRouter.post("/sync-balance", async (req, res) => {
     });
   } catch (error) {
     console.error("Error syncing balance:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
 /**
  * GET /api/slots/game-info/:gameId
- * Fetch game metadata for display
  */
-slotsRapidApiRouter.get("/game-info/:gameId", async (req, res) => {
+slotsRapidApiRouter.get("/game-info/:gameId", async (req: Request, res: Response) => {
   try {
     const { gameId } = req.params;
 
-    /**
-     * Fetch game info from RapidAPI
-     * This would call the slot provider's game metadata endpoint
-     */
     const response = await fetch(
       `https://${RAPIDAPI_HOST}/v1/games/${gameId}`,
       {
@@ -194,9 +167,9 @@ slotsRapidApiRouter.get("/game-info/:gameId", async (req, res) => {
     }
 
     const gameInfo = await response.json();
-    res.json(gameInfo);
+    return res.json(gameInfo);
   } catch (error) {
     console.error("Error fetching game info:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
