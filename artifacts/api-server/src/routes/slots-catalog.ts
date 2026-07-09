@@ -75,7 +75,7 @@ slotsCatalogRouter.get("/catalog", async (_req, res) => {
     // Note: The API might return an object with a games array or a direct array
     const rawGamesArray = Array.isArray(rawGamesData) 
       ? rawGamesData 
-      : (rawGamesData.games || rawGamesData.data || []);
+      : ((rawGamesData as any).games || (rawGamesData as any).data || []);
 
     const games: SlotGame[] = rawGamesArray.map((g: any) => ({
       id: g.id || g.gameId || g.slug || String(g.game_id || ""),
