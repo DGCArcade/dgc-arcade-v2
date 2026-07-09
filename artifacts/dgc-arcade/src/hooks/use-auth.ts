@@ -94,6 +94,11 @@ export function useAuth() {
   const cryptoBalances: CryptoBalance[] = (user as any)?.cryptoBalances ?? [];
   const isInitialAuthLoading = hasToken && isPending && !user && !isError;
 
+  // Manually invalidate and refetch the current user (e.g. after a bet or deposit)
+  const refreshUser = () => {
+    queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+  };
+
   return {
     user: user ?? null,
     isLoading: isInitialAuthLoading,
@@ -102,6 +107,7 @@ export function useAuth() {
     isAuthenticated: !!user,
     logout,
     requireAuth,
+    refreshUser,
     cryptoBalances,
   };
 }

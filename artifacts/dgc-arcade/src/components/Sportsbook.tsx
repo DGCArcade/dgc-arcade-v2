@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import {
@@ -16,12 +16,16 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  PartyPopper,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
+/* ─────────────────────────────────────────────────────────────
+   Types
+───────────────────────────────────────────────────────────── */
 interface Sport {
   key: string;
   group: string;
@@ -67,13 +71,61 @@ interface SportsBet {
   status: string;
   createdAt: string;
   potentialPayoutUsd: string;
+  settledAt?: string;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Helpers
+───────────────────────────────────────────────────────────── */
+
+/**
+ * Correct American odds → payout multiplier.
+ * +150 → 2.5×   |   -110 → 1.909×
+ */
+function americanOddsToMultiplier(americanOdds: number): number {
+  if (americanOdds > 0) return americanOdds / 100 + 1;
+  return 100 / Math.abs(americanOdds) + 1;
+}
+
+function formatOdds(price: number): string {
+  return price > 0 ? `+${price}` : `${price}`;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Sport category tabs (Football / Basketball / UFC / Tennis)
+───────────────────────────────────────────────────────────── */
+const SPORT_CATEGORIES: { label: string; keys: string[] }[] = [
+  {
+    label: "Football",
+    keys: ["americanfootball_nfl", "americanfootball_ncaaf", "soccer_epl", "soccer_uefa_champs_league"],
+  },
+  {
+    label: "Basketball",
+    keys: ["basketball_nba", "basketball_ncaab", "basketball_euroleague"],
+  },
+  { label: "UFC", keys: ["mma_mixed_martial_arts"] },
+  {
+    label: "Tennis",
+    keys: [
+      "tennis_atp_french_open",
+      "tennis_wta_french_open",
+      "tennis_atp_us_open",
+      "tennis_wta_us_open",
+    ],
+  },
+];
+
+/* ─────────────────────────────────────────────────────────────
+   Main Component
+───────────────────────────────────────────────────────────── */
 export function Sportsbook() {
-  const { user, cryptoBalances } = useAuth();
+  const { user, cryptoBalances, refreshUser } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const [selectedSport, setSelectedSport] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string>("Football");
   const [selectedBet, setSelectedBet] = useState<{
     fixture: Fixture;
     market: Market;
@@ -84,22 +136,25 @@ export function Sportsbook() {
   const [selectedCrypto, setSelectedCrypto] = useState<string>("BTC");
   const [showHistory, setShowHistory] = useState(false);
 
-  // Top crypto holding for default selection
+  // Track which settled bet IDs have already been toasted
+  const toastedBetIds = useRef<Set<number>>(new Set());
+
+  // Auto-select top crypto holding
   useEffect(() => {
     if (cryptoBalances.length > 0) {
-      const top = cryptoBalances.reduce((a, b) => a.usdValue > b.usdValue ? a : b);
+      const top = cryptoBalances.reduce((a, b) => (a.usdValue > b.usdValue ? a : b));
       setSelectedCrypto(top.currency.split("_")[0]);
     }
   }, [cryptoBalances]);
 
-  // Fetch available sports
+  /* ── Data fetching ── */
+
+  // All available sports
   const { data: sports = [], isLoading: sportsLoading } = useQuery<Sport[]>({
     queryKey: ["sportsbook-sports"],
     queryFn: async () => {
       const res = await fetch("/api/sportsbook/sports", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("dgc_token")}`,
-        },
+        headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` },
       });
       if (!res.ok) throw new Error("Failed to fetch sports");
       return res.json();
@@ -107,18 +162,18 @@ export function Sportsbook() {
     staleTime: 1000 * 60 * 5,
   });
 
-  // Fetch odds for selected sport
-  const { data: fixtures = [], isLoading: fixturesLoading, error: fixturesError } = useQuery<Fixture[]>({
+  // Live odds for selected sport key
+  const {
+    data: fixtures = [],
+    isLoading: fixturesLoading,
+    error: fixturesError,
+  } = useQuery<Fixture[]>({
     queryKey: ["sportsbook-odds", selectedSport],
     queryFn: async () => {
       if (!selectedSport) return [];
       const res = await fetch(
         `/api/sportsbook/odds/${selectedSport}?regions=us&oddsFormat=american`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("dgc_token")}`,
-          },
-        }
+        { headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` } }
       );
       if (!res.ok) {
         const err = await res.json();
@@ -131,23 +186,60 @@ export function Sportsbook() {
     retry: 1,
   });
 
-  // Fetch bet history
+  // Bet history
   const { data: betHistory = [], isLoading: historyLoading } = useQuery<SportsBet[]>({
     queryKey: ["sportsbook-history", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      const res = await fetch(`/api/sportsbook/bets/${user.id}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("dgc_token")}`,
-        },
+      const res = await fetch(`/api/sportsbook/bets/${(user as any).id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` },
       });
       if (!res.ok) throw new Error("Failed to fetch bet history");
       return res.json();
     },
-    enabled: !!user?.id && showHistory,
+    enabled: !!(user as any)?.id && showHistory,
   });
 
-  // Place bet mutation
+  // Post-match settlement polling: check for newly settled bets every 60 seconds
+  useQuery<SportsBet[]>({
+    queryKey: ["sportsbook-pending-results", (user as any)?.id],
+    queryFn: async () => {
+      if (!(user as any)?.id) return [];
+      const res = await fetch(`/api/sportsbook/pending-results/${(user as any).id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` },
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!(user as any)?.id,
+    refetchInterval: 60_000,
+    staleTime: 0,
+    select: (data) => {
+      // Fire Win/Loss toasts for newly settled bets
+      for (const bet of data) {
+        if (!toastedBetIds.current.has(bet.id) && bet.settledAt) {
+          toastedBetIds.current.add(bet.id);
+          if (bet.status === "won") {
+            toast({
+              title: "🏆 You Won!",
+              description: `${bet.homeTeam} vs ${bet.awayTeam} — ${bet.selectedOutcome} settled. Payout: $${parseFloat(bet.potentialPayoutUsd).toFixed(2)} credited to your vault.`,
+            });
+            // Refresh balance immediately
+            refreshUser();
+          } else if (bet.status === "lost") {
+            toast({
+              title: "Match Settled",
+              description: `${bet.homeTeam} vs ${bet.awayTeam} — ${bet.selectedOutcome} did not win. Better luck next time!`,
+              variant: "destructive",
+            });
+          }
+        }
+      }
+      return data;
+    },
+  });
+
+  /* ── Place bet mutation ── */
   const { mutate: placeBet, isPending: isBettingPending } = useMutation({
     mutationFn: async () => {
       if (!selectedBet || !betAmount) throw new Error("Invalid bet");
@@ -161,7 +253,8 @@ export function Sportsbook() {
         body: JSON.stringify({
           fixtureId: selectedBet.fixture.id,
           sportKey: selectedBet.fixture.sport_key,
-          leagueTitle: sports.find((s) => s.key === selectedBet.fixture.sport_key)?.title || "Unknown",
+          leagueTitle:
+            sports.find((s) => s.key === selectedBet.fixture.sport_key)?.title || "Unknown",
           homeTeam: selectedBet.fixture.home_team,
           awayTeam: selectedBet.fixture.away_team,
           commenceTime: selectedBet.fixture.commence_time,
@@ -182,12 +275,15 @@ export function Sportsbook() {
     },
     onSuccess: (data) => {
       toast({
-        title: "Bet Placed Successfully! 🎯",
-        description: `Your bet of $${parseFloat(betAmount).toFixed(2)} on ${selectedBet?.outcome.name} is live.`,
+        title: "Bet Placed! 🎯",
+        description: `$${parseFloat(betAmount).toFixed(2)} on ${selectedBet?.outcome.name}. Potential payout: $${potentialPayout}`,
       });
       setBetAmount("");
       setSelectedBet(null);
-      // refreshUser(); // refreshUser does not exist on useAuth
+      // Immediately refresh the user's balance after deduction
+      refreshUser();
+      // Invalidate bet history
+      queryClient.invalidateQueries({ queryKey: ["sportsbook-history"] });
     },
     onError: (error) => {
       toast({
@@ -198,22 +294,27 @@ export function Sportsbook() {
     },
   });
 
-  // Total USD balance across all cryptos
-  const totalUsdBalance = useMemo(() => {
-    return cryptoBalances.reduce((sum, b) => sum + b.usdValue, 0);
-  }, [cryptoBalances]);
+  /* ── Derived values ── */
 
-  // Potential payout
-  const potentialPayout = selectedBet && betAmount
-    ? (parseFloat(betAmount) * selectedBet.odds).toFixed(2)
-    : "0.00";
+  const totalUsdBalance = useMemo(
+    () => cryptoBalances.reduce((sum, b) => sum + b.usdValue, 0),
+    [cryptoBalances]
+  );
 
+  // Correct American odds payout calculation
+  const potentialPayout =
+    selectedBet && betAmount && parseFloat(betAmount) > 0
+      ? (parseFloat(betAmount) * americanOddsToMultiplier(selectedBet.odds)).toFixed(2)
+      : "0.00";
+
+  /* ── Render ── */
   return (
     <div className="w-full space-y-6 pb-24 md:pb-12">
-      {/* Header Section - Premium DGC Glassmorphism */}
+
+      {/* ── Header ── */}
       <div className="relative overflow-hidden group flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-6 md:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-500 hover:border-primary/20">
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2" />
-        
+
         <div className="relative z-10 space-y-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/30 shadow-[0_0_30px_rgba(255,215,0,0.15)] group-hover:scale-110 transition-transform duration-500">
@@ -229,7 +330,7 @@ export function Sportsbook() {
                   <span className="text-[10px] font-black uppercase tracking-widest text-green-400">Live Engine</span>
                 </div>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-                  Institutional Grade Odds • Instant Settlement
+                  Institutional Grade Odds · Instant Settlement
                 </span>
               </div>
             </div>
@@ -242,8 +343,8 @@ export function Sportsbook() {
             size="lg"
             onClick={() => setShowHistory(!showHistory)}
             className={`rounded-2xl border-white/10 h-14 px-8 font-black uppercase tracking-[0.2em] text-xs transition-all duration-300 ${
-              showHistory 
-                ? "bg-primary text-black border-primary shadow-[0_0_30px_rgba(255,215,0,0.3)] scale-105" 
+              showHistory
+                ? "bg-primary text-black border-primary shadow-[0_0_30px_rgba(255,215,0,0.3)] scale-105"
                 : "bg-white/5 hover:bg-white/10 hover:border-primary/40 hover:scale-[1.02]"
             }`}
           >
@@ -268,7 +369,7 @@ export function Sportsbook() {
       </div>
 
       {showHistory ? (
-        /* ── Bet History View ── */
+        /* ── Bet History ── */
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="flex items-center justify-between px-2">
             <h2 className="text-lg font-black uppercase tracking-widest flex items-center gap-2">
@@ -277,30 +378,54 @@ export function Sportsbook() {
           </div>
 
           {historyLoading ? (
-            <div className="flex justify-center py-20"><Loader className="w-8 h-8 animate-spin text-primary" /></div>
+            <div className="flex justify-center py-20">
+              <Loader className="w-8 h-8 animate-spin text-primary" />
+            </div>
           ) : betHistory.length === 0 ? (
             <div className="bg-white/5 border border-dashed border-white/10 rounded-3xl py-20 text-center space-y-3">
               <AlertCircle className="w-12 h-12 text-muted-foreground/20 mx-auto" />
               <p className="text-muted-foreground font-mono text-sm">No sports bets found in your history.</p>
-              <Button variant="link" onClick={() => setShowHistory(false)} className="text-primary font-bold uppercase tracking-widest text-xs">Start Betting Now</Button>
+              <Button
+                variant="link"
+                onClick={() => setShowHistory(false)}
+                className="text-primary font-bold uppercase tracking-widest text-xs"
+              >
+                Start Betting Now
+              </Button>
             </div>
           ) : (
             <div className="grid gap-3">
               {betHistory.map((bet) => (
-                <div key={bet.id} className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-white/10 transition-all">
+                <div
+                  key={bet.id}
+                  className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-white/10 transition-all"
+                >
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${
-                      bet.status === "won" ? "bg-green-500/10 border-green-500/30 text-green-400" :
-                      bet.status === "lost" ? "bg-red-500/10 border-red-500/30 text-red-400" :
-                      "bg-blue-500/10 border-blue-500/30 text-blue-400"
-                    }`}>
-                      {bet.status === "won" ? <CheckCircle2 className="w-6 h-6" /> :
-                       bet.status === "lost" ? <XCircle className="w-6 h-6" /> :
-                       <Clock className="w-6 h-6 animate-pulse" />}
+                    <div
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center border ${
+                        bet.status === "won"
+                          ? "bg-green-500/10 border-green-500/30 text-green-400"
+                          : bet.status === "lost"
+                          ? "bg-red-500/10 border-red-500/30 text-red-400"
+                          : "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                      }`}
+                    >
+                      {bet.status === "won" ? (
+                        <CheckCircle2 className="w-6 h-6" />
+                      ) : bet.status === "lost" ? (
+                        <XCircle className="w-6 h-6" />
+                      ) : (
+                        <Clock className="w-6 h-6 animate-pulse" />
+                      )}
                     </div>
                     <div>
-                      <div className="font-bold text-sm uppercase tracking-wide">{bet.homeTeam} vs {bet.awayTeam}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">Selection: <span className="text-foreground font-bold">{bet.selectedOutcome}</span> @ {parseFloat(bet.odds).toFixed(2)}</div>
+                      <div className="font-bold text-sm uppercase tracking-wide">
+                        {bet.homeTeam} vs {bet.awayTeam}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Selection: <span className="text-foreground font-bold">{bet.selectedOutcome}</span>{" "}
+                        @ {formatOdds(parseFloat(bet.odds))}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-8 px-2">
@@ -310,16 +435,24 @@ export function Sportsbook() {
                     </div>
                     <div className="flex flex-col items-end">
                       <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-0.5">Payout</span>
-                      <span className={`font-mono font-black text-sm ${bet.status === "won" ? "text-green-400" : "text-muted-foreground"}`}>
+                      <span
+                        className={`font-mono font-black text-sm ${
+                          bet.status === "won" ? "text-green-400" : "text-muted-foreground"
+                        }`}
+                      >
                         ${parseFloat(bet.potentialPayoutUsd).toFixed(2)}
                       </span>
                     </div>
                     <div className="w-24 text-right">
-                      <Badge className={`uppercase tracking-widest text-[9px] font-black px-2.5 py-1 ${
-                        bet.status === "won" ? "bg-green-500 text-black" :
-                        bet.status === "lost" ? "bg-red-500 text-white" :
-                        "bg-blue-600 text-white"
-                      }`}>
+                      <Badge
+                        className={`uppercase tracking-widest text-[9px] font-black px-2.5 py-1 ${
+                          bet.status === "won"
+                            ? "bg-green-500 text-black"
+                            : bet.status === "lost"
+                            ? "bg-red-500 text-white"
+                            : "bg-blue-600 text-white"
+                        }`}
+                      >
                         {bet.status}
                       </Badge>
                     </div>
@@ -330,34 +463,64 @@ export function Sportsbook() {
           )}
         </div>
       ) : (
-        /* ── Betting View ── */
+        /* ── Betting Lobby ── */
         <div className="grid lg:grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
           {/* Main Feed */}
           <div className="lg:col-span-8 space-y-6">
-            {/* Sport Categories */}
+
+            {/* Category tabs: Football / Basketball / UFC / Tennis */}
             <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {sportsLoading ? (
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map(i => <div key={i} className="w-24 h-10 rounded-xl bg-white/5 animate-pulse" />)}
-                </div>
-              ) : (
-                sports.filter((s) => s.active).map((sport) => (
-                  <button
-                    key={sport.key}
-                    onClick={() => setSelectedSport(sport.key)}
-                    className={`px-6 py-3 rounded-2xl border font-black uppercase tracking-[0.15em] text-[11px] transition-all duration-300 whitespace-nowrap shrink-0 ${
-                      selectedSport === sport.key
-                        ? "bg-primary text-black border-primary shadow-[0_0_25px_rgba(255,215,0,0.4)] scale-105"
-                        : "bg-white/5 text-muted-foreground border-white/10 hover:border-primary/40 hover:text-foreground hover:scale-[1.02]"
-                    }`}
-                  >
-                    {sport.title}
-                  </button>
-                ))
-              )}
+              {SPORT_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.label}
+                  onClick={() => {
+                    setActiveCategory(cat.label);
+                    setSelectedSport(cat.keys[0]);
+                  }}
+                  className={`px-6 py-3 rounded-2xl border font-black uppercase tracking-[0.15em] text-[11px] transition-all duration-300 whitespace-nowrap shrink-0 ${
+                    activeCategory === cat.label
+                      ? "bg-primary text-black border-primary shadow-[0_0_25px_rgba(255,215,0,0.4)] scale-105"
+                      : "bg-white/5 text-muted-foreground border-white/10 hover:border-primary/40 hover:text-foreground hover:scale-[1.02]"
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
             </div>
 
-            {/* Fixtures List */}
+            {/* Sub-sport pills within category */}
+            {selectedSport && (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {sportsLoading ? (
+                  <div className="flex gap-2">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="w-24 h-8 rounded-xl bg-white/5 animate-pulse" />
+                    ))}
+                  </div>
+                ) : (
+                  sports
+                    .filter((s) =>
+                      SPORT_CATEGORIES.find((c) => c.label === activeCategory)?.keys.includes(s.key)
+                    )
+                    .map((sport) => (
+                      <button
+                        key={sport.key}
+                        onClick={() => setSelectedSport(sport.key)}
+                        className={`px-4 py-2 rounded-xl border font-bold uppercase tracking-[0.1em] text-[10px] transition-all duration-200 whitespace-nowrap shrink-0 ${
+                          selectedSport === sport.key
+                            ? "bg-white/15 text-white border-white/30"
+                            : "bg-white/5 text-muted-foreground border-white/10 hover:border-white/20 hover:text-white"
+                        }`}
+                      >
+                        {sport.title}
+                      </button>
+                    ))
+                )}
+              </div>
+            )}
+
+            {/* Fixtures */}
             <div className="space-y-4">
               {!selectedSport ? (
                 <div className="bg-white/5 border border-white/5 rounded-3xl py-24 text-center space-y-4">
@@ -365,96 +528,143 @@ export function Sportsbook() {
                     <Trophy className="w-8 h-8 text-primary/40" />
                   </div>
                   <h3 className="font-display font-black text-xl uppercase tracking-widest">Select a Sport</h3>
-                  <p className="text-muted-foreground text-sm max-w-xs mx-auto">Choose a category above to view live fixtures and competitive odds.</p>
+                  <p className="text-muted-foreground text-sm max-w-xs mx-auto">
+                    Choose a category above to view live fixtures and competitive odds.
+                  </p>
                 </div>
               ) : fixturesLoading ? (
                 <div className="space-y-4">
-                  {[1, 2, 3].map(i => <div key={i} className="h-48 rounded-3xl bg-white/5 animate-pulse" />)}
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-48 rounded-3xl bg-white/5 animate-pulse" />
+                  ))}
                 </div>
               ) : fixturesError ? (
                 <div className="bg-red-500/10 border border-red-500/20 rounded-3xl py-20 text-center space-y-3 px-6">
                   <AlertCircle className="w-12 h-12 text-red-500/50 mx-auto" />
                   <p className="text-red-400 font-bold uppercase tracking-widest text-sm">Connection Error</p>
-                  <p className="text-muted-foreground text-xs max-w-xs mx-auto">{(fixturesError as Error).message}. Check your API credentials in Render.</p>
-                  <Button variant="outline" size="sm" onClick={() => window.location.reload()} className="mt-4 rounded-xl border-white/10 font-bold uppercase tracking-widest text-[10px]">Retry Connection</Button>
+                  <p className="text-muted-foreground text-xs max-w-xs mx-auto">
+                    {(fixturesError as Error).message}. Check THE_ODDS_API_KEY in Render.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.location.reload()}
+                    className="mt-4 rounded-xl border-white/10 font-bold uppercase tracking-widest text-[10px]"
+                  >
+                    Retry Connection
+                  </Button>
                 </div>
               ) : fixtures.length === 0 ? (
                 <div className="bg-white/5 border border-white/5 rounded-3xl py-20 text-center">
                   <p className="text-muted-foreground font-mono">No live fixtures for this category right now.</p>
                 </div>
               ) : (
-                fixtures.map((fixture) => (
-                  <div key={fixture.id} className="group relative overflow-hidden bg-gradient-to-br from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/10 rounded-[2.5rem] hover:border-primary/40 transition-all duration-500 shadow-[0_20px_50px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_50px_rgba(255,215,0,0.1)]">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    
-                    <div className="p-5 md:p-8 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
-                      <div className="flex items-center gap-4">
-                        <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">
-                            {new Date(fixture.commence_time).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+                fixtures.map((fixture) => {
+                  const h2hMarket = fixture.bookmakers[0]?.markets.find((m) => m.key === "h2h");
+                  if (!h2hMarket) return null;
+                  return (
+                    <div
+                      key={fixture.id}
+                      className="group relative overflow-hidden bg-gradient-to-br from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/10 rounded-[2.5rem] hover:border-primary/40 transition-all duration-500 shadow-[0_20px_50px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_50px_rgba(255,215,0,0.1)]"
+                    >
+                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+                      <div className="p-5 md:p-8 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+                        <div className="flex items-center gap-4">
+                          <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">
+                              {new Date(fixture.commence_time).toLocaleString(undefined, {
+                                weekday: "short",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </div>
+                          <span className="hidden md:block text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/30">
+                            Match ID: {fixture.id.slice(0, 8)}
                           </span>
                         </div>
-                        <span className="hidden md:block text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/30">
-                          Match ID: {fixture.id.slice(0, 8)}
-                        </span>
+                        <Badge className="bg-primary/10 hover:bg-primary/20 text-primary border-primary/20 text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg">
+                          Market Open
+                        </Badge>
                       </div>
-                      <Badge className="bg-primary/10 hover:bg-primary/20 text-primary border-primary/20 text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg">
-                        Market Open
-                      </Badge>
-                    </div>
 
-                    <div className="p-6 md:p-8">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
-                        <div className="flex-1">
-                          <div className="grid grid-cols-[1fr,auto,1fr] items-center gap-4 md:gap-8">
-                            <div className="space-y-2 text-center md:text-right">
-                              <div className="text-base md:text-2xl font-black uppercase tracking-tight text-white group-hover:text-primary transition-colors duration-300">{fixture.home_team}</div>
-                              <div className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-widest">Home Squad</div>
-                            </div>
-                            <div className="relative">
-                              <div className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center font-black italic text-muted-foreground/20 text-xs md:text-sm">VS</div>
-                              <div className="absolute inset-0 rounded-full bg-primary/5 blur-lg animate-pulse" />
-                            </div>
-                            <div className="space-y-2 text-center md:text-left">
-                              <div className="text-base md:text-2xl font-black uppercase tracking-tight text-white group-hover:text-primary transition-colors duration-300">{fixture.away_team}</div>
-                              <div className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-widest">Away Squad</div>
+                      <div className="p-6 md:p-8">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
+                          <div className="flex-1">
+                            <div className="grid grid-cols-[1fr,auto,1fr] items-center gap-4 md:gap-8">
+                              <div className="space-y-2 text-center md:text-right">
+                                <div className="text-base md:text-2xl font-black uppercase tracking-tight text-white group-hover:text-primary transition-colors duration-300">
+                                  {fixture.home_team}
+                                </div>
+                                <div className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-widest">Home Squad</div>
+                              </div>
+                              <div className="relative">
+                                <div className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center font-black italic text-muted-foreground/20 text-xs md:text-sm">
+                                  VS
+                                </div>
+                                <div className="absolute inset-0 rounded-full bg-primary/5 blur-lg animate-pulse" />
+                              </div>
+                              <div className="space-y-2 text-center md:text-left">
+                                <div className="text-base md:text-2xl font-black uppercase tracking-tight text-white group-hover:text-primary transition-colors duration-300">
+                                  {fixture.away_team}
+                                </div>
+                                <div className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-widest">Away Squad</div>
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="grid grid-cols-3 gap-3 md:w-[400px]">
-                          {fixture.bookmakers[0]?.markets.find(m => m.key === "h2h")?.outcomes.map((outcome) => (
-                            <button
-                              key={outcome.name}
-                              onClick={() => setSelectedBet({ fixture, market: fixture.bookmakers[0].markets[0], outcome, odds: outcome.price })}
-                              className={`group/odd relative overflow-hidden p-4 rounded-2xl border transition-all duration-500 flex flex-col items-center gap-1.5 ${
-                                selectedBet?.outcome.name === outcome.name && selectedBet?.fixture.id === fixture.id
-                                  ? "bg-primary text-black border-primary shadow-[0_10px_30px_rgba(255,215,0,0.4)] scale-110 -translate-y-1 z-10"
-                                  : "bg-white/[0.03] border-white/10 hover:border-primary/50 hover:bg-white/[0.07] hover:scale-[1.05] hover:-translate-y-0.5"
-                              }`}
-                            >
-                              <span className={`text-[9px] font-black uppercase tracking-widest transition-opacity ${
-                                selectedBet?.outcome.name === outcome.name && selectedBet?.fixture.id === fixture.id ? "opacity-100" : "opacity-40"
-                              }`}>{outcome.name}</span>
-                              <span className="text-xl font-black font-mono tracking-tighter">
-                                {outcome.price > 0 ? `+${outcome.price}` : outcome.price}
-                              </span>
-                              {selectedBet?.outcome.name === outcome.name && selectedBet?.fixture.id === fixture.id && (
-                                <div className="absolute inset-0 bg-white/20 animate-pulse" />
-                              )}
-                            </button>
-                          ))}
+                          {/* Odds buttons */}
+                          <div className="grid grid-cols-3 gap-3 md:w-[400px]">
+                            {h2hMarket.outcomes.map((outcome) => (
+                              <button
+                                key={outcome.name}
+                                onClick={() =>
+                                  setSelectedBet({
+                                    fixture,
+                                    market: h2hMarket,
+                                    outcome,
+                                    odds: outcome.price,
+                                  })
+                                }
+                                className={`group/odd relative overflow-hidden p-4 rounded-2xl border transition-all duration-500 flex flex-col items-center gap-1.5 ${
+                                  selectedBet?.outcome.name === outcome.name &&
+                                  selectedBet?.fixture.id === fixture.id
+                                    ? "bg-primary text-black border-primary shadow-[0_10px_30px_rgba(255,215,0,0.4)] scale-110 -translate-y-1 z-10"
+                                    : "bg-white/[0.03] border-white/10 hover:border-primary/50 hover:bg-white/[0.07] hover:scale-[1.05] hover:-translate-y-0.5"
+                                }`}
+                              >
+                                <span
+                                  className={`text-[9px] font-black uppercase tracking-widest transition-opacity ${
+                                    selectedBet?.outcome.name === outcome.name &&
+                                    selectedBet?.fixture.id === fixture.id
+                                      ? "opacity-100"
+                                      : "opacity-40"
+                                  }`}
+                                >
+                                  {outcome.name}
+                                </span>
+                                <span className="text-xl font-black font-mono tracking-tighter">
+                                  {formatOdds(outcome.price)}
+                                </span>
+                                {selectedBet?.outcome.name === outcome.name &&
+                                  selectedBet?.fixture.id === fixture.id && (
+                                    <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                                  )}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
 
-          {/* Bet Slip Sidebar */}
+          {/* ── Bet Slip Sidebar ── */}
           <div className="lg:col-span-4">
             <div className="sticky top-24 space-y-4">
               {!selectedBet ? (
@@ -463,34 +673,55 @@ export function Sportsbook() {
                     <Zap className="w-6 h-6 text-muted-foreground/30" />
                   </div>
                   <h3 className="font-bold uppercase tracking-widest text-sm">Empty Slip</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">Select an outcome from the feed to build your wager.</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Select an outcome from the feed to build your wager.
+                  </p>
                 </div>
               ) : (
                 <div className="bg-black/40 border border-primary/30 rounded-3xl p-6 space-y-6 shadow-2xl shadow-primary/5 animate-in zoom-in-95 duration-300">
                   <div className="flex items-center justify-between">
                     <h3 className="font-display font-black uppercase tracking-[0.2em] text-sm text-primary">Bet Slip</h3>
-                    <button onClick={() => setSelectedBet(null)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center hover:bg-red-500/20 hover:text-red-400 transition-all">✕</button>
+                    <button
+                      onClick={() => setSelectedBet(null)}
+                      className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center hover:bg-red-500/20 hover:text-red-400 transition-all"
+                    >
+                      ✕
+                    </button>
                   </div>
 
                   <div className="space-y-4">
+                    {/* Selection summary */}
                     <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
                       <div className="text-[10px] font-black uppercase tracking-widest text-primary/70">Selection</div>
                       <div className="font-bold text-sm leading-tight">{selectedBet.outcome.name}</div>
-                      <div className="text-[10px] text-muted-foreground uppercase tracking-widest">{selectedBet.fixture.home_team} vs {selectedBet.fixture.away_team}</div>
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-widest">
+                        {selectedBet.fixture.home_team} vs {selectedBet.fixture.away_team}
+                      </div>
                       <div className="flex items-center justify-between pt-2 border-t border-white/5 mt-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">American Odds</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                          American Odds
+                        </span>
                         <span className="font-mono font-black text-primary">
-                          {selectedBet.odds > 0 ? `+${selectedBet.odds}` : selectedBet.odds}
+                          {formatOdds(selectedBet.odds)}
                         </span>
                       </div>
                     </div>
 
+                    {/* Wager input */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between px-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Wager Amount (USD)</label>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                          Wager Amount (USD)
+                        </label>
                         <div className="flex items-center gap-2">
-                          {[10, 50, 100].map(amt => (
-                            <button key={amt} onClick={() => setBetAmount(amt.toString())} className="text-[9px] font-black bg-white/5 hover:bg-white/10 border border-white/10 px-2 py-1 rounded-md transition-all">${amt}</button>
+                          {[10, 50, 100].map((amt) => (
+                            <button
+                              key={amt}
+                              onClick={() => setBetAmount(amt.toString())}
+                              className="text-[9px] font-black bg-white/5 hover:bg-white/10 border border-white/10 px-2 py-1 rounded-md transition-all"
+                            >
+                              ${amt}
+                            </button>
                           ))}
                         </div>
                       </div>
@@ -506,17 +737,22 @@ export function Sportsbook() {
                       </div>
                     </div>
 
+                    {/* Crypto selector */}
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Settle With</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">
+                        Settle With
+                      </label>
                       <div className="grid grid-cols-2 gap-2">
-                        {cryptoBalances.slice(0, 4).map(b => {
+                        {cryptoBalances.slice(0, 4).map((b) => {
                           const symbol = b.currency.split("_")[0];
                           return (
                             <button
                               key={b.currency}
                               onClick={() => setSelectedCrypto(symbol)}
                               className={`p-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
-                                selectedCrypto === symbol ? "bg-primary/20 border-primary text-primary" : "bg-white/5 border-white/10 text-muted-foreground hover:border-white/20"
+                                selectedCrypto === symbol
+                                  ? "bg-primary/20 border-primary text-primary"
+                                  : "bg-white/5 border-white/10 text-muted-foreground hover:border-white/20"
                               }`}
                             >
                               {symbol}
@@ -526,10 +762,16 @@ export function Sportsbook() {
                       </div>
                     </div>
 
+                    {/* Payout preview */}
                     <div className="bg-primary/10 border border-primary/20 rounded-2xl p-4 flex items-center justify-between">
                       <div className="flex flex-col">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-primary/70">Potential Payout</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-primary/70">
+                          Potential Payout
+                        </span>
                         <span className="text-xl font-black font-mono text-primary">${potentialPayout}</span>
+                        <span className="text-[9px] text-muted-foreground/60 font-mono mt-0.5">
+                          {americanOddsToMultiplier(selectedBet.odds).toFixed(3)}× multiplier
+                        </span>
                       </div>
                       <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
                         <TrendingUp className="w-5 h-5 text-primary" />

@@ -1,9 +1,11 @@
 import { Router, Request, Response } from "express";
 import { db } from "@workspace/db";
 import { sportsBetsTable, usersTable, userBalancesTable } from "@workspace/db/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { requireAuth } from "../middlewares/auth.js";
+import { eq, and, desc, sql, lt, lte } from "drizzle-orm";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 import { getCryptoPrice } from "../lib/price-service.js";
+import { logger } from "../lib/logger.js";
 
 export const sportsbookRouter = Router();
 
@@ -12,8 +14,6 @@ export const sportsbookRouter = Router();
  * The Odds API Configuration
  *
  * Uses The Odds API direct (https://api.the-odds-api.com)
- *   - Free tier: 500 requests/month — no credit card, no contact required
- *   - Sign up free at https://the-odds-api.com  →  get THE_ODDS_API_KEY
  *   - Set env var: THE_ODDS_API_KEY=your_key_here in Render dashboard
  * ─────────────────────────────────────────────────────────────────────────────
  */
@@ -25,6 +25,18 @@ function buildOddsUrl(path: string, extraParams: Record<string, string> = {}): s
   if (THE_ODDS_API_KEY) url.searchParams.set("apiKey", THE_ODDS_API_KEY);
   for (const [k, v] of Object.entries(extraParams)) url.searchParams.set(k, v);
   return url.toString();
+}
+
+/**
+ * Compute correct payout multiplier from American odds.
+ * e.g. +150 → 2.5x, -110 → 1.909x
+ */
+function americanOddsToMultiplier(americanOdds: number): number {
+  if (americanOdds > 0) {
+    return americanOdds / 100 + 1;
+  } else {
+    return 100 / Math.abs(americanOdds) + 1;
+  }
 }
 
 /**
@@ -45,14 +57,89 @@ sportsbookRouter.get("/sports", async (req: Request, res: Response) => {
 
     if (!response.ok) {
       const body = await response.text();
-      console.error(`[Sportsbook] /sports failed ${response.status}: ${body}`);
+      logger.error({ status: response.status, body }, "[Sportsbook] /sports failed");
       return res.status(response.status).json({ error: "Failed to fetch sports from The Odds API", details: body });
     }
 
     const sports = await response.json();
     return res.json(sports);
   } catch (error) {
-    console.error("[Sportsbook] Error fetching sports:", error);
+    logger.error({ error }, "[Sportsbook] Error fetching sports");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/sports/feed
+ * Premium global match feed for Football, Basketball, UFC, and Tennis.
+ * Loops real-time data into the DGC glassmorphic match card layout.
+ * This is the primary feed endpoint referenced in the deployment spec.
+ */
+sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
+  try {
+    if (!THE_ODDS_API_KEY) {
+      return res.status(503).json({
+        error: "Sportsbook API key not configured",
+        setup: "Set THE_ODDS_API_KEY in your Render environment variables.",
+      });
+    }
+
+    // Dedicated sport keys for the four tracked categories
+    const TRACKED_SPORTS: Record<string, string[]> = {
+      Football: ["americanfootball_nfl", "americanfootball_ncaaf", "soccer_epl", "soccer_uefa_champs_league"],
+      Basketball: ["basketball_nba", "basketball_ncaab", "basketball_euroleague"],
+      UFC: ["mma_mixed_martial_arts"],
+      Tennis: ["tennis_atp_french_open", "tennis_wta_french_open", "tennis_atp_us_open", "tennis_wta_us_open"],
+    };
+
+    const feedResults: Record<string, any[]> = {
+      Football: [],
+      Basketball: [],
+      UFC: [],
+      Tennis: [],
+    };
+
+    // Fetch fixtures for each category in parallel
+    await Promise.all(
+      Object.entries(TRACKED_SPORTS).map(async ([category, sportKeys]) => {
+        for (const sportKey of sportKeys) {
+          try {
+            const url = buildOddsUrl(`/v4/sports/${sportKey}/odds`, {
+              regions: "us",
+              oddsFormat: "american",
+              markets: "h2h",
+            });
+            const resp = await fetch(url, { method: "GET" });
+            if (!resp.ok) continue;
+            const fixtures = await resp.json() as any[];
+            feedResults[category].push(
+              ...fixtures.map((f: any) => ({ ...f, _category: category, _sportKey: sportKey }))
+            );
+          } catch {
+            // Skip unavailable sport keys silently
+          }
+        }
+      })
+    );
+
+    // Log quota usage
+    const quotaUrl = buildOddsUrl("/v4/sports", { all: "false" });
+    const quotaResp = await fetch(quotaUrl).catch(() => null);
+    if (quotaResp) {
+      logger.info({
+        used: quotaResp.headers.get("x-requests-used"),
+        remaining: quotaResp.headers.get("x-requests-remaining"),
+      }, "[Sportsbook] Feed quota");
+    }
+
+    return res.json({
+      success: true,
+      feed: feedResults,
+      totalFixtures: Object.values(feedResults).reduce((sum, arr) => sum + arr.length, 0),
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error({ error }, "[Sportsbook] Error fetching global feed");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -89,13 +176,12 @@ sportsbookRouter.get("/odds/:sport", async (req: Request, res: Response) => {
     const { sport } = req.params;
     const regions = (req.query.regions as string) || "us";
     const markets = (req.query.markets as string) || "h2h";
-    // Always American odds — matches the UI display logic
     const oddsFormat = "american";
 
     if (!THE_ODDS_API_KEY) {
       return res.status(503).json({
         error: "Sportsbook API key not configured",
-        setup: "Set THE_ODDS_API_KEY in your Render environment variables. Free key at https://the-odds-api.com",
+        setup: "Set THE_ODDS_API_KEY in your Render environment variables.",
       });
     }
 
@@ -104,29 +190,29 @@ sportsbookRouter.get("/odds/:sport", async (req: Request, res: Response) => {
 
     if (!response.ok) {
       const body = await response.text();
-      console.error(`[Sportsbook] /odds/${sport} failed ${response.status}: ${body}`);
+      logger.error({ status: response.status, body, sport }, "[Sportsbook] /odds/:sport failed");
       return res.status(response.status).json({ error: "Failed to fetch odds", details: body });
     }
 
     const odds = await response.json();
 
-    // Log remaining quota for monitoring
     const remaining = response.headers.get("x-requests-remaining");
     const used = response.headers.get("x-requests-used");
-    if (remaining) console.log(`[Sportsbook] Odds API quota — used: ${used}, remaining: ${remaining}`);
+    if (remaining) logger.info({ used, remaining }, "[Sportsbook] Odds API quota");
 
     return res.json(odds);
   } catch (error) {
-    console.error("[Sportsbook] Error fetching odds:", error);
+    logger.error({ error }, "[Sportsbook] Error fetching odds");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
 /**
  * POST /api/sportsbook/bet
- * Uses the real crypto wallet (balance-service) to prevent "fake" balances.
+ * Places a bet with proper row-locking (SELECT FOR UPDATE) on user_balances
+ * and correct American odds payout calculation.
  */
-sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
+sportsbookRouter.post("/bet", requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
     if (!userId) {
@@ -151,47 +237,47 @@ sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // 1. Process deduction with SQL row lock via transaction
+    const betAmountFloat = parseFloat(betAmountUsd);
+    if (isNaN(betAmountFloat) || betAmountFloat <= 0) {
+      return res.status(400).json({ error: "Invalid bet amount" });
+    }
+
+    // Correct American odds payout multiplier
+    const americanOdds = parseFloat(odds.toString());
+    const multiplier = americanOddsToMultiplier(americanOdds);
+    const potentialPayoutUsd = betAmountFloat * multiplier;
+
     const betResult = await db.transaction(async (tx) => {
-      // Apply row lock on user balance to prevent race conditions
+      // Strict row lock on BOTH users and user_balances before any read/write
       await tx.execute(sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`);
       await tx.execute(sql`SELECT id FROM user_balances WHERE user_id = ${userId} FOR UPDATE`);
 
-      // Use the deductBalance logic within the transaction
+      // Deduct balance INSIDE this transaction (passes tx so the lock is honoured)
       const { newBalance, usedCurrency } = await deductBalance(
-        userId, 
-        parseFloat(betAmountUsd), 
-        cryptoType as string
+        userId,
+        betAmountFloat,
+        cryptoType as string,
+        tx
       );
 
       const cryptoPrice = await getCryptoPrice(usedCurrency.split("_")[0]);
-      const betAmountCrypto = parseFloat(betAmountUsd) / cryptoPrice;
-      // Calculate potential payout based on American odds
-      const americanOdds = parseFloat(odds.toString());
-      let multiplier = 0;
-      if (americanOdds > 0) {
-        multiplier = (americanOdds / 100) + 1;
-      } else {
-        multiplier = (100 / Math.abs(americanOdds)) + 1;
-      }
-      const potentialPayoutUsd = parseFloat(betAmountUsd) * multiplier;
+      const betAmountCrypto = betAmountFloat / cryptoPrice;
       const potentialPayoutCrypto = potentialPayoutUsd / cryptoPrice;
 
-      // 2. Record the bet with the real crypto details
       const [bet] = await tx
         .insert(sportsBetsTable)
         .values({
           userId: userId as number,
           fixtureId: fixtureId as string,
           sportKey: sportKey as string,
-          leagueTitle: leagueTitle as string,
+          leagueTitle: (leagueTitle as string) || "Unknown",
           homeTeam: homeTeam as string,
           awayTeam: awayTeam as string,
           commenceTime: new Date(commenceTime),
           marketKey: marketKey as string,
           selectedOutcome: selectedOutcome as string,
-          odds: odds.toString(),
-          betAmountUsd: betAmountUsd.toString(),
+          odds: americanOdds.toString(),
+          betAmountUsd: betAmountFloat.toString(),
           betAmountCrypto: betAmountCrypto.toFixed(12),
           cryptoType: usedCurrency,
           cryptoPriceAtBet: cryptoPrice.toString(),
@@ -220,9 +306,9 @@ sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error("Error placing bet:", error);
-    return res.status(error.message === "Insufficient balance" ? 400 : 500).json({ 
-      error: error.message || "Internal server error" 
+    logger.error({ error }, "[Sportsbook] Error placing bet");
+    return res.status(error.message === "Insufficient balance" ? 400 : 500).json({
+      error: error.message || "Internal server error",
     });
   }
 });
@@ -230,10 +316,10 @@ sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
 /**
  * GET /api/sportsbook/bets/:userId
  */
-sportsbookRouter.get("/bets/:userId", async (req: Request, res: Response) => {
+sportsbookRouter.get("/bets/:userId", requireAuth, async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
-    const requestingUserId = (req as any).user?.id;
+    const requestingUserId = (req as any).user?.userId;
     const userIdNum = parseInt(Array.isArray(userId) ? userId[0] : userId);
 
     if (requestingUserId !== userIdNum && (req as any).user?.role !== "admin") {
@@ -249,18 +335,18 @@ sportsbookRouter.get("/bets/:userId", async (req: Request, res: Response) => {
 
     return res.json(bets);
   } catch (error) {
-    console.error("Error fetching bets:", error);
+    logger.error({ error }, "[Sportsbook] Error fetching bets");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
 /**
  * POST /api/sportsbook/settle-bet
- * Credits winnings back to the real crypto wallet.
+ * Admin endpoint: credits winnings back to the real crypto wallet.
  */
-sportsbookRouter.post("/settle-bet", async (req: Request, res: Response) => {
+sportsbookRouter.post("/settle-bet", requireAuth, async (req: Request, res: Response) => {
   try {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const [admin] = await db
       .select()
       .from(usersTable)
@@ -297,12 +383,10 @@ sportsbookRouter.post("/settle-bet", async (req: Request, res: Response) => {
     if (won) {
       status = "won";
       actualPayoutUsd = parseFloat(bet.potentialPayoutUsd.toString());
-      
-      // Credit winnings back to the SAME crypto used for the bet
-      // This ensures the USD balance is always tied to real crypto.
+      // Credit winnings in the same crypto used for the bet
       newTotalBalance = await creditBalance(
-        bet.userId, 
-        actualPayoutUsd, 
+        bet.userId,
+        actualPayoutUsd,
         bet.cryptoType || "BTC"
       );
     } else {
@@ -325,7 +409,153 @@ sportsbookRouter.post("/settle-bet", async (req: Request, res: Response) => {
       newBalanceUsd: newTotalBalance,
     });
   } catch (error) {
-    console.error("Error settling bet:", error);
+    logger.error({ error }, "[Sportsbook] Error settling bet");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * POST /api/sportsbook/auto-settle
+ * Internal endpoint called by the background settlement checker (or owner).
+ * Checks all pending bets whose commence_time has passed, queries
+ * The Odds API for scores/results, and settles them automatically.
+ * Returns a list of settled bets with win/loss outcomes for UI toasts.
+ */
+sportsbookRouter.post("/auto-settle", async (req: Request, res: Response) => {
+  try {
+    // Only callable from internal background tasks or owner
+    const callerRole = (req as any).user?.role;
+    const isInternal = req.headers["x-internal-task"] === process.env.INTERNAL_TASK_SECRET;
+    if (!isInternal && callerRole !== "owner" && callerRole !== "admin") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const now = new Date();
+    // Find pending bets where the match has already started (commence_time in the past)
+    const pendingBets = await db
+      .select()
+      .from(sportsBetsTable)
+      .where(
+        and(
+          eq(sportsBetsTable.status, "pending"),
+          lte(sportsBetsTable.commenceTime, now)
+        )
+      )
+      .limit(50);
+
+    if (pendingBets.length === 0) {
+      return res.json({ success: true, settled: [] });
+    }
+
+    const settled: Array<{ betId: number; userId: number; status: string; payoutUsd: number }> = [];
+
+    for (const bet of pendingBets) {
+      try {
+        if (!THE_ODDS_API_KEY) break;
+
+        // Query scores for this sport
+        const scoresUrl = buildOddsUrl(`/v4/sports/${bet.sportKey}/scores`, {
+          daysFrom: "3",
+        });
+        const scoresResp = await fetch(scoresUrl);
+        if (!scoresResp.ok) continue;
+
+        const scores = await scoresResp.json() as any[];
+        const matchScore = scores.find((s: any) => s.id === bet.fixtureId);
+
+        // Only settle if the match is marked completed
+        if (!matchScore || !matchScore.completed) continue;
+
+        const homeScore = matchScore.scores?.find((s: any) => s.name === matchScore.home_team)?.score;
+        const awayScore = matchScore.scores?.find((s: any) => s.name === matchScore.away_team)?.score;
+
+        let won = false;
+        if (homeScore !== undefined && awayScore !== undefined) {
+          const homeWon = parseFloat(homeScore) > parseFloat(awayScore);
+          const awayWon = parseFloat(awayScore) > parseFloat(homeScore);
+          const isDraw = parseFloat(homeScore) === parseFloat(awayScore);
+
+          if (bet.selectedOutcome === matchScore.home_team) won = homeWon;
+          else if (bet.selectedOutcome === matchScore.away_team) won = awayWon;
+          else if (bet.selectedOutcome === "Draw") won = isDraw;
+        }
+
+        let actualPayoutUsd = 0;
+        let newBalance = 0;
+
+        if (won) {
+          actualPayoutUsd = parseFloat(bet.potentialPayoutUsd.toString());
+          newBalance = await creditBalance(bet.userId, actualPayoutUsd, bet.cryptoType || "BTC");
+        } else {
+          const { totalBalance } = await getUserBalance(bet.userId);
+          newBalance = totalBalance;
+        }
+
+        await db
+          .update(sportsBetsTable)
+          .set({
+            status: won ? "won" : "lost",
+            actualPayoutUsd: actualPayoutUsd.toString(),
+            settledAt: new Date(),
+          })
+          .where(eq(sportsBetsTable.id, bet.id));
+
+        settled.push({
+          betId: bet.id,
+          userId: bet.userId,
+          status: won ? "won" : "lost",
+          payoutUsd: actualPayoutUsd,
+        });
+
+        logger.info(
+          { betId: bet.id, userId: bet.userId, won, actualPayoutUsd },
+          "[Sportsbook] Auto-settled bet"
+        );
+      } catch (betErr) {
+        logger.error({ betErr, betId: bet.id }, "[Sportsbook] Error auto-settling individual bet");
+      }
+    }
+
+    return res.json({ success: true, settled });
+  } catch (error) {
+    logger.error({ error }, "[Sportsbook] Auto-settle error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/sportsbook/pending-results/:userId
+ * Returns recently settled bets for a user so the frontend can
+ * display Win/Loss toast notifications on the profile panel.
+ */
+sportsbookRouter.get("/pending-results/:userId", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const requestingUserId = (req as any).user?.userId;
+    const userIdNum = parseInt(Array.isArray(userId) ? userId[0] : userId);
+
+    if (requestingUserId !== userIdNum) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    // Return bets settled in the last 10 minutes that haven't been toasted yet
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    const recentlySettled = await db
+      .select()
+      .from(sportsBetsTable)
+      .where(
+        and(
+          eq(sportsBetsTable.userId, userIdNum),
+          sql`${sportsBetsTable.settledAt} >= ${tenMinutesAgo}`,
+          sql`${sportsBetsTable.status} IN ('won', 'lost')`
+        )
+      )
+      .orderBy(desc(sportsBetsTable.settledAt))
+      .limit(10);
+
+    return res.json(recentlySettled);
+  } catch (error) {
+    logger.error({ error }, "[Sportsbook] Error fetching pending results");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

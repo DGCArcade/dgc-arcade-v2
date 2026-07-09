@@ -52,5 +52,7 @@ router.use("/chicken-road", chickenRoadRouter);
 router.use("/slots", slotsCatalogRouter);
 router.use("/slots", casinoRouter);
 router.use("/sportsbook", sportsbookRouter);
+// Alias: /api/sports/feed → /api/sportsbook/feed (NODE_MIRROR deployment spec)
+router.use("/sports", sportsbookRouter);
 
 export default router;

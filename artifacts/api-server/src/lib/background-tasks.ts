@@ -1,5 +1,6 @@
 import { db, transactionsTable, usersTable, referralsTable, userBalancesTable, creatorBankTxnsTable } from "@workspace/db";
-import { eq, and, lt, gte, ne, sql, count } from "drizzle-orm";
+import { sportsBetsTable } from "@workspace/db/schema";
+import { eq, and, lt, gte, ne, sql, count, lte, desc } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { recordLedger } from "../services/ledger.js";
 import { creditCryptoBalance } from "./balance-service.js";
@@ -14,6 +15,105 @@ import { getCryptoPrice } from "./price-service.js";
 import { diceRoundManager } from "./dice-round-manager.js";
 
 const WAGER_MULTIPLIER = 1.0;
+
+/**
+ * Sports Bet Auto-Settlement
+ * Queries The Odds API scores endpoint for all pending bets whose match has started.
+ * Settles won/lost bets and credits winnings to the user's crypto wallet.
+ * Runs every 5 minutes via startBackgroundTasks.
+ */
+export async function settlePendingSportsBets() {
+  const THE_ODDS_API_KEY = process.env.THE_ODDS_API_KEY || "";
+  if (!THE_ODDS_API_KEY) {
+    logger.debug("Sports settlement skipped: THE_ODDS_API_KEY not set");
+    return;
+  }
+
+  try {
+    const now = new Date();
+    const pendingBets = await db
+      .select()
+      .from(sportsBetsTable)
+      .where(
+        and(
+          eq(sportsBetsTable.status, "pending"),
+          lte(sportsBetsTable.commenceTime, now)
+        )
+      )
+      .limit(50);
+
+    if (pendingBets.length === 0) return;
+
+    logger.info({ count: pendingBets.length }, "[Sports Settlement] Checking pending bets");
+
+    // Group bets by sportKey to minimise API calls
+    const sportKeys = [...new Set(pendingBets.map((b) => b.sportKey))];
+
+    const scoresCache = new Map<string, any[]>();
+    for (const sportKey of sportKeys) {
+      try {
+        const url = new URL(`https://api.the-odds-api.com/v4/sports/${sportKey}/scores`);
+        url.searchParams.set("apiKey", THE_ODDS_API_KEY);
+        url.searchParams.set("daysFrom", "3");
+        const resp = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
+        if (resp.ok) {
+          scoresCache.set(sportKey, await resp.json() as any[]);
+        }
+      } catch {
+        // Skip unavailable sport
+      }
+    }
+
+    for (const bet of pendingBets) {
+      try {
+        const scores = scoresCache.get(bet.sportKey) || [];
+        const matchScore = scores.find((s: any) => s.id === bet.fixtureId);
+        if (!matchScore || !matchScore.completed) continue;
+
+        const homeScore = matchScore.scores?.find((s: any) => s.name === matchScore.home_team)?.score;
+        const awayScore = matchScore.scores?.find((s: any) => s.name === matchScore.away_team)?.score;
+
+        let won = false;
+        if (homeScore !== undefined && awayScore !== undefined) {
+          const homeWon = parseFloat(homeScore) > parseFloat(awayScore);
+          const awayWon = parseFloat(awayScore) > parseFloat(homeScore);
+          const isDraw = parseFloat(homeScore) === parseFloat(awayScore);
+          if (bet.selectedOutcome === matchScore.home_team) won = homeWon;
+          else if (bet.selectedOutcome === matchScore.away_team) won = awayWon;
+          else if (bet.selectedOutcome === "Draw") won = isDraw;
+        }
+
+        let actualPayoutUsd = 0;
+        if (won) {
+          actualPayoutUsd = parseFloat(bet.potentialPayoutUsd.toString());
+          await creditCryptoBalance(
+            bet.userId,
+            bet.cryptoType || "BTC",
+            actualPayoutUsd / (await getCryptoPrice(bet.cryptoType || "BTC"))
+          );
+        }
+
+        await db
+          .update(sportsBetsTable)
+          .set({
+            status: won ? "won" : "lost",
+            actualPayoutUsd: actualPayoutUsd.toString(),
+            settledAt: new Date(),
+          })
+          .where(eq(sportsBetsTable.id, bet.id));
+
+        logger.info(
+          { betId: bet.id, userId: bet.userId, won, actualPayoutUsd },
+          "[Sports Settlement] Bet settled"
+        );
+      } catch (betErr) {
+        logger.error({ betErr, betId: bet.id }, "[Sports Settlement] Error settling individual bet");
+      }
+    }
+  } catch (err) {
+    logger.error({ err }, "[Sports Settlement] Error in settlement task");
+  }
+}
 
 /**
  * Auto-cleanup: Mark pending deposits as expired if they haven't been completed within 120 minutes.
@@ -295,17 +395,26 @@ export function startBackgroundTasks() {
     });
   }, 1 * 60 * 1000);
 
+  // Sports bet auto-settlement: check completed matches every 5 minutes
+  const sportsSettleInterval = setInterval(() => {
+    settlePendingSportsBets().catch((err) => {
+      logger.error({ err }, "Unhandled error in sports settlement interval");
+    });
+  }, 5 * 60 * 1000);
+
   process.on("SIGTERM", () => {
     clearInterval(cleanupInterval);
     clearInterval(syncInterval);
+    clearInterval(sportsSettleInterval);
     diceRoundManager.destroy();
   });
 
   process.on("SIGINT", () => {
     clearInterval(cleanupInterval);
     clearInterval(syncInterval);
+    clearInterval(sportsSettleInterval);
     diceRoundManager.destroy();
   });
 
-  logger.info("Background tasks started: cleanup (30m) and Plisio sync (1m)");
+  logger.info("Background tasks started: cleanup (30m), Plisio sync (1m), sports settlement (5m)");
 }

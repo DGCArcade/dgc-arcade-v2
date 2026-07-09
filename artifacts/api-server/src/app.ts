@@ -86,7 +86,8 @@ app.use(cors({
 
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "DENY");
+  // Allow our own origin to embed iframes (slot game player)
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   if (isProduction) {
     res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
@@ -271,6 +272,8 @@ app.use("/api/blackjack", betLimiter);
 app.use("/api/mines", betLimiter);
 app.use("/api/chicken-road", betLimiter);
 app.use("/api/bets", betLimiter);
+app.use("/api/sportsbook/bet", betLimiter);
+app.use("/api/sports/bet", betLimiter);
 app.use("/api", router);
 
 // Start background tasks (cleanup, etc.)
