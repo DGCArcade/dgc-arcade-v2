@@ -113,6 +113,20 @@ export function Navbar() {
           Leaderboard
         </Link>
       )}
+
+      {settings.slotsEnabled && (
+        <Link href="/sportsbook" className={`group relative px-4 py-1.5 rounded-full text-sm font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-2 overflow-hidden ${
+          location === "/sportsbook" 
+            ? "text-black bg-primary shadow-[0_0_20px_rgba(255,215,0,0.4)]" 
+            : "text-primary border border-primary/30 hover:border-primary hover:bg-primary/10"
+        }`}>
+          <Trophy className={`w-3.5 h-3.5 ${location === "/sportsbook" ? "animate-bounce" : "group-hover:animate-pulse"}`} />
+          <span>Sports</span>
+          {location !== "/sportsbook" && (
+            <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-shimmer" />
+          )}
+        </Link>
+      )}
       {isAdmin && (
         <Link href="/admin" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/admin" ? "text-primary" : "text-amber-500/80 hover:text-amber-400"}`}>
           <Shield className="w-3.5 h-3.5" />Admin

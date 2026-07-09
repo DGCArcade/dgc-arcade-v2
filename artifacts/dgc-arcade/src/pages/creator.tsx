@@ -218,16 +218,37 @@ export default function CreatorPage() {
     );
   }
 
+  // Allow non-creators to see the regular hub even if specialty dashboard fails
+  if (!dashboard && !isCreator) {
+    return (
+      <div className="text-center py-24 space-y-4">
+        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+          <Users className="w-8 h-8 text-primary" />
+        </div>
+        <h2 className="text-xl font-display font-black uppercase tracking-widest">Affiliate Hub</h2>
+        <p className="text-muted-foreground font-mono text-sm max-w-md mx-auto">
+          Start referring players and earn up to 30% monthly commission.
+        </p>
+        <button
+          onClick={() => { setDashLoading(true); setDashError(null); fetchDashboard(); }}
+          className="px-8 py-3 rounded-xl bg-primary text-primary-foreground font-black uppercase tracking-widest hover:scale-105 transition-transform shadow-lg shadow-primary/20"
+        >
+          Access Hub
+        </button>
+      </div>
+    );
+  }
+
   if (!dashboard) {
     return (
       <div className="text-center py-24 space-y-4">
-        <p className="text-muted-foreground font-mono">Failed to load affiliate hub.</p>
+        <p className="text-muted-foreground font-mono">Failed to load specialty hub.</p>
         {dashError && <p className="text-xs text-red-400 font-mono max-w-sm mx-auto break-all">{dashError}</p>}
         <button
           onClick={() => { setDashLoading(true); setDashError(null); fetchDashboard(); }}
           className="px-5 py-2 rounded-lg bg-primary/20 border border-primary/40 text-primary text-sm font-bold hover:bg-primary/30 transition-colors"
         >
-          Retry
+          Retry Hub Access
         </button>
       </div>
     );

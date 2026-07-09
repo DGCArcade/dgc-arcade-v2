@@ -45,13 +45,13 @@ export function BottomNav() {
           <span className={location === "/slots" ? "mt-2 text-amber-500 font-black" : ""}>Slots</span>
         </Link>
 
-        {/* Race */}
-        <Link href="/race" className={`flex flex-col items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-tighter transition-all duration-300 ${active("/race")}`}>
-          <div className={`p-2 rounded-2xl transition-all relative group ${location === "/race" ? "bg-purple-500 text-black scale-110 shadow-[0_0_20px_rgba(168,85,247,0.4)] -translate-y-2" : "bg-secondary"}`}>
-            <Trophy className={`w-6 h-6 ${location === "/race" ? "animate-bounce" : ""}`} />
-            {location !== "/race" && <div className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full animate-ping" />}
+        {/* Sportsbook */}
+        <Link href="/sportsbook" className={`flex flex-col items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-tighter transition-all duration-300 ${active("/sportsbook")}`}>
+          <div className={`p-2 rounded-2xl transition-all relative group ${location === "/sportsbook" ? "bg-primary text-black scale-110 shadow-[0_0_20px_rgba(255,215,0,0.4)] -translate-y-2" : "bg-secondary"}`}>
+            <Trophy className={`w-6 h-6 ${location === "/sportsbook" ? "animate-bounce" : ""}`} />
+            {location !== "/sportsbook" && <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-ping" />}
           </div>
-          <span className={location === "/race" ? "mt-1" : ""}>Race</span>
+          <span className={location === "/sportsbook" ? "mt-1 text-primary" : ""}>Sports</span>
         </Link>
 
         {/* Profile / Auth */}

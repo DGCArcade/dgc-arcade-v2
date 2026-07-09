@@ -2,7 +2,8 @@ import { Router, Request, Response } from "express";
 import { db } from "@workspace/db";
 import { sportsBetsTable, usersTable } from "@workspace/db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { getCryptoPrice } from "../../../lib/utils/crypto-price-mapper.js";
+// Correct relative path to the root lib directory
+import { getCryptoPrice } from "../../../../lib/utils/crypto-price-mapper";
 
 export const sportsbookRouter = Router();
 
@@ -147,8 +148,8 @@ sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
         potentialPayoutCrypto: potentialPayoutCrypto.toString(),
         status: "pending",
         bookmakerKey: "the-odds-api",
-        ipAddress: req.ip as string,
-        userAgent: req.get("user-agent") as string,
+        ipAddress: Array.isArray(req.ip) ? req.ip[0] : (req.ip || ""),
+        userAgent: req.get("user-agent") || "",
       })
       .returning();
 
