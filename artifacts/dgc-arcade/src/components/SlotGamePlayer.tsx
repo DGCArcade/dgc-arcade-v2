@@ -14,10 +14,33 @@ export function SlotGamePlayer({ gameId, onBack }: SlotGamePlayerProps) {
   const [isMuted, setIsMuted] = useState(false);
   const [, setIsFullscreen] = useState(false);
 
-  // Fetch game launch URL from backend
+  // Fetch game launch URL from backend (tries RapidAPI first, falls back to casino provider)
   const { data: gameSession, isLoading, error } = useQuery({
     queryKey: ["slot-game", gameId],
     queryFn: async () => {
+      // Try RapidAPI launcher first
+      try {
+        const rapidResponse = await fetch(`/api/slots/launch-rapidapi`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("dgc_token")}`,
+          },
+          body: JSON.stringify({
+            gameId,
+            gameName: gameId,
+            provider: "rapidapi",
+            cryptoType: "BTC",
+          }),
+        });
+        if (rapidResponse.ok) {
+          return rapidResponse.json();
+        }
+      } catch (e) {
+        console.warn("RapidAPI launcher failed, falling back to casino provider", e);
+      }
+
+      // Fallback to original casino provider launcher
       const response = await fetch(`/api/slots/launch?game_id=${gameId}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("dgc_token")}`,

@@ -23,3 +23,4 @@ export * from "./jackpot-pool";
 export * from "./chicken-road";
 export * from "./activity-logs";
 export * from "./casino-transactions";
+export * from "./sports-bets";

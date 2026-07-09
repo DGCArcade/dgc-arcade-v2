@@ -14,6 +14,7 @@ const Home = lazy(() => import("@/pages/home"));
 const Games = lazy(() => import("@/pages/games"));
 const SlotsPage = lazy(() => import("@/pages/slots"));
 const SlotGamePage = lazy(() => import("@/pages/slot-game"));
+const SportsbookPage = lazy(() => import("@/pages/sportsbook"));
 const GamePage = lazy(() => import("@/pages/game"));
 const Leaderboard = lazy(() => import("@/pages/leaderboard"));
 const Profile = lazy(() => import("@/pages/profile"));
@@ -166,10 +167,12 @@ function Router() {
             {settings.slotsEnabled ? <SlotsPage /> : <NotFound />}
           </Route>
           
-          <Route path="/slots/:slug">
+                    <Route path="/slots/:slug">
             {settings.slotsEnabled ? <SlotGamePage /> : <NotFound />}
           </Route>
-          
+          <Route path="/sportsbook">
+            {settings.slotsEnabled ? <SportsbookPage /> : <NotFound />}
+          </Route>
           <Route path="/games/:gameId">
             {settings.gamesEnabled ? <GamePage /> : <NotFound />}
           </Route>

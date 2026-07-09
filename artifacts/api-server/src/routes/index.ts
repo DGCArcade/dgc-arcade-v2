@@ -23,6 +23,8 @@ import { crashLiveRouter } from "./crash-live.js";
 import { chickenRoadRouter } from "./chicken-road.js";
 import { casinoRouter } from "./casino.js";
 import { slotsCatalogRouter } from "./slots-catalog.js";
+import { sportsbookRouter } from "./sportsbook.js";
+import { slotsRapidApiRouter } from "./slots-rapidapi.js";
 
 const router: IRouter = Router();
 
@@ -50,5 +52,7 @@ router.use("/crash/live", crashLiveRouter);
 router.use("/chicken-road", chickenRoadRouter);
 router.use("/slots", casinoRouter);
 router.use("/slots", slotsCatalogRouter);
+router.use("/sportsbook", sportsbookRouter);
+router.use("/slots", slotsRapidApiRouter);
 
 export default router;
