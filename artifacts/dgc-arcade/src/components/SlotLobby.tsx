@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from "react";
-import { Input } from "@workspace/ui/components/input";
-import { Button } from "@workspace/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
-import { Badge } from "@workspace/ui/components/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "../hooks/useAuth";
-import { useNavigate } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { useLocation } from "wouter";
 import { Gamepad2, Search, Zap } from "lucide-react";
 
 interface SlotGame {
@@ -27,13 +27,12 @@ export function SlotLobby({ onGameSelect }: SlotLobbyProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
 
   // Fetch slot games catalog from the aggregator API
   const { data: games = [], isLoading } = useQuery({
     queryKey: ["slot-games"],
     queryFn: async () => {
-      // TODO: Replace with actual aggregator API endpoint
       const response = await fetch("/api/slots/catalog", {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("dgc_token")}`,
@@ -48,7 +47,7 @@ export function SlotLobby({ onGameSelect }: SlotLobbyProps) {
   // Extract unique providers for filter tabs
   const providers = useMemo(() => {
     const uniqueProviders = new Set(games.map((game: SlotGame) => game.provider));
-    return Array.from(uniqueProviders).sort();
+    return Array.from(uniqueProviders).sort() as string[];
   }, [games]);
 
   // Filter games based on search and provider
@@ -64,7 +63,7 @@ export function SlotLobby({ onGameSelect }: SlotLobbyProps) {
     if (onGameSelect) {
       onGameSelect(gameId);
     } else {
-      navigate(`/slots/${gameId}`);
+      setLocation(`/slots/${gameId}`);
     }
   };
 
@@ -89,7 +88,7 @@ export function SlotLobby({ onGameSelect }: SlotLobbyProps) {
           <Input
             placeholder="Search 348+ slot titles..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
             className="pl-10 h-11 text-base"
           />
         </div>
@@ -97,7 +96,7 @@ export function SlotLobby({ onGameSelect }: SlotLobbyProps) {
 
       {/* Provider Filter Tabs */}
       {providers.length > 0 && (
-        <Tabs value={selectedProvider || "all"} onValueChange={(value) => setSelectedProvider(value === "all" ? null : value)}>
+        <Tabs value={selectedProvider || "all"} onValueChange={(value: string) => setSelectedProvider(value === "all" ? null : value)}>
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 h-auto p-2 bg-muted">
             <TabsTrigger value="all" className="text-xs md:text-sm">
               All Games

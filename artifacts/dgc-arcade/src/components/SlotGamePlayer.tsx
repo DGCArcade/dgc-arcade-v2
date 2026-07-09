@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from "react";
-import { Button } from "@workspace/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
-import { Badge } from "@workspace/ui/components/badge";
+import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Maximize2, Volume2, VolumeX } from "lucide-react";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 
 interface SlotGamePlayerProps {
   gameId: string;
@@ -12,9 +10,9 @@ interface SlotGamePlayerProps {
 }
 
 export function SlotGamePlayer({ gameId, onBack }: SlotGamePlayerProps) {
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const [isMuted, setIsMuted] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [, setIsFullscreen] = useState(false);
 
   // Fetch game launch URL from backend
   const { data: gameSession, isLoading, error } = useQuery({
@@ -42,7 +40,7 @@ export function SlotGamePlayer({ gameId, onBack }: SlotGamePlayerProps) {
     if (onBack) {
       onBack();
     } else {
-      navigate("/slots");
+      setLocation("/slots");
     }
   };
 
