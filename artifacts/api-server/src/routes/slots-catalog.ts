@@ -32,7 +32,8 @@ slotsCatalogRouter.get("/catalog", async (_req, res) => {
   try {
     const now = Date.now();
     if (cachedCatalog && (now - lastFetchTime < CACHE_DURATION)) {
-      return res.json(cachedCatalog);
+      res.json(cachedCatalog);
+      return;
     }
 
     const response = await fetch(`https://${RAPIDAPI_HOST}/slot-and-betting-games`, {
@@ -46,7 +47,8 @@ slotsCatalogRouter.get("/catalog", async (_req, res) => {
     if (!response.ok) {
       console.error("Failed to fetch slots from RapidAPI:", response.status);
       // Fallback to empty if first load fails
-      return res.json(cachedCatalog || []);
+      res.json(cachedCatalog || []);
+      return;
     }
 
     const rawGames = await response.json();
