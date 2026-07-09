@@ -70,7 +70,7 @@ interface SportsBet {
 }
 
 export function Sportsbook() {
-  const { user, cryptoBalances, refreshUser } = useAuth();
+  const { user, cryptoBalances } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [selectedSport, setSelectedSport] = useState<string | null>(null);
@@ -183,7 +183,7 @@ export function Sportsbook() {
       });
       setBetAmount("");
       setSelectedBet(null);
-      refreshUser();
+      // refreshUser(); // refreshUser does not exist on useAuth
     },
     onError: (error) => {
       toast({

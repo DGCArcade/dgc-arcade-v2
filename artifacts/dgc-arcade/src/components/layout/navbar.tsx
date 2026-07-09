@@ -4,7 +4,7 @@ import { useAuthModal } from "@/hooks/use-auth-modal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/format";
-import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound, Star, X, ArrowLeftRight, MessageSquare, TrendingUp, TrendingDown} from "lucide-react";
+import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound, Star, X, ArrowLeftRight, MessageSquare, TrendingUp, TrendingDown, Trophy} from "lucide-react";
 import { CoinIcon } from "@/components/wallet/coin-icon";
 import {
   DropdownMenu,
