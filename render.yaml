@@ -51,16 +51,10 @@ services:
       - key: RENDER_DEPLOY_HOOK_URL
         sync: false
       # ── Sports Betting (The Odds API) ──────────────────────────────
-      # PRIMARY: Get a FREE key at https://the-odds-api.com
+      # Get a FREE key at https://the-odds-api.com
       # Free tier: 500 requests/month, no credit card, no paid subscription
-      # Set THE_ODDS_API_KEY — server auto-detects and uses direct API
       - key: THE_ODDS_API_KEY
         sync: false
-      # FALLBACK only (only used if THE_ODDS_API_KEY is NOT set)
-      - key: RAPIDAPI_KEY
-        sync: false
-      - key: RAPIDAPI_HOST
-        value: "the-odds-api.p.rapidapi.com"
       # ── Owner Settings ─────────────────────────────────────────────
       # Must match the owner's username in the database (default: fanodgc)
       - key: OWNER_USERNAME

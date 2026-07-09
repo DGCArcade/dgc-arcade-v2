@@ -11,37 +11,18 @@ export const sportsbookRouter = Router();
  * ─────────────────────────────────────────────────────────────────────────────
  * The Odds API Configuration
  *
- * PRIMARY:  The Odds API direct (https://api.the-odds-api.com)
+ * Uses The Odds API direct (https://api.the-odds-api.com)
  *   - Free tier: 500 requests/month — no credit card, no contact required
  *   - Sign up free at https://the-odds-api.com  →  get THE_ODDS_API_KEY
- *   - Set env var: THE_ODDS_API_KEY=your_key_here
- *
- * FALLBACK: RapidAPI proxy (https://the-odds-api.p.rapidapi.com)
- *   - Only used if THE_ODDS_API_KEY is not set
- *   - Set env vars: RAPIDAPI_KEY + RAPIDAPI_HOST=the-odds-api.p.rapidapi.com
- *
- * Recommendation: Use the direct API. It's free, open, and requires no
- * third-party marketplace subscription or paid contact.
+ *   - Set env var: THE_ODDS_API_KEY=your_key_here in Render dashboard
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const THE_ODDS_API_KEY = process.env.THE_ODDS_API_KEY || "";
-const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || "";
-const RAPIDAPI_HOST = process.env.RAPIDAPI_HOST || "the-odds-api.p.rapidapi.com";
-
-// Prefer direct API; fall back to RapidAPI proxy only if direct key is absent
-const USE_DIRECT_API = !!THE_ODDS_API_KEY;
-const ODDS_API_BASE = USE_DIRECT_API
-  ? "https://api.the-odds-api.com"
-  : `https://${RAPIDAPI_HOST}`;
-
-function buildOddsHeaders(): Record<string, string> {
-  if (USE_DIRECT_API) return {}; // key goes in query param for direct API
-  return { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": RAPIDAPI_HOST };
-}
+const ODDS_API_BASE = "https://api.the-odds-api.com";
 
 function buildOddsUrl(path: string, extraParams: Record<string, string> = {}): string {
   const url = new URL(`${ODDS_API_BASE}${path}`);
-  if (USE_DIRECT_API && THE_ODDS_API_KEY) url.searchParams.set("apiKey", THE_ODDS_API_KEY);
+  if (THE_ODDS_API_KEY) url.searchParams.set("apiKey", THE_ODDS_API_KEY);
   for (const [k, v] of Object.entries(extraParams)) url.searchParams.set(k, v);
   return url.toString();
 }
@@ -52,7 +33,7 @@ function buildOddsUrl(path: string, extraParams: Record<string, string> = {}): s
  */
 sportsbookRouter.get("/sports", async (req: Request, res: Response) => {
   try {
-    if (!THE_ODDS_API_KEY && !RAPIDAPI_KEY) {
+    if (!THE_ODDS_API_KEY) {
       return res.status(503).json({
         error: "Sportsbook API key not configured",
         setup: "Set THE_ODDS_API_KEY in your Render environment variables. Free key at https://the-odds-api.com",
@@ -60,7 +41,7 @@ sportsbookRouter.get("/sports", async (req: Request, res: Response) => {
     }
 
     const url = buildOddsUrl("/v4/sports", { all: "false" });
-    const response = await fetch(url, { method: "GET", headers: buildOddsHeaders() });
+    const response = await fetch(url, { method: "GET" });
 
     if (!response.ok) {
       const body = await response.text();
@@ -83,10 +64,10 @@ sportsbookRouter.get("/sports", async (req: Request, res: Response) => {
 sportsbookRouter.get("/quota", async (_req: Request, res: Response) => {
   try {
     if (!THE_ODDS_API_KEY) {
-      return res.json({ configured: false, mode: "rapidapi", message: "Using RapidAPI proxy — quota not directly visible" });
+      return res.json({ configured: false, message: "THE_ODDS_API_KEY not set" });
     }
     const url = buildOddsUrl("/v4/sports", { all: "false" });
-    const response = await fetch(url, { headers: buildOddsHeaders() });
+    const response = await fetch(url);
     return res.json({
       configured: true,
       mode: "direct",
@@ -111,7 +92,7 @@ sportsbookRouter.get("/odds/:sport", async (req: Request, res: Response) => {
     // Always American odds — matches the UI display logic
     const oddsFormat = "american";
 
-    if (!THE_ODDS_API_KEY && !RAPIDAPI_KEY) {
+    if (!THE_ODDS_API_KEY) {
       return res.status(503).json({
         error: "Sportsbook API key not configured",
         setup: "Set THE_ODDS_API_KEY in your Render environment variables. Free key at https://the-odds-api.com",
@@ -119,7 +100,7 @@ sportsbookRouter.get("/odds/:sport", async (req: Request, res: Response) => {
     }
 
     const url = buildOddsUrl(`/v4/sports/${sport}/odds`, { regions, oddsFormat, markets });
-    const response = await fetch(url, { method: "GET", headers: buildOddsHeaders() });
+    const response = await fetch(url, { method: "GET" });
 
     if (!response.ok) {
       const body = await response.text();
@@ -129,12 +110,10 @@ sportsbookRouter.get("/odds/:sport", async (req: Request, res: Response) => {
 
     const odds = await response.json();
 
-    // Log remaining quota for monitoring (direct API only)
-    if (USE_DIRECT_API) {
-      const remaining = response.headers.get("x-requests-remaining");
-      const used = response.headers.get("x-requests-used");
-      if (remaining) console.log(`[Sportsbook] Odds API quota — used: ${used}, remaining: ${remaining}`);
-    }
+    // Log remaining quota for monitoring
+    const remaining = response.headers.get("x-requests-remaining");
+    const used = response.headers.get("x-requests-used");
+    if (remaining) console.log(`[Sportsbook] Odds API quota — used: ${used}, remaining: ${remaining}`);
 
     return res.json(odds);
   } catch (error) {

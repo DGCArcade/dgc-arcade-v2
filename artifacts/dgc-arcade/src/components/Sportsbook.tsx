@@ -209,7 +209,7 @@ export function Sportsbook() {
     : "0.00";
 
   return (
-    <div className="w-full space-y-6 pb-24 md:pb-12 max-w-7xl mx-auto px-2 md:px-0">
+    <div className="w-full space-y-6 pb-24 md:pb-12">
       {/* Header Section - Premium DGC Glassmorphism */}
       <div className="relative overflow-hidden group flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-6 md:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-500 hover:border-primary/20">
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2" />

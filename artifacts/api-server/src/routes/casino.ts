@@ -1,8 +1,10 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
-import { usersTable, casinoTransactionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
-import { logger } from "../lib/logger";
+import { usersTable, casinoTransactionsTable, userBalancesTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
+import { logger } from "../lib/logger.js";
+import { getCryptoPrice } from "../lib/price-service.js";
+import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 import crypto from "crypto";
 
 export const casinoRouter = Router();
@@ -19,7 +21,6 @@ function verifyCasinoSignature(
 ): boolean {
   const secret = process.env.CASINO_SECRET_SIGN;
   if (!secret) {
-    // If no secret is configured, skip verification (dev mode)
     logger.warn("CASINO_SECRET_SIGN not set — skipping signature verification");
     return true;
   }
@@ -35,14 +36,195 @@ function verifyCasinoSignature(
 }
 
 /* ─────────────────────────────────────────────────────────────
+   GET /api/slots/launch?game_id=X
+   Generates a single-use session URL from the external
+   aggregator (Pragmatic Play / Hacksaw / NoLimit City / NetEnt).
+
+   Required env vars (set in Render dashboard):
+     CASINO_PROVIDER_URL  — aggregator base URL
+     CASINO_API_KEY       — your aggregator API key / AGENT_TOKEN
+     CASINO_MERCHANT_ID   — your merchant / operator ID / AGENT_CODE
+
+   Optional:
+     AGENT_CODE           — NexusGGR / CasinoDog agent code (alias)
+     AGENT_TOKEN          — NexusGGR / CasinoDog agent token (alias)
+     API_ENDPOINT         — override aggregator endpoint if needed
+───────────────────────────────────────────────────────────── */
+casinoRouter.get("/launch", async (req: Request, res: Response) => {
+  try {
+    const gameId = req.query.game_id as string;
+    const currency = (req.query.currency as string) || "USD";
+    const lang = (req.query.lang as string) || "en";
+
+    if (!gameId) {
+      return res.status(400).json({ success: false, message: "game_id is required" });
+    }
+
+    const CASINO_PROVIDER_URL = process.env.CASINO_PROVIDER_URL || process.env.API_ENDPOINT;
+    const CASINO_API_KEY = process.env.CASINO_API_KEY || process.env.AGENT_TOKEN;
+    const CASINO_MERCHANT_ID = process.env.CASINO_MERCHANT_ID || process.env.AGENT_CODE;
+
+    if (!CASINO_PROVIDER_URL || !CASINO_API_KEY || !CASINO_MERCHANT_ID) {
+      logger.error("Casino launch: missing environment variables");
+      return res.status(503).json({
+        success: false,
+        message: "Casino aggregator not configured",
+        setup: "Set CASINO_PROVIDER_URL, CASINO_API_KEY, and CASINO_MERCHANT_ID in your Render environment variables.",
+      });
+    }
+
+    const userId = (req as any).user?.userId ?? "guest";
+    const username = (req as any).user?.username ?? "guest";
+
+    const launchUrl = new URL(`${CASINO_PROVIDER_URL}/launch`);
+    launchUrl.searchParams.set("game_id", gameId);
+    launchUrl.searchParams.set("api_key", CASINO_API_KEY);
+    launchUrl.searchParams.set("merchant_id", CASINO_MERCHANT_ID);
+    launchUrl.searchParams.set("user_id", String(userId));
+    launchUrl.searchParams.set("username", username);
+    launchUrl.searchParams.set("currency", currency);
+    launchUrl.searchParams.set("lang", lang);
+    launchUrl.searchParams.set("return_url", `${process.env.SITE_URL ?? ""}/slots`);
+
+    logger.info({ gameId, userId, currency }, "Casino launch URL generated");
+    return res.json({ success: true, launchUrl: launchUrl.toString() });
+  } catch (error) {
+    logger.error({ error, query: req.query }, "Casino launch error");
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+/* ─────────────────────────────────────────────────────────────
+   POST /api/slots/webhook
+   Processes BET / WIN / REFUND signals from the aggregator.
+   Uses SELECT FOR UPDATE row-lock to prevent race conditions.
+   Converts USD wager amounts to/from live crypto prices.
+───────────────────────────────────────────────────────────── */
+casinoRouter.post("/webhook", async (req: Request, res: Response) => {
+  try {
+    const rawBody = JSON.stringify(req.body);
+    const signature = req.headers["x-casino-signature"] as string | undefined;
+
+    if (!verifyCasinoSignature(rawBody, signature)) {
+      logger.warn({ signature }, "Casino webhook: invalid signature");
+      return res.status(401).json({ success: false, message: "INVALID_SIGNATURE" });
+    }
+
+    const { action, user_id, transaction_id, amount, currency, game_id } = req.body;
+
+    if (!user_id || !transaction_id || !action) {
+      return res.status(400).json({ success: false, message: "Missing required fields" });
+    }
+
+    const transactionAmount = parseFloat(amount);
+    if (isNaN(transactionAmount) || transactionAmount < 0) {
+      return res.status(400).json({ success: false, message: "Invalid amount" });
+    }
+
+    await db.transaction(async (tx) => {
+      const [user] = await tx
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.id, user_id))
+        .for("update");
+
+      if (!user) {
+        logger.error({ user_id }, "Casino webhook: user not found");
+        tx.rollback();
+        res.status(404).json({ success: false, message: "USER_NOT_FOUND" });
+        return;
+      }
+
+      // Idempotency check — ignore duplicate transaction IDs
+      const existing = await tx
+        .select({ id: casinoTransactionsTable.id })
+        .from(casinoTransactionsTable)
+        .where(eq(casinoTransactionsTable.transactionId, transaction_id))
+        .limit(1);
+
+      if (existing.length > 0) {
+        logger.info({ transaction_id }, "Casino webhook: duplicate transaction ignored");
+        res.json({ success: true, message: "DUPLICATE_IGNORED" });
+        return;
+      }
+
+      const usedCurrency = (currency || "BTC").toUpperCase();
+      let cryptoPrice = 1;
+      try { cryptoPrice = await getCryptoPrice(usedCurrency); } catch { cryptoPrice = 1; }
+      const cryptoAmount = cryptoPrice > 0 ? transactionAmount / cryptoPrice : transactionAmount;
+
+      switch (action) {
+        case "BET": {
+          try {
+            await deductBalance(user_id, transactionAmount, usedCurrency, tx);
+          } catch (err: any) {
+            if (err.message === "Insufficient balance") {
+              tx.rollback();
+              res.status(200).json({ success: false, message: "INSUFFICIENT_FUNDS" });
+              return;
+            }
+            throw err;
+          }
+          break;
+        }
+        case "WIN": {
+          await creditBalance(user_id, transactionAmount, usedCurrency, tx);
+          break;
+        }
+        case "REFUND": {
+          await creditBalance(user_id, transactionAmount, usedCurrency, tx);
+          break;
+        }
+        default: {
+          logger.warn({ action }, "Casino webhook: unknown action");
+          tx.rollback();
+          res.status(400).json({ success: false, message: "UNKNOWN_ACTION" });
+          return;
+        }
+      }
+
+      await tx.insert(casinoTransactionsTable).values({
+        userId: user_id,
+        transactionId: transaction_id,
+        type: action as "BET" | "WIN" | "REFUND",
+        amount: transactionAmount.toString(),
+      });
+
+      const { totalBalance: newBalanceUsd } = await getUserBalance(user_id);
+
+      logger.info({ user_id, action, amount: transactionAmount, currency: usedCurrency, cryptoAmount, game_id }, "Casino webhook processed");
+
+      res.json({
+        success: true,
+        message: `${action} processed`,
+        newBalanceUsd,
+        cryptoAmount,
+        currency: usedCurrency,
+      });
+    });
+
+    return;
+  } catch (error) {
+    logger.error({ error, body: req.body }, "Casino webhook error");
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+/* ─────────────────────────────────────────────────────────────
+   POST /api/slots/callback  (legacy alias — same as /webhook)
+───────────────────────────────────────────────────────────── */
+casinoRouter.post("/callback", async (req: Request, res: Response) => {
+  req.url = "/webhook";
+  return casinoRouter.handle(req, res, () => {});
+});
+
+/* ─────────────────────────────────────────────────────────────
    POST /api/slots/payments/plisio-webhook
    Processes Plisio.net IPN crypto deposit notifications and
-   credits the user's casino_balance in Neon.tech.
+   credits the user's multi-crypto balance in Neon.tech.
 ───────────────────────────────────────────────────────────── */
-casinoRouter.post("/payments/plisio-webhook", async (req, res) => {
+casinoRouter.post("/payments/plisio-webhook", async (req: Request, res: Response) => {
   try {
-    // TODO: Implement Plisio IPN HMAC verification
-    // See: https://plisio.net/api#ipn
     const { amount, currency, user_id, transaction_id, status } = req.body;
 
     if (status !== "completed") {
@@ -57,7 +239,6 @@ casinoRouter.post("/payments/plisio-webhook", async (req, res) => {
     }
 
     await db.transaction(async (tx) => {
-      // Row-level lock prevents double-credit race conditions
       const [user] = await tx
         .select()
         .from(usersTable)
@@ -70,214 +251,69 @@ casinoRouter.post("/payments/plisio-webhook", async (req, res) => {
         return;
       }
 
-      const newCasinoBalance =
-        parseFloat(user.casinoBalance as string) + depositAmount;
+      // Idempotency check
+      const existing = await tx
+        .select({ id: casinoTransactionsTable.id })
+        .from(casinoTransactionsTable)
+        .where(eq(casinoTransactionsTable.transactionId, transaction_id))
+        .limit(1);
 
-      await tx
-        .update(usersTable)
-        .set({ casinoBalance: newCasinoBalance.toString() })
-        .where(eq(usersTable.id, user_id));
-
-      await tx.insert(casinoTransactionsTable).values({
-        userId: user_id,
-        transactionId: transaction_id,
-        type: "DEPOSIT",
-        amount: depositAmount.toString(),
-      });
-
-      logger.info(
-        { user_id, amount, currency, transaction_id, newCasinoBalance },
-        "Plisio deposit processed"
-      );
-      res.json({ success: true, message: "Deposit processed" });
-    });
-    return;
-  } catch (error) {
-    logger.error({ error, body: req.body }, "Plisio webhook error");
-    res.status(500).json({ success: false, message: "Internal server error" });
-    return;
-  }
-});
-
-/* ─────────────────────────────────────────────────────────────
-   POST /api/slots/callback
-   Aggregator spin callback — processes BET / WIN / REFUND
-   actions against the user's casino_balance with SELECT FOR
-   UPDATE row-locking to prevent credit duplication.
-───────────────────────────────────────────────────────────── */
-casinoRouter.post("/callback", async (req, res) => {
-  try {
-    // Verify HMAC signature from aggregator
-    const rawBody = JSON.stringify(req.body);
-    const signature = req.headers["x-casino-signature"] as string | undefined;
-    if (!verifyCasinoSignature(rawBody, signature)) {
-      logger.warn({ headers: req.headers }, "Casino callback: invalid signature");
-      return res.status(401).json({ success: false, message: "Invalid signature" });
-    }
-
-    const { action, user_id, amount, transaction_id } = req.body;
-
-    if (!user_id || !action || !amount || !transaction_id) {
-      logger.error({ body: req.body }, "Casino callback: missing required fields");
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing required fields" });
-    }
-
-    const transactionAmount = parseFloat(amount);
-    if (isNaN(transactionAmount) || transactionAmount <= 0) {
-      logger.error({ body: req.body }, "Casino callback: invalid transaction amount");
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid transaction amount" });
-    }
-
-    await db.transaction(async (tx) => {
-      // SELECT FOR UPDATE — row-level lock prevents double-spend
-      const [user] = await tx
-        .select()
-        .from(usersTable)
-        .where(eq(usersTable.id, user_id))
-        .for("update");
-
-      if (!user) {
-        logger.error({ user_id }, "Casino callback: user not found");
-        tx.rollback();
+      if (existing.length > 0) {
+        logger.info({ transaction_id }, "Plisio webhook: duplicate deposit ignored");
+        res.json({ success: true, message: "DUPLICATE_IGNORED" });
         return;
       }
 
-      let newCasinoBalance = parseFloat(user.casinoBalance as string);
-      let transactionType: "BET" | "WIN" | "REFUND";
+      const cryptoCurrency = (currency || "BTC").toUpperCase();
 
-      switch (action) {
-        case "BET":
-          if (newCasinoBalance < transactionAmount) {
-            logger.warn(
-              { user_id, balance: newCasinoBalance, bet: transactionAmount },
-              "Casino callback: insufficient funds"
-            );
-            tx.rollback();
-            res.status(200).json({ success: false, message: "INSUFFICIENT_FUNDS" });
-            return;
-          }
-          newCasinoBalance -= transactionAmount;
-          transactionType = "BET";
-          break;
-
-        case "WIN":
-          newCasinoBalance += transactionAmount;
-          transactionType = "WIN";
-          break;
-
-        case "REFUND":
-          newCasinoBalance += transactionAmount;
-          transactionType = "REFUND";
-          break;
-
-        default:
-          logger.warn({ action }, "Casino callback: unknown action");
-          tx.rollback();
-          return;
-      }
-
+      // Credit exact crypto amount to the user's multi-crypto balance
       await tx
-        .update(usersTable)
-        .set({ casinoBalance: newCasinoBalance.toString() })
-        .where(eq(usersTable.id, user_id));
+        .insert(userBalancesTable)
+        .values({ userId: user_id, currency: cryptoCurrency, amount: String(depositAmount) })
+        .onConflictDoUpdate({
+          target: [userBalancesTable.userId, userBalancesTable.currency],
+          set: { amount: sql`user_balances.amount + ${String(depositAmount)}` },
+        });
 
       await tx.insert(casinoTransactionsTable).values({
         userId: user_id,
         transactionId: transaction_id,
-        type: transactionType,
-        amount: transactionAmount.toString(),
+        type: "WIN",
+        amount: depositAmount.toString(),
       });
 
-      logger.info(
-        { user_id, action, amount, newCasinoBalance },
-        "Casino callback processed"
-      );
-      res.json({ success: true, message: `${action} processed` });
+      logger.info({ user_id, depositAmount, currency: cryptoCurrency }, "Plisio deposit credited");
+      res.json({ success: true, message: "Deposit credited" });
     });
+
     return;
   } catch (error) {
-    logger.error({ error, body: req.body }, "Casino callback error");
-    res.status(500).json({ success: false, message: "Internal server error" });
-    return;
-  }
-});
-
-/* ─────────────────────────────────────────────────────────────
-   GET /api/slots/launch?game_id=X
-   Generates a single-use session URL from the external
-   aggregator (Pragmatic Play / Hacksaw / NoLimit City / NetEnt).
-   Requires CASINO_PROVIDER_URL, CASINO_API_KEY, CASINO_MERCHANT_ID.
-───────────────────────────────────────────────────────────── */
-casinoRouter.get("/launch", async (req, res) => {
-  try {
-    const gameId = req.query.game_id as string;
-    if (!gameId) {
-      return res
-        .status(400)
-        .json({ success: false, message: "game_id is required" });
-    }
-
-    const CASINO_PROVIDER_URL = process.env.CASINO_PROVIDER_URL;
-    const CASINO_API_KEY = process.env.CASINO_API_KEY;
-    const CASINO_MERCHANT_ID = process.env.CASINO_MERCHANT_ID;
-
-    if (!CASINO_PROVIDER_URL || !CASINO_API_KEY || !CASINO_MERCHANT_ID) {
-      logger.error("Casino launch: missing environment variables");
-      return res
-        .status(500)
-        .json({ success: false, message: "Casino not configured" });
-    }
-
-    const userId = (req.user as any)?.userId ?? "guest";
-
-    // Build the aggregator launch URL.
-    // In production the aggregator returns a signed single-use token URL;
-    // replace this with the actual aggregator SDK call as needed.
-    const externalLaunchUrl = `${CASINO_PROVIDER_URL}/launch?game_id=${encodeURIComponent(gameId)}&api_key=${CASINO_API_KEY}&merchant_id=${CASINO_MERCHANT_ID}&user_id=${userId}`;
-
-    logger.info({ gameId, userId }, "Casino launch URL generated");
-    res.json({ success: true, launchUrl: externalLaunchUrl });
-    return;
-  } catch (error) {
-    logger.error({ error, query: req.query }, "Casino launch error");
-    res.status(500).json({ success: false, message: "Internal server error" });
-    return;
+    logger.error({ error, body: req.body }, "Plisio webhook error");
+    return res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 
 /* ─────────────────────────────────────────────────────────────
    GET /api/slots/balance
-   Returns the authenticated user's current casino_balance so
-   the frontend can display it without a full /me refetch.
+   Returns the authenticated user's total USD balance across
+   all crypto holdings for the casino iframe display.
 ───────────────────────────────────────────────────────────── */
-casinoRouter.get("/balance", async (req, res) => {
+casinoRouter.get("/balance", async (req: Request, res: Response) => {
   try {
-    const userId = (req.user as any)?.userId;
+    const userId = (req as any).user?.userId;
     if (!userId) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    const [user] = await db
-      .select({ casinoBalance: usersTable.casinoBalance })
-      .from(usersTable)
-      .where(eq(usersTable.id, userId));
+    const { totalBalance, cryptoBalances } = await getUserBalance(userId);
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
-
-    res.json({
+    return res.json({
       success: true,
-      casinoBalance: parseFloat(user.casinoBalance as string),
+      balanceUsd: totalBalance,
+      cryptoBalances,
     });
-    return;
   } catch (error) {
     logger.error({ error }, "Casino balance fetch error");
-    res.status(500).json({ success: false, message: "Internal server error" });
-    return;
+    return res.status(500).json({ success: false, message: "Internal server error" });
   }
 });

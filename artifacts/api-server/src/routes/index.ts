@@ -24,7 +24,6 @@ import { chickenRoadRouter } from "./chicken-road.js";
 import { casinoRouter } from "./casino.js";
 import { slotsCatalogRouter } from "./slots-catalog.js";
 import { sportsbookRouter } from "./sportsbook.js";
-import { slotsRapidApiRouter } from "./slots-rapidapi.js";
 
 const router: IRouter = Router();
 
@@ -51,7 +50,6 @@ router.use("/dice/live", diceLiveRouter);
 router.use("/crash/live", crashLiveRouter);
 router.use("/chicken-road", chickenRoadRouter);
 router.use("/slots", slotsCatalogRouter);
-router.use("/slots", slotsRapidApiRouter);
 router.use("/slots", casinoRouter);
 router.use("/sportsbook", sportsbookRouter);
 
