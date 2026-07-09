@@ -3,7 +3,7 @@ import { SlotLobby } from "@/components/SlotLobby";
 
 export default function SlotsPage() {
   return (
-    <div className="container mx-auto py-8">
+    <div className="min-h-screen">
       <SlotLobby />
     </div>
   );

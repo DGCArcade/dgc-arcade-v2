@@ -3754,3 +3754,28 @@ button, a, [role="button"] {
   }
 }
 
+
+/* ══════════════════════════════════════════════════════════════
+   PREMIUM SLOT LOBBY — Card hover & glow animations
+   Cassanova-style interactions matching the DGC platform theme
+═══════════════════════════════════════════════════════════════ */
+
+.slot-card {
+  transform: translateY(0) scale(1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  will-change: transform, box-shadow;
+}
+
+.slot-card:hover {
+  transform: scale(1.05) translateY(-4px);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.5),
+    0 0 0 1px hsl(var(--primary) / 0.35),
+    0 0 20px var(--card-glow, hsl(43 100% 50% / 0.25));
+}
+
+/* Play button circle pulse on hover */
+@keyframes slot-play-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.6); }
+  50%       { box-shadow: 0 0 0 8px hsl(var(--primary) / 0); }
+}
