@@ -11,7 +11,8 @@ export const sportsbookRouter = Router();
  * The Odds API Configuration
  */
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || "";
-const RAPIDAPI_HOST = "the-odds-api.p.rapidapi.com";
+const RAPIDAPI_HOST = process.env.RAPIDAPI_HOST || "the-odds-api.p.rapidapi.com";
+const THE_ODDS_API_KEY = process.env.THE_ODDS_API_KEY || "";
 const ODDS_API_BASE = `https://${RAPIDAPI_HOST}`;
 
 /**
@@ -19,12 +20,14 @@ const ODDS_API_BASE = `https://${RAPIDAPI_HOST}`;
  */
 sportsbookRouter.get("/sports", async (req: Request, res: Response) => {
   try {
+    // Use THE_ODDS_API_KEY if available, otherwise fallback to RapidAPI headers
+    const headers: Record<string, string> = THE_ODDS_API_KEY 
+      ? { "x-api-key": THE_ODDS_API_KEY }
+      : { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": RAPIDAPI_HOST };
+
     const response = await fetch(`${ODDS_API_BASE}/v4/sports`, {
       method: "GET",
-      headers: {
-        "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": RAPIDAPI_HOST,
-      },
+      headers,
     });
 
     if (!response.ok) {
@@ -47,14 +50,15 @@ sportsbookRouter.get("/odds/:sport", async (req: Request, res: Response) => {
     const { sport } = req.params;
     const { regions = "us", oddsFormat = "decimal" } = req.query;
 
+    const headers: Record<string, string> = THE_ODDS_API_KEY 
+      ? { "x-api-key": THE_ODDS_API_KEY }
+      : { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": RAPIDAPI_HOST };
+
     const response = await fetch(
       `${ODDS_API_BASE}/v4/sports/${sport}/odds?regions=${regions as string}&oddsFormat=${oddsFormat as string}`,
       {
         method: "GET",
-        headers: {
-          "x-rapidapi-key": RAPIDAPI_KEY,
-          "x-rapidapi-host": RAPIDAPI_HOST,
-        },
+        headers,
       }
     );
 
@@ -76,7 +80,7 @@ sportsbookRouter.get("/odds/:sport", async (req: Request, res: Response) => {
  */
 sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.id;
+    const userId = (req as any).user?.userId;
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
@@ -99,45 +103,56 @@ sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // 1. Deduct from real crypto balance using unified helper
-    // This ensures USD knows what crypto it has and prevents fake balances.
-    const { newBalance, usedCurrency } = await deductBalance(
-      userId, 
-      parseFloat(betAmountUsd), 
-      cryptoType as string
-    );
+    // 1. Process deduction with SQL row lock via transaction
+    const betResult = await db.transaction(async (tx) => {
+      // Apply row lock on user balance to prevent race conditions
+      await tx.execute(sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`);
+      await tx.execute(sql`SELECT id FROM user_balances WHERE user_id = ${userId} FOR UPDATE`);
 
-    const cryptoPrice = await getCryptoPrice(usedCurrency);
-    const betAmountCrypto = parseFloat(betAmountUsd) / cryptoPrice;
-    const potentialPayoutUsd = parseFloat(betAmountUsd) * parseFloat(odds.toString());
-    const potentialPayoutCrypto = potentialPayoutUsd / cryptoPrice;
+      // Use the deductBalance logic within the transaction
+      const { newBalance, usedCurrency } = await deductBalance(
+        userId, 
+        parseFloat(betAmountUsd), 
+        cryptoType as string,
+        tx
+      );
 
-    // 2. Record the bet with the real crypto details
-    const [bet] = await db
-      .insert(sportsBetsTable)
-      .values({
-        userId: userId as number,
-        fixtureId: fixtureId as string,
-        sportKey: sportKey as string,
-        leagueTitle: leagueTitle as string,
-        homeTeam: homeTeam as string,
-        awayTeam: awayTeam as string,
-        commenceTime: new Date(commenceTime),
-        marketKey: marketKey as string,
-        selectedOutcome: selectedOutcome as string,
-        odds: odds.toString(),
-        betAmountUsd: betAmountUsd.toString(),
-        betAmountCrypto: betAmountCrypto.toFixed(12),
-        cryptoType: usedCurrency, // Record which crypto was actually used
-        cryptoPriceAtBet: cryptoPrice.toString(),
-        potentialPayoutUsd: potentialPayoutUsd.toString(),
-        potentialPayoutCrypto: potentialPayoutCrypto.toFixed(12),
-        status: "pending",
-        bookmakerKey: "the-odds-api",
-        ipAddress: Array.isArray(req.ip) ? req.ip[0] : (req.ip || "0.0.0.0"),
-        userAgent: (req.get("user-agent") as string) || "unknown",
-      })
-      .returning();
+      const cryptoPrice = await getCryptoPrice(usedCurrency);
+      const betAmountCrypto = parseFloat(betAmountUsd) / cryptoPrice;
+      const potentialPayoutUsd = parseFloat(betAmountUsd) * parseFloat(odds.toString());
+      const potentialPayoutCrypto = potentialPayoutUsd / cryptoPrice;
+
+      // 2. Record the bet with the real crypto details
+      const [bet] = await tx
+        .insert(sportsBetsTable)
+        .values({
+          userId: userId as number,
+          fixtureId: fixtureId as string,
+          sportKey: sportKey as string,
+          leagueTitle: leagueTitle as string,
+          homeTeam: homeTeam as string,
+          awayTeam: awayTeam as string,
+          commenceTime: new Date(commenceTime),
+          marketKey: marketKey as string,
+          selectedOutcome: selectedOutcome as string,
+          odds: odds.toString(),
+          betAmountUsd: betAmountUsd.toString(),
+          betAmountCrypto: betAmountCrypto.toFixed(12),
+          cryptoType: usedCurrency,
+          cryptoPriceAtBet: cryptoPrice.toString(),
+          potentialPayoutUsd: potentialPayoutUsd.toString(),
+          potentialPayoutCrypto: potentialPayoutCrypto.toFixed(12),
+          status: "pending",
+          bookmakerKey: "the-odds-api",
+          ipAddress: Array.isArray(req.ip) ? req.ip[0] : (req.ip || "0.0.0.0"),
+          userAgent: (req.get("user-agent") as string) || "unknown",
+        })
+        .returning();
+
+      return { bet, newBalance };
+    });
+
+    const { bet, newBalance } = betResult;
 
     return res.json({
       success: true,

@@ -4,7 +4,7 @@ import { useAuthModal } from "@/hooks/use-auth-modal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/format";
-import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound, Star, X, ArrowLeftRight, MessageSquare, TrendingUp, TrendingDown, Trophy} from "lucide-react";
+import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound, Star, X, ArrowLeftRight, MessageSquare, TrendingUp, TrendingDown, Trophy, Gamepad2, Zap} from "lucide-react";
 import { CoinIcon } from "@/components/wallet/coin-icon";
 import {
   DropdownMenu,
@@ -93,47 +93,49 @@ export function Navbar() {
   }, [isCreator, isAuthenticated]);
 
   const NavLinks = () => (
-    <>
+    <div className="flex items-center gap-8">
       {settings.gamesEnabled && (
-        <Link href="/games" className={`text-sm font-medium uppercase tracking-wider transition-colors ${location === "/games" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
-          Games
+        <Link href="/games" className={`group flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] transition-all duration-300 ${location === "/games" ? "text-primary scale-110" : "text-muted-foreground hover:text-foreground hover:scale-105"}`}>
+          <Gamepad2 className={`w-4 h-4 ${location === "/games" ? "animate-pulse" : "group-hover:animate-bounce"}`} />
+          <span>Games</span>
         </Link>
       )}
 
-
-
       {settings.raceEnabled && (
-        <Link href="/race" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/race" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
-          🏇 Race
+        <Link href="/race" className={`group flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] transition-all duration-300 ${location === "/race" ? "text-primary scale-110" : "text-muted-foreground hover:text-foreground hover:scale-105"}`}>
+          <Zap className={`w-4 h-4 ${location === "/race" ? "animate-pulse" : "group-hover:animate-bounce"}`} />
+          <span>Race</span>
         </Link>
       )}
 
       {settings.leaderboardEnabled && (
-        <Link href="/leaderboard" className={`text-sm font-medium uppercase tracking-wider transition-colors ${location === "/leaderboard" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
-          Leaderboard
+        <Link href="/leaderboard" className={`group flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] transition-all duration-300 ${location === "/leaderboard" ? "text-primary scale-110" : "text-muted-foreground hover:text-foreground hover:scale-105"}`}>
+          <TrendingUp className={`w-4 h-4 ${location === "/leaderboard" ? "animate-pulse" : "group-hover:animate-bounce"}`} />
+          <span>Ranks</span>
         </Link>
       )}
 
       {settings.slotsEnabled && (
-        <Link href="/sportsbook" className={`group relative px-4 py-1.5 rounded-full text-sm font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-2 overflow-hidden ${
+        <Link href="/sportsbook" className={`group relative px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.25em] transition-all duration-500 flex items-center gap-3 overflow-hidden ${
           location === "/sportsbook" 
-            ? "text-black bg-primary shadow-[0_0_20px_rgba(255,215,0,0.4)]" 
-            : "text-primary border border-primary/30 hover:border-primary hover:bg-primary/10"
+            ? "text-black bg-primary shadow-[0_0_30px_rgba(255,215,0,0.5)] scale-110" 
+            : "text-primary border border-primary/20 hover:border-primary/60 hover:bg-primary/5 hover:scale-105"
         }`}>
-          <Trophy className={`w-3.5 h-3.5 ${location === "/sportsbook" ? "animate-bounce" : "group-hover:animate-pulse"}`} />
-          <span>Sports</span>
+          <Trophy className={`w-4 h-4 ${location === "/sportsbook" ? "animate-bounce" : "group-hover:animate-pulse"}`} />
+          <span>Sportsbook</span>
           {location !== "/sportsbook" && (
-            <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-shimmer" />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-shimmer" />
           )}
         </Link>
       )}
+      
       {isAdmin && (
-        <Link href="/admin" className={`text-sm font-medium uppercase tracking-wider transition-colors flex items-center gap-1 ${location === "/admin" ? "text-primary" : "text-amber-500/80 hover:text-amber-400"}`}>
-          <Shield className="w-3.5 h-3.5" />Admin
+        <Link href="/admin" className={`group flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] transition-all duration-300 ${location === "/admin" ? "text-amber-400 scale-110" : "text-amber-500/60 hover:text-amber-400 hover:scale-105"}`}>
+          <Shield className={`w-4 h-4 ${location === "/admin" ? "animate-pulse" : "group-hover:animate-bounce"}`} />
+          <span>Admin</span>
         </Link>
       )}
-      {/* DGC Bank removed from header as requested */}
-    </>
+    </div>
   );
 
   async function handleBankPinSubmit() {
@@ -161,14 +163,17 @@ export function Navbar() {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="logo-glow-shift w-9 h-9 rounded-lg flex items-center justify-center font-display font-black text-primary-foreground text-xl group-hover:shadow-[0_0_28px_var(--theme-glow-strong)] transition-shadow duration-300">D</div>
-              <span className="font-display font-bold text-xl uppercase tracking-widest hidden sm:inline-block">DGC <span className="text-glow-shift-slow">Arcade</span></span>
+      <nav className="sticky top-0 z-50 w-full border-b border-white/5 bg-black/40 backdrop-blur-2xl">
+        <div className="container mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-12">
+            <Link href="/" className="flex items-center gap-4 group">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center font-display font-black text-black text-2xl shadow-[0_0_20px_rgba(255,215,0,0.3)] group-hover:shadow-[0_0_40px_rgba(255,215,0,0.6)] group-hover:scale-110 transition-all duration-500">D</div>
+              <div className="flex flex-col leading-none">
+                <span className="font-display font-black text-2xl uppercase tracking-[0.25em] text-white group-hover:text-primary transition-colors duration-500">DGC</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/60 group-hover:text-primary transition-colors duration-500">Arcade</span>
+              </div>
             </Link>
-            <div className="hidden md:flex items-center gap-6"><NavLinks /></div>
+            <div className="hidden lg:flex items-center"><NavLinks /></div>
           </div>
 
           <div className="flex items-center gap-2">

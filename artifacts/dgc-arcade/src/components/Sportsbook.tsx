@@ -209,48 +209,60 @@ export function Sportsbook() {
     : "0.00";
 
   return (
-    <div className="w-full space-y-6 pb-24 md:pb-8">
-      {/* Header Section */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-black/40 backdrop-blur-md border border-white/5 rounded-3xl p-6 md:p-8 shadow-2xl">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30 shadow-[0_0_15px_rgba(255,215,0,0.1)]">
-              <Trophy className="w-5 h-5 text-primary" />
+    <div className="w-full space-y-6 pb-24 md:pb-12 max-w-7xl mx-auto px-2 md:px-0">
+      {/* Header Section - Premium DGC Glassmorphism */}
+      <div className="relative overflow-hidden group flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-6 md:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-500 hover:border-primary/20">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2" />
+        
+        <div className="relative z-10 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/30 shadow-[0_0_30px_rgba(255,215,0,0.15)] group-hover:scale-110 transition-transform duration-500">
+              <Trophy className="w-6 h-6 md:w-8 md:h-8 text-primary animate-pulse" />
             </div>
             <div>
-              <h1 className="font-display font-black text-2xl md:text-4xl uppercase tracking-[0.2em] text-white">
-                Sports<span className="text-primary">book</span>
+              <h1 className="font-display font-black text-3xl md:text-6xl uppercase tracking-[0.15em] text-white leading-none">
+                DGC<span className="text-primary drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]">SPORTS</span>
               </h1>
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Live Odds • Real-Time Payouts
+              <div className="flex items-center gap-3 mt-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 border border-green-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-green-400">Live Engine</span>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                  Institutional Grade Odds • Instant Settlement
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="relative z-10 flex flex-wrap items-center gap-4">
           <Button
             variant="outline"
-            size="sm"
+            size="lg"
             onClick={() => setShowHistory(!showHistory)}
-            className={`rounded-xl border-white/10 h-11 px-5 font-bold uppercase tracking-widest transition-all ${showHistory ? "bg-primary text-black border-primary" : "bg-white/5 hover:bg-white/10"}`}
+            className={`rounded-2xl border-white/10 h-14 px-8 font-black uppercase tracking-[0.2em] text-xs transition-all duration-300 ${
+              showHistory 
+                ? "bg-primary text-black border-primary shadow-[0_0_30px_rgba(255,215,0,0.3)] scale-105" 
+                : "bg-white/5 hover:bg-white/10 hover:border-primary/40 hover:scale-[1.02]"
+            }`}
           >
-            <History className="w-4 h-4 mr-2" />
-            {showHistory ? "Back to Betting" : "My Bets"}
+            <History className="w-4 h-4 mr-3" />
+            {showHistory ? "Lobby" : "History"}
           </Button>
 
-          <div className="flex items-center gap-3 bg-white/5 border border-white/10 px-5 py-2.5 rounded-2xl h-11">
+          <div className="flex items-center gap-4 bg-black/40 backdrop-blur-xl border border-white/10 px-6 py-3 rounded-2xl h-14 shadow-inner">
             <div className="flex flex-col items-end leading-none">
-              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-0.5">Total Balance</span>
-              <span className="text-sm font-black font-mono text-primary tracking-tight">
-                ${totalUsdBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <span className="text-[9px] font-black uppercase tracking-widest text-primary/60 mb-1">Vault Value</span>
+              <span className="text-lg font-black font-mono text-white tracking-tighter">
+                <span className="text-primary/80 mr-1">$</span>
+                {totalUsdBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <div className="w-px h-6 bg-white/10 mx-1" />
-            <Coins className="w-4 h-4 text-primary/70" />
+            <div className="w-px h-8 bg-white/10 mx-1" />
+            <div className="p-2 rounded-xl bg-primary/10">
+              <Coins className="w-5 h-5 text-primary" />
+            </div>
           </div>
         </div>
       </div>
@@ -333,10 +345,10 @@ export function Sportsbook() {
                   <button
                     key={sport.key}
                     onClick={() => setSelectedSport(sport.key)}
-                    className={`px-5 py-2.5 rounded-xl border font-black uppercase tracking-widest text-[10px] transition-all whitespace-nowrap shrink-0 ${
+                    className={`px-6 py-3 rounded-2xl border font-black uppercase tracking-[0.15em] text-[11px] transition-all duration-300 whitespace-nowrap shrink-0 ${
                       selectedSport === sport.key
-                        ? "bg-primary text-black border-primary shadow-[0_0_20px_rgba(255,215,0,0.3)] scale-105"
-                        : "bg-white/5 text-muted-foreground border-white/10 hover:border-primary/40 hover:text-foreground"
+                        ? "bg-primary text-black border-primary shadow-[0_0_25px_rgba(255,215,0,0.4)] scale-105"
+                        : "bg-white/5 text-muted-foreground border-white/10 hover:border-primary/40 hover:text-foreground hover:scale-[1.02]"
                     }`}
                   >
                     {sport.title}
@@ -372,40 +384,63 @@ export function Sportsbook() {
                 </div>
               ) : (
                 fixtures.map((fixture) => (
-                  <div key={fixture.id} className="group bg-black/40 border border-white/5 rounded-3xl overflow-hidden hover:border-primary/30 transition-all duration-500 shadow-xl">
-                    <div className="p-5 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
-                          {new Date(fixture.commence_time).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+                  <div key={fixture.id} className="group relative overflow-hidden bg-gradient-to-br from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/10 rounded-[2.5rem] hover:border-primary/40 transition-all duration-500 shadow-[0_20px_50px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_50px_rgba(255,215,0,0.1)]">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    
+                    <div className="p-5 md:p-8 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+                      <div className="flex items-center gap-4">
+                        <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">
+                            {new Date(fixture.commence_time).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <span className="hidden md:block text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/30">
+                          Match ID: {fixture.id.slice(0, 8)}
                         </span>
                       </div>
-                      <Badge variant="outline" className="bg-primary/10 border-primary/20 text-primary text-[9px] font-black uppercase tracking-widest px-2.5">In-Play</Badge>
+                      <Badge className="bg-primary/10 hover:bg-primary/20 text-primary border-primary/20 text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg">
+                        Market Open
+                      </Badge>
                     </div>
 
-                    <div className="p-4 md:p-6">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
-                        <div className="flex-1 space-y-2 md:space-y-4">
-                          <div className="flex items-center justify-between md:justify-start md:gap-8 bg-white/5 md:bg-transparent p-3 md:p-0 rounded-2xl border border-white/5 md:border-none">
-                            <div className="text-sm md:text-lg font-black uppercase tracking-tight group-hover:text-primary transition-colors text-center flex-1 md:flex-none">{fixture.home_team}</div>
-                            <span className="text-[10px] font-black text-muted-foreground/30 italic px-2">VS</span>
-                            <div className="text-sm md:text-lg font-black uppercase tracking-tight group-hover:text-primary transition-colors text-center flex-1 md:flex-none">{fixture.away_team}</div>
+                    <div className="p-6 md:p-8">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
+                        <div className="flex-1">
+                          <div className="grid grid-cols-[1fr,auto,1fr] items-center gap-4 md:gap-8">
+                            <div className="space-y-2 text-center md:text-right">
+                              <div className="text-base md:text-2xl font-black uppercase tracking-tight text-white group-hover:text-primary transition-colors duration-300">{fixture.home_team}</div>
+                              <div className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-widest">Home Squad</div>
+                            </div>
+                            <div className="relative">
+                              <div className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center font-black italic text-muted-foreground/20 text-xs md:text-sm">VS</div>
+                              <div className="absolute inset-0 rounded-full bg-primary/5 blur-lg animate-pulse" />
+                            </div>
+                            <div className="space-y-2 text-center md:text-left">
+                              <div className="text-base md:text-2xl font-black uppercase tracking-tight text-white group-hover:text-primary transition-colors duration-300">{fixture.away_team}</div>
+                              <div className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-widest">Away Squad</div>
+                            </div>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-3 md:flex md:flex-wrap gap-2">
+                        <div className="grid grid-cols-3 gap-3 md:w-[400px]">
                           {fixture.bookmakers[0]?.markets.find(m => m.key === "h2h")?.outcomes.map((outcome) => (
                             <button
                               key={outcome.name}
                               onClick={() => setSelectedBet({ fixture, market: fixture.bookmakers[0].markets[0], outcome, odds: outcome.price })}
-                              className={`min-w-[100px] p-3 rounded-2xl border transition-all duration-300 flex flex-col items-center gap-1 ${
+                              className={`group/odd relative overflow-hidden p-4 rounded-2xl border transition-all duration-500 flex flex-col items-center gap-1.5 ${
                                 selectedBet?.outcome.name === outcome.name && selectedBet?.fixture.id === fixture.id
-                                  ? "bg-primary text-black border-primary shadow-[0_0_20px_rgba(255,215,0,0.4)] scale-105"
-                                  : "bg-white/5 border-white/10 hover:border-primary/50 hover:bg-white/10"
+                                  ? "bg-primary text-black border-primary shadow-[0_10px_30px_rgba(255,215,0,0.4)] scale-110 -translate-y-1 z-10"
+                                  : "bg-white/[0.03] border-white/10 hover:border-primary/50 hover:bg-white/[0.07] hover:scale-[1.05] hover:-translate-y-0.5"
                               }`}
                             >
-                              <span className="text-[9px] font-black uppercase tracking-widest opacity-60">{outcome.name}</span>
-                              <span className="text-base font-black font-mono">{outcome.price.toFixed(2)}</span>
+                              <span className={`text-[9px] font-black uppercase tracking-widest transition-opacity ${
+                                selectedBet?.outcome.name === outcome.name && selectedBet?.fixture.id === fixture.id ? "opacity-100" : "opacity-40"
+                              }`}>{outcome.name}</span>
+                              <span className="text-xl font-black font-mono tracking-tighter">{outcome.price.toFixed(2)}</span>
+                              {selectedBet?.outcome.name === outcome.name && selectedBet?.fixture.id === fixture.id && (
+                                <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                              )}
                             </button>
                           ))}
                         </div>
