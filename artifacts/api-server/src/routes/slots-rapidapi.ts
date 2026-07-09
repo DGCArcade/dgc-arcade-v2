@@ -2,12 +2,12 @@ import { Router, Request, Response } from "express";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 
 export const slotsRapidApiRouter = Router();
 
 /**
  * RapidAPI Slot Streamer Configuration
- * Generic launcher for any RapidAPI-based slot provider
  */
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || "";
 const RAPIDAPI_HOST = process.env.RAPIDAPI_SLOT_HOST || "your-slot-provider.p.rapidapi.com";
@@ -19,6 +19,7 @@ interface LaunchResponse {
 
 /**
  * POST /api/slots/launch-rapidapi
+ * Uses the real crypto wallet (balance-service) to prevent "fake" balances.
  */
 slotsRapidApiRouter.post("/launch-rapidapi", async (req: Request, res: Response) => {
   try {
@@ -27,37 +28,21 @@ slotsRapidApiRouter.post("/launch-rapidapi", async (req: Request, res: Response)
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const { gameId, gameName, provider, cryptoType } = req.body;
+    const { gameId, gameName, provider, cryptoType, betAmountUsd } = req.body;
 
-    if (!gameId || !gameName || !provider) {
+    if (!gameId || !gameName || !provider || !betAmountUsd || !cryptoType) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Fetch user
-    const user = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.id, userId))
-      .then((rows: any[]) => rows[0]);
+    // 1. Deduct from real crypto wallet before launching
+    // This ensures USD knows what crypto it has and prevents fake balances.
+    const { newBalance, usedCurrency } = await deductBalance(
+      userId, 
+      parseFloat(betAmountUsd), 
+      cryptoType as string
+    );
 
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    // Generate session token
-    const sessionId = `${userId}-${gameId}-${Date.now()}`;
-    const gameToken = Buffer.from(
-      JSON.stringify({
-        userId,
-        gameId,
-        gameName,
-        provider,
-        cryptoType,
-        balance: user.casinoBalance,
-        timestamp: Date.now(),
-      })
-    ).toString("base64");
-
+    // 2. Launch game via RapidAPI
     const rapidApiResponse = await fetch(
       `https://${RAPIDAPI_HOST}/v1/games/launch`,
       {
@@ -71,16 +56,17 @@ slotsRapidApiRouter.post("/launch-rapidapi", async (req: Request, res: Response)
           gameId,
           gameName,
           provider,
-          userId: sessionId,
-          token: gameToken,
+          userId: userId.toString(),
+          currency: "USD",
+          balance: parseFloat(betAmountUsd),
           returnUrl: `${process.env.FRONTEND_URL}/slots/${gameId}`,
-          currency: cryptoType,
         }),
       }
     );
 
     if (!rapidApiResponse.ok) {
-      console.error("RapidAPI error:", await rapidApiResponse.text());
+      // Refund if launch fails
+      await creditBalance(userId, parseFloat(betAmountUsd), usedCurrency);
       return res.status(502).json({ error: "Failed to launch game via RapidAPI" });
     }
 
@@ -89,57 +75,47 @@ slotsRapidApiRouter.post("/launch-rapidapi", async (req: Request, res: Response)
     return res.json({
       success: true,
       launchUrl: rapidApiData.gameUrl || rapidApiData.launchUrl,
-      sessionId,
-      gameToken,
-      provider,
-      gameName,
+      newBalanceUsd: newBalance,
+      usedCurrency
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error launching RapidAPI slot:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(error.message === "Insufficient balance" ? 400 : 500).json({ 
+      error: error.message || "Internal server error" 
+    });
   }
 });
 
 /**
  * POST /api/slots/sync-balance
+ * Webhook to sync wins back to the real crypto wallet.
  */
 slotsRapidApiRouter.post("/sync-balance", async (req: Request, res: Response) => {
   try {
-    const { sessionId, betAmount, winAmount } = req.body;
+    const { user_id, amount, currency, transaction_id } = req.body;
 
-    if (!sessionId || betAmount === undefined || winAmount === undefined) {
+    if (!user_id || amount === undefined) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const userId = parseInt(sessionId.split("-")[0]);
+    const userId = parseInt(user_id);
+    const winAmount = parseFloat(amount);
 
-    const user = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.id, userId))
-      .then((rows: any[]) => rows[0]);
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const currentBalance = parseFloat(user.casinoBalance.toString());
-    const newBalance = currentBalance - betAmount + winAmount;
-
-    await db
-      .update(usersTable)
-      .set({ casinoBalance: newBalance.toString() })
-      .where(eq(usersTable.id, userId));
+    // Credit win back to real crypto wallet
+    // This ensures the USD balance is always tied to real crypto.
+    const newTotalBalance = await creditBalance(
+      userId, 
+      winAmount, 
+      currency || "BTC"
+    );
 
     return res.json({
       success: true,
-      newBalance,
-      betAmount,
-      winAmount,
-      profit: winAmount - betAmount,
+      transaction_id,
+      newBalanceUsd: newTotalBalance,
     });
   } catch (error) {
-    console.error("Error syncing balance:", error);
+    console.error("Error syncing slot balance:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 });

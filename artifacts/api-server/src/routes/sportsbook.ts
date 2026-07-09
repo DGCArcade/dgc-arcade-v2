@@ -1,9 +1,8 @@
 import { Router, Request, Response } from "express";
 import { db } from "@workspace/db";
-import { sportsBetsTable, usersTable } from "@workspace/db/schema";
-import { eq, and, desc } from "drizzle-orm";
-// Correct relative path to the root lib directory
-import { getCryptoPrice } from "../../../../lib/utils/crypto-price-mapper";
+import { sportsBetsTable, usersTable, userBalancesTable } from "@workspace/db/schema";
+import { eq, and, desc, sql } from "drizzle-orm";
+import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 
 export const sportsbookRouter = Router();
 
@@ -72,6 +71,7 @@ sportsbookRouter.get("/odds/:sport", async (req: Request, res: Response) => {
 
 /**
  * POST /api/sportsbook/bet
+ * Uses the real crypto wallet (balance-service) to prevent "fake" balances.
  */
 sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
   try {
@@ -98,35 +98,17 @@ sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const user = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.id, userId))
-      .then((rows: any[]) => rows[0]);
+    // 1. Deduct from real crypto balance using unified helper
+    // This ensures USD knows what crypto it has and prevents fake balances.
+    const { newBalance, usedCurrency } = await deductBalance(
+      userId, 
+      parseFloat(betAmountUsd), 
+      cryptoType as string
+    );
 
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    const potentialPayoutUsd = parseFloat(betAmountUsd) * parseFloat(odds.toString());
 
-    const cryptoPrice = getCryptoPrice(cryptoType);
-    if (!cryptoPrice) {
-      return res.status(400).json({ error: `Crypto type ${cryptoType} not supported` });
-    }
-
-    const betAmountCrypto = betAmountUsd / cryptoPrice;
-    const userCryptoBalance = parseFloat(user.casinoBalance.toString());
-    if (userCryptoBalance < betAmountCrypto) {
-      return res.status(400).json({
-        error: "Insufficient balance",
-        required: betAmountCrypto,
-        available: userCryptoBalance,
-      });
-    }
-
-    const potentialPayoutUsd = betAmountUsd * parseFloat(odds.toString());
-    const potentialPayoutCrypto = potentialPayoutUsd / cryptoPrice;
-    const newBalance = userCryptoBalance - betAmountCrypto;
-
+    // 2. Record the bet with the real crypto details
     const [bet] = await db
       .insert(sportsBetsTable)
       .values({
@@ -141,22 +123,14 @@ sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
         selectedOutcome: selectedOutcome as string,
         odds: odds.toString(),
         betAmountUsd: betAmountUsd.toString(),
-        betAmountCrypto: betAmountCrypto.toString(),
-        cryptoType: cryptoType as string,
-        cryptoPriceAtBet: cryptoPrice.toString(),
+        cryptoType: usedCurrency, // Record which crypto was actually used
         potentialPayoutUsd: potentialPayoutUsd.toString(),
-        potentialPayoutCrypto: potentialPayoutCrypto.toString(),
         status: "pending",
         bookmakerKey: "the-odds-api",
-        ipAddress: Array.isArray(req.ip) ? req.ip[0] : (req.ip || ""),
-        userAgent: req.get("user-agent") || "",
+        ipAddress: Array.isArray(req.ip) ? req.ip[0] : (req.ip || "0.0.0.0"),
+        userAgent: (req.get("user-agent") as string) || "unknown",
       })
       .returning();
-
-    await db
-      .update(usersTable)
-      .set({ casinoBalance: newBalance.toString() })
-      .where(eq(usersTable.id, userId));
 
     return res.json({
       success: true,
@@ -165,13 +139,14 @@ sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
         status: bet.status,
         betAmountUsd: bet.betAmountUsd,
         potentialPayoutUsd: bet.potentialPayoutUsd,
-        newBalance,
-        newBalanceUsd: newBalance * cryptoPrice,
+        newBalanceUsd: newBalance,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error placing bet:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(error.message === "Insufficient balance" ? 400 : 500).json({ 
+      error: error.message || "Internal server error" 
+    });
   }
 });
 
@@ -203,23 +178,24 @@ sportsbookRouter.get("/bets/:userId", async (req: Request, res: Response) => {
 
 /**
  * POST /api/sportsbook/settle-bet
+ * Credits winnings back to the real crypto wallet.
  */
 sportsbookRouter.post("/settle-bet", async (req: Request, res: Response) => {
   try {
     const adminId = (req as any).user?.id;
-    const admin = await db
+    const [admin] = await db
       .select()
       .from(usersTable)
       .where(eq(usersTable.id, adminId))
-      .then((rows: any[]) => rows[0]);
+      .limit(1);
 
     if (!admin || admin.role !== "admin") {
       return res.status(403).json({ error: "Admin access required" });
     }
 
-    const { betId, resultOutcome, won } = req.body;
+    const { betId, won } = req.body;
 
-    if (!betId || resultOutcome === undefined || won === undefined) {
+    if (!betId || won === undefined) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -236,48 +212,39 @@ sportsbookRouter.post("/settle-bet", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Bet already settled" });
     }
 
-    const user = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.id, bet.userId))
-      .then((rows: any[]) => rows[0]);
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    let newBalance = parseFloat(user.casinoBalance.toString());
     let status = "lost";
     let actualPayoutUsd = 0;
-    let actualPayoutCrypto = 0;
+    let newTotalBalance = 0;
 
     if (won) {
       status = "won";
       actualPayoutUsd = parseFloat(bet.potentialPayoutUsd.toString());
-      actualPayoutCrypto = parseFloat(bet.potentialPayoutCrypto.toString());
-      newBalance += actualPayoutCrypto;
+      
+      // Credit winnings back to the SAME crypto used for the bet
+      // This ensures the USD balance is always tied to real crypto.
+      newTotalBalance = await creditBalance(
+        bet.userId, 
+        actualPayoutUsd, 
+        bet.cryptoType || "BTC"
+      );
+    } else {
+      const { totalBalance } = await getUserBalance(bet.userId);
+      newTotalBalance = totalBalance;
     }
 
     await db
       .update(sportsBetsTable)
       .set({
         status,
-        resultOutcome: resultOutcome.toString(),
         actualPayoutUsd: actualPayoutUsd.toString(),
-        actualPayoutCrypto: actualPayoutCrypto.toString(),
         settledAt: new Date(),
       })
       .where(eq(sportsBetsTable.id, betId));
 
-    await db
-      .update(usersTable)
-      .set({ casinoBalance: newBalance.toString() })
-      .where(eq(usersTable.id, bet.userId));
-
     return res.json({
       success: true,
       bet: { id: bet.id, status, actualPayoutUsd },
-      userNewBalance: newBalance,
+      newBalanceUsd: newTotalBalance,
     });
   } catch (error) {
     console.error("Error settling bet:", error);
