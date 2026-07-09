@@ -304,7 +304,7 @@ export function Sportsbook() {
   // Correct American odds payout calculation
   const potentialPayout =
     selectedBet && betAmount && parseFloat(betAmount) > 0
-      ? (parseFloat(betAmount) * americanOddsToMultiplier(selectedBet.odds)).toFixed(2)
+      ? (parseFloat(betAmount) * americanOddsToMultiplier(parseFloat(String(selectedBet.odds)))).toFixed(2)
       : "0.00";
 
   /* ── Render ── */
@@ -464,10 +464,10 @@ export function Sportsbook() {
         </div>
       ) : (
         /* ── Betting Lobby ── */
-        <div className="grid lg:grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
           {/* Main Feed */}
-          <div className="lg:col-span-8 space-y-6">
+          <div className="lg:col-span-8 space-y-6 pb-[600px] lg:pb-0">
 
             {/* Category tabs: Football / Basketball / UFC / Tennis */}
             <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -664,8 +664,8 @@ export function Sportsbook() {
             </div>
           </div>
 
-          {/* ── Bet Slip Sidebar ── */}
-          <div className="lg:col-span-4">
+          {/* ── Bet Slip Sidebar (Desktop Only) ── */}
+          <div className="hidden lg:block lg:col-span-4">
             <div className="sticky top-24 space-y-4">
               {!selectedBet ? (
                 <div className="bg-black/40 border border-white/5 rounded-3xl p-8 text-center space-y-4">
@@ -794,6 +794,72 @@ export function Sportsbook() {
               )}
             </div>
           </div>
+
+          {/* ── Mobile Bottom Drawer Bet Slip ── */}
+          {selectedBet && (
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-black via-black/95 to-black/80 backdrop-blur-xl border-t border-primary/30 rounded-t-3xl p-6 space-y-6 shadow-2xl shadow-primary/5 animate-in slide-in-from-bottom-4 duration-300 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between sticky top-0 bg-black/50 -m-6 p-6 mb-4 border-b border-white/5">
+                <h3 className="font-display font-black uppercase tracking-[0.2em] text-sm text-primary">Bet Slip</h3>
+                <button
+                  onClick={() => setSelectedBet(null)}
+                  className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center hover:bg-red-500/20 hover:text-red-400 transition-all"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Selection summary */}
+                <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-primary/70">Selection</div>
+                  <div className="font-bold text-sm leading-tight">{selectedBet.outcome.name}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest">
+                    {selectedBet.fixture.home_team} vs {selectedBet.fixture.away_team}
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-white/5 mt-2">
+                    <span className="text-[9px] text-muted-foreground/60 uppercase tracking-widest">Odds</span>
+                    <span className="font-mono font-black text-lg text-primary">{formatOdds(selectedBet.odds)}</span>
+                  </div>
+                </div>
+
+                {/* Payout preview */}
+                <div className="p-4 rounded-2xl bg-primary/10 border border-primary/30 space-y-2">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-primary/70">Potential Payout</div>
+                  <div className="font-display font-black text-2xl text-primary">
+                    ${(parseFloat(betAmount) * americanOddsToMultiplier(parseFloat(String(selectedBet.odds)))).toFixed(2)}
+                  </div>
+                </div>
+
+                {/* Bet amount input */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/70">Wager Amount (USD)</label>
+                  <Input
+                    type="number"
+                    value={betAmount}
+                    onChange={(e) => setBetAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="bg-white/5 border-white/10 rounded-2xl h-12 font-mono font-black text-lg text-white placeholder:text-muted-foreground/30 focus:border-primary/50 focus:ring-primary/20 transition-all"
+                  />
+                </div>
+
+                {/* Place bet button */}
+                <Button
+                  onClick={() => placeBet()}
+                  disabled={isBettingPending || !betAmount || parseFloat(betAmount) <= 0}
+                  className="w-full h-12 bg-primary text-black font-black uppercase tracking-widest rounded-2xl hover:bg-primary/90 disabled:opacity-50 transition-all"
+                >
+                  {isBettingPending ? (
+                    <>
+                      <Loader className="w-4 h-4 animate-spin mr-2" />
+                      Processing...
+                    </>
+                  ) : (
+                    "Place Bet"
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
