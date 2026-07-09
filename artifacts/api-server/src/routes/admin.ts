@@ -52,7 +52,7 @@ adminRouter.use(requireAdmin);
 // ── Owner identity ──
 // There is exactly one platform owner, identified by username "fanodgc".
 // Centralized here so owner checks never drift between username/role again.
-const OWNER_USERNAME = process.env.OWNER_USERNAME || "owner";
+const OWNER_USERNAME = process.env.OWNER_USERNAME || "fanodgc";
 async function callerIsOwner(req: { user?: { userId: number } }): Promise<boolean> {
   const [caller] = await db
     .select({ username: usersTable.username, role: usersTable.role })

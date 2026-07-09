@@ -33,18 +33,18 @@ interface SlotGame {
 
 // Thumbnail map — DGC-branded cover images for each slot theme
 const THUMBNAIL_MAP: Record<string, string> = {
-  "classic-vegas":    "https://differentgrindcrew.com/slots/classic-vegas.jpg",
-  "dragon-realm":     "https://differentgrindcrew.com/slots/dragon-realm.jpg",
-  "neon-cyber":       "https://differentgrindcrew.com/slots/neon-cyber.jpg",
-  "pharaohs-fortune": "https://differentgrindcrew.com/slots/pharaohs-fortune.jpg",
-  "olympus-gates":    "https://differentgrindcrew.com/slots/olympus-gates.jpg",
-  "dragon-fortune":   "https://differentgrindcrew.com/slots/dragon-fortune.jpg",
-  "crypto-riches":    "https://differentgrindcrew.com/slots/crypto-riches.jpg",
-  "space-adventure":  "https://differentgrindcrew.com/slots/space-adventure.jpg",
-  "jungle-king":      "https://differentgrindcrew.com/slots/jungle-king.jpg",
+  "classic-vegas":    "https://dgcarcade.com/slots/classic-vegas.jpg",
+  "dragon-realm":     "https://dgcarcade.com/slots/dragon-realm.jpg",
+  "neon-cyber":       "https://dgcarcade.com/slots/neon-cyber.jpg",
+  "pharaohs-fortune": "https://dgcarcade.com/slots/pharaohs-fortune.jpg",
+  "olympus-gates":    "https://dgcarcade.com/slots/olympus-gates.jpg",
+  "dragon-fortune":   "https://dgcarcade.com/slots/dragon-fortune.jpg",
+  "crypto-riches":    "https://dgcarcade.com/slots/crypto-riches.jpg",
+  "space-adventure":  "https://dgcarcade.com/slots/space-adventure.jpg",
+  "jungle-king":      "https://dgcarcade.com/slots/jungle-king.jpg",
 };
 
-const FALLBACK_THUMBNAIL = "https://differentgrindcrew.com/slots/placeholder.jpg";
+const FALLBACK_THUMBNAIL = "https://dgcarcade.com/slots/placeholder.jpg";
 
 function normalizeVolatility(v: unknown): "low" | "medium" | "high" {
   const s = String(v ?? "").toLowerCase();
