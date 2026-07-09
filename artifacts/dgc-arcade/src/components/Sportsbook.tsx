@@ -312,7 +312,7 @@ export function Sportsbook() {
     <div className="w-full space-y-6 pb-24 md:pb-12">
 
       {/* ── Header ── */}
-      <div className="relative overflow-hidden group flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-6 md:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-500 hover:border-primary/20">
+      <div className="relative w-full overflow-hidden group flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-4 md:p-6 lg:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300 hover:border-primary/20 hover:shadow-[0_20px_50px_rgba(255,215,0,0.2)]">
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2" />
 
         <div className="relative z-10 space-y-4">
@@ -337,12 +337,12 @@ export function Sportsbook() {
           </div>
         </div>
 
-        <div className="relative z-10 flex flex-wrap items-center gap-4">
+        <div className="relative z-10 w-full lg:w-auto flex flex-wrap items-center gap-2 md:gap-4">
           <Button
             variant="outline"
             size="lg"
             onClick={() => setShowHistory(!showHistory)}
-            className={`rounded-2xl border-white/10 h-14 px-8 font-black uppercase tracking-[0.2em] text-xs transition-all duration-300 ${
+            className={`rounded-2xl border-white/10 h-10 md:h-12 lg:h-14 px-4 md:px-6 lg:px-8 font-black uppercase tracking-[0.2em] text-[10px] md:text-xs transition-all duration-300 hover:scale-105 ${
               showHistory
                 ? "bg-primary text-black border-primary shadow-[0_0_30px_rgba(255,215,0,0.3)] scale-105"
                 : "bg-white/5 hover:bg-white/10 hover:border-primary/40 hover:scale-[1.02]"
@@ -565,11 +565,11 @@ export function Sportsbook() {
                   return (
                     <div
                       key={fixture.id}
-                      className="group relative overflow-hidden bg-gradient-to-br from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/10 rounded-[2.5rem] hover:border-primary/40 transition-all duration-500 shadow-[0_20px_50px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_50px_rgba(255,215,0,0.1)]"
+                      className="group relative w-full overflow-hidden bg-gradient-to-br from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/10 rounded-[2.5rem] transition-all duration-300 hover:scale-[1.05] hover:-translate-y-1 hover:border-primary/40 hover:shadow-[0_20px_50px_rgba(255,215,0,0.15)] shadow-lg"
                     >
                       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-                      <div className="p-5 md:p-8 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+                      <div className="w-full p-4 md:p-6 lg:p-8 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/[0.02]">
                         <div className="flex items-center gap-4">
                           <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 flex items-center gap-2">
                             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
@@ -590,10 +590,10 @@ export function Sportsbook() {
                         </Badge>
                       </div>
 
-                      <div className="p-6 md:p-8">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
-                          <div className="flex-1">
-                            <div className="grid grid-cols-[1fr,auto,1fr] items-center gap-4 md:gap-8">
+                      <div className="w-full p-4 md:p-6 lg:p-8">
+                        <div className="w-full flex flex-col gap-6 md:gap-8">
+                          <div className="w-full flex-1">
+                            <div className="w-full grid grid-cols-[1fr,auto,1fr] items-center gap-2 md:gap-4 lg:gap-8">
                               <div className="space-y-2 text-center md:text-right">
                                 <div className="text-base md:text-2xl font-black uppercase tracking-tight text-white group-hover:text-primary transition-colors duration-300">
                                   {fixture.home_team}
@@ -616,7 +616,7 @@ export function Sportsbook() {
                           </div>
 
                           {/* Odds buttons */}
-                          <div className="grid grid-cols-3 gap-3 md:w-[400px]">
+                          <div className="w-full grid grid-cols-3 gap-2 md:gap-3">
                             {h2hMarket.outcomes.map((outcome) => (
                               <button
                                 key={outcome.name}
@@ -628,7 +628,7 @@ export function Sportsbook() {
                                     odds: outcome.price,
                                   })
                                 }
-                                className={`group/odd relative overflow-hidden p-4 rounded-2xl border transition-all duration-500 flex flex-col items-center gap-1.5 ${
+                                className={`group/odd relative w-full overflow-hidden p-3 md:p-4 rounded-2xl border transition-all duration-300 hover:scale-105 flex flex-col items-center gap-1.5 ${
                                   selectedBet?.outcome.name === outcome.name &&
                                   selectedBet?.fixture.id === fixture.id
                                     ? "bg-primary text-black border-primary shadow-[0_10px_30px_rgba(255,215,0,0.4)] scale-110 -translate-y-1 z-10"
@@ -666,9 +666,9 @@ export function Sportsbook() {
 
           {/* ── Bet Slip Sidebar (Desktop Only) ── */}
           <div className="hidden lg:block lg:col-span-4">
-            <div className="sticky top-24 space-y-4">
+            <div className="sticky top-24 space-y-4 max-h-[calc(100vh-120px)] overflow-y-auto">
               {!selectedBet ? (
-                <div className="bg-black/40 border border-white/5 rounded-3xl p-8 text-center space-y-4">
+                <div className="w-full bg-black/40 border border-white/5 rounded-3xl p-6 md:p-8 text-center space-y-4">
                   <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center mx-auto">
                     <Zap className="w-6 h-6 text-muted-foreground/30" />
                   </div>
@@ -678,7 +678,7 @@ export function Sportsbook() {
                   </p>
                 </div>
               ) : (
-                <div className="bg-black/40 border border-primary/30 rounded-3xl p-6 space-y-6 shadow-2xl shadow-primary/5 animate-in zoom-in-95 duration-300">
+                <div className="w-full bg-black/40 border border-primary/30 rounded-3xl p-4 md:p-6 space-y-4 md:space-y-6 shadow-2xl shadow-primary/5 animate-in zoom-in-95 duration-300">
                   <div className="flex items-center justify-between">
                     <h3 className="font-display font-black uppercase tracking-[0.2em] text-sm text-primary">Bet Slip</h3>
                     <button

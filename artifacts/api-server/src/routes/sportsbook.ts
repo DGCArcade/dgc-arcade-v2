@@ -99,11 +99,12 @@ sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
       Tennis: [],
     };
 
-    // Fetch fixtures for each category in parallel
+    // Fetch fixtures for each category in parallel (live + upcoming merged)
     await Promise.all(
       Object.entries(TRACKED_SPORTS).map(async ([category, sportKeys]) => {
         for (const sportKey of sportKeys) {
           try {
+            // Fetch all odds (live and upcoming)
             const url = buildOddsUrl(`/v4/sports/${sportKey}/odds`, {
               regions: "us",
               oddsFormat: "american",
@@ -113,7 +114,12 @@ sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
             if (!resp.ok) continue;
             const fixtures = await resp.json() as any[];
             feedResults[category].push(
-              ...fixtures.map((f: any) => ({ ...f, _category: category, _sportKey: sportKey }))
+              ...fixtures.map((f: any) => ({
+                ...f,
+                _category: category,
+                _sportKey: sportKey,
+                _isLive: new Date(f.commence_time).getTime() <= Date.now() + 3600000,
+              }))
             );
           } catch {
             // Skip unavailable sport keys silently
@@ -121,6 +127,18 @@ sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
         }
       })
     );
+
+    // Sort by commence time (live games first, then upcoming)
+    for (const category of Object.keys(feedResults)) {
+      feedResults[category].sort((a: any, b: any) => {
+        const aIsLive = a._isLive ? 0 : 1;
+        const bIsLive = b._isLive ? 0 : 1;
+        if (aIsLive !== bIsLive) return aIsLive - bIsLive;
+        const aTime = new Date(a.commence_time).getTime();
+        const bTime = new Date(b.commence_time).getTime();
+        return aTime - bTime;
+      });
+    }
 
     // Log quota usage
     const quotaUrl = buildOddsUrl("/v4/sports", { all: "false" });
