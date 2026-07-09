@@ -28,9 +28,10 @@ export function SlotGamePlayer({ gameId, onBack }: SlotGamePlayerProps) {
           },
           body: JSON.stringify({
             gameId,
-            gameName: gameId,
-            provider: "rapidapi",
+            gameName: gameInfo?.title || gameId,
+            provider: gameInfo?.provider || "Inbet",
             cryptoType: "BTC",
+            betAmountUsd: 0, // Initial launch doesn't require a bet
           }),
         });
         if (rapidResponse.ok) {

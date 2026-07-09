@@ -10,7 +10,7 @@ export const slotsRapidApiRouter = Router();
  * RapidAPI Slot Streamer Configuration
  */
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || "";
-const RAPIDAPI_HOST = process.env.RAPIDAPI_SLOT_HOST || "your-slot-provider.p.rapidapi.com";
+const RAPIDAPI_HOST = process.env.RAPIDAPI_SLOT_HOST || "slot-and-betting-games.p.rapidapi.com";
 
 interface LaunchResponse {
   gameUrl?: string;
@@ -28,23 +28,29 @@ slotsRapidApiRouter.post("/launch-rapidapi", async (req: Request, res: Response)
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const { gameId, gameName, provider, cryptoType, betAmountUsd } = req.body;
+    const { gameId, gameName, provider, cryptoType, betAmountUsd = 0 } = req.body;
 
-    if (!gameId || !gameName || !provider || !betAmountUsd || !cryptoType) {
+    if (!gameId || !gameName || !provider || !cryptoType) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // 1. Deduct from real crypto wallet before launching
-    // This ensures USD knows what crypto it has and prevents fake balances.
-    const { newBalance, usedCurrency } = await deductBalance(
-      userId, 
-      parseFloat(betAmountUsd), 
-      cryptoType as string
-    );
+    // 1. Deduct from real crypto wallet before launching (if bet amount > 0)
+    let newBalance = 0;
+    let usedCurrency = cryptoType as string;
+    if (parseFloat(betAmountUsd) > 0) {
+      const result = await deductBalance(
+        userId, 
+        parseFloat(betAmountUsd), 
+        cryptoType as string
+      );
+      newBalance = result.newBalance;
+      usedCurrency = result.usedCurrency;
+    }
 
     // 2. Launch game via RapidAPI
+    // Note: The endpoint might vary based on the specific provider API
     const rapidApiResponse = await fetch(
-      `https://${RAPIDAPI_HOST}/v1/games/launch`,
+      `https://${RAPIDAPI_HOST}/slot-and-betting-games`,
       {
         method: "POST",
         headers: {
@@ -59,7 +65,7 @@ slotsRapidApiRouter.post("/launch-rapidapi", async (req: Request, res: Response)
           userId: userId.toString(),
           currency: "USD",
           balance: parseFloat(betAmountUsd),
-          returnUrl: `${process.env.FRONTEND_URL}/slots/${gameId}`,
+          returnUrl: `${process.env.FRONTEND_URL}/slots`,
         }),
       }
     );

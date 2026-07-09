@@ -50,9 +50,9 @@ router.use("/jackpot", jackpotRouter);
 router.use("/dice/live", diceLiveRouter);
 router.use("/crash/live", crashLiveRouter);
 router.use("/chicken-road", chickenRoadRouter);
-router.use("/slots", casinoRouter);
 router.use("/slots", slotsCatalogRouter);
-router.use("/sportsbook", sportsbookRouter);
 router.use("/slots", slotsRapidApiRouter);
+router.use("/slots", casinoRouter);
+router.use("/sportsbook", sportsbookRouter);
 
 export default router;

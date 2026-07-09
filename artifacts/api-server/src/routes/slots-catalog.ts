@@ -36,34 +36,56 @@ slotsCatalogRouter.get("/catalog", async (_req, res) => {
       return;
     }
 
-    const response = await fetch(`https://${RAPIDAPI_HOST}/slot-and-betting-games`, {
-      method: "GET",
-      headers: {
-        "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": RAPIDAPI_HOST,
-      },
-    });
+    // Try multiple possible endpoints for Slot and Betting Games API
+    const endpoints = [
+      `https://${RAPIDAPI_HOST}/slot-and-betting-games`,
+      `https://${RAPIDAPI_HOST}/games`,
+      `https://${RAPIDAPI_HOST}/list`,
+    ];
 
-    if (!response.ok) {
-      console.error("Failed to fetch slots from RapidAPI:", response.status);
-      // Fallback to empty if first load fails
+    let rawGamesData = null;
+    for (const url of endpoints) {
+      try {
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            "x-rapidapi-key": RAPIDAPI_KEY,
+            "x-rapidapi-host": RAPIDAPI_HOST,
+          },
+        });
+        if (response.ok) {
+          rawGamesData = await response.json();
+          console.log(`Successfully fetched slots from ${url}`);
+          break;
+        } else {
+          console.warn(`Endpoint ${url} returned ${response.status}`);
+        }
+      } catch (e) {
+        console.error(`Failed to fetch from ${url}:`, e);
+      }
+    }
+
+    if (!rawGamesData) {
+      console.error("Failed to fetch slots from all RapidAPI endpoints");
       res.json(cachedCatalog || []);
       return;
     }
 
-    const rawGames = await response.json();
-    
     // Transform RapidAPI response to our SlotGame interface
-    // Note: Adjust mapping based on actual API response structure
-    const games: SlotGame[] = Array.isArray(rawGames) ? rawGames.map((g: any) => ({
-      id: g.id || g.gameId || g.slug,
-      title: g.title || g.name || g.gameName,
-      provider: g.provider || "Inbet",
-      thumbnail: g.thumbnail || g.image || g.imageUrl || "https://differentgrindcrew.com/placeholder-slot.png",
+    // Note: The API might return an object with a games array or a direct array
+    const rawGamesArray = Array.isArray(rawGamesData) 
+      ? rawGamesData 
+      : (rawGamesData.games || rawGamesData.data || []);
+
+    const games: SlotGame[] = rawGamesArray.map((g: any) => ({
+      id: g.id || g.gameId || g.slug || String(g.game_id || ""),
+      title: g.title || g.name || g.gameName || g.game_name || "Unknown Game",
+      provider: g.provider || g.gameProvider || "Inbet",
+      thumbnail: g.thumbnail || g.image || g.imageUrl || g.image_url || "https://differentgrindcrew.com/placeholder-slot.png",
       rtp: g.rtp || 96.0,
       volatility: g.volatility || "medium",
       jackpot: g.jackpot
-    })) : [];
+    })).filter((g: SlotGame) => g.id);
 
     cachedCatalog = games;
     lastFetchTime = now;

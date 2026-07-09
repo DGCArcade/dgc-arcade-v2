@@ -322,26 +322,27 @@ export function SlotLobby({ onGameSelect }: SlotLobbyProps) {
   return (
     <div className="w-full space-y-8 px-4 md:px-8 py-8 max-w-[1600px] mx-auto">
       {/* ── Premium Header ─────────────────────────────────────── */}
-      <div className="relative overflow-hidden group bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-8 md:p-12 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2" />
+      <div className="relative overflow-hidden group bg-gradient-to-br from-black/80 to-black/60 backdrop-blur-3xl border border-white/10 rounded-[3rem] p-10 md:p-16 shadow-[0_40px_100px_rgba(0,0,0,0.8)]">
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[150px] -translate-y-1/2 translate-x-1/2 animate-pulse" />
+        <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-primary/5 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2" />
         
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/30 shadow-[0_0_30px_rgba(255,215,0,0.2)]">
-                <Gamepad2 className="w-7 h-7 text-primary animate-pulse" />
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-12">
+          <div className="space-y-6">
+            <div className="flex items-center gap-6">
+              <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center border border-primary/50 shadow-[0_0_50px_rgba(255,215,0,0.4)] group-hover:scale-110 transition-transform duration-700">
+                <Gamepad2 className="w-10 h-10 text-black animate-pulse" />
               </div>
               <div>
-                <h1 className="font-display font-black text-4xl md:text-6xl uppercase tracking-[0.2em] text-white leading-none">
-                  DGC<span className="text-primary">SLOTS</span>
+                <h1 className="font-display font-black text-5xl md:text-8xl uppercase tracking-[0.1em] text-white leading-none drop-shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                  DGC<span className="text-primary italic">SLOTS</span>
                 </h1>
-                <div className="flex items-center gap-3 mt-2">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-primary">Live Engine</span>
+                <div className="flex items-center gap-4 mt-4">
+                  <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/20 border border-primary/40 shadow-[0_0_20px_rgba(255,215,0,0.2)]">
+                    <span className="w-2 h-2 rounded-full bg-primary animate-ping" />
+                    <span className="text-[11px] font-black uppercase tracking-widest text-primary">Live Rapid-API Engine</span>
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-                    Premium Providers • Instant Play
+                  <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/40">
+                    62+ Premium Titles • Instant Crypto Payouts
                   </span>
                 </div>
               </div>
@@ -412,12 +413,19 @@ export function SlotLobby({ onGameSelect }: SlotLobbyProps) {
           ))}
         </div>
       ) : paginated.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-32 bg-black/40 backdrop-blur-xl rounded-[3rem] border border-dashed border-white/10">
-          <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6">
-            <Gamepad2 className="w-10 h-10 text-muted-foreground/30" />
+        <div className="flex flex-col items-center justify-center py-32 bg-black/60 backdrop-blur-3xl rounded-[4rem] border border-dashed border-primary/20 shadow-[0_0_100px_rgba(255,215,0,0.05)]">
+          <div className="w-24 h-24 rounded-3xl bg-primary/10 flex items-center justify-center mb-8 border border-primary/20 shadow-[0_0_40px_rgba(255,215,0,0.1)]">
+            <Gamepad2 className="w-12 h-12 text-primary/40 animate-pulse" />
           </div>
-          <h3 className="text-2xl font-black uppercase tracking-widest text-white">No games found</h3>
-          <p className="text-muted-foreground font-mono mt-2">Try adjusting your filters.</p>
+          <h3 className="text-3xl font-black uppercase tracking-[0.2em] text-white drop-shadow-[0_0_20px_rgba(255,215,0,0.3)]">No games found</h3>
+          <p className="text-primary/60 font-black uppercase tracking-widest text-[11px] mt-4">The dynamic Rapid-API feed is active, but no matches were found.</p>
+          <Button 
+            variant="outline" 
+            onClick={() => {setSearchTerm(""); setSelectedProvider(null);}} 
+            className="mt-10 rounded-2xl border-primary/30 text-primary font-black uppercase tracking-widest text-xs h-14 px-10 hover:bg-primary hover:text-black transition-all"
+          >
+            Reset All Filters
+          </Button>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 md:gap-10">

@@ -13,7 +13,10 @@ export const sportsbookRouter = Router();
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || "";
 const RAPIDAPI_HOST = process.env.RAPIDAPI_HOST || "the-odds-api.p.rapidapi.com";
 const THE_ODDS_API_KEY = process.env.THE_ODDS_API_KEY || "";
-const ODDS_API_BASE = `https://${RAPIDAPI_HOST}`;
+// Ensure we use the correct base URL for The Odds API via RapidAPI
+const ODDS_API_BASE = RAPIDAPI_HOST.includes("rapidapi.com") 
+  ? `https://${RAPIDAPI_HOST}` 
+  : `https://the-odds-api.p.rapidapi.com`;
 
 /**
  * GET /api/sportsbook/sports
