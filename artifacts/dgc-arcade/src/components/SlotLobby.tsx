@@ -334,7 +334,7 @@ export function SlotLobby({ onGameSelect }: SlotLobbyProps) {
               </div>
               <div>
                 <h1 className="font-display font-black text-5xl md:text-8xl uppercase tracking-[0.1em] text-white leading-none drop-shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-                  DGC<span className="text-primary italic">SLOTS</span>
+                  DGC<span className="text-glow-shift-slow italic">SLOTS</span>
                 </h1>
                 <div className="flex items-center gap-4 mt-4">
                   <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/20 border border-primary/40 shadow-[0_0_20px_rgba(255,215,0,0.2)]">

@@ -415,26 +415,34 @@ export default function Profile() {
         </div>
 
         <div className="flex flex-col items-end gap-2">
-          <div className="bg-secondary/50 border border-primary/20 rounded-xl p-4 flex flex-col items-end min-w-[200px]">
-            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Live Balance</span>
-            <span className="font-mono font-bold text-3xl text-primary">{formatCurrency(user.balance as number)}</span>
+          <div className="bg-secondary/50 border border-primary/20 rounded-xl p-4 flex flex-col items-end min-w-[200px] w-full md:w-auto">
+            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Balance</span>
+            <span className="font-mono font-black text-3xl text-primary drop-shadow-[0_0_15px_rgba(255,215,0,0.3)]">
+              {formatCurrency(user.balance as number).split('.')[0]}<span className="text-sm opacity-50">.{formatCurrency(user.balance as number).split('.')[1]}</span>
+            </span>
             {cryptoBalances.length > 0 && (
-              <div className="mt-2 w-full space-y-1 border-t border-border/30 pt-2">
-                {cryptoBalances.filter(cb => cb.amount > 0).map(cb => (
-                  <div key={cb.currency} className="flex items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-1 text-muted-foreground">
-                      <CoinIcon currency={cb.currency} size={11} />
-                      <span className="font-mono">{cb.amount.toFixed(6)} {cb.currency.split("_")[0]}</span>
+              <div className="mt-4 w-full space-y-3 border-t border-border/30 pt-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground text-left px-1">Crypto Breakdown</p>
+                {cryptoBalances.map(cb => (
+                  <div key={cb.currency} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 hover:border-primary/20 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
+                        <CoinIcon currency={cb.currency} size={18} />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-xs font-black uppercase tracking-widest">{cb.currency.split('_')[0]}</p>
+                        <p className="text-[10px] font-mono text-muted-foreground">{cb.amount.toFixed(8)}</p>
+                      </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-mono text-foreground font-bold">{formatCurrency(cb.usdValue)}</div>
-                      <div className="text-[9px] text-muted-foreground">@ ${cb.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}</div>
+                      <p className="text-xs font-mono font-bold text-primary">{formatCurrency(cb.usdValue)}</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">Value USD</p>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            <div className="text-[9px] text-muted-foreground/60 mt-1">Updates every 5s · live market price</div>
+            <div className="text-[9px] text-muted-foreground/60 mt-3 text-right">Updates every 5s · live market price</div>
           </div>
           {/* VIP badge — cursor-pointer so it's obviously clickable */}
           <button onClick={() => setVipOpen(true)}

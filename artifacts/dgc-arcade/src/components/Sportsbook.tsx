@@ -221,7 +221,7 @@ export function Sportsbook() {
             </div>
             <div>
               <h1 className="font-display font-black text-3xl md:text-6xl uppercase tracking-[0.15em] text-white leading-none">
-                DGC<span className="text-primary drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]">SPORTS</span>
+                DGC<span className="text-glow-shift-slow drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]">SPORTS</span>
               </h1>
               <div className="flex items-center gap-3 mt-2">
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 border border-green-500/20">
@@ -437,7 +437,9 @@ export function Sportsbook() {
                               <span className={`text-[9px] font-black uppercase tracking-widest transition-opacity ${
                                 selectedBet?.outcome.name === outcome.name && selectedBet?.fixture.id === fixture.id ? "opacity-100" : "opacity-40"
                               }`}>{outcome.name}</span>
-                              <span className="text-xl font-black font-mono tracking-tighter">{outcome.price.toFixed(2)}</span>
+                              <span className="text-xl font-black font-mono tracking-tighter">
+                                {outcome.price > 0 ? `+${outcome.price}` : outcome.price}
+                              </span>
                               {selectedBet?.outcome.name === outcome.name && selectedBet?.fixture.id === fixture.id && (
                                 <div className="absolute inset-0 bg-white/20 animate-pulse" />
                               )}
@@ -476,8 +478,10 @@ export function Sportsbook() {
                       <div className="font-bold text-sm leading-tight">{selectedBet.outcome.name}</div>
                       <div className="text-[10px] text-muted-foreground uppercase tracking-widest">{selectedBet.fixture.home_team} vs {selectedBet.fixture.away_team}</div>
                       <div className="flex items-center justify-between pt-2 border-t border-white/5 mt-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Decimal Odds</span>
-                        <span className="font-mono font-black text-primary">{selectedBet.odds.toFixed(2)}</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">American Odds</span>
+                        <span className="font-mono font-black text-primary">
+                          {selectedBet.odds > 0 ? `+${selectedBet.odds}` : selectedBet.odds}
+                        </span>
                       </div>
                     </div>
 

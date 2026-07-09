@@ -341,7 +341,16 @@ export default function Home() {
   const { isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
 
-  const featuredGames = Array.isArray(games) ? games.filter((g) => g.active).slice(0, 3) : [];
+  const [featuredGames, setFeaturedGames] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (Array.isArray(games)) {
+      const active = games.filter((g) => g.active);
+      // Shuffle and pick 4 games for mobile (2x2 grid) or 3 for desktop
+      const shuffled = [...active].sort(() => 0.5 - Math.random());
+      setFeaturedGames(shuffled.slice(0, 4));
+    }
+  }, [games]);
 
   return (
     <div className="space-y-16 pb-16">
@@ -440,10 +449,10 @@ export default function Home() {
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           {featuredGames.length === 0
             ? [1, 2, 3, 4].map((i) => (
-                <div key={i} className="aspect-[3/4.2] md:aspect-[16/9] bg-secondary/60 animate-pulse rounded-xl border border-border/40" />
+                <div key={i} className="aspect-[3/4.2] lg:aspect-[4/5] bg-secondary/60 animate-pulse rounded-xl border border-border/40" />
               ))
             : featuredGames.map((game) => (
                 <div key={game.id} className="h-full">

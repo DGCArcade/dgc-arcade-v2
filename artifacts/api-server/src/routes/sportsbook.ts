@@ -57,8 +57,10 @@ sportsbookRouter.get("/odds/:sport", async (req: Request, res: Response) => {
       ? { "x-api-key": THE_ODDS_API_KEY }
       : { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": RAPIDAPI_HOST };
 
+    // Default to American odds format as requested
+    const format = oddsFormat === "decimal" ? "american" : oddsFormat;
     const response = await fetch(
-      `${ODDS_API_BASE}/v4/sports/${sport}/odds?regions=${regions as string}&oddsFormat=${oddsFormat as string}`,
+      `${ODDS_API_BASE}/v4/sports/${sport}/odds?regions=${regions as string}&oddsFormat=${format as string}`,
       {
         method: "GET",
         headers,
@@ -122,7 +124,15 @@ sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
 
       const cryptoPrice = await getCryptoPrice(usedCurrency);
       const betAmountCrypto = parseFloat(betAmountUsd) / cryptoPrice;
-      const potentialPayoutUsd = parseFloat(betAmountUsd) * parseFloat(odds.toString());
+      // Calculate potential payout based on American odds
+      const americanOdds = parseFloat(odds.toString());
+      let multiplier = 0;
+      if (americanOdds > 0) {
+        multiplier = (americanOdds / 100) + 1;
+      } else {
+        multiplier = (100 / Math.abs(americanOdds)) + 1;
+      }
+      const potentialPayoutUsd = parseFloat(betAmountUsd) * multiplier;
       const potentialPayoutCrypto = potentialPayoutUsd / cryptoPrice;
 
       // 2. Record the bet with the real crypto details

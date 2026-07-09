@@ -786,3 +786,421 @@ params: crash,1
     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
     at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
     at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:29:34.812] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:30:34.812] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:31:34.812] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:32:34.813] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:33:34.813] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:34:34.813] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:35:34.813] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:36:34.813] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:37:34.812] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+[17:37:35.113] [31mERROR[39m (4146): [36mError in cleanupExpiredDeposits background task[39m
+    err: {
+      "type": "_DrizzleQueryError",
+      "message": "Failed query: select \"id\", \"user_id\", \"amount\" from \"transactions\" where (\"transactions\".\"type\" = $1 and \"transactions\".\"status\" = $2 and \"transactions\".\"created_at\" < $3)\nparams: deposit,pending,2026-07-09T15:37:34.809Z: password authentication failed for user 'neondb_owner'",
+      "stack":
+          Error: Failed query: select "id", "user_id", "amount" from "transactions" where ("transactions"."type" = $1 and "transactions"."status" = $2 and "transactions"."created_at" < $3)
+          params: deposit,pending,2026-07-09T15:37:34.809Z
+              at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+              at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+              at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+              at async cleanupExpiredDeposits (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/lib/background-tasks.ts:26:29)
+          caused by: error: password authentication failed for user 'neondb_owner'
+              at <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool/index.js:45:11)
+              at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+              at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:161:13)
+              at async NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:71:12)
+              at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+              at async cleanupExpiredDeposits (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/lib/background-tasks.ts:26:29)
+      "query": "select \"id\", \"user_id\", \"amount\" from \"transactions\" where (\"transactions\".\"type\" = $1 and \"transactions\".\"status\" = $2 and \"transactions\".\"created_at\" < $3)",
+      "params": [
+        "deposit",
+        "pending",
+        "2026-07-09T15:37:34.809Z"
+      ]
+    }
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:38:34.813] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:39:34.813] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:40:34.813] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:41:34.813] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:42:34.813] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason:
+Error: Failed query: select "id", "slug", "name", "description", "image_url", "min_bet", "max_bet", "house_edge", "active", "created_at" from "games" where "games"."slug" = $1 limit $2
+params: crash,1
+    at NodePgPreparedQuery.queryWithCache (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/home/ubuntu/dgc-arcade-v2/node_modules/.pnpm/drizzle-orm@0.45.2_@opentelemetry+api@1.9.1_@types+pg@8.20.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)
+    at async CrashRoundManager.onCrashResolve (/home/ubuntu/dgc-arcade-v2/artifacts/api-server/src/routes/crash-live.ts:181:18)
+[17:43:34.813] [33mWARN[39m (4146): [36mPlisio sync skipped: Plisio API key not set (check PLISIO_SECRET_KEY, PLISIO_API_KEY, or API_KEY)[39m

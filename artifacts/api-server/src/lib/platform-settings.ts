@@ -7,10 +7,10 @@ export const DEFAULT_SETTINGS = {
   minWithdrawal: 1,
   signupBonus: 100,
 
-  slotsEnabled: true,
-  raceEnabled: true,
-  leaderboardEnabled: true,
-  gamesEnabled: true,
+  slotsEnabled: false,
+  raceEnabled: false,
+  leaderboardEnabled: false,
+  gamesEnabled: false,
 
   maintenanceMode: false,
 
