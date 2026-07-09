@@ -19,39 +19,37 @@ export function BottomNav() {
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-primary/20 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80 safe-area-bottom shadow-[0_-8px_30px_rgb(0,0,0,0.5)]">
       <div className="grid grid-cols-5 h-16 items-center">
-        {/* Home */}
-        <Link href="/" className={`flex flex-col items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-tighter transition-all duration-300 ${active("/")}`}>
-          <div className={`p-1.5 rounded-xl transition-all ${location === "/" ? "bg-primary/20 shadow-[0_0_15px_rgba(255,215,0,0.2)] scale-110 -translate-y-1" : ""}`}>
-            <Home className={`w-5 h-5 ${location === "/" ? "animate-pulse" : ""}`} />
-          </div>
-          <span>Home</span>
-        </Link>
-
-        {/* Games */}
+        {/* Games - Center Highlighted */}
         <Link href="/games" className={`flex flex-col items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-tighter transition-all duration-300 ${active("/games")}`}>
-          <div className={`p-2 rounded-2xl transition-all relative group ${location === "/games" ? "bg-primary text-black scale-110 shadow-[0_0_20px_rgba(255,215,0,0.4)] -translate-y-2" : "bg-secondary"}`}>
+          <div className={`p-2.5 rounded-2xl transition-all relative group ${location === "/games" ? "bg-gradient-to-br from-primary to-amber-500 text-black scale-125 shadow-[0_0_30px_rgba(255,215,0,0.6)] -translate-y-3" : "bg-secondary"}`}>
             <Gamepad2 className={`w-6 h-6 ${location === "/games" ? "animate-bounce" : ""}`} />
             {location !== "/games" && <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-ping" />}
           </div>
-          <span className={location === "/games" ? "mt-1" : ""}>Games</span>
+          <span className={location === "/games" ? "mt-2 text-primary font-black" : ""}>Games</span>
         </Link>
 
-        {/* Slots - Center with maximum pop-out */}
+        {/* Slots */}
         <Link href="/slots" className={`flex flex-col items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-tighter transition-all duration-300 ${active("/slots")}`}>
-          <div className={`p-2.5 rounded-2xl transition-all relative group ${location === "/slots" ? "bg-gradient-to-br from-amber-400 to-orange-500 text-black scale-125 shadow-[0_0_30px_rgba(255,193,7,0.6)] -translate-y-3" : "bg-secondary"}`}>
-            <Zap className={`w-6 h-6 ${location === "/slots" ? "animate-bounce" : ""}`} />
-            {location !== "/slots" && <div className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full animate-ping" />}
+          <div className={`p-1.5 rounded-xl transition-all ${location === "/slots" ? "bg-primary/20 shadow-[0_0_15px_rgba(255,215,0,0.2)] scale-110 -translate-y-1" : ""}`}>
+            <Zap className={`w-5 h-5 ${location === "/slots" ? "animate-pulse" : ""}`} />
           </div>
-          <span className={location === "/slots" ? "mt-2 text-amber-500 font-black" : ""}>Slots</span>
+          <span>Slots</span>
+        </Link>
+
+        {/* Race - Restored */}
+        <Link href="/race" className={`flex flex-col items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-tighter transition-all duration-300 ${active("/race")}`}>
+          <div className={`p-1.5 rounded-xl transition-all ${location === "/race" ? "bg-primary/20 shadow-[0_0_15px_rgba(255,215,0,0.2)] scale-110 -translate-y-1" : ""}`}>
+            <span className={`text-xl ${location === "/race" ? "animate-bounce" : ""}`}>🏇</span>
+          </div>
+          <span>Race</span>
         </Link>
 
         {/* Sportsbook */}
         <Link href="/sportsbook" className={`flex flex-col items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-tighter transition-all duration-300 ${active("/sportsbook")}`}>
-          <div className={`p-2 rounded-2xl transition-all relative group ${location === "/sportsbook" ? "bg-primary text-black scale-110 shadow-[0_0_20px_rgba(255,215,0,0.4)] -translate-y-2" : "bg-secondary"}`}>
-            <Trophy className={`w-6 h-6 ${location === "/sportsbook" ? "animate-bounce" : ""}`} />
-            {location !== "/sportsbook" && <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-ping" />}
+          <div className={`p-1.5 rounded-xl transition-all ${location === "/sportsbook" ? "bg-primary/20 shadow-[0_0_15px_rgba(255,215,0,0.2)] scale-110 -translate-y-1" : ""}`}>
+            <Trophy className={`w-5 h-5 ${location === "/sportsbook" ? "animate-pulse" : ""}`} />
           </div>
-          <span className={location === "/sportsbook" ? "mt-1 text-primary" : ""}>Sports</span>
+          <span>Sports</span>
         </Link>
 
         {/* Profile / Auth */}

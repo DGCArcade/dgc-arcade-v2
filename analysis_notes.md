@@ -36,3 +36,22 @@
 ### 3. Creator Hub Real-Time Data
 - **Backend**: Updated `/api/creator/dashboard` to include `totalPlatformPlayers`, `totalPlatformGames`, and `totalPaymentMethods` (currently 10 based on Plisio support).
 - **Frontend**: Updated `creator.tsx` to use these real-time values in the Overview section, with a fallback to the previous hardcoded values if data is missing.
+
+## RapidAPI Slot and Betting Games Analysis (2026-07-09)
+
+### Provider Details
+- **Name**: Slot and Betting Games
+- **Host**: `slot-and-betting-games.p.rapidapi.com`
+- **RapidAPI Key**: `b7733564a5msh9fc9e2607ef221p19e057jsn84a9a2dc66af` (from user screenshot)
+
+### Endpoints
+- **List Games**: `GET https://slot-and-betting-games.p.rapidapi.com/`
+  - Returns a list of games including slots and betting games.
+- **Launch Game**: `POST https://slot-and-betting-games.p.rapidapi.com/v1/games/launch` (as seen in existing code, need to verify if it matches the new provider).
+
+### Action Plan
+1. Update `slots-catalog.ts` with real games from the API.
+2. Fix `Sportsbook.tsx` loading issues.
+3. Improve mobile UI for Sportsbook.
+4. Restore 'Race' link in mobile navbar.
+5. Polish the navbar icons and animations.

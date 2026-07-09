@@ -171,14 +171,14 @@ function Router() {
             {settings.slotsEnabled ? <SlotGamePage /> : <NotFound />}
           </Route>
           <Route path="/sportsbook">
-            {settings.slotsEnabled ? <SportsbookPage /> : <NotFound />}
+            <SportsbookPage />
           </Route>
           <Route path="/games/:gameId">
             {settings.gamesEnabled ? <GamePage /> : <NotFound />}
           </Route>
           
           <Route path="/race">
-            {settings.raceEnabled ? <EmailVerifiedGate><RacePage /></EmailVerifiedGate> : <RaceDisabled />}
+            <EmailVerifiedGate><RacePage /></EmailVerifiedGate>
           </Route>
           
           <Route path="/leaderboard">

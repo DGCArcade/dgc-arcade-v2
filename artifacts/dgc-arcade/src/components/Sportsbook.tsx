@@ -108,7 +108,7 @@ export function Sportsbook() {
   });
 
   // Fetch odds for selected sport
-  const { data: fixtures = [], isLoading: fixturesLoading } = useQuery<Fixture[]>({
+  const { data: fixtures = [], isLoading: fixturesLoading, error: fixturesError } = useQuery<Fixture[]>({
     queryKey: ["sportsbook-odds", selectedSport],
     queryFn: async () => {
       if (!selectedSport) return [];
@@ -120,11 +120,15 @@ export function Sportsbook() {
           },
         }
       );
-      if (!res.ok) throw new Error("Failed to fetch odds");
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to fetch odds");
+      }
       return res.json();
     },
     enabled: !!selectedSport,
     staleTime: 1000 * 30,
+    retry: 1,
   });
 
   // Fetch bet history
@@ -355,6 +359,13 @@ export function Sportsbook() {
                 <div className="space-y-4">
                   {[1, 2, 3].map(i => <div key={i} className="h-48 rounded-3xl bg-white/5 animate-pulse" />)}
                 </div>
+              ) : fixturesError ? (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-3xl py-20 text-center space-y-3 px-6">
+                  <AlertCircle className="w-12 h-12 text-red-500/50 mx-auto" />
+                  <p className="text-red-400 font-bold uppercase tracking-widest text-sm">Connection Error</p>
+                  <p className="text-muted-foreground text-xs max-w-xs mx-auto">{(fixturesError as Error).message}. Check your API credentials in Render.</p>
+                  <Button variant="outline" size="sm" onClick={() => window.location.reload()} className="mt-4 rounded-xl border-white/10 font-bold uppercase tracking-widest text-[10px]">Retry Connection</Button>
+                </div>
               ) : fixtures.length === 0 ? (
                 <div className="bg-white/5 border border-white/5 rounded-3xl py-20 text-center">
                   <p className="text-muted-foreground font-mono">No live fixtures for this category right now.</p>
@@ -372,17 +383,17 @@ export function Sportsbook() {
                       <Badge variant="outline" className="bg-primary/10 border-primary/20 text-primary text-[9px] font-black uppercase tracking-widest px-2.5">In-Play</Badge>
                     </div>
 
-                    <div className="p-6">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                        <div className="flex-1 space-y-4">
-                          <div className="flex items-center justify-between md:justify-start md:gap-8">
-                            <div className="text-lg font-black uppercase tracking-tight group-hover:text-primary transition-colors">{fixture.home_team}</div>
-                            <span className="text-xs font-black text-muted-foreground/30 italic">VS</span>
-                            <div className="text-lg font-black uppercase tracking-tight group-hover:text-primary transition-colors">{fixture.away_team}</div>
+                    <div className="p-4 md:p-6">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
+                        <div className="flex-1 space-y-2 md:space-y-4">
+                          <div className="flex items-center justify-between md:justify-start md:gap-8 bg-white/5 md:bg-transparent p-3 md:p-0 rounded-2xl border border-white/5 md:border-none">
+                            <div className="text-sm md:text-lg font-black uppercase tracking-tight group-hover:text-primary transition-colors text-center flex-1 md:flex-none">{fixture.home_team}</div>
+                            <span className="text-[10px] font-black text-muted-foreground/30 italic px-2">VS</span>
+                            <div className="text-sm md:text-lg font-black uppercase tracking-tight group-hover:text-primary transition-colors text-center flex-1 md:flex-none">{fixture.away_team}</div>
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-2">
+                        <div className="grid grid-cols-3 md:flex md:flex-wrap gap-2">
                           {fixture.bookmakers[0]?.markets.find(m => m.key === "h2h")?.outcomes.map((outcome) => (
                             <button
                               key={outcome.name}
