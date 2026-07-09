@@ -26,7 +26,7 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-lg font-bold text-foreground mb-3">1. Who We Are</h2>
           <p><strong className="text-foreground">DGC Arcade Ltd.</strong> ("we", "us", "our", "DGC Arcade") is the operator of the DGC Arcade licensed gaming platform.</p>
-          <p className="mt-2">For all privacy-related inquiries, contact our Data Protection team at <strong className="text-foreground">privacy@dgcarcade.io</strong>.</p>
+          <p className="mt-2">For all privacy-related inquiries, contact our Data Protection team at <strong className="text-foreground">support@dgcarcade.com</strong>.</p>
         </section>
 
         <section>
@@ -205,7 +205,7 @@ export default function PrivacyPage() {
               </div>
             ))}
           </div>
-          <p className="mt-3">To exercise any right, email <strong className="text-foreground">privacy@dgcarcade.io</strong> with your username and request. We will respond within 30 days. We may require identity verification before acting on your request.</p>
+          <p className="mt-3">To exercise any right, email <strong className="text-foreground">support@dgcarcade.com</strong> with your username and request. We will respond within 30 days. We may require identity verification before acting on your request.</p>
         </section>
 
         <section>
@@ -218,7 +218,7 @@ export default function PrivacyPage() {
             <li>All admin actions logged and auditable</li>
             <li>AI fraud monitoring on all withdrawal transactions</li>
           </ul>
-          <p className="mt-3">No system is 100% secure. If you believe your account has been compromised, contact us immediately at <strong className="text-foreground">support@dgcarcade.io</strong>.</p>
+          <p className="mt-3">No system is 100% secure. If you believe your account has been compromised, contact us immediately at <strong className="text-foreground">support@dgcarcade.com</strong>.</p>
         </section>
 
         <section>
@@ -234,9 +234,9 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-lg font-bold text-foreground mb-3">11. Contact</h2>
           <div className="bg-secondary/30 rounded-xl p-4 border border-border/40 space-y-1">
-            <p><strong className="text-foreground">Data Protection:</strong> privacy@dgcarcade.io</p>
-            <p><strong className="text-foreground">General Support:</strong> support@dgcarcade.io</p>
-            <p><strong className="text-foreground">Operator:</strong> DGC Arcade Ltd. — DGCArcade.io</p>
+            <p><strong className="text-foreground">Data Protection:</strong> support@dgcarcade.com</p>
+            <p><strong className="text-foreground">General Support:</strong> support@dgcarcade.com</p>
+            <p><strong className="text-foreground">Operator:</strong> DGC Arcade Ltd. — DGCArcade.com</p>
           </div>
         </section>
 

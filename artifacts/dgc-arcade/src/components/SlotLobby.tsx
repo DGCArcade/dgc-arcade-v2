@@ -88,6 +88,7 @@ function SlotCard({
   onClick: () => void;
 }) {
   const glow = providerGlow(game.provider);
+  const [imgFailed, setImgFailed] = React.useState(false);
 
   return (
     <div
@@ -101,16 +102,35 @@ function SlotCard({
     >
       {/* Thumbnail */}
       <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
-        <img
-          src={game.thumbnail}
-          alt={game.title}
-          loading="lazy"
-          className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).src =
-              "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'%3E%3Crect width='400' height='300' fill='%23111827'/%3E%3Ctext x='200' y='155' text-anchor='middle' fill='%23374151' font-size='48' font-family='sans-serif'%3E🎰%3C/text%3E%3C/svg%3E";
-          }}
-        />
+        {!imgFailed ? (
+          <img
+            src={game.thumbnail}
+            alt={game.title}
+            loading="lazy"
+            className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          /* Branded gradient placeholder — renders when CDN cover is unavailable */
+          <div
+            className="w-full h-full flex flex-col items-center justify-center gap-2 transition-transform duration-300 ease-in-out group-hover:scale-105"
+            style={{
+              background: `linear-gradient(135deg, hsl(220 20% 10%) 0%, hsl(220 20% 16%) 100%)`,
+              borderBottom: `2px solid ${glow}`,
+            }}
+          >
+            <span className="text-4xl select-none">🎰</span>
+            <span
+              className="text-[11px] font-black uppercase tracking-widest text-center px-3 leading-tight"
+              style={{ color: glow }}
+            >
+              {game.title}
+            </span>
+            <span className="text-[9px] text-muted-foreground font-medium uppercase tracking-wider">
+              {game.provider}
+            </span>
+          </div>
+        )}
 
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center gap-3">

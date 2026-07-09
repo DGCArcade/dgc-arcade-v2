@@ -101,8 +101,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <div>
                   <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Support</p>
                   <ul className="space-y-2 text-xs text-muted-foreground">
-                    <li><a href="mailto:support@dgcarcade.io" className="hover:text-foreground transition-colors">support@dgcarcade.io</a></li>
-                    <li><a href="mailto:kyc@dgcarcade.io" className="hover:text-foreground transition-colors">kyc@dgcarcade.io</a></li>
+                    <li><a href="mailto:support@dgcarcade.com" className="hover:text-foreground transition-colors">support@dgcarcade.com</a></li>
                     <li><a href="https://t.me/dgcarcade" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">Telegram</a></li>
                   </ul>
                 </div>
@@ -115,7 +114,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                   <span>Licensed gaming platform</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground/50">
-                  <span>© {new Date().getFullYear()} DGC Arcade — DGCArcade.io</span>
+                  <span>© {new Date().getFullYear()} DGC Arcade — DGCArcade.com</span>
                   <span>·</span>
                   <Link href="/provably-fair" className="hover:text-foreground transition-colors font-medium underline underline-offset-2">All games use provably fair algorithms</Link>
                   <span>·</span>

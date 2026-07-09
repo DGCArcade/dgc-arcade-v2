@@ -25,7 +25,7 @@ export default function TermsPage() {
         <section>
           <h2 className="text-lg font-bold text-foreground mb-3">1. Company Information</h2>
           <p>DGC Arcade (the "Platform") is operated by <strong className="text-foreground">DGC Arcade Ltd.</strong>, a licensed gaming platform.</p>
-          <p className="mt-2">Support: <strong className="text-foreground">support@dgcarcade.io</strong></p>
+          <p className="mt-2">Support: <strong className="text-foreground">support@dgcarcade.com</strong></p>
         </section>
 
         <section>
@@ -56,7 +56,7 @@ export default function TermsPage() {
           <ul className="list-disc pl-5 space-y-1 mt-2">
             <li>Maintaining the confidentiality of your login credentials</li>
             <li>All activity that occurs under your account</li>
-            <li>Notifying us immediately of unauthorized access at <strong className="text-foreground">support@dgcarcade.io</strong></li>
+            <li>Notifying us immediately of unauthorized access at <strong className="text-foreground">support@dgcarcade.com</strong></li>
           </ul>
           <p className="mt-2">DGC Arcade reserves the right to request identity verification documents at any time. Failure to provide documents within the requested timeframe may result in account suspension or withdrawal restrictions.</p>
         </section>

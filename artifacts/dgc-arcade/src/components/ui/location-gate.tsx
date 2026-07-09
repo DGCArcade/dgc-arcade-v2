@@ -392,7 +392,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
         <Button onClick={handleRetry} variant="outline" className="gap-2 font-bold">
           <MapPin className="w-4 h-4" /> Try Again
         </Button>
-        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@dgcarcade.io</strong></p>
+        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@dgcarcade.com</strong></p>
       </div>
     );
   }
@@ -410,7 +410,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             DGC Arcade is not available in {geoData?.country_name ?? "your region"} due to local gambling regulations. We apologize for the inconvenience.
           </p>
         </div>
-        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@dgcarcade.io</strong></p>
+        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@dgcarcade.com</strong></p>
       </div>
     );
   }
@@ -428,7 +428,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
             DGC Arcade is not currently available in {geoData?.region ?? "your state"} due to local gambling regulations.
           </p>
         </div>
-        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@dgcarcade.io</strong></p>
+        <p className="text-xs text-muted-foreground/50">Questions? <strong>support@dgcarcade.com</strong></p>
       </div>
     );
   }

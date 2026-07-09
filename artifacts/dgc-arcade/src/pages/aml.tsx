@@ -91,8 +91,8 @@ export default function AmlPage() {
 
         <section>
           <h2 className="text-lg font-bold text-foreground mb-3">7. Contact</h2>
-          <p>For KYC verification enquiries: <strong className="text-foreground">kyc@dgcarcade.io</strong><br />
-          For AML/compliance matters: <strong className="text-foreground">compliance@dgcarcade.io</strong></p>
+          <p>For KYC verification enquiries: <strong className="text-foreground">support@dgcarcade.com</strong><br />
+          For AML/compliance matters: <strong className="text-foreground">support@dgcarcade.com</strong></p>
         </section>
       </div>
     </div>

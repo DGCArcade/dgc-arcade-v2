@@ -2992,6 +2992,49 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* ── Casino / Slots Provider Config ── */}
+            <Card className="border-border/60 bg-card/60 shadow-xl shadow-primary/5">
+              <CardHeader className="pb-2 pt-4 px-4 border-b border-border/40 mb-4">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <span className="text-lg">🎰</span> Casino &amp; Slots Provider
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-4">
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+                  <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                    <strong>These credentials are set as environment variables on your Render deployment</strong>, not stored in the database. Set them in your Render service&apos;s Environment tab. See the guide below.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">CASINO_PROVIDER_URL</span>
+                    <p className="text-xs text-muted-foreground">The base URL of your aggregator (e.g. <code className="bg-secondary px-1 rounded text-primary">https://api.yourprovider.com</code>). Game launch requests are sent here.</p>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">CASINO_API_KEY</span>
+                    <p className="text-xs text-muted-foreground">Your aggregator API key — provided by your casino content provider when you sign up. Authenticates your platform with their game servers.</p>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">CASINO_MERCHANT_ID</span>
+                    <p className="text-xs text-muted-foreground">Your merchant/operator ID assigned by the aggregator. Identifies your platform in their system.</p>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">CASINO_SECRET_SIGN</span>
+                    <p className="text-xs text-muted-foreground">Shared secret for verifying spin callbacks (BET/WIN/REFUND). Generate any strong random string and set the same value on both sides.</p>
+                  </div>
+                </div>
+                <div className="bg-secondary/30 rounded-lg p-3 border border-border/40">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Current Status</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${bankSettings.slotsEnabled ? "bg-green-400 animate-pulse" : "bg-red-400"}`} />
+                    <span className="text-xs text-muted-foreground">
+                      Slots section is <strong className="text-foreground">{bankSettings.slotsEnabled ? "ENABLED" : "DISABLED"}</strong> — toggle above to change
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       )}
