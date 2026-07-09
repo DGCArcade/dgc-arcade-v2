@@ -17,7 +17,7 @@ interface SlotGame {
 }
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || "";
-const RAPIDAPI_HOST = process.env.RAPIDAPI_SLOT_HOST || "slot-and-betting-games.p.rapidapi.com";
+const RAPIDAPI_HOST = "slot-and-betting-games.p.rapidapi.com";
 
 let cachedCatalog: SlotGame[] | null = null;
 let lastFetchTime = 0;
@@ -35,7 +35,7 @@ slotsCatalogRouter.get("/catalog", async (_req, res) => {
       return res.json(cachedCatalog);
     }
 
-    const response = await fetch(`https://${RAPIDAPI_HOST}/`, {
+    const response = await fetch(`https://${RAPIDAPI_HOST}/slot-and-betting-games`, {
       method: "GET",
       headers: {
         "x-rapidapi-key": RAPIDAPI_KEY,
