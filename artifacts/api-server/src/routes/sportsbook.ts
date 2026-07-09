@@ -47,7 +47,7 @@ sportsbookRouter.get("/odds/:sport", async (req: Request, res: Response) => {
     const { regions = "us", oddsFormat = "decimal" } = req.query;
 
     const response = await fetch(
-      `${ODDS_API_BASE}/v4/sports/${sport}/odds?regions=${regions}&oddsFormat=${oddsFormat}`,
+      `${ODDS_API_BASE}/v4/sports/${sport}/odds?regions=${regions as string}&oddsFormat=${oddsFormat as string}`,
       {
         method: "GET",
         headers: {
@@ -129,32 +129,32 @@ sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
     const [bet] = await db
       .insert(sportsBetsTable)
       .values({
-        userId,
-        fixtureId,
-        sportKey,
-        leagueTitle,
-        homeTeam,
-        awayTeam,
+        userId: userId as number,
+        fixtureId: fixtureId as string,
+        sportKey: sportKey as string,
+        leagueTitle: leagueTitle as string,
+        homeTeam: homeTeam as string,
+        awayTeam: awayTeam as string,
         commenceTime: new Date(commenceTime),
-        marketKey,
-        selectedOutcome,
-        odds: parseFloat(odds.toString()),
-        betAmountUsd: parseFloat(betAmountUsd.toString()),
-        betAmountCrypto,
-        cryptoType,
-        cryptoPriceAtBet: cryptoPrice,
-        potentialPayoutUsd,
-        potentialPayoutCrypto,
+        marketKey: marketKey as string,
+        selectedOutcome: selectedOutcome as string,
+        odds: odds.toString(),
+        betAmountUsd: betAmountUsd.toString(),
+        betAmountCrypto: betAmountCrypto.toString(),
+        cryptoType: cryptoType as string,
+        cryptoPriceAtBet: cryptoPrice.toString(),
+        potentialPayoutUsd: potentialPayoutUsd.toString(),
+        potentialPayoutCrypto: potentialPayoutCrypto.toString(),
         status: "pending",
         bookmakerKey: "the-odds-api",
-        ipAddress: req.ip,
-        userAgent: req.get("user-agent"),
+        ipAddress: req.ip as string,
+        userAgent: req.get("user-agent") as string,
       })
       .returning();
 
     await db
       .update(usersTable)
-      .set({ casinoBalance: newBalance })
+      .set({ casinoBalance: newBalance.toString() })
       .where(eq(usersTable.id, userId));
 
     return res.json({
@@ -261,16 +261,16 @@ sportsbookRouter.post("/settle-bet", async (req: Request, res: Response) => {
       .update(sportsBetsTable)
       .set({
         status,
-        resultOutcome,
-        actualPayoutUsd,
-        actualPayoutCrypto,
+        resultOutcome: resultOutcome.toString(),
+        actualPayoutUsd: actualPayoutUsd.toString(),
+        actualPayoutCrypto: actualPayoutCrypto.toString(),
         settledAt: new Date(),
       })
       .where(eq(sportsBetsTable.id, betId));
 
     await db
       .update(usersTable)
-      .set({ casinoBalance: newBalance })
+      .set({ casinoBalance: newBalance.toString() })
       .where(eq(usersTable.id, bet.userId));
 
     return res.json({

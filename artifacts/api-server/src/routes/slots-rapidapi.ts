@@ -128,7 +128,7 @@ slotsRapidApiRouter.post("/sync-balance", async (req: Request, res: Response) =>
 
     await db
       .update(usersTable)
-      .set({ casinoBalance: newBalance })
+      .set({ casinoBalance: newBalance.toString() })
       .where(eq(usersTable.id, userId));
 
     return res.json({
