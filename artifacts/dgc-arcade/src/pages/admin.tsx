@@ -326,6 +326,7 @@ export default function AdminDashboard() {
 	    signupBonus: 0,
 	    plisioConnected: true,
 	    slotsEnabled: true,
+	    sportsbookEnabled: true,
 	    raceEnabled: true,
 	    leaderboardEnabled: true,
 	    gamesEnabled: true,
@@ -2737,6 +2738,7 @@ export default function AdminDashboard() {
                   {[
                     { id: "gamesEnabled", label: "Games Lobby", icon: "🎮", desc: "Toggle visibility of the main games collection" },
                     { id: "slotsEnabled", label: "Slots Section", icon: "🎰", desc: "Toggle all slot games and the slots landing page" },
+                    { id: "sportsbookEnabled", label: "Sportsbook", icon: "🏈", desc: "Toggle the sports betting section and live odds" },
                     { id: "raceEnabled", label: "Race Game", icon: "🏇", desc: "Toggle the horse racing game visibility" },
                     { id: "leaderboardEnabled", label: "Leaderboard", icon: "🏆", desc: "Toggle the global player leaderboard" },
                   ].map((feat) => (

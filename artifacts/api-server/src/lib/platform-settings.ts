@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS = {
   signupBonus: 100,
 
   slotsEnabled: false,
+  sportsbookEnabled: true,
   raceEnabled: false,
   leaderboardEnabled: false,
   gamesEnabled: false,

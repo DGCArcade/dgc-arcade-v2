@@ -205,6 +205,7 @@ gamesRouter.get("/settings", async (req, res) => {
     const settings = await getPlatformSettings();
     res.json({
       slotsEnabled: settings.slotsEnabled,
+      sportsbookEnabled: settings.sportsbookEnabled,
       raceEnabled: settings.raceEnabled,
       leaderboardEnabled: settings.leaderboardEnabled,
       gamesEnabled: settings.gamesEnabled,

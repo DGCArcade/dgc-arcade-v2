@@ -2294,7 +2294,7 @@ adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
     }
 
     // Boolean settings
-    const booleanKeys = ["slotsEnabled", "raceEnabled", "leaderboardEnabled", "gamesEnabled", "maintenanceMode", "custom404Enabled"];
+    const booleanKeys = ["slotsEnabled", "sportsbookEnabled", "raceEnabled", "leaderboardEnabled", "gamesEnabled", "maintenanceMode", "custom404Enabled"];
     for (const key of booleanKeys) {
       if (typeof body[key] === "boolean") {
         updates[key] = String(body[key]);

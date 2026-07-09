@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 export interface PublicSettings {
   slotsEnabled: boolean;
+  sportsbookEnabled: boolean;
   raceEnabled: boolean;
   leaderboardEnabled: boolean;
   gamesEnabled: boolean;
@@ -16,6 +17,7 @@ export interface PublicSettings {
 
 const DEFAULTS: PublicSettings = {
   slotsEnabled: false,
+  sportsbookEnabled: true,
   raceEnabled: true,
   leaderboardEnabled: true,
   gamesEnabled: true,

@@ -8,73 +8,137 @@ import { getCryptoPrice } from "../lib/price-service.js";
 export const sportsbookRouter = Router();
 
 /**
+ * ─────────────────────────────────────────────────────────────────────────────
  * The Odds API Configuration
+ *
+ * PRIMARY:  The Odds API direct (https://api.the-odds-api.com)
+ *   - Free tier: 500 requests/month — no credit card, no contact required
+ *   - Sign up free at https://the-odds-api.com  →  get THE_ODDS_API_KEY
+ *   - Set env var: THE_ODDS_API_KEY=your_key_here
+ *
+ * FALLBACK: RapidAPI proxy (https://the-odds-api.p.rapidapi.com)
+ *   - Only used if THE_ODDS_API_KEY is not set
+ *   - Set env vars: RAPIDAPI_KEY + RAPIDAPI_HOST=the-odds-api.p.rapidapi.com
+ *
+ * Recommendation: Use the direct API. It's free, open, and requires no
+ * third-party marketplace subscription or paid contact.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
+const THE_ODDS_API_KEY = process.env.THE_ODDS_API_KEY || "";
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || "";
 const RAPIDAPI_HOST = process.env.RAPIDAPI_HOST || "the-odds-api.p.rapidapi.com";
-const THE_ODDS_API_KEY = process.env.THE_ODDS_API_KEY || "";
-// Ensure we use the correct base URL for The Odds API via RapidAPI
-const ODDS_API_BASE = RAPIDAPI_HOST.includes("rapidapi.com") 
-  ? `https://${RAPIDAPI_HOST}` 
-  : `https://the-odds-api.p.rapidapi.com`;
+
+// Prefer direct API; fall back to RapidAPI proxy only if direct key is absent
+const USE_DIRECT_API = !!THE_ODDS_API_KEY;
+const ODDS_API_BASE = USE_DIRECT_API
+  ? "https://api.the-odds-api.com"
+  : `https://${RAPIDAPI_HOST}`;
+
+function buildOddsHeaders(): Record<string, string> {
+  if (USE_DIRECT_API) return {}; // key goes in query param for direct API
+  return { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": RAPIDAPI_HOST };
+}
+
+function buildOddsUrl(path: string, extraParams: Record<string, string> = {}): string {
+  const url = new URL(`${ODDS_API_BASE}${path}`);
+  if (USE_DIRECT_API && THE_ODDS_API_KEY) url.searchParams.set("apiKey", THE_ODDS_API_KEY);
+  for (const [k, v] of Object.entries(extraParams)) url.searchParams.set(k, v);
+  return url.toString();
+}
 
 /**
  * GET /api/sportsbook/sports
+ * Returns all available sports from The Odds API.
  */
 sportsbookRouter.get("/sports", async (req: Request, res: Response) => {
   try {
-    // Use THE_ODDS_API_KEY if available, otherwise fallback to RapidAPI headers
-    const headers: Record<string, string> = THE_ODDS_API_KEY 
-      ? { "x-api-key": THE_ODDS_API_KEY }
-      : { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": RAPIDAPI_HOST };
+    if (!THE_ODDS_API_KEY && !RAPIDAPI_KEY) {
+      return res.status(503).json({
+        error: "Sportsbook API key not configured",
+        setup: "Set THE_ODDS_API_KEY in your Render environment variables. Free key at https://the-odds-api.com",
+      });
+    }
 
-    const response = await fetch(`${ODDS_API_BASE}/v4/sports`, {
-      method: "GET",
-      headers,
-    });
+    const url = buildOddsUrl("/v4/sports", { all: "false" });
+    const response = await fetch(url, { method: "GET", headers: buildOddsHeaders() });
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: "Failed to fetch sports" });
+      const body = await response.text();
+      console.error(`[Sportsbook] /sports failed ${response.status}: ${body}`);
+      return res.status(response.status).json({ error: "Failed to fetch sports from The Odds API", details: body });
     }
 
     const sports = await response.json();
     return res.json(sports);
   } catch (error) {
-    console.error("Error fetching sports:", error);
+    console.error("[Sportsbook] Error fetching sports:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
 /**
+ * GET /api/sportsbook/quota
+ * Returns remaining API quota (for monitoring in owner panel).
+ */
+sportsbookRouter.get("/quota", async (_req: Request, res: Response) => {
+  try {
+    if (!THE_ODDS_API_KEY) {
+      return res.json({ configured: false, mode: "rapidapi", message: "Using RapidAPI proxy — quota not directly visible" });
+    }
+    const url = buildOddsUrl("/v4/sports", { all: "false" });
+    const response = await fetch(url, { headers: buildOddsHeaders() });
+    return res.json({
+      configured: true,
+      mode: "direct",
+      requestsUsed: response.headers.get("x-requests-used"),
+      requestsRemaining: response.headers.get("x-requests-remaining"),
+      requestsLast: response.headers.get("x-requests-last"),
+    });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to check quota" });
+  }
+});
+
+/**
  * GET /api/sportsbook/odds/:sport
+ * Returns live odds for a given sport key. Always uses American odds format.
  */
 sportsbookRouter.get("/odds/:sport", async (req: Request, res: Response) => {
   try {
     const { sport } = req.params;
-    const { regions = "us", oddsFormat = "decimal" } = req.query;
+    const regions = (req.query.regions as string) || "us";
+    const markets = (req.query.markets as string) || "h2h";
+    // Always American odds — matches the UI display logic
+    const oddsFormat = "american";
 
-    const headers: Record<string, string> = THE_ODDS_API_KEY 
-      ? { "x-api-key": THE_ODDS_API_KEY }
-      : { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": RAPIDAPI_HOST };
+    if (!THE_ODDS_API_KEY && !RAPIDAPI_KEY) {
+      return res.status(503).json({
+        error: "Sportsbook API key not configured",
+        setup: "Set THE_ODDS_API_KEY in your Render environment variables. Free key at https://the-odds-api.com",
+      });
+    }
 
-    // Default to American odds format as requested
-    const format = oddsFormat === "decimal" ? "american" : oddsFormat;
-    const response = await fetch(
-      `${ODDS_API_BASE}/v4/sports/${sport}/odds?regions=${regions as string}&oddsFormat=${format as string}`,
-      {
-        method: "GET",
-        headers,
-      }
-    );
+    const url = buildOddsUrl(`/v4/sports/${sport}/odds`, { regions, oddsFormat, markets });
+    const response = await fetch(url, { method: "GET", headers: buildOddsHeaders() });
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: "Failed to fetch odds" });
+      const body = await response.text();
+      console.error(`[Sportsbook] /odds/${sport} failed ${response.status}: ${body}`);
+      return res.status(response.status).json({ error: "Failed to fetch odds", details: body });
     }
 
     const odds = await response.json();
+
+    // Log remaining quota for monitoring (direct API only)
+    if (USE_DIRECT_API) {
+      const remaining = response.headers.get("x-requests-remaining");
+      const used = response.headers.get("x-requests-used");
+      if (remaining) console.log(`[Sportsbook] Odds API quota — used: ${used}, remaining: ${remaining}`);
+    }
+
     return res.json(odds);
   } catch (error) {
-    console.error("Error fetching odds:", error);
+    console.error("[Sportsbook] Error fetching odds:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -118,11 +182,10 @@ sportsbookRouter.post("/bet", async (req: Request, res: Response) => {
       const { newBalance, usedCurrency } = await deductBalance(
         userId, 
         parseFloat(betAmountUsd), 
-        cryptoType as string,
-        tx
+        cryptoType as string
       );
 
-      const cryptoPrice = await getCryptoPrice(usedCurrency);
+      const cryptoPrice = await getCryptoPrice(usedCurrency.split("_")[0]);
       const betAmountCrypto = parseFloat(betAmountUsd) / cryptoPrice;
       // Calculate potential payout based on American odds
       const americanOdds = parseFloat(odds.toString());
@@ -225,7 +288,7 @@ sportsbookRouter.post("/settle-bet", async (req: Request, res: Response) => {
       .where(eq(usersTable.id, adminId))
       .limit(1);
 
-    if (!admin || admin.role !== "admin") {
+    if (!admin || (admin.role !== "admin" && admin.role !== "owner")) {
       return res.status(403).json({ error: "Admin access required" });
     }
 

@@ -113,7 +113,7 @@ export function Sportsbook() {
     queryFn: async () => {
       if (!selectedSport) return [];
       const res = await fetch(
-        `/api/sportsbook/odds/${selectedSport}?regions=us&oddsFormat=decimal`,
+        `/api/sportsbook/odds/${selectedSport}?regions=us&oddsFormat=american`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("dgc_token")}`,
