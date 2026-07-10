@@ -174,8 +174,13 @@ export function Navbar() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="logo-glow-shift w-9 h-9 rounded-lg flex items-center justify-center font-display font-black text-primary-foreground text-xl group-hover:shadow-[0_0_28px_var(--theme-glow-strong)] transition-shadow duration-300">D</div>
-              <span className="font-display font-bold text-xl uppercase tracking-widest hidden sm:inline-block">DGC <span className="text-glow-shift-slow">Arcade</span></span>
+              <div className="d-sports-logo w-10 h-10 rounded-xl flex items-center justify-center font-display font-black text-primary-foreground text-lg group-hover:scale-110 transition-transform duration-300 relative">
+                <span className="relative z-10">D</span>
+              </div>
+              <div className="hidden sm:flex flex-col leading-tight">
+                <span className="font-display font-black text-sm uppercase tracking-[0.3em] text-primary">D Sports</span>
+                <span className="font-mono text-[10px] text-muted-foreground tracking-widest">ARCADE</span>
+              </div>
             </Link>
             <div className="hidden md:flex items-center gap-6"><NavLinks /></div>
           </div>

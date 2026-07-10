@@ -641,9 +641,9 @@ export function Sportsbook() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Sidebar: Sports */}
           {!showTopSports && !showLiveOnly && (
-            <aside className="lg:col-span-2 space-y-1">
-              <div className="text-xs font-bold text-gray-500 uppercase tracking-wider px-3 mb-2">
-                Popular Sports
+            <aside className="lg:col-span-2 space-y-1 glass-surface rounded-2xl p-3">
+              <div className="text-xs font-bold text-primary uppercase tracking-wider px-3 mb-2">
+                🏅 Popular Sports
               </div>
               {SPORT_CATEGORIES.map((cat) => {
                 const count = fixtures.filter((f) => cat.keys.includes(f.sport_key)).length;
@@ -805,7 +805,7 @@ export function Sportsbook() {
                   return (
                     <div
                       key={game.id}
-                      className="bg-black/40 border border-white/5 hover:border-white/10 rounded-xl transition-all p-4"
+                      className="glass-card rounded-xl transition-all p-4"
                     >
                       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
                         {/* Teams & Scores */}
@@ -955,7 +955,7 @@ export function Sportsbook() {
 
           {/* Right Sidebar: Bet Slip */}
           <aside className="lg:col-span-3">
-            <div className="sticky top-6 bg-black/40 border border-white/5 rounded-xl p-6 space-y-4">
+            <div className="sticky top-6 glass-surface-deep rounded-xl p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-black uppercase tracking-widest text-sm">Bet Slip</h3>
                 <div className="text-right">
