@@ -45,7 +45,7 @@ async function seedPremiumSlotsIfNeeded(): Promise<void> {
 
     // Import premium slots seed data
     // @ts-ignore
-    const { ALL_PREMIUM_SLOTS } = await import("../../../lib/db/src/seeds/premium-slots");
+    const { ALL_PREMIUM_SLOTS } = await import("../../../../lib/db/src/seeds/premium-slots");
 
     // Insert in batches to avoid overwhelming the database
     const batchSize = 50;

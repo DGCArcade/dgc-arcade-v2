@@ -13,19 +13,19 @@ import {
 } from "./plisio-amounts.js";
 import { getCryptoPrice } from "./price-service.js";
 import { diceRoundManager } from "./dice-round-manager.js";
+import { isSportsGameOddsConfigured, fetchLeagueEvents, SgoEvent } from "./sportsgameodds.js";
 
 const WAGER_MULTIPLIER = 1.0;
 
 /**
  * Sports Bet Auto-Settlement
- * Queries The Odds API scores endpoint for all pending bets whose match has started.
+ * Queries SportsGameOdds for all pending bets whose match has started.
  * Settles won/lost bets and credits winnings to the user's crypto wallet.
  * Runs every 5 minutes via startBackgroundTasks.
  */
 export async function settlePendingSportsBets() {
-  const THE_ODDS_API_KEY = process.env.THE_ODDS_API_KEY || "";
-  if (!THE_ODDS_API_KEY) {
-    logger.debug("Sports settlement skipped: THE_ODDS_API_KEY not set");
+  if (!isSportsGameOddsConfigured()) {
+    logger.debug("Sports settlement skipped: SPORTSGAMEODDS_API_KEY not set");
     return;
   }
 
@@ -46,19 +46,13 @@ export async function settlePendingSportsBets() {
 
     logger.info({ count: pendingBets.length }, "[Sports Settlement] Checking pending bets");
 
-    // Group bets by sportKey to minimise API calls
+    // Group bets by sportKey (leagueID) to minimise API calls
     const sportKeys = [...new Set(pendingBets.map((b) => b.sportKey))];
 
-    const scoresCache = new Map<string, any[]>();
+    const eventsCache = new Map<string, SgoEvent[]>();
     for (const sportKey of sportKeys) {
       try {
-        const url = new URL(`https://api.the-odds-api.com/v4/sports/${sportKey}/scores`);
-        url.searchParams.set("apiKey", THE_ODDS_API_KEY);
-        url.searchParams.set("daysFrom", "3");
-        const resp = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
-        if (resp.ok) {
-          scoresCache.set(sportKey, await resp.json() as any[]);
-        }
+        eventsCache.set(sportKey, await fetchLeagueEvents(sportKey, { finalized: "true" }));
       } catch {
         // Skip unavailable sport
       }
@@ -66,20 +60,24 @@ export async function settlePendingSportsBets() {
 
     for (const bet of pendingBets) {
       try {
-        const scores = scoresCache.get(bet.sportKey) || [];
-        const matchScore = scores.find((s: any) => s.id === bet.fixtureId);
-        if (!matchScore || !matchScore.completed) continue;
+        const events = eventsCache.get(bet.sportKey) || [];
+        const matchEvent = events.find((e) => e.eventID === bet.fixtureId);
+        if (!matchEvent || !(matchEvent.status?.finalized || matchEvent.status?.ended)) continue;
 
-        const homeScore = matchScore.scores?.find((s: any) => s.name === matchScore.home_team)?.score;
-        const awayScore = matchScore.scores?.find((s: any) => s.name === matchScore.away_team)?.score;
+        const homeTeamName = matchEvent.teams?.home?.names?.long || matchEvent.teams?.home?.teamID;
+        const awayTeamName = matchEvent.teams?.away?.names?.long || matchEvent.teams?.away?.teamID;
+
+        const oddsEntries = Object.values(matchEvent.odds ?? {});
+        const homeScore = oddsEntries.find((o) => o.oddID?.includes("-home-game-ml-home"))?.score;
+        const awayScore = oddsEntries.find((o) => o.oddID?.includes("-away-game-ml-away"))?.score;
 
         let won = false;
         if (homeScore !== undefined && awayScore !== undefined) {
           const homeWon = parseFloat(homeScore) > parseFloat(awayScore);
           const awayWon = parseFloat(awayScore) > parseFloat(homeScore);
           const isDraw = parseFloat(homeScore) === parseFloat(awayScore);
-          if (bet.selectedOutcome === matchScore.home_team) won = homeWon;
-          else if (bet.selectedOutcome === matchScore.away_team) won = awayWon;
+          if (bet.selectedOutcome === homeTeamName) won = homeWon;
+          else if (bet.selectedOutcome === awayTeamName) won = awayWon;
           else if (bet.selectedOutcome === "Draw") won = isDraw;
         }
 
