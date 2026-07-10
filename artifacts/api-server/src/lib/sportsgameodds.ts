@@ -4,6 +4,7 @@ import { logger } from "./logger.js";
  * ─────────────────────────────────────────────────────────────────────────────
  * SportsGameOdds API Client (https://sportsgameodds.com)
  *
+ * Pro Plan Integration: 53 leagues, 82 bookmakers, all market types
  * Replaces the previous The Odds API integration. Set SPORTSGAMEODDS_API_KEY
  * in your environment to enable this.
  * ─────────────────────────────────────────────────────────────────────────────
@@ -15,7 +16,10 @@ export function isSportsGameOddsConfigured(): boolean {
   return Boolean(SPORTSGAMEODDS_API_KEY);
 }
 
-/** Maps the frontend's display categories to SportsGameOdds leagueIDs. */
+/**
+ * Maps the frontend's display categories to SportsGameOdds leagueIDs.
+ * Pro Plan: 53 leagues across 25+ sports
+ */
 export const CATEGORY_LEAGUES: Record<string, string[]> = {
   Football: ["NFL", "NCAAF"],
   Soccer: [
@@ -26,14 +30,27 @@ export const CATEGORY_LEAGUES: Record<string, string[]> = {
     "BUNDESLIGA",
     "SERIE_A",
     "LIGUE_1",
+    "EREDIVISIE",
+    "PRIMEIRA_LIGA",
+    "SCOTTISH_PREMIERSHIP",
+    "SUPER_LIGA",
+    "SUPER_LIG",
+    "SERIE_B",
+    "CHAMPIONSHIP",
+    "LEAGUE_ONE",
+    "LEAGUE_TWO",
   ],
-  Basketball: ["NBA", "NCAAB", "WNBA"],
-  Baseball: ["MLB"],
-  Hockey: ["NHL"],
-  Tennis: ["ATP", "WTA"],
-  MMA: ["MMA"],
+  Basketball: ["NBA", "NCAAB", "WNBA", "EUROLEAGUE"],
+  Baseball: ["MLB", "NPB", "KBO"],
+  Hockey: ["NHL", "SHL"],
+  Tennis: ["ATP", "WTA", "GRAND_SLAMS"],
+  MMA: ["MMA", "UFC"],
   Boxing: ["BOXING"],
-  Golf: ["PGA"],
+  Golf: ["PGA", "EUROPEAN_TOUR", "LPGA"],
+  Cricket: ["IPL", "BIG_BASH", "TEST", "ODI", "T20I"],
+  Rugby: ["PREMIERSHIP", "TOP_14", "SUPER_RUGBY"],
+  Esports: ["VALORANT", "CS2", "DOTA2", "LOL"],
+  Other: ["AUSSIE_RULES", "HANDBALL", "VOLLEYBALL"],
 };
 
 /** Flat list of every leagueID this app ever queries. */
@@ -55,6 +72,19 @@ export interface SgoEvent {
     ended?: boolean;
     finalized?: boolean;
   };
+  results?: {
+    game?: { home?: { points?: string | number }; away?: { points?: string | number } };
+    reg?: { home?: { points?: string | number }; away?: { points?: string | number } };
+    ot?: { home?: { points?: string | number }; away?: { points?: string | number } };
+    so?: { home?: { points?: string | number }; away?: { points?: string | number } };
+    "1h"?: { home?: { points?: string | number }; away?: { points?: string | number } };
+    "2h"?: { home?: { points?: string | number }; away?: { points?: string | number } };
+    "1q"?: { home?: { points?: string | number }; away?: { points?: string | number } };
+    "2q"?: { home?: { points?: string | number }; away?: { points?: string | number } };
+    "3q"?: { home?: { points?: string | number }; away?: { points?: string | number } };
+    "4q"?: { home?: { points?: string | number }; away?: { points?: string | number } };
+    [key: string]: any;
+  };
   odds?: Record<
     string,
     {
@@ -69,6 +99,13 @@ export interface SgoEvent {
           spread?: string;
           overUnder?: string;
           deeplink?: string;
+          altLines?: Array<{
+            odds?: string;
+            available?: boolean;
+            spread?: string;
+            overUnder?: string;
+            lastUpdatedAt?: string;
+          }>;
         }
       >;
     }
@@ -101,6 +138,8 @@ export async function fetchLeagueEvents(
     const url = new URL(`${SPORTSGAMEODDS_BASE}/events`);
     url.searchParams.set("leagueID", leagueID);
     url.searchParams.set("limit", "100");
+    // Pro plan: include alt lines and all market data
+    url.searchParams.set("includeAltLines", "true");
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
     if (cursor) url.searchParams.set("cursor", cursor);
 
@@ -154,19 +193,69 @@ const MARKET_KEY_BY_BET_TYPE: Record<string, string> = {
   ml3way: "h2h",
   sp: "spreads",
   ou: "totals",
+  prop: "props",
 };
+
+/**
+ * Extract live score from event results object
+ */
+function extractLiveScore(event: SgoEvent): { homeScore?: number; awayScore?: number; period?: string } {
+  if (!event.results) return {};
+
+  // Try to get the most recent score available
+  const gameScore = event.results.game;
+  if (gameScore?.home?.points !== undefined && gameScore?.away?.points !== undefined) {
+    return {
+      homeScore: Number(gameScore.home.points),
+      awayScore: Number(gameScore.away.points),
+      period: "game",
+    };
+  }
+
+  // Try quarter/half scores
+  for (const period of ["4q", "3q", "2q", "1q", "2h", "1h"]) {
+    const periodScore = (event.results as any)[period];
+    if (periodScore?.home?.points !== undefined && periodScore?.away?.points !== undefined) {
+      return {
+        homeScore: Number(periodScore.home.points),
+        awayScore: Number(periodScore.away.points),
+        period,
+      };
+    }
+  }
+
+  return {};
+}
 
 /**
  * Normalizes a SportsGameOdds event into the same shape the frontend already
  * expects (the-odds-api "fixture" shape) so existing UI code keeps working.
+ * Enhanced with live scores, alt lines, and all market types.
  */
 export function mapEventToFixture(event: SgoEvent, sportKey: string) {
   const homeTeam = teamDisplayName(event.teams?.home);
   const awayTeam = teamDisplayName(event.teams?.away);
+  const liveScore = extractLiveScore(event);
 
   const bookmakerMap: Record<
     string,
-    { key: string; title: string; markets: Record<string, { key: string; outcomes: { name: string; price: number; point?: number }[] }> }
+    {
+      key: string;
+      title: string;
+      markets: Record<
+        string,
+        {
+          key: string;
+          outcomes: Array<{
+            name: string;
+            price: number;
+            point?: number;
+            altLines?: Array<{ odds: number; spread?: number; overUnder?: number }>;
+          }>;
+        }
+      >;
+      deeplinks?: Record<string, string>;
+    }
   > = {};
 
   for (const [oddID, oddObj] of Object.entries(event.odds ?? {})) {
@@ -179,7 +268,7 @@ export function mapEventToFixture(event: SgoEvent, sportKey: string) {
     for (const [bookmakerID, bm] of Object.entries(oddObj.byBookmaker ?? {})) {
       if (!bm || bm.available === false || bm.odds === undefined) continue;
 
-      bookmakerMap[bookmakerID] ??= { key: bookmakerID, title: bookmakerID, markets: {} };
+      bookmakerMap[bookmakerID] ??= { key: bookmakerID, title: bookmakerID, markets: {}, deeplinks: {} };
       bookmakerMap[bookmakerID].markets[marketKey] ??= { key: marketKey, outcomes: [] };
 
       const outcomeName =
@@ -205,11 +294,25 @@ export function mapEventToFixture(event: SgoEvent, sportKey: string) {
           ? Number(bm.overUnder)
           : undefined;
 
+      // Extract alt lines if available
+      const altLines =
+        bm.altLines?.map((alt) => ({
+          odds: Number(alt.odds ?? 0),
+          spread: alt.spread ? Number(alt.spread) : undefined,
+          overUnder: alt.overUnder ? Number(alt.overUnder) : undefined,
+        })) ?? [];
+
       bookmakerMap[bookmakerID].markets[marketKey].outcomes.push({
         name: outcomeName,
         price,
         ...(point !== undefined && !Number.isNaN(point) ? { point } : {}),
+        ...(altLines.length > 0 ? { altLines } : {}),
       });
+
+      // Store deeplink for bookmaker
+      if (bm.deeplink) {
+        bookmakerMap[bookmakerID].deeplinks![oddID] = bm.deeplink;
+      }
     }
   }
 
@@ -221,10 +324,12 @@ export function mapEventToFixture(event: SgoEvent, sportKey: string) {
     completed: Boolean(event.status?.ended),
     home_team: homeTeam,
     away_team: awayTeam,
+    liveScore: liveScore.homeScore !== undefined ? liveScore : undefined,
     bookmakers: Object.values(bookmakerMap).map((bm) => ({
       key: bm.key,
       title: bm.title,
       markets: Object.values(bm.markets),
+      deeplinks: bm.deeplinks,
     })),
   };
 }
