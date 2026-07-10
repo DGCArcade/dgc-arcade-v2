@@ -21,10 +21,11 @@ export function isSportsGameOddsConfigured(): boolean {
  * Pro Plan: 53 leagues across 25+ sports
  */
 export const CATEGORY_LEAGUES: Record<string, string[]> = {
-  Football: ["NFL", "NCAAF"],
+  Football: ["NFL", "NCAAF", "CFL", "XFL", "USFL"],
   Soccer: [
     "EPL",
     "UEFA_CHAMPIONS_LEAGUE",
+    "UEFA_EUROPA_LEAGUE",
     "MLS",
     "LA_LIGA",
     "BUNDESLIGA",
@@ -39,18 +40,21 @@ export const CATEGORY_LEAGUES: Record<string, string[]> = {
     "CHAMPIONSHIP",
     "LEAGUE_ONE",
     "LEAGUE_TWO",
+    "COPA_LIBERTADORES",
+    "BRAZIL_SERIE_A",
+    "MEXICO_LIGA_MX",
   ],
-  Basketball: ["NBA", "NCAAB", "WNBA", "EUROLEAGUE"],
-  Baseball: ["MLB", "NPB", "KBO"],
-  Hockey: ["NHL", "SHL"],
-  Tennis: ["ATP", "WTA", "GRAND_SLAMS"],
-  MMA: ["MMA", "UFC"],
+  Basketball: ["NBA", "NCAAB", "WNBA", "EUROLEAGUE", "LIGA_ACB", "BSL", "NBL"],
+  Baseball: ["MLB", "NPB", "KBO", "LMB"],
+  Hockey: ["NHL", "SHL", "KHL", "LIIGA", "DEL"],
+  Tennis: ["ATP", "WTA", "GRAND_SLAMS", "ITF_MEN", "ITF_WOMEN"],
+  MMA: ["MMA", "UFC", "BELLATOR", "PFL"],
   Boxing: ["BOXING"],
-  Golf: ["PGA", "EUROPEAN_TOUR", "LPGA"],
-  Cricket: ["IPL", "BIG_BASH", "TEST", "ODI", "T20I"],
-  Rugby: ["PREMIERSHIP", "TOP_14", "SUPER_RUGBY"],
-  Esports: ["VALORANT", "CS2", "DOTA2", "LOL"],
-  Other: ["AUSSIE_RULES", "HANDBALL", "VOLLEYBALL"],
+  Golf: ["PGA", "EUROPEAN_TOUR", "LPGA", "LIV"],
+  Cricket: ["IPL", "BIG_BASH", "TEST", "ODI", "T20I", "THE_HUNDRED"],
+  Rugby: ["PREMIERSHIP", "TOP_14", "SUPER_RUGBY", "SIX_NATIONS", "RUGBY_CHAMPIONSHIP"],
+  Esports: ["VALORANT", "CS2", "DOTA2", "LOL", "OVERWATCH", "RAINBOW_SIX"],
+  Other: ["AUSSIE_RULES", "HANDBALL", "VOLLEYBALL", "DARTS", "SNOOKER", "TABLE_TENNIS"],
 };
 
 /** Flat list of every leagueID this app ever queries. */
@@ -316,16 +320,19 @@ export function mapEventToFixture(event: SgoEvent, sportKey: string) {
     }
   }
 
+  // Ensure bookmakers are sorted by title for consistent UI
+  const bookmakers = Object.values(bookmakerMap).sort((a, b) => a.title.localeCompare(b.title));
+
   return {
     id: event.eventID,
     sport_key: sportKey,
-    sport_title: event.leagueID ?? sportKey,
-    commence_time: event.status?.startsAt ?? new Date().toISOString(),
+    sport_title: event.leagueID || sportKey,
+    commence_time: event.status?.startsAt || new Date().toISOString(),
     completed: Boolean(event.status?.ended),
     home_team: homeTeam,
     away_team: awayTeam,
     liveScore: liveScore.homeScore !== undefined ? liveScore : undefined,
-    bookmakers: Object.values(bookmakerMap).map((bm) => ({
+    bookmakers: bookmakers.map((bm) => ({
       key: bm.key,
       title: bm.title,
       markets: Object.values(bm.markets),

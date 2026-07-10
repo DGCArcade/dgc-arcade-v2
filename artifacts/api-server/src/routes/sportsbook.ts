@@ -33,10 +33,11 @@ export const sportsbookRouter = Router();
  */
 function americanOddsToMultiplier(americanOdds: number): number {
   if (americanOdds > 0) {
-    return americanOdds / 100 + 1;
-  } else {
-    return 100 / Math.abs(americanOdds) + 1;
+    return Number((americanOdds / 100 + 1).toFixed(4));
+  } else if (americanOdds < 0) {
+    return Number((100 / Math.abs(americanOdds) + 1).toFixed(4));
   }
+  return 1.0; // Push/Void
 }
 
 /**
@@ -278,6 +279,7 @@ sportsbookRouter.post("/bet", requireAuth, async (req: Request, res: Response) =
       odds,
       betAmountUsd,
       cryptoType,
+      bookmakerKey,
     } = req.body;
 
     if (!fixtureId || !sportKey || !marketKey || !selectedOutcome || !odds || !betAmountUsd || !cryptoType) {
@@ -292,7 +294,8 @@ sportsbookRouter.post("/bet", requireAuth, async (req: Request, res: Response) =
     // Correct American odds payout multiplier
     const americanOdds = parseFloat((odds as any).toString());
     const multiplier = americanOddsToMultiplier(americanOdds);
-    const potentialPayoutUsd = betAmountFloat * multiplier;
+    // Ensure potential payout is rounded to 2 decimal places for USD
+    const potentialPayoutUsd = Math.floor(betAmountFloat * multiplier * 100) / 100;
 
     const betResult = await db.transaction(async (tx) => {
       // Strict row lock on BOTH users and user_balances before any read/write
@@ -331,7 +334,7 @@ sportsbookRouter.post("/bet", requireAuth, async (req: Request, res: Response) =
           potentialPayoutUsd: potentialPayoutUsd.toString(),
           potentialPayoutCrypto: potentialPayoutCrypto.toFixed(12),
           status: "pending",
-          bookmakerKey: "sportsgameodds",
+          bookmakerKey: bookmakerKey || "sportsgameodds",
           ipAddress: Array.isArray(req.ip) ? req.ip[0] : (req.ip || "0.0.0.0"),
           userAgent: (req.get("user-agent") as string) || "unknown",
         })

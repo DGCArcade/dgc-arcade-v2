@@ -363,6 +363,20 @@ ensureCoreGamesSeeded()
   }
 })();
 
+// ── Sportsbook Parlay migration (idempotent) ──────────────────────────────────
+(async () => {
+  try {
+    await pool.query(`
+      ALTER TABLE sports_bets
+      ADD COLUMN IF NOT EXISTS is_parlay BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS parlay_id TEXT;
+    `);
+    logger.info("Sportsbook migration: parlay columns ensured");
+  } catch (err) {
+    logger.error({ err }, "Sportsbook migration: failed to add parlay columns");
+  }
+})();
+
 // ── Withdraw OTP columns (idempotent) ─────────────────────────────────────────
 (async () => {
   try {

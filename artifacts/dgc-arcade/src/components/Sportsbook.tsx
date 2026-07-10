@@ -125,10 +125,14 @@ function formatCommenceTime(isoString: string, includeDate = false): string {
 }
 
 function isGameLive(fixture: Fixture): boolean {
+  // If we have live scores, it's definitely live
+  if (fixture.liveScore) return true;
+  
   const now = new Date();
   const commenceTime = new Date(fixture.commence_time);
   const timeDiff = (now.getTime() - commenceTime.getTime()) / (1000 * 60);
-  return timeDiff >= 0 && timeDiff < 180 && !fixture.completed;
+  // A game is considered live if it started within the last 4 hours and isn't marked completed
+  return timeDiff >= 0 && timeDiff < 240 && !fixture.completed;
 }
 
 function isGameUpcoming(fixture: Fixture): boolean {
@@ -422,6 +426,7 @@ export function Sportsbook() {
           odds: selectedBet.odds,
           betAmountUsd: parseFloat(betAmount),
           cryptoType: selectedCrypto,
+          bookmakerKey: selectedBet.bookmaker,
         }),
       });
 
@@ -459,7 +464,7 @@ export function Sportsbook() {
 
   const potentialPayout =
     selectedBet && betAmount && parseFloat(betAmount) > 0
-      ? (parseFloat(betAmount) * americanOddsToMultiplier(parseFloat(String(selectedBet.odds)))).toFixed(2)
+      ? (Math.floor(parseFloat(betAmount) * americanOddsToMultiplier(parseFloat(String(selectedBet.odds))) * 100) / 100).toFixed(2)
       : "0.00";
 
   /* ── Render ── */
@@ -638,28 +643,37 @@ export function Sportsbook() {
               <div className="text-xs font-bold text-gray-500 uppercase tracking-wider px-3 mb-2">
                 Popular Sports
               </div>
-              {SPORT_CATEGORIES.map((cat) => (
-                <button
-                  key={cat.label}
-                  onClick={() => {
-                    setActiveCategory(cat.label);
-                    setSelectedSport(cat.keys[0]);
-                  }}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
-                    activeCategory === cat.label
-                      ? "bg-gradient-to-r from-primary/20 to-transparent border-l-4 border-primary text-white font-bold"
-                      : "text-gray-400 hover:bg-white/[0.02] hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-2 h-2 rounded-full bg-gray-600 group-hover:bg-primary transition-colors" />
-                    <span>{cat.icon} {cat.label}</span>
-                  </div>
-                  <span className="text-xs bg-white/5 text-gray-500 px-1.5 py-0.5 rounded group-hover:text-primary">
-                    {fixtures.filter((f) => cat.keys.includes(f.sport_key)).length}
-                  </span>
-                </button>
-              ))}
+              {SPORT_CATEGORIES.map((cat) => {
+                const count = fixtures.filter((f) => cat.keys.includes(f.sport_key)).length;
+                return (
+                  <button
+                    key={cat.label}
+                    onClick={() => {
+                      setActiveCategory(cat.label);
+                      setSelectedSport(cat.keys[0]);
+                      setShowTopSports(false);
+                      setShowLiveOnly(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
+                      activeCategory === cat.label && !showTopSports && !showLiveOnly
+                        ? "bg-gradient-to-r from-primary/20 to-transparent border-l-4 border-primary text-white font-bold"
+                        : "text-gray-400 hover:bg-white/[0.02] hover:text-white"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className={`w-2 h-2 rounded-full transition-colors ${
+                        activeCategory === cat.label && !showTopSports && !showLiveOnly ? "bg-primary" : "bg-gray-600 group-hover:bg-primary"
+                      }`} />
+                      <span>{cat.icon} {cat.label}</span>
+                    </div>
+                    {count > 0 && (
+                      <span className="text-[10px] font-black bg-primary/10 text-primary px-1.5 py-0.5 rounded-full border border-primary/20 group-hover:bg-primary group-hover:text-black transition-all">
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </aside>
           )}
 
@@ -686,38 +700,51 @@ export function Sportsbook() {
               <>
                 {/* Bookmaker Selector */}
                 {searchResults.length > 0 && (
-                  <div className="flex gap-2 flex-wrap mb-4">
-                    <button
-                      onClick={() => setSelectedBookmaker("best")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
-                        selectedBookmaker === "best"
-                          ? "bg-primary/40 border-primary/60 border text-primary"
-                          : "bg-white/5 border border-white/10 text-gray-400 hover:text-white"
-                      }`}
-                    >
-                      Best Odds
-                    </button>
-                    {Array.from(
-                      new Set(
-                        searchResults
-                          .flatMap((g) => g.bookmakers.map((b) => b.key))
-                          .filter(Boolean)
-                      )
-                    )
-                      .slice(0, 8)
-                      .map((bookmakerKey) => (
+                  <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center mb-6 p-4 bg-white/5 border border-white/10 rounded-2xl">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Odds Provider</span>
+                      <div className="flex gap-2">
                         <button
-                          key={bookmakerKey}
-                          onClick={() => setSelectedBookmaker(bookmakerKey)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
-                            selectedBookmaker === bookmakerKey
-                              ? "bg-primary/40 border-primary/60 border text-primary"
-                              : "bg-white/5 border border-white/10 text-gray-400 hover:text-white"
+                          onClick={() => setSelectedBookmaker("best")}
+                          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                            selectedBookmaker === "best"
+                              ? "bg-primary text-black shadow-[0_0_20px_rgba(255,215,0,0.3)]"
+                              : "bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10"
                           }`}
                         >
-                          {bookmakerKey.replace(/_/g, " ").slice(0, 12)}
+                          🔥 Best Odds
                         </button>
-                      ))}
+                      </div>
+                    </div>
+                    
+                    <div className="flex-1 w-full flex flex-col gap-1">
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Specific Bookmaker</span>
+                      <div className="relative">
+                        <select
+                          value={selectedBookmaker}
+                          onChange={(e) => setSelectedBookmaker(e.target.value)}
+                          className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider text-white focus:outline-none focus:border-primary/60 appearance-none cursor-pointer hover:bg-black/60 transition-all"
+                        >
+                          <option value="best">Select a bookmaker (82+ available)</option>
+                          {Array.from(
+                            new Set(
+                              fixtures
+                                .flatMap((g) => g.bookmakers.map((b) => b.key))
+                                .filter(Boolean)
+                            )
+                          )
+                            .sort()
+                            .map((bookmakerKey) => (
+                              <option key={bookmakerKey} value={bookmakerKey}>
+                                🏦 {bookmakerKey.replace(/_/g, " ")}
+                              </option>
+                            ))}
+                        </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+                          <Search className="w-3 h-3" />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
                 <div className="space-y-3">
@@ -743,9 +770,33 @@ export function Sportsbook() {
                     activeBookmakers = game.bookmakers.filter((b) => b.key === selectedBookmaker);
                   }
 
-                  const h2hMarket = activeBookmakers[0]?.markets.find((m) => m.key === "h2h");
-                  const spreadsMarket = activeBookmakers[0]?.markets.find((m) => m.key === "spreads");
-                  const totalsMarket = activeBookmakers[0]?.markets.find((m) => m.key === "totals");
+                  // If "Best Odds" is selected, we want to show the best odds for each market
+                  // Otherwise, we show the odds for the selected bookmaker
+                  const getMarket = (key: string) => {
+                    if (selectedBookmaker === "best") {
+                      const best = getBestOdds(key, ""); // This is a bit simplified, we'll refine below
+                      // Find a bookmaker that has this market
+                      for (const bm of game.bookmakers) {
+                        const m = bm.markets.find((mk) => mk.key === key);
+                        if (m) {
+                          // Create a synthetic market with best odds for each outcome
+                          return {
+                            key,
+                            outcomes: m.outcomes.map((o) => {
+                              const bestO = getBestOdds(key, o.name);
+                              return { ...o, price: bestO.odds || o.price, bookmaker: bestO.bookmaker };
+                            })
+                          };
+                        }
+                      }
+                      return null;
+                    }
+                    return activeBookmakers[0]?.markets.find((m) => m.key === key);
+                  };
+
+                  const h2hMarket = getMarket("h2h");
+                  const spreadsMarket = getMarket("spreads");
+                  const totalsMarket = getMarket("totals");
 
                   if (!h2hMarket) return null;
 
@@ -764,7 +815,7 @@ export function Sportsbook() {
                               </span>
                             )}
                             <span className="text-xs font-mono text-gray-400">
-                              {game.liveScore?.period || formatCommenceTime(game.commence_time, showTopSports)}
+                              {game.liveScore?.period || formatCommenceTime(game.commence_time, true)}
                             </span>
                           </div>
 
@@ -795,9 +846,11 @@ export function Sportsbook() {
                                   market: spreadsMarket,
                                   outcome,
                                   odds: outcome.price,
+                                  bookmaker: (outcome as any).bookmaker || activeBookmakers[0]?.key,
                                 })
                               }
                               className={`p-2 rounded-lg text-center transition-all ${
+                                selectedBet?.fixture.id === game.id &&
                                 selectedBet?.outcome.name === outcome.name &&
                                 selectedBet?.market.key === spreadsMarket.key
                                   ? "bg-primary/40 border-primary/60 border-2 shadow-[0_0_15px_rgba(255,215,0,0.3)]"
@@ -825,9 +878,11 @@ export function Sportsbook() {
                                   market: totalsMarket,
                                   outcome,
                                   odds: outcome.price,
+                                  bookmaker: (outcome as any).bookmaker || activeBookmakers[0]?.key,
                                 })
                               }
                               className={`p-2 rounded-lg text-center transition-all ${
+                                selectedBet?.fixture.id === game.id &&
                                 selectedBet?.outcome.name === outcome.name &&
                                 selectedBet?.market.key === totalsMarket.key
                                   ? "bg-primary/40 border-primary/60 border-2 shadow-[0_0_15px_rgba(255,215,0,0.3)]"
@@ -855,9 +910,11 @@ export function Sportsbook() {
                                   market: h2hMarket,
                                   outcome,
                                   odds: outcome.price,
+                                  bookmaker: (outcome as any).bookmaker || activeBookmakers[0]?.key,
                                 })
                               }
                               className={`p-2 rounded-lg text-center transition-all ${
+                                selectedBet?.fixture.id === game.id &&
                                 selectedBet?.outcome.name === outcome.name &&
                                 selectedBet?.market.key === h2hMarket.key
                                   ? "bg-primary/40 border-primary/60 border-2 shadow-[0_0_15px_rgba(255,215,0,0.3)]"
@@ -924,6 +981,11 @@ export function Sportsbook() {
                       <p className="text-sm font-bold text-primary">
                         {selectedBet.outcome.name} @ {formatOdds(selectedBet.odds)}
                       </p>
+                      {selectedBet.bookmaker && (
+                        <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-tighter">
+                          Via {selectedBet.bookmaker.replace(/_/g, " ")}
+                        </p>
+                      )}
                     </div>
                   </div>
 

@@ -45,6 +45,8 @@ export const sportsBetsTable = pgTable("sports_bets", {
   
   // Metadata & Audit
   bookmakerKey: text("bookmaker_key"), // Which bookmaker's odds were used
+  isParlay: boolean("is_parlay").default(false), // If this is part of a parlay
+  parlayId: text("parlay_id"), // Grouping ID for parlay legs
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
   metadata: jsonb("metadata"), // Any additional data (e.g., bet builder, parlay info)
