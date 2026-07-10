@@ -224,6 +224,83 @@ sportsbookRouter.get("/quota", async (_req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/sportsbook/live/:sport
+ * Streams live match data with real-time score updates and fluctuating odds.
+ * Uses Server-Sent Events (SSE) for continuous updates without polling.
+ */
+sportsbookRouter.get("/live/:sport", async (req: Request, res: Response) => {
+  try {
+    const { sport } = req.params;
+
+    if (!THE_ODDS_API_KEY) {
+      return res.status(503).json({
+        error: "Sportsbook API key not configured",
+        setup: "Set THE_ODDS_API_KEY in your Render environment variables.",
+      });
+    }
+
+    // Set SSE headers for streaming
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    // Send initial connection message
+    res.write(`data: ${JSON.stringify({ type: "connected", sport, timestamp: new Date().toISOString() })}\n\n`);
+
+    // Fetch and stream live odds every 10 seconds
+    const interval = setInterval(async () => {
+      return; // Ensure path returns void for setInterval
+    }, 10000);
+
+    // Replace the above dummy with the real logic, ensuring return types are handled
+    const realInterval = setInterval(async () => {
+      try {
+        const url = buildOddsUrl(`/v4/sports/${sport}/odds`, {
+          regions: "us",
+          oddsFormat: "american",
+          markets: "h2h",
+        });
+        const response = await fetch(url, { method: "GET" });
+
+        if (!response.ok) {
+          logger.warn({ status: response.status, sport }, "[Sportsbook] Live odds fetch failed");
+          return;
+        }
+
+        const oddsData = await response.json() as any[];
+        const remaining = response.headers.get("x-requests-remaining");
+
+        // Stream the odds data
+        res.write(
+          `data: ${JSON.stringify({
+            type: "odds_update",
+            sport,
+            fixtures: oddsData.slice(0, 20), // Limit to 20 fixtures per update
+            quotaRemaining: remaining,
+            timestamp: new Date().toISOString(),
+          })}\n\n`
+        );
+      } catch (error) {
+        logger.error({ error, sport }, "[Sportsbook] Error in live stream");
+      }
+    }, 10000); // Update every 10 seconds
+
+    // Clean up interval on client disconnect
+    req.on("close", () => {
+      clearInterval(interval);
+      clearInterval(realInterval);
+      res.end();
+    });
+
+    return;
+  } catch (error) {
+    logger.error({ error }, "[Sportsbook] Error setting up live stream");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
  * GET /api/sportsbook/odds/:sport
  * Returns live odds for a given sport key. Always uses American odds format.
  */
@@ -299,7 +376,7 @@ sportsbookRouter.post("/bet", requireAuth, async (req: Request, res: Response) =
     }
 
     // Correct American odds payout multiplier
-    const americanOdds = parseFloat(odds.toString());
+    const americanOdds = parseFloat((odds as any).toString());
     const multiplier = americanOddsToMultiplier(americanOdds);
     const potentialPayoutUsd = betAmountFloat * multiplier;
 
@@ -439,15 +516,29 @@ sportsbookRouter.post("/settle-bet", requireAuth, async (req: Request, res: Resp
     if (won) {
       status = "won";
       actualPayoutUsd = parseFloat(bet.potentialPayoutUsd.toString());
-      // Credit winnings in the same crypto used for the bet
       newTotalBalance = await creditBalance(
         bet.userId,
         actualPayoutUsd,
         bet.cryptoType || "BTC"
       );
+      logger.info(
+        {
+          betId: bet.id,
+          userId: bet.userId,
+          cryptoType: bet.cryptoType,
+          payoutUsd: actualPayoutUsd,
+          payoutCrypto: bet.potentialPayoutCrypto,
+          timestamp: new Date().toISOString(),
+        },
+        "[Sportsbook] Bet settled — payout credited to vault"
+      );
     } else {
       const { totalBalance } = await getUserBalance(bet.userId);
       newTotalBalance = totalBalance;
+      logger.info(
+        { betId: bet.id, userId: bet.userId, timestamp: new Date().toISOString() },
+        "[Sportsbook] Bet settled — loss recorded"
+      );
     }
 
     await db

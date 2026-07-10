@@ -434,7 +434,7 @@ export function Sportsbook() {
       </div>
 
       {/* ── Header ── */}
-      <div className="relative w-full overflow-hidden group flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-4 md:p-6 lg:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300 hover:border-primary/20 hover:shadow-[0_20px_50px_rgba(255,215,0,0.2)]">
+      <div className="relative w-full overflow-hidden group flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 bg-black/30 backdrop-blur-xl border border-white/5 rounded-[2.5rem] p-4 md:p-6 lg:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.3)] transition-all duration-300 hover:border-amber-400/30 hover:shadow-[0_0_20px_rgba(255,215,0,0.1)]">
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2" />
 
         <div className="relative z-10 space-y-4">
@@ -474,17 +474,17 @@ export function Sportsbook() {
             {showHistory ? "Lobby" : "History"}
           </Button>
 
-          <div className="flex items-center gap-4 bg-black/40 backdrop-blur-xl border border-white/10 px-6 py-3 rounded-2xl h-14 shadow-inner">
+          <div className="flex items-center gap-4 bg-black/30 backdrop-blur-xl border border-white/5 px-6 py-3 rounded-2xl h-14 shadow-[0_0_20px_rgba(255,215,0,0.1)] hover:border-amber-400/20 transition-all">
             <div className="flex flex-col items-end leading-none">
-              <span className="text-[9px] font-black uppercase tracking-widest text-primary/60 mb-1">Vault Value</span>
+              <span className="text-[9px] font-black uppercase tracking-widest text-amber-400/60 mb-1">Vault Value</span>
               <span className="text-lg font-black font-mono text-white tracking-tighter">
-                <span className="text-primary/80 mr-1">$</span>
+                <span className="text-amber-400 mr-1">$</span>
                 {totalUsdBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <div className="w-px h-8 bg-white/10 mx-1" />
-            <div className="p-2 rounded-xl bg-primary/10">
-              <Coins className="w-5 h-5 text-primary" />
+            <div className="w-px h-8 bg-white/5 mx-1" />
+            <div className="p-2 rounded-xl bg-amber-400/10 shadow-[0_0_15px_rgba(255,215,0,0.1)]">
+              <Coins className="w-5 h-5 text-amber-400" />
             </div>
           </div>
         </div>
@@ -602,8 +602,8 @@ export function Sportsbook() {
                   }}
                   className={`px-5 py-3 rounded-2xl border font-black uppercase tracking-[0.15em] text-[11px] transition-all duration-300 whitespace-nowrap shrink-0 flex items-center gap-2 ${
                     activeCategory === cat.label
-                      ? "bg-primary text-black border-primary shadow-[0_0_25px_rgba(255,215,0,0.4)] scale-105"
-                      : "bg-white/5 text-muted-foreground border-white/10 hover:border-primary/40 hover:text-foreground hover:scale-[1.02]"
+                      ? "bg-amber-400 text-black border-amber-400 shadow-[0_0_25px_rgba(255,215,0,0.4)] scale-105"
+                      : "bg-black/30 backdrop-blur-xl text-muted-foreground border-white/5 hover:border-amber-400/30 hover:text-foreground hover:scale-[1.02] hover:shadow-[0_0_15px_rgba(255,215,0,0.1)]"
                   }`}
                 >
                   <span>{cat.icon}</span>
@@ -688,7 +688,7 @@ export function Sportsbook() {
                   return (
                     <div
                       key={fixture.id}
-                      className="group relative w-full overflow-hidden bg-gradient-to-br from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/10 rounded-[2.5rem] transition-all duration-300 hover:scale-[1.05] hover:-translate-y-1 hover:border-primary/40 hover:shadow-[0_20px_50px_rgba(255,215,0,0.15)] shadow-lg"
+                      className="group relative w-full overflow-hidden bg-black/30 backdrop-blur-xl border border-white/5 rounded-[2.5rem] transition-all duration-300 hover:scale-[1.05] hover:-translate-y-1 hover:border-amber-400/30 hover:shadow-[0_0_20px_rgba(255,215,0,0.1)] shadow-lg"
                     >
                       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
@@ -714,7 +714,7 @@ export function Sportsbook() {
                           <div className="w-full flex-1">
                             <div className="w-full grid grid-cols-[1fr,auto,1fr] items-center gap-2 md:gap-4 lg:gap-8">
                               <div className="space-y-2 text-center md:text-right">
-                                <div className="text-base md:text-2xl font-black uppercase tracking-tight text-white group-hover:text-primary transition-colors duration-300">
+                                <div className="text-base md:text-2xl font-black uppercase tracking-tight text-white group-hover:text-amber-400 transition-colors duration-300">
                                   {fixture.home_team}
                                 </div>
                                 <div className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-widest">Home Squad</div>
@@ -726,7 +726,7 @@ export function Sportsbook() {
                                 <div className="absolute inset-0 rounded-full bg-primary/5 blur-lg animate-pulse" />
                               </div>
                               <div className="space-y-2 text-center md:text-left">
-                                <div className="text-base md:text-2xl font-black uppercase tracking-tight text-white group-hover:text-primary transition-colors duration-300">
+                                <div className="text-base md:text-2xl font-black uppercase tracking-tight text-white group-hover:text-amber-400 transition-colors duration-300">
                                   {fixture.away_team}
                                 </div>
                                 <div className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-widest">Away Squad</div>
