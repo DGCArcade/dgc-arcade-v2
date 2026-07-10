@@ -60,8 +60,12 @@ const PLISIO_CURRENCY_MAP: Record<string, string> = {
   XMR:      "XMR",
   DASH:     "DASH",
   TON:      "TON",
+  USDT:     "USDT_TRX",  // Default to TRX chain
   USDT_TON: "USDT_TON",
   USDT_TRX: "USDT_TRX",
+  USDC:     "USDC",
+  MATIC:    "MATIC",
+  XRP:      "XRP",
 };
 
 // GET /api/transactions

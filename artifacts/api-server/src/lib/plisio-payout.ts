@@ -5,14 +5,15 @@ import { notifyWithdrawalStatus } from "../services/withdrawal-notify.js";
 const PLISIO_PAYOUT_MAP: Record<string, string> = {
   BTC: "BTC", ETH: "ETH", LTC: "LTC", DOGE: "DOGE", SOL: "SOL",
   BCH: "BCH", TRX: "TRX", TON: "TON", XMR: "XMR", DASH: "DASH",
-  USDT_TRX: "USDT_TRX", USDT_TON: "USDT_TON",
+  USDT: "USDT_TRX", USDT_TRX: "USDT_TRX", USDT_TON: "USDT_TON",
+  USDC: "USDC",
 };
 
 // Coinbase base symbols — their public /v2/prices/{BASE}-USD/spot endpoint
 const COINBASE_SYMBOL_MAP: Record<string, string> = {
   BTC:  "BTC",  ETH:  "ETH",  LTC: "LTC",  DOGE: "DOGE",
   SOL:  "SOL",  BCH:  "BCH",  TRX: "TRX",  XMR:  "XMR",
-  DASH: "DASH", TON:  "TON",
+  DASH: "DASH", TON:  "TON", USDC: "USDC",
 };
 
 // CoinGecko IDs (free API, used as secondary fallback)
@@ -20,7 +21,7 @@ const COINGECKO_ID_MAP: Record<string, string> = {
   BTC:  "bitcoin",       ETH:  "ethereum",        LTC:  "litecoin",
   DOGE: "dogecoin",      SOL:  "solana",           BCH:  "bitcoin-cash",
   TRX:  "tron",          XMR:  "monero",           DASH: "dash",
-  TON:  "the-open-network",
+  TON:  "the-open-network", USDC: "usd-coin",
 };
 
 // Stablecoins — always worth exactly $1 USD, no API call needed
