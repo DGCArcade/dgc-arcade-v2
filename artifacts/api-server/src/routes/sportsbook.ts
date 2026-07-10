@@ -90,15 +90,15 @@ sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
     // Fetch and cache the feed with 30-second TTL and 60-second stale window
     const feedData = await cached(
       "sportsbook:global-feed",
-      30_000, // 30 seconds
+      120_000, // 2 minutes TTL
       async () => {
         const categories = Object.keys(CATEGORY_LEAGUES);
         const feedResults: Record<string, any[]> = Object.fromEntries(categories.map((c) => [c, []]));
 
+        // Fetch ALL leagues in parallel (not sequentially per category) — 5-10x faster
         await Promise.all(
-          categories.map(async (category) => {
-            const leagueIDs = CATEGORY_LEAGUES[category];
-            for (const leagueID of leagueIDs) {
+          Object.entries(CATEGORY_LEAGUES).flatMap(([category, leagueIDs]) =>
+            leagueIDs.map(async (leagueID) => {
               try {
                 const events = await fetchLeagueEvents(leagueID, { finalized: "false" });
                 const fixtures = events.map((event) => {
@@ -114,26 +114,24 @@ sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
               } catch {
                 // Skip unavailable leagues silently
               }
-            }
-          })
+            })
+          )
         );
 
-        // Sort by commence time (live games first, then upcoming)
+        // Sort: live first, then by commence time
         for (const category of Object.keys(feedResults)) {
           feedResults[category].sort((a: any, b: any) => {
             const aIsLive = a._isLive ? 0 : 1;
             const bIsLive = b._isLive ? 0 : 1;
             if (aIsLive !== bIsLive) return aIsLive - bIsLive;
-            const aTime = new Date(a.commence_time).getTime();
-            const bTime = new Date(b.commence_time).getTime();
-            return aTime - bTime;
+            return new Date(a.commence_time).getTime() - new Date(b.commence_time).getTime();
           });
         }
 
         return feedResults;
       },
       {
-        staleTtlMs: 60_000, // 60 seconds stale window
+        staleTtlMs: 300_000, // serve stale for up to 5 min while revalidating in background
         staleWhileRevalidate: true,
       }
     );
@@ -546,13 +544,34 @@ sportsbookRouter.post("/auto-settle", async (req: Request, res: Response) => {
 
         let won = false;
         if (homeScore !== undefined && awayScore !== undefined) {
-          const homeWon = parseFloat(homeScore) > parseFloat(awayScore);
-          const awayWon = parseFloat(awayScore) > parseFloat(homeScore);
-          const isDraw = parseFloat(homeScore) === parseFloat(awayScore);
+          const home = parseFloat(homeScore);
+          const away = parseFloat(awayScore);
+          const homeWon = home > away;
+          const awayWon = away > home;
+          const isDraw = home === away;
 
-          if (bet.selectedOutcome === homeTeamName) won = homeWon;
-          else if (bet.selectedOutcome === awayTeamName) won = awayWon;
-          else if (bet.selectedOutcome === "Draw") won = isDraw;
+          if (bet.marketKey === "spreads") {
+            // Spread: team must win after applying the point spread stored in metadata
+            const spread = parseFloat((bet.metadata as any)?.spread ?? "0");
+            const isHomeSide = bet.selectedOutcome === homeTeamName;
+            const adjustedHome = home + (isHomeSide ? spread : 0);
+            const adjustedAway = away + (!isHomeSide ? spread : 0);
+            won = isHomeSide ? adjustedHome > adjustedAway : adjustedAway > adjustedHome;
+          } else if (bet.marketKey === "totals") {
+            // Totals: Over/Under vs the line stored in metadata
+            const totalLine = parseFloat((bet.metadata as any)?.total ?? "0");
+            const actualTotal = home + away;
+            if (actualTotal === totalLine) {
+              // Push — refund; skip (leave pending for manual resolution)
+              continue;
+            }
+            won = bet.selectedOutcome === "Over" ? actualTotal > totalLine : actualTotal < totalLine;
+          } else {
+            // H2H moneyline (default)
+            if (bet.selectedOutcome === homeTeamName) won = homeWon;
+            else if (bet.selectedOutcome === awayTeamName) won = awayWon;
+            else if (bet.selectedOutcome === "Draw") won = isDraw;
+          }
         }
 
         let actualPayoutUsd = 0;
