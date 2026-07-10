@@ -61,9 +61,15 @@ interface LiveScore {
 interface Fixture {
   id: string;
   sport_key: string;
-  sport_title: string;
+  sport_title: string;  // league ID e.g. "NFL", "EPL"
   commence_time: string;
   completed: boolean;
+  // Real live-status fields from SportsGameOdds API
+  live: boolean;          // TRUE only while game is in-progress right now
+  started: boolean;       // started but may be in half-time break
+  inBreak?: boolean;      // half-time / timeout break
+  currentPeriod?: string; // "1q","2q","1h","2h", etc.
+  periodDisplay?: string; // human-readable e.g. "Q3 4:22" or "2nd Half"
   home_team: string;
   away_team: string;
   liveScore?: LiveScore;
@@ -152,19 +158,50 @@ function formatTimeOnly(isoString: string): string {
   }
 }
 
+/** Uses the REAL `status.live` boolean from the API — never guesses from time */
 function isGameLive(fixture: Fixture): boolean {
-  if (fixture.liveScore) return true;
-  const now = new Date();
-  const commenceTime = new Date(fixture.commence_time);
-  const timeDiff = (now.getTime() - commenceTime.getTime()) / (1000 * 60);
-  return timeDiff >= 0 && timeDiff < 240 && !fixture.completed;
+  return fixture.live === true;
 }
 
+/** Game hasn't started yet and starts within the next 2 weeks */
 function isGameUpcoming(fixture: Fixture): boolean {
+  if (fixture.live || fixture.started || fixture.completed) return false;
   const now = new Date();
   const commenceTime = new Date(fixture.commence_time);
-  const timeDiff = (commenceTime.getTime() - now.getTime()) / (1000 * 60);
-  return timeDiff > 0 && timeDiff < 20160;
+  const minutesUntil = (commenceTime.getTime() - now.getTime()) / (1000 * 60);
+  return minutesUntil > 0 && minutesUntil < 20160; // up to 14 days out
+}
+
+/** Live badge label showing period/score display from the API */
+function liveBadgeLabel(fixture: Fixture): string {
+  if (fixture.periodDisplay) return fixture.periodDisplay;
+  if (fixture.inBreak && fixture.currentPeriod) return `Break (${fixture.currentPeriod.toUpperCase()})`;
+  if (fixture.currentPeriod) {
+    const p = fixture.currentPeriod;
+    const labels: Record<string, string> = {
+      "1q": "Q1", "2q": "Q2", "3q": "Q3", "4q": "Q4",
+      "1h": "1st Half", "2h": "2nd Half",
+      "game": "Live", "ot": "OT",
+    };
+    return labels[p] || p.toUpperCase();
+  }
+  return "LIVE";
+}
+
+/** Human-readable league label */
+const LEAGUE_LABELS: Record<string, string> = {
+  NFL: "NFL", NBA: "NBA", MLB: "MLB", NHL: "NHL", NCAAB: "NCAA Basketball",
+  NCAAF: "NCAA Football", WNBA: "WNBA", EPL: "Premier League",
+  UEFA_CHAMPIONS_LEAGUE: "Champions League", UEFA_EUROPA_LEAGUE: "Europa League",
+  MLS: "MLS Soccer", LA_LIGA: "La Liga", BUNDESLIGA: "Bundesliga",
+  SERIE_A: "Serie A", LIGUE_1: "Ligue 1", UFC: "UFC", MMA: "MMA",
+  BOXING: "Boxing", PGA: "PGA Tour", EUROPEAN_TOUR: "Euro Tour",
+  ATP: "ATP Tennis", WTA: "WTA Tennis", CFL: "CFL", KBO: "KBO Baseball",
+  NPB: "NPB Baseball", IPL: "IPL Cricket", T20I: "T20 Intl", CS2: "CS2",
+  VALORANT: "VALORANT", LOL: "League of Legends", DOTA2: "Dota 2",
+};
+function leagueLabel(sportTitle: string): string {
+  return LEAGUE_LABELS[sportTitle] || sportTitle.replace(/_/g, " ");
 }
 
 function bookmakerDisplayName(key: string): string {
@@ -363,7 +400,18 @@ export function Sportsbook() {
     queryFn: async () => {
       if (!selectedSport && !showLiveOnly && !showTopSports) return [];
 
-      if (showTopSports || showLiveOnly) {
+
+      if (showLiveOnly) {
+        // Dedicated live endpoint — only returns events where status.live === true
+        const res = await fetch("/api/sports/live-now", {
+          headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` },
+        });
+        if (!res.ok) throw new Error("Failed to fetch live games");
+        const data = await res.json();
+        return (data.fixtures || []) as Fixture[];
+      }
+
+      if (showTopSports) {
         const res = await fetch("/api/sports/feed", {
           headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` },
         });
@@ -378,11 +426,7 @@ export function Sportsbook() {
             for (const g of category as Fixture[]) {
               if (seen.has(g.id)) continue;
               seen.add(g.id);
-              // Top Sports: show live AND upcoming. Live Only: only live.
-              const include = showLiveOnly
-                ? isGameLive(g)
-                : isGameLive(g) || isGameUpcoming(g);
-              if (include) allGames.push(g);
+              if (isGameLive(g) || isGameUpcoming(g)) allGames.push(g);
             }
           }
         }
@@ -406,8 +450,10 @@ export function Sportsbook() {
       return res.json();
     },
     enabled: !!(selectedSport || showLiveOnly || showTopSports),
-    staleTime: showLiveOnly ? 0 : 1000 * 30,
-    refetchInterval: showLiveOnly ? 10_000 : undefined,
+    // Live view: refetch every 15 s to match backend cache TTL
+    // Top sports: every 60 s; by sport: every 30 s
+    staleTime: showLiveOnly ? 0 : showTopSports ? 1000 * 60 : 1000 * 30,
+    refetchInterval: showLiveOnly ? 15_000 : showTopSports ? 60_000 : undefined,
     retry: 1,
   });
 
@@ -863,32 +909,74 @@ function GameCard({ game, selectedBookmaker, isBetSelected, toggleBet }: GameCar
   };
 
   return (
-    <div className="bg-black/20 backdrop-blur-sm border border-white/[0.06] rounded-xl p-3 hover:border-white/[0.12] transition-all group">
+    <div className={`backdrop-blur-sm border rounded-xl p-3 hover:border-white/[0.14] transition-all group ${
+      live
+        ? "bg-red-950/20 border-red-500/20 hover:border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.06)]"
+        : "bg-black/20 border-white/[0.06]"
+    }`}>
       <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-        {/* Teams + date */}
+        {/* Teams + date + live score */}
         <div className="col-span-1 md:col-span-5 space-y-1.5">
+          {/* Top row: league badge + live indicator OR date */}
           <div className="flex items-center gap-2 flex-wrap">
+            {/* League badge */}
+            <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] text-gray-400">
+              {leagueLabel(game.sport_title)}
+            </span>
             {live ? (
-              <span className="bg-red-500/15 text-red-400 text-[9px] font-black uppercase px-1.5 py-0.5 rounded border border-red-500/20 animate-pulse">
-                🔴 Live
+              <span className="flex items-center gap-1 bg-red-500/15 text-red-400 text-[9px] font-black uppercase px-1.5 py-0.5 rounded border border-red-500/25">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping inline-block" />
+                {liveBadgeLabel(game)}
               </span>
             ) : (
-              <span className="text-[10px] text-muted-foreground/50 font-mono">
+              <span className="text-[10px] text-muted-foreground/45 font-mono">
                 {formatCommenceTime(game.commence_time)}
               </span>
             )}
-            <span className="text-[9px] text-muted-foreground/30 uppercase tracking-wider">
-              {game.sport_title}
-            </span>
+            {game.inBreak && (
+              <span className="text-[9px] font-bold text-yellow-500/70 uppercase tracking-wider">Break</span>
+            )}
           </div>
+
+          {/* Team rows with live scores */}
           <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-white text-sm leading-tight">{game.home_team}</span>
-              {live && <span className="font-mono font-bold text-primary text-sm">{game.liveScore?.homeScore ?? "-"}</span>}
+            <div className="flex items-center justify-between gap-2">
+              <span className={`font-semibold text-sm leading-tight flex-1 min-w-0 truncate ${
+                live && game.liveScore && game.liveScore.homeScore! > game.liveScore.awayScore!
+                  ? "text-white"
+                  : "text-white/85"
+              }`}>
+                {game.home_team}
+              </span>
+              {live && (
+                <span className={`font-mono font-black text-base tabular-nums flex-shrink-0 ${
+                  game.liveScore?.homeScore !== undefined && game.liveScore?.awayScore !== undefined
+                  && game.liveScore.homeScore > game.liveScore.awayScore
+                    ? "text-primary"
+                    : "text-white/70"
+                }`}>
+                  {game.liveScore?.homeScore ?? "·"}
+                </span>
+              )}
             </div>
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-white/80 text-sm leading-tight">{game.away_team}</span>
-              {live && <span className="font-mono font-bold text-primary text-sm">{game.liveScore?.awayScore ?? "-"}</span>}
+            <div className="flex items-center justify-between gap-2">
+              <span className={`font-semibold text-sm leading-tight flex-1 min-w-0 truncate ${
+                live && game.liveScore && game.liveScore.awayScore! > game.liveScore.homeScore!
+                  ? "text-white"
+                  : "text-white/70"
+              }`}>
+                {game.away_team}
+              </span>
+              {live && (
+                <span className={`font-mono font-black text-base tabular-nums flex-shrink-0 ${
+                  game.liveScore?.homeScore !== undefined && game.liveScore?.awayScore !== undefined
+                  && game.liveScore.awayScore > game.liveScore.homeScore
+                    ? "text-primary"
+                    : "text-white/70"
+                }`}>
+                  {game.liveScore?.awayScore ?? "·"}
+                </span>
+              )}
             </div>
           </div>
         </div>

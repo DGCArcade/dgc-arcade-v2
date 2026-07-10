@@ -13,6 +13,7 @@ import {
   fetchLeagueEvents,
   fetchCategoryEvents,
   mapEventToFixture,
+  fetchAllLiveEvents,
 } from "../lib/sportsgameodds.js";
 import { cached } from "../lib/response-cache-v2.js";
 
@@ -107,7 +108,8 @@ sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
                     ...fixture,
                     _category: category,
                     _sportKey: leagueID,
-                    _isLive: new Date(fixture.commence_time).getTime() <= Date.now() + 3600000,
+                    // Use the REAL live boolean from the API — never guess from time
+                    _isLive: fixture.live,
                   };
                 });
                 feedResults[category].push(...fixtures);
@@ -118,12 +120,12 @@ sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
           )
         );
 
-        // Sort: live first, then by commence time
+        // Sort: live (in-progress) first, then upcoming by start time
         for (const category of Object.keys(feedResults)) {
           feedResults[category].sort((a: any, b: any) => {
-            const aIsLive = a._isLive ? 0 : 1;
-            const bIsLive = b._isLive ? 0 : 1;
-            if (aIsLive !== bIsLive) return aIsLive - bIsLive;
+            const aLive = a._isLive ? 0 : 1;
+            const bLive = b._isLive ? 0 : 1;
+            if (aLive !== bLive) return aLive - bLive;
             return new Date(a.commence_time).getTime() - new Date(b.commence_time).getTime();
           });
         }
@@ -170,9 +172,39 @@ sportsbookRouter.get("/quota", async (_req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/sports/live
+ * Returns all events across every league where status.live === true RIGHT NOW.
+ * Short 15-second cache so scores and odds stay fresh.
+ */
+sportsbookRouter.get("/live-now", async (req: Request, res: Response) => {
+  try {
+    if (!isSportsGameOddsConfigured()) {
+      return res.status(503).json({ error: "Sportsbook API key not configured" });
+    }
+
+    const liveFixtures = await cached(
+      "sportsbook:live-now",
+      15_000, // 15-second TTL — live scores change fast
+      () => fetchAllLiveEvents(),
+      { staleTtlMs: 30_000, staleWhileRevalidate: true }
+    );
+
+    return res.json({
+      success: true,
+      fixtures: liveFixtures,
+      count: liveFixtures.length,
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error({ error }, "[Sportsbook] Error fetching live-now events");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
  * GET /api/sportsbook/live/:sport
- * Streams live match data with real-time score updates and fluctuating odds.
- * Uses Server-Sent Events (SSE) for continuous updates without polling.
+ * SSE stream — pushes live-event updates every 15 seconds for a given league.
+ * Also sends all-sports live summary on each tick so the "Live Now" tab stays current.
  */
 sportsbookRouter.get("/live/:sport", async (req: Request, res: Response) => {
   try {
@@ -186,36 +218,41 @@ sportsbookRouter.get("/live/:sport", async (req: Request, res: Response) => {
       });
     }
 
-    // Set SSE headers for streaming
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("Access-Control-Allow-Origin", "*");
 
-    // Send initial connection message
     res.write(`data: ${JSON.stringify({ type: "connected", sport, timestamp: new Date().toISOString() })}\n\n`);
 
-    const realInterval = setInterval(async () => {
+    const sendUpdate = async () => {
       try {
         const events = await fetchLeagueEvents(sport, { finalized: "false" });
-        const fixtures = events.slice(0, 20).map((event) => mapEventToFixture(event, sport));
+        // Only emit events that are genuinely live or upcoming (not ended)
+        const fixtures = events
+          .filter((ev) => !ev.status?.ended && !ev.status?.finalized)
+          .map((ev) => mapEventToFixture(ev, sport));
 
         res.write(
           `data: ${JSON.stringify({
             type: "odds_update",
             sport,
             fixtures,
+            liveCount: fixtures.filter((f) => f.live).length,
             timestamp: new Date().toISOString(),
           })}\n\n`
         );
       } catch (error) {
-        logger.error({ error, sport }, "[Sportsbook] Error in live stream");
+        logger.error({ error, sport }, "[Sportsbook] Error in live stream tick");
       }
-    }, 10000); // Update every 10 seconds
+    };
 
-    // Clean up interval on client disconnect
+    // Send first update immediately, then every 15 s
+    await sendUpdate();
+    const interval = setInterval(sendUpdate, 15_000);
+
     req.on("close", () => {
-      clearInterval(realInterval);
+      clearInterval(interval);
       res.end();
     });
 

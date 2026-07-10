@@ -29,18 +29,9 @@ sportsbookLiveRouter.get("/:sport", async (req: Request, res: Response) => {
     logger.info({ sport }, "[SportsLive] Fetching live in-play games");
 
     const events = await fetchLeagueEvents(sport, { finalized: "false" });
-    const now = new Date();
-
-    // Filter for LIVE games only (started within last 3 hours, not ended)
+    // Filter using the REAL status.live boolean from SportsGameOdds — never guess from time
     const liveGames = events
-      .filter((event) => {
-        if (event.status?.ended) return false;
-        const startsAt = event.status?.startsAt;
-        if (!startsAt) return false;
-        const commenceTime = new Date(startsAt);
-        const timeDiff = (now.getTime() - commenceTime.getTime()) / (1000 * 60);
-        return timeDiff >= 0 && timeDiff < 180;
-      })
+      .filter((event) => event.status?.live === true)
       .map((event) => mapEventToFixture(event, sport));
 
     logger.info({ count: liveGames.length, sport }, "[SportsLive] Fetched live games");

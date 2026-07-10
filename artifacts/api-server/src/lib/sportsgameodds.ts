@@ -75,6 +75,14 @@ export interface SgoEvent {
     started?: boolean;
     ended?: boolean;
     finalized?: boolean;
+    live?: boolean;          // TRUE only while the game is in-progress RIGHT NOW
+    cancelled?: boolean;
+    inBreak?: boolean;       // half-time, timeouts, etc.
+    currentPeriodID?: string; // "1q","2q","3q","4q","1h","2h","game"
+    displayShort?: string;   // e.g. "Q3 4:22"
+    displayLong?: string;    // e.g. "3rd Quarter"
+    oddsAvailable?: boolean;
+    oddsPresent?: boolean;
   };
   results?: {
     game?: { home?: { points?: string | number }; away?: { points?: string | number } };
@@ -206,25 +214,26 @@ const MARKET_KEY_BY_BET_TYPE: Record<string, string> = {
 function extractLiveScore(event: SgoEvent): { homeScore?: number; awayScore?: number; period?: string } {
   if (!event.results) return {};
 
+  const toScore = (v: string | number | undefined): number | undefined => {
+    const n = Number(v);
+    return v !== undefined && !isNaN(n) ? n : undefined;
+  };
+
   // Try to get the most recent score available
   const gameScore = event.results.game;
-  if (gameScore?.home?.points !== undefined && gameScore?.away?.points !== undefined) {
-    return {
-      homeScore: Number(gameScore.home.points),
-      awayScore: Number(gameScore.away.points),
-      period: "game",
-    };
+  const gHome = toScore(gameScore?.home?.points);
+  const gAway = toScore(gameScore?.away?.points);
+  if (gHome !== undefined && gAway !== undefined) {
+    return { homeScore: gHome, awayScore: gAway, period: "game" };
   }
 
-  // Try quarter/half scores
+  // Try quarter/half scores (most recent period first)
   for (const period of ["4q", "3q", "2q", "1q", "2h", "1h"]) {
     const periodScore = (event.results as any)[period];
-    if (periodScore?.home?.points !== undefined && periodScore?.away?.points !== undefined) {
-      return {
-        homeScore: Number(periodScore.home.points),
-        awayScore: Number(periodScore.away.points),
-        period,
-      };
+    const pH = toScore(periodScore?.home?.points);
+    const pA = toScore(periodScore?.away?.points);
+    if (pH !== undefined && pA !== undefined) {
+      return { homeScore: pH, awayScore: pA, period };
     }
   }
 
@@ -329,9 +338,18 @@ export function mapEventToFixture(event: SgoEvent, sportKey: string) {
     sport_title: event.leagueID || sportKey,
     commence_time: event.status?.startsAt || new Date().toISOString(),
     completed: Boolean(event.status?.ended),
+    // Real live-status fields — passed through directly from the API response
+    live: Boolean(event.status?.live),
+    started: Boolean(event.status?.started),
+    inBreak: Boolean(event.status?.inBreak),
+    currentPeriod: event.status?.currentPeriodID || undefined,
+    periodDisplay: event.status?.displayShort || event.status?.displayLong || undefined,
     home_team: homeTeam,
     away_team: awayTeam,
-    liveScore: liveScore.homeScore !== undefined ? liveScore : undefined,
+    // Only attach liveScore when the game is actually in-progress with real data
+    liveScore: (event.status?.started && !event.status?.ended && liveScore.homeScore !== undefined)
+      ? liveScore
+      : undefined,
     bookmakers: bookmakers.map((bm) => ({
       key: bm.key,
       title: bm.title,
@@ -339,4 +357,41 @@ export function mapEventToFixture(event: SgoEvent, sportKey: string) {
       deeplinks: bm.deeplinks,
     })),
   };
+}
+
+/**
+ * Fetches all currently LIVE events across every configured league.
+ * Uses a short cache (15 s) so the live tab stays fresh.
+ */
+export async function fetchAllLiveEvents(): Promise<ReturnType<typeof mapEventToFixture>[]> {
+  if (!SPORTSGAMEODDS_API_KEY) return [];
+
+  const results = await Promise.all(
+    ALL_LEAGUE_IDS.map(async (leagueID) => {
+      try {
+        const url = new URL(`${SPORTSGAMEODDS_BASE}/events`);
+        url.searchParams.set("leagueID", leagueID);
+        url.searchParams.set("limit", "50");
+        url.searchParams.set("includeAltLines", "true");
+        // Only fetch events that have started (the API doesn't have a ?live= param,
+        // so we fetch started events and filter on status.live below)
+        url.searchParams.set("finalized", "false");
+
+        const response = await fetch(url.toString(), {
+          headers: { "x-api-key": SPORTSGAMEODDS_API_KEY },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!response.ok) return [];
+
+        const body = (await response.json()) as SgoEventsResponse;
+        return (body.data ?? [])
+          .filter((ev) => ev.status?.live === true)
+          .map((ev) => mapEventToFixture(ev, leagueID));
+      } catch {
+        return [];
+      }
+    })
+  );
+
+  return results.flat();
 }
