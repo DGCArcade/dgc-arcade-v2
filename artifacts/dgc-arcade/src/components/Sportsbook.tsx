@@ -427,6 +427,8 @@ export function Sportsbook() {
           betAmountUsd: parseFloat(betAmount),
           cryptoType: selectedCrypto,
           bookmakerKey: selectedBet.bookmaker,
+          ...(selectedBet.market.key === "spreads" && selectedBet.outcome.point !== undefined && { spread: selectedBet.outcome.point }),
+          ...(selectedBet.market.key === "totals" && selectedBet.outcome.point !== undefined && { total: selectedBet.outcome.point }),
         }),
       });
 

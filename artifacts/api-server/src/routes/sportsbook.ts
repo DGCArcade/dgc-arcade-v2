@@ -314,6 +314,15 @@ sportsbookRouter.post("/bet", requireAuth, async (req: Request, res: Response) =
       const betAmountCrypto = betAmountFloat / cryptoPrice;
       const potentialPayoutCrypto = potentialPayoutUsd / cryptoPrice;
 
+      // Extract spread/total metadata for settlement
+      const metadata: any = {};
+      if (marketKey === "spreads" && req.body.spread !== undefined) {
+        metadata.spread = req.body.spread;
+      }
+      if (marketKey === "totals" && req.body.total !== undefined) {
+        metadata.total = req.body.total;
+      }
+
       const [bet] = await tx
         .insert(sportsBetsTable)
         .values({
@@ -337,6 +346,7 @@ sportsbookRouter.post("/bet", requireAuth, async (req: Request, res: Response) =
           bookmakerKey: bookmakerKey || "sportsgameodds",
           ipAddress: Array.isArray(req.ip) ? req.ip[0] : (req.ip || "0.0.0.0"),
           userAgent: (req.get("user-agent") as string) || "unknown",
+          metadata: Object.keys(metadata).length > 0 ? metadata : null,
         })
         .returning();
 

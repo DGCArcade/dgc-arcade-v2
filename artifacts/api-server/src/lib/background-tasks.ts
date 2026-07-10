@@ -64,21 +64,63 @@ export async function settlePendingSportsBets() {
         const matchEvent = events.find((e) => e.eventID === bet.fixtureId);
         if (!matchEvent || !(matchEvent.status?.finalized || matchEvent.status?.ended)) continue;
 
-        const homeTeamName = matchEvent.teams?.home?.names?.long || matchEvent.teams?.home?.teamID;
-        const awayTeamName = matchEvent.teams?.away?.names?.long || matchEvent.teams?.away?.teamID;
+        const homeTeamName = matchEvent.teams?.home?.names?.long || matchEvent.teams?.home?.teamID || "Home";
+        const awayTeamName = matchEvent.teams?.away?.names?.long || matchEvent.teams?.away?.teamID || "Away";
 
-        const oddsEntries = Object.values(matchEvent.odds ?? {});
-        const homeScore = oddsEntries.find((o) => o.oddID?.includes("-home-game-ml-home"))?.score;
-        const awayScore = oddsEntries.find((o) => o.oddID?.includes("-away-game-ml-away"))?.score;
+        // Extract final score from results
+        let homeScore: number | undefined;
+        let awayScore: number | undefined;
+        
+        if (matchEvent.results?.game) {
+          homeScore = Number(matchEvent.results.game.home?.points);
+          awayScore = Number(matchEvent.results.game.away?.points);
+        }
 
         let won = false;
-        if (homeScore !== undefined && awayScore !== undefined) {
-          const homeWon = parseFloat(homeScore) > parseFloat(awayScore);
-          const awayWon = parseFloat(awayScore) > parseFloat(homeScore);
-          const isDraw = parseFloat(homeScore) === parseFloat(awayScore);
-          if (bet.selectedOutcome === homeTeamName) won = homeWon;
-          else if (bet.selectedOutcome === awayTeamName) won = awayWon;
-          else if (bet.selectedOutcome === "Draw") won = isDraw;
+        let resultOutcome = "";
+
+        // Only settle if we have a final score
+        if (homeScore !== undefined && awayScore !== undefined && !isNaN(homeScore) && !isNaN(awayScore)) {
+          // Determine winner based on market type
+          if (bet.marketKey === "h2h") {
+            // Moneyline: Home, Away, or Draw
+            const homeWon = homeScore > awayScore;
+            const awayWon = awayScore > homeScore;
+            const isDraw = homeScore === awayScore;
+            
+            if (bet.selectedOutcome === homeTeamName && homeWon) won = true;
+            else if (bet.selectedOutcome === awayTeamName && awayWon) won = true;
+            else if (bet.selectedOutcome === "Draw" && isDraw) won = true;
+            
+            resultOutcome = homeWon ? homeTeamName : awayWon ? awayTeamName : "Draw";
+          } else if (bet.marketKey === "spreads") {
+            // Point spread: Parse the spread from selectedOutcome (e.g., "Home -3.5", "Away +3.5")
+            const metadata = bet.metadata as any;
+            const spread = metadata?.spread || 0;
+            
+            if (bet.selectedOutcome.includes(homeTeamName)) {
+              // Home team with spread
+              won = homeScore - spread > awayScore;
+            } else if (bet.selectedOutcome.includes(awayTeamName)) {
+              // Away team with spread
+              won = awayScore + spread > homeScore;
+            }
+            
+            resultOutcome = `${homeTeamName} ${homeScore} vs ${awayTeamName} ${awayScore}`;
+          } else if (bet.marketKey === "totals") {
+            // Over/Under: Parse the total from selectedOutcome
+            const metadata = bet.metadata as any;
+            const total = metadata?.total || 0;
+            const combinedScore = homeScore + awayScore;
+            
+            if (bet.selectedOutcome === "Over") {
+              won = combinedScore > total;
+            } else if (bet.selectedOutcome === "Under") {
+              won = combinedScore < total;
+            }
+            
+            resultOutcome = `Total: ${combinedScore} (Line: ${total})`;
+          }
         }
 
         let actualPayoutUsd = 0;
@@ -95,13 +137,14 @@ export async function settlePendingSportsBets() {
           .update(sportsBetsTable)
           .set({
             status: won ? "won" : "lost",
+            resultOutcome: resultOutcome || "No result",
             actualPayoutUsd: actualPayoutUsd.toString(),
             settledAt: new Date(),
           })
           .where(eq(sportsBetsTable.id, bet.id));
 
         logger.info(
-          { betId: bet.id, userId: bet.userId, won, actualPayoutUsd },
+          { betId: bet.id, userId: bet.userId, marketKey: bet.marketKey, won, actualPayoutUsd, resultOutcome },
           "[Sports Settlement] Bet settled"
         );
       } catch (betErr) {
