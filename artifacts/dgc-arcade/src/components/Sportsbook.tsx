@@ -280,6 +280,33 @@ export function Sportsbook() {
     retry: 1,
   });
 
+  // Live SSE connection for real-time score updates
+  useEffect(() => {
+    if (!selectedSport) return;
+
+    const eventSource = new EventSource(`/api/sportsbook/live/${selectedSport}`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "odds_update" && data.fixtures) {
+          queryClient.setQueryData(["sportsbook-odds", selectedSport], data.fixtures);
+        }
+      } catch (error) {
+        console.error("[Sportsbook] Error parsing SSE data", error);
+      }
+    };
+
+    eventSource.onerror = () => {
+      console.warn("[Sportsbook] SSE connection lost, reconnecting...");
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [selectedSport, queryClient]);
+
   // Filter fixtures: live only if toggle is active
   const filteredFixtures = useMemo(() => {
     if (!showLiveOnly) return fixtures;
