@@ -23,7 +23,9 @@ import { crashLiveRouter } from "./crash-live.js";
 import { chickenRoadRouter } from "./chicken-road.js";
 import { casinoRouter } from "./casino.js";
 import { slotsCatalogRouter } from "./slots-catalog.js";
+import { slotsAggregatorRouter } from "./slots-aggregator.js";
 import { sportsbookRouter } from "./sportsbook.js";
+import { sportsbookLiveRouter } from "./sportsbook-live.js";
 
 const router: IRouter = Router();
 
@@ -51,8 +53,11 @@ router.use("/crash/live", crashLiveRouter);
 router.use("/chicken-road", chickenRoadRouter);
 router.use("/slots", slotsCatalogRouter);
 router.use("/slots", casinoRouter);
+router.use("/slots/aggregator", slotsAggregatorRouter);
 router.use("/sportsbook", sportsbookRouter);
+router.use("/sportsbook/live", sportsbookLiveRouter);
 // Alias: /api/sports/feed → /api/sportsbook/feed (NODE_MIRROR deployment spec)
 router.use("/sports", sportsbookRouter);
+router.use("/sports/live", sportsbookLiveRouter);
 
 export default router;

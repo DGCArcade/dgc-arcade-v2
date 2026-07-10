@@ -126,6 +126,7 @@ export function Sportsbook() {
 
   const [selectedSport, setSelectedSport] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>("Football");
+  const [showLiveOnly, setShowLiveOnly] = useState(false);
   const [selectedBet, setSelectedBet] = useState<{
     fixture: Fixture;
     market: Market;
@@ -182,9 +183,22 @@ export function Sportsbook() {
       return res.json();
     },
     enabled: !!selectedSport,
-    staleTime: 1000 * 30,
+    staleTime: showLiveOnly ? 0 : 1000 * 30,
+    refetchInterval: showLiveOnly ? 10_000 : undefined,
     retry: 1,
   });
+
+  // Filter fixtures: live only if toggle is active
+  const filteredFixtures = useMemo(() => {
+    if (!showLiveOnly) return fixtures;
+    const now = new Date();
+    return fixtures.filter((f) => {
+      const commenceTime = new Date(f.commence_time);
+      // Show games that started within last 3 hours or start within next 1 hour
+      const timeDiff = (now.getTime() - commenceTime.getTime()) / (1000 * 60);
+      return timeDiff > -60 && timeDiff < 180; // -60 min to +180 min
+    });
+  }, [fixtures, showLiveOnly]);
 
   // Bet history
   const { data: betHistory = [], isLoading: historyLoading } = useQuery<SportsBet[]>({
@@ -310,6 +324,22 @@ export function Sportsbook() {
   /* ── Render ── */
   return (
     <div className="w-full space-y-6 pb-24 md:pb-12">
+      {/* ── Live In-Play Toggle ── */}
+      <div className="w-full flex items-center justify-center">
+        <button
+          onClick={() => setShowLiveOnly(!showLiveOnly)}
+          className={`px-6 py-3 rounded-full font-black uppercase tracking-[0.15em] text-[11px] transition-all duration-300 border-2 flex items-center gap-2 ${
+            showLiveOnly
+              ? "bg-red-500 text-white border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.5)]"
+              : "bg-white/5 text-muted-foreground border-white/10 hover:border-primary/40 hover:text-foreground"
+          }`}
+        >
+          <span className={`w-2 h-2 rounded-full ${
+            showLiveOnly ? "bg-white animate-pulse" : "bg-muted-foreground/30"
+          }`} />
+          🔴 LIVE IN-PLAY
+        </button>
+      </div>
 
       {/* ── Header ── */}
       <div className="relative w-full overflow-hidden group flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-4 md:p-6 lg:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300 hover:border-primary/20 hover:shadow-[0_20px_50px_rgba(255,215,0,0.2)]">
@@ -559,7 +589,7 @@ export function Sportsbook() {
                   <p className="text-muted-foreground font-mono">No live fixtures for this category right now.</p>
                 </div>
               ) : (
-                fixtures.map((fixture) => {
+                filteredFixtures.map((fixture) => {
                   const h2hMarket = fixture.bookmakers[0]?.markets.find((m) => m.key === "h2h");
                   if (!h2hMarket) return null;
                   return (

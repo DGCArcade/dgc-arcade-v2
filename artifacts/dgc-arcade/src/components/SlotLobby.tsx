@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +26,7 @@ import {
   Zap,
   Trophy,
   Flame,
+  AlertCircle,
 } from "lucide-react";
 
 /* ─────────────────────────────────────────────────────────────
@@ -39,6 +40,7 @@ interface SlotGame {
   rtp: number;
   volatility: "low" | "medium" | "high";
   jackpot?: number;
+  slug?: string;
 }
 
 interface SlotLobbyProps {
@@ -55,11 +57,12 @@ type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 const PROVIDER_COLORS: Record<string, string> = {
   "Pragmatic Play": "#FFD700",
   "Hacksaw Gaming": "#a855f7",
-  "NoLimit City":   "#ef4444",
-  "NetEnt":         "#3b82f6",
-  "Evolution":      "#10b981",
-  "Inbet":          "#FFD700",
-  "DGC Originals":  "#FFD700",
+  "NoLimit City": "#ef4444",
+  "NetEnt": "#3b82f6",
+  "Evolution": "#10b981",
+  "Inbet": "#FFD700",
+  "DGC Originals": "#FFD700",
+  "NexusGGR": "#FF6B35",
 };
 
 /* ─────────────────────────────────────────────────────────────
@@ -88,7 +91,7 @@ function SlotCard({ game, onClick }: { game: SlotGame; onClick: () => void }) {
 
   return (
     <div
-      className="group relative cursor-pointer rounded-2xl overflow-hidden border border-white/5 bg-black/40 backdrop-blur-sm transition-all duration-300 hover:border-primary/40 hover:scale-[1.05] hover:-translate-y-1 shadow-xl hover:shadow-[0_20px_40px_rgba(255,215,0,0.15)]"
+      className="group relative w-full cursor-pointer rounded-2xl overflow-hidden border border-white/5 bg-black/40 backdrop-blur-sm transition-all duration-300 hover:border-primary/40 hover:scale-[1.05] hover:-translate-y-1 shadow-xl hover:shadow-[0_20px_40px_rgba(255,215,0,0.15)]"
       style={{ "--provider-color": providerColor } as React.CSSProperties}
       onClick={onClick}
     >
@@ -101,261 +104,99 @@ function SlotCard({ game, onClick }: { game: SlotGame; onClick: () => void }) {
           <img
             src={game.thumbnail}
             alt={game.title}
-            loading="lazy"
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+            className="w-full h-full object-cover"
             onError={() => setImgFailed(true)}
           />
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-black/80 to-black/60">
-            <div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center"
-              style={{ background: `${providerColor}15`, border: `1px solid ${providerColor}30` }}
-            >
-              <Gamepad2 className="w-8 h-8" style={{ color: providerColor }} />
-            </div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-white/50 text-center px-4 leading-tight">
-              {game.title}
-            </span>
+          <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-black/80 to-black/40">
+            <Gamepad2 className="w-8 h-8 text-muted-foreground/40" />
+            <span className="text-[10px] text-muted-foreground/30 text-center px-2">No cover available</span>
           </div>
         )}
-
-        {/* Hover play overlay */}
-        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20 flex items-center justify-center">
-          <div
-            className="w-14 h-14 rounded-full flex items-center justify-center shadow-2xl scale-75 group-hover:scale-100 transition-transform duration-300"
-            style={{ background: providerColor }}
-          >
-            <Play className="w-7 h-7 text-black fill-black ml-0.5" />
-          </div>
-        </div>
       </div>
 
-      {/* Info overlay */}
-      <div className="absolute bottom-0 left-0 w-full p-3 z-30 space-y-1">
-        <h3 className="font-black text-[11px] md:text-xs uppercase tracking-wider text-white truncate drop-shadow-lg leading-tight">
-          {game.title}
-        </h3>
-        <div className="flex items-center justify-between gap-1">
-          <span
-            className="text-[9px] font-black uppercase tracking-widest truncate"
-            style={{ color: providerColor }}
-          >
-            {game.provider}
-          </span>
-          <div className="flex items-center gap-1 shrink-0">
-            <span className="text-[9px] font-black font-mono text-white/50">
-              {game.rtp}%
+      {/* Content */}
+      <div className="relative z-20 p-4 space-y-3">
+        {/* Title */}
+        <div className="space-y-1">
+          <h3 className="font-black text-sm uppercase tracking-tight line-clamp-2 text-white group-hover:text-primary transition-colors">
+            {game.title}
+          </h3>
+          <div className="flex items-center justify-between gap-2">
+            <span
+              className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-white/10"
+              style={{ borderColor: providerColor, borderWidth: "1px" }}
+            >
+              {game.provider}
             </span>
             <VolatilityBadge v={game.volatility} />
           </div>
         </div>
-        {game.jackpot && (
-          <div className="flex items-center gap-1">
-            <Trophy className="w-2.5 h-2.5 text-yellow-400" />
-            <span className="text-[9px] font-black text-yellow-400 font-mono">
-              ${game.jackpot.toLocaleString()}
-            </span>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-2 text-[10px] font-black uppercase tracking-widest">
+          <div className="bg-white/5 rounded-lg p-2 text-center">
+            <div className="text-muted-foreground/60">RTP</div>
+            <div className="text-primary">{game.rtp}%</div>
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────
-   Pagination Controls
-───────────────────────────────────────────────────────────── */
-function PaginationBar({
-  page,
-  totalPages,
-  onPage,
-}: {
-  page: number;
-  totalPages: number;
-  onPage: (p: number) => void;
-}) {
-  if (totalPages <= 1) return null;
-  const windowSize = 2;
-  const pages: (number | "…")[] = [];
-  for (let i = 1; i <= totalPages; i++) {
-    if (i === 1 || i === totalPages || (i >= page - windowSize && i <= page + windowSize)) {
-      pages.push(i);
-    } else if (pages[pages.length - 1] !== "…") {
-      pages.push("…");
-    }
-  }
-  return (
-    <div className="flex items-center justify-center gap-1 flex-wrap py-2">
-      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page === 1} onClick={() => onPage(1)}>
-        <ChevronFirst className="w-4 h-4" />
-      </Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page === 1} onClick={() => onPage(page - 1)}>
-        <ChevronLeft className="w-4 h-4" />
-      </Button>
-      {pages.map((p, idx) =>
-        p === "…" ? (
-          <span key={`e-${idx}`} className="px-1 text-muted-foreground text-sm select-none">…</span>
-        ) : (
-          <Button
-            key={p}
-            variant={p === page ? "default" : "ghost"}
-            size="icon"
-            className={`h-8 w-8 text-xs font-black ${p === page ? "bg-primary text-black shadow-[0_0_12px_rgba(255,215,0,0.4)]" : ""}`}
-            onClick={() => onPage(p as number)}
-          >
-            {p}
-          </Button>
-        )
-      )}
-      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page === totalPages} onClick={() => onPage(page + 1)}>
-        <ChevronRight className="w-4 h-4" />
-      </Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page === totalPages} onClick={() => onPage(totalPages)}>
-        <ChevronLast className="w-4 h-4" />
-      </Button>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────
-   Game iframe Player
-───────────────────────────────────────────────────────────── */
-function SlotIframePlayer({ gameId, onClose }: { gameId: string; onClose: () => void }) {
-  const { user } = useAuth();
-  const [launchUrl, setLaunchUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [fullscreen, setFullscreen] = useState(false);
-
-  useEffect(() => {
-    const fetchLaunchUrl = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const token = localStorage.getItem("dgc_token");
-        const res = await fetch(`/api/slots/launch?game_id=${encodeURIComponent(gameId)}&currency=USD`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        const data = await res.json();
-        if (data.success && data.launchUrl) {
-          setLaunchUrl(data.launchUrl);
-        } else {
-          setError(data.message || data.setup || "Failed to launch game");
-        }
-      } catch (e) {
-        setError("Network error — could not launch game");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchLaunchUrl();
-  }, [gameId]);
-
-  return (
-    <div
-      className={`fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col transition-all duration-300 ${
-        fullscreen ? "p-0" : "p-0 md:p-4"
-      }`}
-    >
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-3 bg-black/80 border-b border-white/5 shrink-0">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onClose}
-            className="flex items-center gap-2 text-muted-foreground hover:text-white transition-colors text-xs font-black uppercase tracking-widest"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:inline">Back to Lobby</span>
-          </button>
-          <div className="w-px h-4 bg-white/10 hidden sm:block" />
-          <span className="text-xs font-black uppercase tracking-widest text-primary truncate max-w-[200px]">
-            {gameId.replace(/-/g, " ")}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setFullscreen((f) => !f)}
-            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-muted-foreground hover:text-white transition-all"
-          >
-            {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-muted-foreground hover:text-red-400 transition-all"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* iframe container */}
-      <div className="flex-1 relative overflow-hidden rounded-b-2xl md:rounded-2xl">
-        {loading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-10 gap-4">
-            <div className="w-16 h-16 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-            <p className="text-white font-black uppercase tracking-widest text-xs">Loading Game…</p>
-          </div>
-        )}
-        {error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-10 gap-6 px-8 text-center">
-            <div className="w-20 h-20 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <Gamepad2 className="w-10 h-10 text-primary/60" />
+          {game.jackpot ? (
+            <div className="bg-primary/10 rounded-lg p-2 text-center border border-primary/20">
+              <div className="text-muted-foreground/60">Jackpot</div>
+              <div className="text-primary">${game.jackpot.toLocaleString()}</div>
             </div>
-            <div className="space-y-2">
-              <h3 className="text-xl font-black uppercase tracking-widest text-white">Game Unavailable</h3>
-              <p className="text-sm text-muted-foreground max-w-sm leading-relaxed">{error}</p>
-              {error.includes("CASINO_PROVIDER_URL") || error.includes("not configured") ? (
-                <p className="text-xs text-primary/60 font-mono mt-2">
-                  Set CASINO_PROVIDER_URL, CASINO_API_KEY, and CASINO_MERCHANT_ID in your Render environment variables.
-                </p>
-              ) : null}
+          ) : (
+            <div className="bg-white/5 rounded-lg p-2 text-center">
+              <div className="text-muted-foreground/60">Volatility</div>
+              <div className="text-amber-400 capitalize">{game.volatility}</div>
             </div>
-            <button
-              onClick={onClose}
-              className="px-8 py-3 rounded-2xl bg-primary text-black font-black uppercase tracking-widest text-xs hover:bg-primary/90 transition-all"
-            >
-              Back to Lobby
-            </button>
-          </div>
-        )}
-        {launchUrl && (
-          <iframe
-            src={launchUrl}
-            className="w-full h-full border-0"
-            allow="fullscreen; autoplay; payment"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-            title={gameId}
-            onLoad={() => setLoading(false)}
-          />
-        )}
+          )}
+        </div>
+
+        {/* Play button */}
+        <Button
+          className="w-full h-10 bg-primary text-black font-black uppercase tracking-widest text-xs rounded-xl hover:bg-primary/90 hover:shadow-[0_0_20px_rgba(255,215,0,0.3)] transition-all"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+        >
+          <Play className="w-3 h-3 mr-2" />
+          Play Now
+        </Button>
       </div>
     </div>
   );
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Main Lobby
+   Main Slot Lobby Component
 ───────────────────────────────────────────────────────────── */
-export function SlotLobby({ onGameSelect, initialGameId }: SlotLobbyProps) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSize>(50);
-  const [activeGameId, setActiveGameId] = useState<string | null>(initialGameId ?? null);
+export function SlotLobby({ initialGameId, onGameSelect }: SlotLobbyProps) {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [pageSize, setPageSize] = useState<PageSize>(25);
+  const [page, setPage] = useState(1);
+  const [fullscreenGameId, setFullscreenGameId] = useState<string | null>(null);
 
-  const { data: games = [], isLoading } = useQuery<SlotGame[]>({
-    queryKey: ["slot-games"],
+  // Fetch real games from aggregator API
+  const { data: games = [], isLoading, error } = useQuery<SlotGame[]>({
+    queryKey: ["slot-games-aggregator"],
     queryFn: async () => {
       const token = localStorage.getItem("dgc_token");
-      const res = await fetch("/api/slots/catalog", {
+      const res = await fetch("/api/slots/aggregator/games", {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) throw new Error("Failed to fetch slot games");
-      return res.json();
+      if (!res.ok) {
+        throw new Error("Failed to fetch slot games from aggregator");
+      }
+      const data = await res.json();
+      return data.games || [];
     },
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 10, // 10 minutes
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
   const providers = useMemo(() => {
@@ -377,156 +218,194 @@ export function SlotLobby({ onGameSelect, initialGameId }: SlotLobbyProps) {
     return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
 
-  const handleSearch = useCallback((val: string) => { setSearchTerm(val); setPage(1); }, []);
-  const handleProvider = useCallback((p: string | null) => { setSelectedProvider(p); setPage(1); }, []);
-  const handlePageSize = useCallback((val: string) => { setPageSize(Number(val) as PageSize); setPage(1); }, []);
+  const handleSearch = useCallback((val: string) => {
+    setSearchTerm(val);
+    setPage(1);
+  }, []);
 
-  const handleGameClick = useCallback((gameId: string) => {
-    if (onGameSelect) {
-      onGameSelect(gameId);
-    } else {
-      setActiveGameId(gameId);
-    }
-  }, [onGameSelect]);
+  const handleLaunchGame = useCallback(
+    async (gameId: string) => {
+      try {
+        if (onGameSelect) onGameSelect(gameId);
+        setLocation(`/slots/${gameId}`);
+      } catch (err) {
+        console.error("Error launching game:", err);
+      }
+    },
+    [setLocation, onGameSelect]
+  );
 
-  // If a game is active, show the iframe player
-  if (activeGameId) {
-    return <SlotIframePlayer gameId={activeGameId} onClose={() => setActiveGameId(null)} />;
+  if (isLoading) {
+    return (
+      <div className="w-full space-y-6 pb-24 md:pb-12">
+        <div className="relative overflow-hidden group flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-4 md:p-6 lg:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-pulse">
+          <div className="h-16 w-48 bg-white/5 rounded-lg" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+          {[...Array(12)].map((_, i) => (
+            <div key={i} className="aspect-[4/5] bg-white/5 rounded-2xl animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="w-full space-y-6 pb-24 md:pb-12">
+        <div className="relative overflow-hidden group flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 bg-gradient-to-br from-red-500/10 to-red-500/5 backdrop-blur-2xl border border-red-500/30 rounded-[2.5rem] p-4 md:p-6 lg:p-10 shadow-[0_20px_50px_rgba(255,0,0,0.1)]">
+          <div className="flex items-center gap-4">
+            <AlertCircle className="w-8 h-8 text-red-500" />
+            <div>
+              <h2 className="font-black text-lg text-red-400">Failed to Load Games</h2>
+              <p className="text-sm text-red-300/80">Could not fetch games from the aggregator. Please try again.</p>
+            </div>
+          </div>
+          <Button onClick={() => window.location.reload()} className="bg-red-500 hover:bg-red-600">
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-black">
-      {/* ── Hero Header ─────────────────────────────────── */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent pointer-events-none" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,215,0,0.08),transparent_60%)] pointer-events-none" />
-        <div className="relative px-4 sm:px-6 lg:px-8 pt-8 pb-6">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-1 h-6 bg-primary rounded-full" />
-                  <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary/70">DGC Casino</span>
-                </div>
-                <h1 className="text-3xl sm:text-4xl font-black uppercase tracking-tight text-white">
-                  Slot Lobby
-                </h1>
-                <p className="text-sm text-muted-foreground mt-1 font-medium">
-                  {isLoading ? "Loading games…" : `${games.length} games · Pragmatic Play · Hacksaw · NoLimit City`}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-500/20">
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-green-400">Live</span>
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20">
-                  <Zap className="w-3 h-3 text-primary" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-primary">Crypto Native</span>
-                </div>
-              </div>
-            </div>
+    <div className="w-full space-y-6 pb-24 md:pb-12">
+      {/* ── Header ── */}
+      <div className="relative w-full overflow-hidden group flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-4 md:p-6 lg:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300 hover:border-primary/20 hover:shadow-[0_20px_50px_rgba(255,215,0,0.2)]">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2" />
 
-            {/* ── Search + Page Size ─────────────────────── */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  value={searchTerm}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  placeholder="Search games…"
-                  className="h-12 pl-10 bg-white/5 border-white/10 rounded-2xl font-black uppercase tracking-[0.1em] text-[11px] focus:border-primary/50 focus:ring-primary/20 transition-all"
-                />
-              </div>
-              <Select value={String(pageSize)} onValueChange={handlePageSize}>
-                <SelectTrigger className="w-full sm:w-36 h-12 bg-white/5 border-white/10 rounded-2xl font-black uppercase tracking-[0.1em] text-[11px] focus:border-primary/50 shrink-0">
-                  <SelectValue placeholder="Show" />
-                </SelectTrigger>
-                <SelectContent className="bg-black/95 border-white/10 backdrop-blur-xl rounded-xl">
-                  {PAGE_SIZE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt} value={String(opt)} className="font-black uppercase tracking-[0.1em] text-[11px] focus:bg-primary focus:text-black">
-                      {opt} Games
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <div className="relative z-10 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/30 shadow-[0_0_30px_rgba(255,215,0,0.15)] group-hover:scale-110 transition-transform duration-500">
+              <Gamepad2 className="w-6 h-6 md:w-8 md:h-8 text-primary animate-pulse" />
             </div>
-
-            {/* ── Provider Filters ─────────────────────── */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              <button
-                onClick={() => handleProvider(null)}
-                className={`px-5 py-2.5 rounded-2xl border font-black uppercase tracking-[0.15em] text-[10px] transition-all duration-200 whitespace-nowrap shrink-0 ${
-                  selectedProvider === null
-                    ? "bg-primary text-black border-primary shadow-[0_0_20px_rgba(255,215,0,0.25)]"
-                    : "bg-white/5 text-muted-foreground border-white/10 hover:border-primary/30 hover:text-white"
-                }`}
-              >
-                All Games
-              </button>
-              {providers.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => handleProvider(p)}
-                  className={`px-5 py-2.5 rounded-2xl border font-black uppercase tracking-[0.15em] text-[10px] transition-all duration-200 whitespace-nowrap shrink-0 ${
-                    selectedProvider === p
-                      ? "bg-primary text-black border-primary shadow-[0_0_20px_rgba(255,215,0,0.25)]"
-                      : "bg-white/5 text-muted-foreground border-white/10 hover:border-primary/30 hover:text-white"
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
+            <div>
+              <h1 className="font-display font-black text-3xl md:text-6xl uppercase tracking-[0.15em] text-white leading-none">
+                DGC<span className="text-glow-shift-slow drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]">SLOTS</span>
+              </h1>
+              <div className="flex items-center gap-3 mt-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 border border-green-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-green-400">
+                    {games.length} Games Live
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── Game Grid ─────────────────────────────────── */}
-      <div className="px-4 sm:px-6 lg:px-8 pb-12">
-        <div className="max-w-7xl mx-auto">
-          {isLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
-              {Array.from({ length: 12 }).map((_, i) => (
-                <div key={i} className="aspect-[4/5] rounded-2xl bg-white/5 animate-pulse border border-white/5" />
-              ))}
-            </div>
-          ) : paginated.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-32 bg-white/[0.02] backdrop-blur-sm rounded-3xl border border-dashed border-primary/15">
-              <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center mb-6 border border-primary/20">
-                <Gamepad2 className="w-10 h-10 text-primary/40" />
-              </div>
-              <h3 className="text-2xl font-black uppercase tracking-[0.2em] text-white mb-2">No Games Found</h3>
-              <p className="text-primary/50 font-black uppercase tracking-widest text-[10px] mb-8">
-                {games.length === 0 ? "No games in catalog yet — add games in the Owner Panel" : "No games match your search"}
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => { setSearchTerm(""); setSelectedProvider(null); }}
-                className="rounded-2xl border-primary/30 text-primary font-black uppercase tracking-widest text-xs h-12 px-8 hover:bg-primary hover:text-black transition-all"
-              >
-                Reset Filters
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
-              {paginated.map((game) => (
-                <SlotCard key={game.id} game={game} onClick={() => handleGameClick(game.id)} />
-              ))}
-            </div>
-          )}
+      {/* ── Search & Filters ── */}
+      <div className="w-full space-y-4">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40 pointer-events-none" />
+          <Input
+            placeholder="Search games..."
+            value={searchTerm}
+            onChange={(e) => handleSearch(e.target.value)}
+            className="w-full pl-12 bg-white/5 border-white/10 rounded-2xl h-12 font-mono font-black text-lg text-white placeholder:text-muted-foreground/30 focus:border-primary/50 focus:ring-primary/20 transition-all"
+          />
+        </div>
 
-          {/* ── Pagination ─────────────────────────────── */}
-          {!isLoading && filtered.length > 0 && (
-            <div className="mt-8 space-y-2">
-              <PaginationBar page={page} totalPages={totalPages} onPage={setPage} />
-              <p className="text-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Showing {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, filtered.length)} of {filtered.length} games · Page {page} of {totalPages}
-              </p>
-            </div>
-          )}
+        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+          <Select value={selectedProvider || "all"} onValueChange={(v) => setSelectedProvider(v === "all" ? null : v)}>
+            <SelectTrigger className="w-full md:w-48 bg-white/5 border-white/10 rounded-2xl h-12 font-black uppercase text-xs">
+              <SelectValue placeholder="All Providers" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Providers</SelectItem>
+              {providers.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {p}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Per Page:</span>
+            <Select value={pageSize.toString()} onValueChange={(v) => { setPageSize(parseInt(v) as PageSize); setPage(1); }}>
+              <SelectTrigger className="w-20 bg-white/5 border-white/10 rounded-xl h-10 font-black">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <SelectItem key={size} value={size.toString()}>
+                    {size}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
+
+      {/* ── Games Grid ── */}
+      <div className="w-full space-y-6">
+        {paginated.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+            {paginated.map((game) => (
+              <SlotCard key={game.id} game={game} onClick={() => handleLaunchGame(game.id)} />
+            ))}
+          </div>
+        ) : (
+          <div className="w-full py-12 text-center">
+            <Zap className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+            <p className="text-muted-foreground">No games found matching your filters.</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Pagination ── */}
+      {totalPages > 1 && (
+        <div className="w-full flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(1)}
+            disabled={page === 1}
+            className="rounded-lg"
+          >
+            <ChevronFirst className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(Math.max(1, page - 1))}
+            disabled={page === 1}
+            className="rounded-lg"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+
+          <div className="flex items-center gap-1 px-4">
+            <span className="text-sm font-black">
+              {page} / {totalPages}
+            </span>
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(Math.min(totalPages, page + 1))}
+            disabled={page === totalPages}
+            className="rounded-lg"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(totalPages)}
+            disabled={page === totalPages}
+            className="rounded-lg"
+          >
+            <ChevronLast className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
