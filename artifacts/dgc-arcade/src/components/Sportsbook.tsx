@@ -701,7 +701,7 @@ export function Sportsbook() {
                   <AlertCircle className="w-12 h-12 text-red-500/50 mx-auto" />
                   <p className="text-red-400 font-bold uppercase tracking-widest text-sm">Connection Error</p>
                   <p className="text-muted-foreground text-xs max-w-xs mx-auto">
-                    {(fixturesError as Error).message}. Check THE_ODDS_API_KEY in Render.
+                    {(fixturesError as Error).message}. Check SPORTS_GAME_ODDS_API_KEY in Render.
                   </p>
                   <Button
                     variant="outline"

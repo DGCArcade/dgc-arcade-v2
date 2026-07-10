@@ -141,6 +141,7 @@ slotsAggregatorRouter.get("/games", async (req: Request, res: Response) => {
 
       if (aggregatorRes.ok) {
         const aggregatorData = await aggregatorRes.json() as any;
+        logger.info({ rawData: JSON.stringify(aggregatorData).substring(0, 500) }, "[SlotsAggregator] Raw aggregator response snippet");
 
         // Map aggregator games into our format
         const aggregatorGames = (aggregatorData.games || aggregatorData.data || [])
@@ -148,7 +149,7 @@ slotsAggregatorRouter.get("/games", async (req: Request, res: Response) => {
             id: game.game_id || game.id || `game-${idx}`,
             title: game.name || game.title || "Unknown Game",
             provider: game.provider || "NexusGGR",
-            thumbnail: game.image || game.thumbnail || game.cover_url || "",
+            thumbnail: game.image || game.thumbnail || game.cover_url || game.cover || game.icon || `https://api.dicebear.com/7.x/identicon/svg?seed=${game.name || game.title}`,
             rtp: parseFloat(game.rtp) || 96.0,
             volatility: normalizeVolatility(game.volatility),
             jackpot: game.jackpot ? parseFloat(game.jackpot) : undefined,

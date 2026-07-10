@@ -8,7 +8,7 @@ import { logger } from "./logger.js";
  * in your environment to enable this.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-export const SPORTSGAMEODDS_API_KEY = process.env.SPORTSGAMEODDS_API_KEY || "";
+export const SPORTSGAMEODDS_API_KEY = process.env.SPORTS_GAME_ODDS_API_KEY || process.env.SPORTSGAMEODDS_API_KEY || "";
 const SPORTSGAMEODDS_BASE = "https://api.sportsgameodds.com/v2";
 
 export function isSportsGameOddsConfigured(): boolean {

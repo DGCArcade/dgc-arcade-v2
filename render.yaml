@@ -50,10 +50,9 @@ services:
         sync: false
       - key: RENDER_DEPLOY_HOOK_URL
         sync: false
-      # ── Sports Betting (The Odds API) ──────────────────────────────
-      # Get a FREE key at https://the-odds-api.com
-      # Free tier: 500 requests/month, no credit card, no paid subscription
-      - key: THE_ODDS_API_KEY
+      # ── Sports Betting (SportsGameOdds) ───────────────────────────
+      # Get your key at https://sportsgameodds.com
+      - key: SPORTS_GAME_ODDS_API_KEY
         sync: false
       # ── Owner Settings ─────────────────────────────────────────────
       # Must match the owner's username in the database (default: fanodgc)
