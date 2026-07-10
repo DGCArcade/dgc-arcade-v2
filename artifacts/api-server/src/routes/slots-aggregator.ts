@@ -3,9 +3,10 @@ import { logger } from "../lib/logger.js";
 
 export const slotsAggregatorRouter = Router();
 
-const AGGREGATOR_URL = "https://nexusggr.dev";
-const AGGREGATOR_API_KEY = "test_demoxx";
-const AGGREGATOR_MERCHANT_ID = "test_demo";
+// Provider credentials — env vars take priority; fall back to sandbox defaults
+const AGGREGATOR_URL = (process.env.CASINO_PROVIDER_URL || "https://my.nexusggr.dev").replace(/\/$/, "");
+const AGGREGATOR_API_KEY = process.env.CASINO_API_KEY || "test_demoxx";
+const AGGREGATOR_MERCHANT_ID = process.env.CASINO_MERCHANT_ID || "test_demo";
 
 // In-memory cache for aggregator games
 let cachedGames: any[] | null = null;

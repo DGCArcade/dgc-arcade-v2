@@ -84,19 +84,57 @@ sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
       });
     }
 
-    // Dedicated sport keys for the four tracked categories
+    // Expanded sport keys — covers all major categories shown in the frontend
     const TRACKED_SPORTS: Record<string, string[]> = {
-      Football: ["americanfootball_nfl", "americanfootball_ncaaf", "soccer_epl", "soccer_uefa_champs_league"],
-      Basketball: ["basketball_nba", "basketball_ncaab", "basketball_euroleague"],
+      Football: [
+        "americanfootball_nfl",
+        "americanfootball_ncaaf",
+        "soccer_epl",
+        "soccer_mls",
+        "soccer_uefa_champs_league",
+        "soccer_uefa_europa_league",
+        "soccer_spain_la_liga",
+        "soccer_germany_bundesliga",
+        "soccer_italy_serie_a",
+        "soccer_france_ligue_one",
+      ],
+      Basketball: [
+        "basketball_nba",
+        "basketball_ncaab",
+        "basketball_euroleague",
+        "basketball_wnba",
+      ],
+      Baseball: ["baseball_mlb"],
+      Hockey: ["icehockey_nhl", "icehockey_sweden_hockey_league"],
+      Tennis: [
+        "tennis_atp_wimbledon",
+        "tennis_wta_wimbledon",
+        "tennis_atp_us_open",
+        "tennis_wta_us_open",
+        "tennis_atp_aus_open",
+        "tennis_wta_aus_open",
+        "tennis_atp_french_open",
+        "tennis_wta_french_open",
+      ],
       UFC: ["mma_mixed_martial_arts"],
-      Tennis: ["tennis_atp_french_open", "tennis_wta_french_open", "tennis_atp_us_open", "tennis_wta_us_open"],
+      Boxing: ["boxing_boxing"],
+      Golf: [
+        "golf_pga_championship",
+        "golf_the_masters_tournament",
+        "golf_us_open",
+        "golf_the_open_championship",
+      ],
     };
 
     const feedResults: Record<string, any[]> = {
       Football: [],
       Basketball: [],
-      UFC: [],
+      Baseball: [],
+      Hockey: [],
       Tennis: [],
+      UFC: [],
+      Boxing: [],
+      Golf: [],
     };
 
     // Fetch fixtures for each category in parallel (live + upcoming merged)

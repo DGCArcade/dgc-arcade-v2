@@ -91,26 +91,118 @@ function formatOdds(price: number): string {
   return price > 0 ? `+${price}` : `${price}`;
 }
 
+/**
+ * Returns the user's browser IANA timezone string (e.g. "America/New_York").
+ * Falls back to "UTC" if the Intl API is unavailable.
+ */
+function getUserTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+/**
+ * Format a UTC ISO commence_time string into the user's local timezone.
+ * Explicitly passes the detected IANA timezone so the correct day/hour
+ * is always shown regardless of server-side UTC offsets.
+ */
+function formatCommenceTime(isoString: string): string {
+  const tz = getUserTimezone();
+  try {
+    return new Date(isoString).toLocaleString(undefined, {
+      timeZone: tz,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    // Fallback: rely on browser default (no explicit timeZone)
+    return new Date(isoString).toLocaleString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+}
+
 /* ─────────────────────────────────────────────────────────────
-   Sport category tabs (Football / Basketball / UFC / Tennis)
+   Sport category tabs — expanded with more sports
 ───────────────────────────────────────────────────────────── */
-const SPORT_CATEGORIES: { label: string; keys: string[] }[] = [
+const SPORT_CATEGORIES: { label: string; icon: string; keys: string[] }[] = [
   {
     label: "Football",
-    keys: ["americanfootball_nfl", "americanfootball_ncaaf", "soccer_epl", "soccer_uefa_champs_league"],
+    icon: "🏈",
+    keys: [
+      "americanfootball_nfl",
+      "americanfootball_ncaaf",
+      "soccer_epl",
+      "soccer_mls",
+      "soccer_uefa_champs_league",
+      "soccer_uefa_europa_league",
+      "soccer_spain_la_liga",
+      "soccer_germany_bundesliga",
+      "soccer_italy_serie_a",
+      "soccer_france_ligue_one",
+    ],
   },
   {
     label: "Basketball",
-    keys: ["basketball_nba", "basketball_ncaab", "basketball_euroleague"],
+    icon: "🏀",
+    keys: [
+      "basketball_nba",
+      "basketball_ncaab",
+      "basketball_euroleague",
+      "basketball_wnba",
+    ],
   },
-  { label: "UFC", keys: ["mma_mixed_martial_arts"] },
+  {
+    label: "Baseball",
+    icon: "⚾",
+    keys: ["baseball_mlb"],
+  },
+  {
+    label: "Hockey",
+    icon: "🏒",
+    keys: ["icehockey_nhl", "icehockey_sweden_hockey_league"],
+  },
   {
     label: "Tennis",
+    icon: "🎾",
     keys: [
-      "tennis_atp_french_open",
-      "tennis_wta_french_open",
+      "tennis_atp_wimbledon",
+      "tennis_wta_wimbledon",
       "tennis_atp_us_open",
       "tennis_wta_us_open",
+      "tennis_atp_aus_open",
+      "tennis_wta_aus_open",
+      "tennis_atp_french_open",
+      "tennis_wta_french_open",
+    ],
+  },
+  {
+    label: "UFC / MMA",
+    icon: "🥊",
+    keys: ["mma_mixed_martial_arts"],
+  },
+  {
+    label: "Boxing",
+    icon: "🥋",
+    keys: ["boxing_boxing"],
+  },
+  {
+    label: "Golf",
+    icon: "⛳",
+    keys: [
+      "golf_pga_championship",
+      "golf_the_masters_tournament",
+      "golf_us_open",
+      "golf_the_open_championship",
     ],
   },
 ];
@@ -508,13 +600,14 @@ export function Sportsbook() {
                     setActiveCategory(cat.label);
                     setSelectedSport(cat.keys[0]);
                   }}
-                  className={`px-6 py-3 rounded-2xl border font-black uppercase tracking-[0.15em] text-[11px] transition-all duration-300 whitespace-nowrap shrink-0 ${
+                  className={`px-5 py-3 rounded-2xl border font-black uppercase tracking-[0.15em] text-[11px] transition-all duration-300 whitespace-nowrap shrink-0 flex items-center gap-2 ${
                     activeCategory === cat.label
                       ? "bg-primary text-black border-primary shadow-[0_0_25px_rgba(255,215,0,0.4)] scale-105"
                       : "bg-white/5 text-muted-foreground border-white/10 hover:border-primary/40 hover:text-foreground hover:scale-[1.02]"
                   }`}
                 >
-                  {cat.label}
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
                 </button>
               ))}
             </div>
@@ -604,11 +697,7 @@ export function Sportsbook() {
                           <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 flex items-center gap-2">
                             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
                             <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">
-                              {new Date(fixture.commence_time).toLocaleString(undefined, {
-                                weekday: "short",
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
+                              {formatCommenceTime(fixture.commence_time)}
                             </span>
                           </div>
                           <span className="hidden md:block text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/30">

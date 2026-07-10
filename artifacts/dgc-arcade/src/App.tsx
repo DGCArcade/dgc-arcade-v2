@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -204,11 +204,14 @@ function Router() {
           <Route path="/deposit/success" component={DepositSuccessPage} />
           <Route path="/deposit/failed" component={DepositFailedPage} />
 
+                    {/* Convenience redirect: /chicken-road → /games/chicken-road */}
+          <Route path="/chicken-road">
+            <Redirect to="/games/chicken-road" />
+          </Route>
           {/* Hidden owner-only Sentry smoke test — not linked in nav */}
           <Route path="/debug-sentry">
             {isOwner ? <DebugSentryPage /> : <NotFound />}
           </Route>
-          
           {/* Catch-all 404 */}
           <Route component={NotFound} />
         </Switch>

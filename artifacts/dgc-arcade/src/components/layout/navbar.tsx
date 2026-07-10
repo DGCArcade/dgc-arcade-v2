@@ -116,9 +116,16 @@ export function Navbar() {
       )}
 
       {settings.slotsEnabled && (
+        <Link href="/slots" className={`group flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] transition-all duration-300 ${location === "/slots" ? "text-primary scale-110" : "text-muted-foreground hover:text-foreground hover:scale-105"}`}>
+          <Zap className={`w-4 h-4 ${location === "/slots" ? "animate-pulse" : "group-hover:animate-bounce"}`} />
+          <span>Slots</span>
+        </Link>
+      )}
+
+      {settings.sportsbookEnabled && (
         <Link href="/sportsbook" className={`group relative px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.25em] transition-all duration-500 flex items-center gap-3 overflow-hidden ${
-          location === "/sportsbook" 
-            ? "text-black bg-primary shadow-[0_0_30px_rgba(255,215,0,0.5)] scale-110" 
+          location === "/sportsbook"
+            ? "text-black bg-primary shadow-[0_0_30px_rgba(255,215,0,0.5)] scale-110"
             : "text-primary border border-primary/20 hover:border-primary/60 hover:bg-primary/5 hover:scale-105"
         }`}>
           <Trophy className={`w-4 h-4 ${location === "/sportsbook" ? "animate-bounce" : "group-hover:animate-pulse"}`} />

@@ -52,16 +52,16 @@ casinoRouter.get("/launch", async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "game_id is required" });
     }
 
-    // SANDBOX MODE: hardcoded free staging credentials
-    const CASINO_PROVIDER_URL = "https://nexusggr.dev";
-    const CASINO_API_KEY = "test_demoxx";
-    const CASINO_MERCHANT_ID = "test_demo";
+    // Provider credentials — env vars take priority; fall back to sandbox defaults
+    const CASINO_PROVIDER_URL = (process.env.CASINO_PROVIDER_URL || "https://my.nexusggr.dev").replace(/\/$/, "");
+    const CASINO_API_KEY = process.env.CASINO_API_KEY || "test_demoxx";
+    const CASINO_MERCHANT_ID = process.env.CASINO_MERCHANT_ID || "test_demo";
 
     const userId = (req as any).user?.userId ?? "guest";
     const username = (req as any).user?.username ?? "guest";
 
     // Build the aggregator stream-session request URL
-    const streamEndpoint = new URL(`${CASINO_PROVIDER_URL.replace(/\/$/, "")}/launch`);
+    const streamEndpoint = new URL(`${CASINO_PROVIDER_URL}/launch`);
     streamEndpoint.searchParams.set("game_id", gameId);
     streamEndpoint.searchParams.set("api_key", CASINO_API_KEY);
     streamEndpoint.searchParams.set("merchant_id", CASINO_MERCHANT_ID);
