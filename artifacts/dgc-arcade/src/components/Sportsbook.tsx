@@ -5,22 +5,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import {
-  Zap,
-  TrendingUp,
-  ChevronDown,
-  ChevronUp,
+  Search,
   Loader,
   AlertCircle,
-  DollarSign,
   Trophy,
   Coins,
   History,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  PartyPopper,
   ExternalLink,
   Flame,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,17 +31,10 @@ interface Sport {
   active: boolean;
 }
 
-interface AltLine {
-  odds: number;
-  spread?: number;
-  overUnder?: number;
-}
-
 interface Outcome {
   name: string;
   price: number;
   point?: number;
-  altLines?: AltLine[];
 }
 
 interface Market {
@@ -141,12 +127,18 @@ function isGameLive(fixture: Fixture): boolean {
   const now = new Date();
   const commenceTime = new Date(fixture.commence_time);
   const timeDiff = (now.getTime() - commenceTime.getTime()) / (1000 * 60);
-  // Live if started within last 3 hours and not completed
   return timeDiff >= 0 && timeDiff < 180 && !fixture.completed;
 }
 
+function isGameUpcoming(fixture: Fixture): boolean {
+  const now = new Date();
+  const commenceTime = new Date(fixture.commence_time);
+  const timeDiff = (commenceTime.getTime() - now.getTime()) / (1000 * 60);
+  return timeDiff > 0 && timeDiff < 1440; // Next 24 hours
+}
+
 /* ─────────────────────────────────────────────────────────────
-   Sport category tabs
+   Sport categories
 ───────────────────────────────────────────────────────────── */
 const SPORT_CATEGORIES: { label: string; icon: string; keys: string[] }[] = [
   { label: "Football", icon: "🏈", keys: ["NFL", "NCAAF"] },
@@ -181,6 +173,7 @@ export function Sportsbook() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // State
   const [selectedSport, setSelectedSport] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("dgc_sportsbook_sport") || "NFL";
@@ -196,7 +189,8 @@ export function Sportsbook() {
   });
 
   const [showLiveOnly, setShowLiveOnly] = useState(false);
-  const [activeMarket, setActiveMarket] = useState<"main" | "props" | "alt">("main");
+  const [showTopSports, setShowTopSports] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
   const [selectedBet, setSelectedBet] = useState<{
     fixture: Fixture;
     market: Market;
@@ -241,24 +235,43 @@ export function Sportsbook() {
     staleTime: 1000 * 60 * 5,
   });
 
-  // Fetch fixtures for selected sport OR all sports if live view
+  // Fetch fixtures
   const {
     data: fixtures = [],
     isLoading: fixturesLoading,
     error: fixturesError,
   } = useQuery<Fixture[]>({
-    queryKey: ["sportsbook-odds", selectedSport, showLiveOnly],
+    queryKey: ["sportsbook-odds", selectedSport, showLiveOnly, showTopSports],
     queryFn: async () => {
-      if (!selectedSport && !showLiveOnly) return [];
+      if (!selectedSport && !showLiveOnly && !showTopSports) return [];
 
-      // If live view, fetch from global feed
+      // Top Sports: fetch all upcoming games
+      if (showTopSports) {
+        const res = await fetch("/api/sports/feed", {
+          headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` },
+        });
+        if (!res.ok) throw new Error("Failed to fetch top sports");
+        const data = await res.json();
+        const allGames: Fixture[] = [];
+        for (const category of Object.values(data.feed || {})) {
+          if (Array.isArray(category)) {
+            allGames.push(...category.filter((g: any) => isGameUpcoming(g)));
+          }
+        }
+        return allGames.sort((a, b) => {
+          const aTime = new Date(a.commence_time).getTime();
+          const bTime = new Date(b.commence_time).getTime();
+          return aTime - bTime;
+        });
+      }
+
+      // Live view: fetch all live games
       if (showLiveOnly) {
         const res = await fetch("/api/sports/feed", {
           headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` },
         });
         if (!res.ok) throw new Error("Failed to fetch global feed");
         const data = await res.json();
-        // Flatten all categories and filter for live games only
         const allGames: Fixture[] = [];
         for (const category of Object.values(data.feed || {})) {
           if (Array.isArray(category)) {
@@ -268,7 +281,7 @@ export function Sportsbook() {
         return allGames;
       }
 
-      // Otherwise fetch for selected sport
+      // Single sport view
       const res = await fetch(
         `/api/sportsbook/odds/${selectedSport}?regions=us&oddsFormat=american`,
         { headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` } }
@@ -279,7 +292,7 @@ export function Sportsbook() {
       }
       return res.json();
     },
-    enabled: !!(selectedSport || showLiveOnly),
+    enabled: !!(selectedSport || showLiveOnly || showTopSports),
     staleTime: showLiveOnly ? 0 : 1000 * 30,
     refetchInterval: showLiveOnly ? 10_000 : undefined,
     retry: 1,
@@ -287,7 +300,7 @@ export function Sportsbook() {
 
   // Live SSE
   useEffect(() => {
-    if (!selectedSport || showLiveOnly) return;
+    if (!selectedSport || showLiveOnly || showTopSports) return;
 
     const eventSource = new EventSource(`/api/sportsbook/live/${selectedSport}`);
 
@@ -295,7 +308,10 @@ export function Sportsbook() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === "odds_update" && data.fixtures) {
-          queryClient.setQueryData(["sportsbook-odds", selectedSport, showLiveOnly], data.fixtures);
+          queryClient.setQueryData(
+            ["sportsbook-odds", selectedSport, showLiveOnly, showTopSports],
+            data.fixtures
+          );
         }
       } catch (error) {
         console.error("[Sportsbook] Error parsing SSE data", error);
@@ -310,25 +326,23 @@ export function Sportsbook() {
     return () => {
       eventSource.close();
     };
-  }, [selectedSport, showLiveOnly, queryClient]);
+  }, [selectedSport, showLiveOnly, showTopSports, queryClient]);
 
-  // Filter for live games only
-  const filteredFixtures = useMemo(() => {
-    if (!showLiveOnly) return fixtures;
-    return fixtures.filter((f) => isGameLive(f));
-  }, [fixtures, showLiveOnly]);
+  // Search & Filter
+  const searchResults = useMemo(() => {
+    if (!searchTerm.trim()) return fixtures;
 
-  // Group fixtures by sport for live view
-  const groupedByCategory = useMemo(() => {
-    if (!showLiveOnly) return {};
-    const grouped: Record<string, Fixture[]> = {};
-    for (const cat of SPORT_CATEGORIES) {
-      grouped[cat.label] = filteredFixtures.filter((f) =>
-        cat.keys.includes(f.sport_key)
-      );
-    }
-    return grouped;
-  }, [filteredFixtures, showLiveOnly]);
+    const term = searchTerm.toLowerCase();
+    return fixtures.filter((f) => {
+      const homeMatch = f.home_team.toLowerCase().includes(term);
+      const awayMatch = f.away_team.toLowerCase().includes(term);
+      const leagueMatch = f.sport_title.toLowerCase().includes(term);
+      const scoreMatch =
+        f.liveScore &&
+        `${f.liveScore.homeScore}-${f.liveScore.awayScore}`.includes(term);
+      return homeMatch || awayMatch || leagueMatch || scoreMatch;
+    });
+  }, [fixtures, searchTerm]);
 
   // Bet history
   const { data: betHistory = [], isLoading: historyLoading } = useQuery<SportsBet[]>({
@@ -446,35 +460,173 @@ export function Sportsbook() {
 
   /* ── Render ── */
   return (
-    <div className="min-h-screen bg-[#0d0e12] text-[#f5f6f9] font-sans antialiased selection:bg-emerald-500 selection:text-black">
+    <div className="w-full space-y-6 pb-24 md:pb-12">
       {/* Hero Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600/20 to-purple-600/10 border-b border-white/5 px-6 py-8 mb-6 rounded-2xl mx-4 mt-4">
-        <div className="relative z-10 max-w-2xl">
-          <span className="bg-emerald-500/10 text-emerald-400 text-xs font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border border-emerald-500/20">
-            Live Streaming & Betting
-          </span>
-          <h1 className="text-3xl font-black tracking-tight mt-3 text-white uppercase sm:text-4xl">
-            DGC <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
-              Arcade Sports
-            </span>
-          </h1>
-          <p className="mt-2 text-sm text-gray-400 max-w-md">
-            Sub-minute odds updates, real-time live scores, and instant settlement.
-          </p>
+      <div className="relative overflow-hidden bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-4 md:p-6 lg:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300 hover:border-primary/20 hover:shadow-[0_20px_50px_rgba(255,215,0,0.2)]">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2" />
+
+        <div className="relative z-10 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/30 shadow-[0_0_30px_rgba(255,215,0,0.15)] group-hover:scale-110 transition-transform duration-500">
+              <Trophy className="w-6 h-6 md:w-8 md:h-8 text-primary animate-pulse" />
+            </div>
+            <div>
+              <h1 className="font-display font-black text-3xl md:text-6xl uppercase tracking-[0.15em] text-white leading-none">
+                DGC<span className="text-glow-shift-slow drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]">SPORTS</span>
+              </h1>
+              <div className="flex items-center gap-3 mt-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 border border-green-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-green-400">Live Engine</span>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                  Institutional Grade Odds · Instant Settlement
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="absolute right-0 bottom-0 top-0 w-1/3 bg-[radial-gradient(circle_at_bottom_right,_var(--tw-gradient-stops))] from-emerald-500/10 via-transparent to-transparent hidden md:block" />
       </div>
 
-      {/* Main 3-Column Layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 px-4 pb-12">
-        {/* LEFT SIDEBAR: Sports Navigation */}
-        <aside className="xl:col-span-2 space-y-1">
-          <div className="text-xs font-bold text-gray-500 uppercase tracking-wider px-3 mb-2">
-            {showLiveOnly ? "🔴 LIVE NOW" : "Popular Sports"}
-          </div>
+      {/* Search Bar */}
+      <div className="w-full space-y-4">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40 pointer-events-none" />
+          <Input
+            placeholder="Search matches by team, league, or score..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-12 pr-4 bg-white/5 border-white/10 rounded-2xl h-12 font-mono font-black text-lg text-white placeholder:text-muted-foreground/30 focus:border-primary/50 focus:ring-primary/20 transition-all"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm("")}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground/40 hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
 
-          {!showLiveOnly && (
-            <>
+        {/* View Toggles */}
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => {
+              setShowTopSports(true);
+              setShowLiveOnly(false);
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+              showTopSports
+                ? "bg-primary text-black border border-primary shadow-[0_0_20px_rgba(255,215,0,0.3)]"
+                : "bg-white/5 text-muted-foreground border border-white/10 hover:border-primary/40 hover:text-white"
+            }`}
+          >
+            📊 Top Sports
+          </button>
+
+          <button
+            onClick={() => {
+              setShowLiveOnly(true);
+              setShowTopSports(false);
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+              showLiveOnly
+                ? "bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse"
+                : "bg-white/5 text-muted-foreground border border-white/10 hover:border-red-500/40 hover:text-white"
+            }`}
+          >
+            <Flame className="w-3 h-3" />
+            Live Now
+          </button>
+
+          <button
+            onClick={() => {
+              setShowTopSports(false);
+              setShowLiveOnly(false);
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+              !showTopSports && !showLiveOnly
+                ? "bg-primary text-black border border-primary shadow-[0_0_20px_rgba(255,215,0,0.3)]"
+                : "bg-white/5 text-muted-foreground border border-white/10 hover:border-primary/40 hover:text-white"
+            }`}
+          >
+            🏆 By Sport
+          </button>
+
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+              showHistory
+                ? "bg-primary text-black border border-primary shadow-[0_0_20px_rgba(255,215,0,0.3)]"
+                : "bg-white/5 text-muted-foreground border border-white/10 hover:border-primary/40 hover:text-white"
+            }`}
+          >
+            <History className="w-3 h-3 inline mr-1" />
+            History
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      {showHistory ? (
+        /* Bet History */
+        <div className="space-y-4">
+          <h2 className="text-lg font-black uppercase tracking-widest">Recent Wagers</h2>
+
+          {historyLoading ? (
+            <div className="flex justify-center py-20">
+              <Loader className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : betHistory.length === 0 ? (
+            <div className="bg-white/5 border border-dashed border-white/10 rounded-3xl py-20 text-center">
+              <p className="text-muted-foreground font-mono">No sports bets found in your history.</p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {betHistory.map((bet) => (
+                <div
+                  key={bet.id}
+                  className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-white/10 transition-all"
+                >
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-white">
+                      {bet.homeTeam} vs {bet.awayTeam}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {bet.selectedOutcome} @ {formatOdds(parseFloat(bet.odds))}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">Wager</p>
+                      <p className="text-sm font-bold text-white">${parseFloat(bet.betAmountUsd).toFixed(2)}</p>
+                    </div>
+                    <Badge
+                      className={`uppercase tracking-widest text-[9px] font-black px-2.5 py-1 ${
+                        bet.status === "won"
+                          ? "bg-green-500 text-black"
+                          : bet.status === "lost"
+                          ? "bg-red-500 text-white"
+                          : "bg-blue-600 text-white"
+                      }`}
+                    >
+                      {bet.status}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Games Display */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Sidebar: Sports */}
+          {!showTopSports && !showLiveOnly && (
+            <aside className="lg:col-span-2 space-y-1">
+              <div className="text-xs font-bold text-gray-500 uppercase tracking-wider px-3 mb-2">
+                Popular Sports
+              </div>
               {SPORT_CATEGORIES.map((cat) => (
                 <button
                   key={cat.label}
@@ -484,353 +636,278 @@ export function Sportsbook() {
                   }}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
                     activeCategory === cat.label
-                      ? "bg-gradient-to-r from-emerald-500/10 to-transparent border-l-4 border-emerald-500 text-white font-bold"
+                      ? "bg-gradient-to-r from-primary/20 to-transparent border-l-4 border-primary text-white font-bold"
                       : "text-gray-400 hover:bg-white/[0.02] hover:text-white"
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <span className="w-2 h-2 rounded-full bg-gray-600 group-hover:bg-emerald-400 transition-colors" />
+                    <span className="w-2 h-2 rounded-full bg-gray-600 group-hover:bg-primary transition-colors" />
                     <span>{cat.icon} {cat.label}</span>
                   </div>
-                  <span className="text-xs bg-white/5 text-gray-500 px-1.5 py-0.5 rounded group-hover:text-emerald-400">
+                  <span className="text-xs bg-white/5 text-gray-500 px-1.5 py-0.5 rounded group-hover:text-primary">
                     {fixtures.filter((f) => cat.keys.includes(f.sport_key)).length}
                   </span>
                 </button>
               ))}
-            </>
+            </aside>
           )}
 
-          {showLiveOnly && (
-            <>
-              {SPORT_CATEGORIES.map((cat) => {
-                const count = (groupedByCategory[cat.label] || []).length;
-                if (count === 0) return null;
-                return (
-                  <button
-                    key={cat.label}
-                    onClick={() => {
-                      setShowLiveOnly(false);
-                      setActiveCategory(cat.label);
-                      setSelectedSport(cat.keys[0]);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all bg-gradient-to-r from-red-500/10 to-transparent border-l-4 border-red-500 text-white font-bold"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                      <span>{cat.icon} {cat.label}</span>
-                    </div>
-                    <span className="text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </>
-          )}
-        </aside>
-
-        {/* CENTER: Main Match Display */}
-        <main className="xl:col-span-7 space-y-4">
-          {/* Live Toggle & Market Tabs */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#14161d] p-3 rounded-xl border border-white/5">
-            <button
-              onClick={() => setShowLiveOnly(!showLiveOnly)}
-              className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${
-                showLiveOnly
-                  ? "bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse"
-                  : "bg-white/5 text-gray-400 hover:text-white border border-white/10"
-              }`}
-            >
-              <Flame className="w-4 h-4" />
-              {showLiveOnly ? "Live View Active" : "View All Live"}
-            </button>
-
-            {!showLiveOnly && (
-              <div className="flex gap-1">
-                {(["main", "props", "alt"] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveMarket(tab)}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
-                      activeMarket === tab
-                        ? "bg-[#1e222d] text-white shadow-sm shadow-black/40"
-                        : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    {tab === "main" ? "Main" : tab === "props" ? "Props" : "Alt"}
-                  </button>
+          {/* Main Content */}
+          <main className={showTopSports || showLiveOnly ? "lg:col-span-8" : "lg:col-span-7"}>
+            {fixturesLoading ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-24 rounded-xl bg-white/5 animate-pulse" />
                 ))}
               </div>
-            )}
-
-            <span className="text-xs text-emerald-400 bg-emerald-500/5 px-2 py-1 rounded border border-emerald-500/10 animate-pulse font-mono">
-              ● Live Feed
-            </span>
-          </div>
-
-          {/* Column Headers */}
-          <div className="hidden md:grid grid-cols-12 gap-2 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
-            <div className="col-span-5">Event / Matchup</div>
-            <div className="col-span-2 text-center">Spread</div>
-            <div className="col-span-2 text-center">Total</div>
-            <div className="col-span-2 text-center">Moneyline</div>
-            <div className="col-span-1"></div>
-          </div>
-
-          {/* Games Display */}
-          {fixturesLoading ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-24 rounded-xl bg-white/5 animate-pulse" />
-              ))}
-            </div>
-          ) : fixturesError ? (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl py-12 text-center">
-              <AlertCircle className="w-12 h-12 text-red-500/50 mx-auto mb-3" />
-              <p className="text-red-400 font-bold">{(fixturesError as Error).message}</p>
-            </div>
-          ) : filteredFixtures.length === 0 ? (
-            <div className="bg-white/5 border border-white/5 rounded-xl py-12 text-center">
-              <p className="text-gray-400">
-                {showLiveOnly ? "No live games right now." : "No fixtures available."}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredFixtures.map((game) => {
-                const h2hMarket = game.bookmakers[0]?.markets.find((m) => m.key === "h2h");
-                const spreadsMarket = game.bookmakers[0]?.markets.find((m) => m.key === "spreads");
-                const totalsMarket = game.bookmakers[0]?.markets.find((m) => m.key === "totals");
-
-                if (!h2hMarket) return null;
-
-                return (
-                  <div
-                    key={game.id}
-                    className="bg-[#14161d] border border-white/5 hover:border-white/10 rounded-xl transition-all p-4"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                      {/* Teams & Scores */}
-                      <div className="col-span-1 md:col-span-5 space-y-2">
-                        <div className="flex items-center gap-2">
-                          {isGameLive(game) && (
-                            <span className="bg-red-500/10 text-red-400 text-[10px] font-black uppercase px-1.5 py-0.5 rounded border border-red-500/20 animate-pulse">
-                              Live
-                            </span>
-                          )}
-                          <span className="text-xs font-mono text-gray-400">
-                            {game.liveScore?.period || formatCommenceTime(game.commence_time)}
-                          </span>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-white text-sm">{game.home_team}</span>
-                            <span className="font-mono font-bold text-emerald-400 text-sm">
-                              {game.liveScore?.homeScore ?? "-"}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-white text-sm">{game.away_team}</span>
-                            <span className="font-mono font-bold text-emerald-400 text-sm">
-                              {game.liveScore?.awayScore ?? "-"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Spreads */}
-                      <div className="col-span-1 md:col-span-2 grid grid-cols-2 md:grid-cols-1 gap-1">
-                        {spreadsMarket?.outcomes.slice(0, 2).map((outcome) => (
-                          <button
-                            key={outcome.name}
-                            onClick={() =>
-                              setSelectedBet({
-                                fixture: game,
-                                market: spreadsMarket,
-                                outcome,
-                                odds: outcome.price,
-                              })
-                            }
-                            className="bg-[#1a1d26] hover:bg-[#222733] border border-white/[0.03] p-2 rounded-lg text-center transition-colors"
-                          >
-                            <div className="text-[11px] text-gray-400">
-                              {outcome.point ? (outcome.point > 0 ? "+" : "") + outcome.point : "-"}
-                            </div>
-                            <div className="text-xs font-mono font-bold text-white">
-                              {formatOdds(outcome.price)}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Totals */}
-                      <div className="col-span-1 md:col-span-2 grid grid-cols-2 md:grid-cols-1 gap-1">
-                        {totalsMarket?.outcomes.slice(0, 2).map((outcome) => (
-                          <button
-                            key={outcome.name}
-                            onClick={() =>
-                              setSelectedBet({
-                                fixture: game,
-                                market: totalsMarket,
-                                outcome,
-                                odds: outcome.price,
-                              })
-                            }
-                            className="bg-[#1a1d26] hover:bg-[#222733] border border-white/[0.03] p-2 rounded-lg text-center transition-colors"
-                          >
-                            <div className="text-[11px] text-gray-400">
-                              {outcome.name} {outcome.point}
-                            </div>
-                            <div className="text-xs font-mono font-bold text-white">
-                              {formatOdds(outcome.price)}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Moneyline */}
-                      <div className="col-span-1 md:col-span-2 grid grid-cols-2 md:grid-cols-1 gap-1">
-                        {h2hMarket.outcomes.slice(0, 2).map((outcome) => (
-                          <button
-                            key={outcome.name}
-                            onClick={() =>
-                              setSelectedBet({
-                                fixture: game,
-                                market: h2hMarket,
-                                outcome,
-                                odds: outcome.price,
-                              })
-                            }
-                            className="bg-[#1a1d26] hover:bg-[#222733] border border-white/[0.03] p-2 rounded-lg text-center transition-colors"
-                          >
-                            <div className="text-xs font-mono font-bold text-white">
-                              {formatOdds(outcome.price)}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Deeplink */}
-                      <div className="col-span-1 md:col-span-1 flex items-center justify-end">
-                        {game.bookmakers[0]?.deeplinks &&
-                          Object.values(game.bookmakers[0].deeplinks)[0] && (
-                            <a
-                              href={Object.values(game.bookmakers[0].deeplinks)[0]}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </a>
-                          )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </main>
-
-        {/* RIGHT SIDEBAR: Bet Slip */}
-        <aside className="xl:col-span-3">
-          <div className="sticky top-6 bg-[#14161d] border border-white/5 rounded-xl p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-black uppercase tracking-widest text-sm">Bet Slip</h3>
-              <div className="text-right">
-                <p className="text-xs text-gray-500">Vault</p>
-                <p className="text-lg font-black text-emerald-400">
-                  ${totalUsdBalance.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+            ) : fixturesError ? (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl py-12 text-center">
+                <AlertCircle className="w-12 h-12 text-red-500/50 mx-auto mb-3" />
+                <p className="text-red-400 font-bold">{(fixturesError as Error).message}</p>
+              </div>
+            ) : searchResults.length === 0 ? (
+              <div className="bg-white/5 border border-white/5 rounded-xl py-12 text-center">
+                <p className="text-gray-400">
+                  {searchTerm ? "No matches found." : "No games available."}
                 </p>
               </div>
-            </div>
-
-            {selectedBet ? (
-              <>
-                <div className="space-y-3 pb-4 border-b border-white/5">
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Match</p>
-                    <p className="text-sm font-bold text-white">
-                      {selectedBet.fixture.home_team} vs {selectedBet.fixture.away_team}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Selection</p>
-                    <p className="text-sm font-bold text-emerald-400">
-                      {selectedBet.outcome.name} @ {formatOdds(selectedBet.odds)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-gray-500 mb-2 block">Amount (USD)</label>
-                    <Input
-                      type="number"
-                      value={betAmount}
-                      onChange={(e) => setBetAmount(e.target.value)}
-                      placeholder="0.00"
-                      className="bg-white/5 border-white/10 text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-gray-500 mb-2 block">Crypto</label>
-                    <select
-                      value={selectedCrypto}
-                      onChange={(e) => setSelectedCrypto(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
-                    >
-                      {cryptoBalances.map((bal) => (
-                        <option key={bal.currency} value={bal.currency.split("_")[0]}>
-                          {bal.currency.split("_")[0]} (${bal.usdValue.toFixed(2)})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="bg-white/5 rounded-lg p-3 space-y-2">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">Potential Payout:</span>
-                      <span className="text-emerald-400 font-bold">${potentialPayout}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">Multiplier:</span>
-                      <span className="text-emerald-400 font-bold">
-                        {americanOddsToMultiplier(selectedBet.odds).toFixed(2)}x
-                      </span>
-                    </div>
-                  </div>
-
-                  <Button
-                    onClick={() => placeBet()}
-                    disabled={isBettingPending || !betAmount || parseFloat(betAmount) <= 0}
-                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-black font-black uppercase tracking-widest"
-                  >
-                    {isBettingPending ? "Placing..." : "Place Bet"}
-                  </Button>
-
-                  <Button
-                    onClick={() => setSelectedBet(null)}
-                    variant="outline"
-                    className="w-full border-white/10"
-                  >
-                    Clear
-                  </Button>
-                </div>
-              </>
             ) : (
-              <div className="text-center py-8 text-gray-500">
-                <p className="text-sm">Select a match and outcome to place a bet</p>
+              <div className="space-y-3">
+                {searchResults.slice(0, 50).map((game) => {
+                  const h2hMarket = game.bookmakers[0]?.markets.find((m) => m.key === "h2h");
+                  const spreadsMarket = game.bookmakers[0]?.markets.find((m) => m.key === "spreads");
+                  const totalsMarket = game.bookmakers[0]?.markets.find((m) => m.key === "totals");
+
+                  if (!h2hMarket) return null;
+
+                  return (
+                    <div
+                      key={game.id}
+                      className="bg-black/40 border border-white/5 hover:border-white/10 rounded-xl transition-all p-4"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                        {/* Teams & Scores */}
+                        <div className="col-span-1 md:col-span-5 space-y-2">
+                          <div className="flex items-center gap-2">
+                            {isGameLive(game) && (
+                              <span className="bg-red-500/10 text-red-400 text-[10px] font-black uppercase px-1.5 py-0.5 rounded border border-red-500/20 animate-pulse">
+                                Live
+                              </span>
+                            )}
+                            <span className="text-xs font-mono text-gray-400">
+                              {game.liveScore?.period || formatCommenceTime(game.commence_time)}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-white text-sm">{game.home_team}</span>
+                              <span className="font-mono font-bold text-primary text-sm">
+                                {game.liveScore?.homeScore ?? "-"}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-white text-sm">{game.away_team}</span>
+                              <span className="font-mono font-bold text-primary text-sm">
+                                {game.liveScore?.awayScore ?? "-"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Spreads */}
+                        <div className="col-span-1 md:col-span-2 grid grid-cols-2 md:grid-cols-1 gap-1">
+                          {spreadsMarket?.outcomes.slice(0, 2).map((outcome) => (
+                            <button
+                              key={outcome.name}
+                              onClick={() =>
+                                setSelectedBet({
+                                  fixture: game,
+                                  market: spreadsMarket,
+                                  outcome,
+                                  odds: outcome.price,
+                                })
+                              }
+                              className="bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded-lg text-center transition-colors"
+                            >
+                              <div className="text-[11px] text-gray-400">
+                                {outcome.point ? (outcome.point > 0 ? "+" : "") + outcome.point : "-"}
+                              </div>
+                              <div className="text-xs font-mono font-bold text-white">
+                                {formatOdds(outcome.price)}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Totals */}
+                        <div className="col-span-1 md:col-span-2 grid grid-cols-2 md:grid-cols-1 gap-1">
+                          {totalsMarket?.outcomes.slice(0, 2).map((outcome) => (
+                            <button
+                              key={outcome.name}
+                              onClick={() =>
+                                setSelectedBet({
+                                  fixture: game,
+                                  market: totalsMarket,
+                                  outcome,
+                                  odds: outcome.price,
+                                })
+                              }
+                              className="bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded-lg text-center transition-colors"
+                            >
+                              <div className="text-[11px] text-gray-400">
+                                {outcome.name} {outcome.point}
+                              </div>
+                              <div className="text-xs font-mono font-bold text-white">
+                                {formatOdds(outcome.price)}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Moneyline */}
+                        <div className="col-span-1 md:col-span-2 grid grid-cols-2 md:grid-cols-1 gap-1">
+                          {h2hMarket.outcomes.slice(0, 2).map((outcome) => (
+                            <button
+                              key={outcome.name}
+                              onClick={() =>
+                                setSelectedBet({
+                                  fixture: game,
+                                  market: h2hMarket,
+                                  outcome,
+                                  odds: outcome.price,
+                                })
+                              }
+                              className="bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded-lg text-center transition-colors"
+                            >
+                              <div className="text-xs font-mono font-bold text-white">
+                                {formatOdds(outcome.price)}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Deeplink */}
+                        <div className="col-span-1 md:col-span-1 flex items-center justify-end">
+                          {game.bookmakers[0]?.deeplinks &&
+                            Object.values(game.bookmakers[0].deeplinks)[0] && (
+                              <a
+                                href={Object.values(game.bookmakers[0].deeplinks)[0]}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-all"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </a>
+                            )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
-          </div>
-        </aside>
-      </div>
+          </main>
+
+          {/* Right Sidebar: Bet Slip */}
+          <aside className="lg:col-span-3">
+            <div className="sticky top-6 bg-black/40 border border-white/5 rounded-xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-black uppercase tracking-widest text-sm">Bet Slip</h3>
+                <div className="text-right">
+                  <p className="text-xs text-gray-500">Vault</p>
+                  <p className="text-lg font-black text-primary">
+                    ${totalUsdBalance.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </p>
+                </div>
+              </div>
+
+              {selectedBet ? (
+                <>
+                  <div className="space-y-3 pb-4 border-b border-white/5">
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Match</p>
+                      <p className="text-sm font-bold text-white">
+                        {selectedBet.fixture.home_team} vs {selectedBet.fixture.away_team}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Selection</p>
+                      <p className="text-sm font-bold text-primary">
+                        {selectedBet.outcome.name} @ {formatOdds(selectedBet.odds)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-gray-500 mb-2 block">Amount (USD)</label>
+                      <Input
+                        type="number"
+                        value={betAmount}
+                        onChange={(e) => setBetAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="bg-white/5 border-white/10 text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-gray-500 mb-2 block">Crypto</label>
+                      <select
+                        value={selectedCrypto}
+                        onChange={(e) => setSelectedCrypto(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+                      >
+                        {cryptoBalances.map((bal) => (
+                          <option key={bal.currency} value={bal.currency.split("_")[0]}>
+                            {bal.currency.split("_")[0]} (${bal.usdValue.toFixed(2)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="bg-white/5 rounded-lg p-3 space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-500">Potential Payout:</span>
+                        <span className="text-primary font-bold">${potentialPayout}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-500">Multiplier:</span>
+                        <span className="text-primary font-bold">
+                          {americanOddsToMultiplier(selectedBet.odds).toFixed(2)}x
+                        </span>
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={() => placeBet()}
+                      disabled={isBettingPending || !betAmount || parseFloat(betAmount) <= 0}
+                      className="w-full bg-primary hover:bg-primary/90 text-black font-black uppercase tracking-widest"
+                    >
+                      {isBettingPending ? "Placing..." : "Place Bet"}
+                    </Button>
+
+                    <Button
+                      onClick={() => setSelectedBet(null)}
+                      variant="outline"
+                      className="w-full border-white/10"
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p className="text-sm">Select a match and outcome to place a bet</p>
+                </div>
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }
