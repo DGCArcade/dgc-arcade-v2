@@ -592,6 +592,14 @@ export function Sportsbook() {
                         ${parseFloat(bet.potentialPayoutUsd).toFixed(2)}
                       </span>
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => alert(`Match Tracker: ${bet.homeTeam} vs ${bet.awayTeam}\n\nBet Status: ${bet.status}\nSelection: ${bet.selectedOutcome}\nOdds: ${formatOdds(parseFloat(bet.odds))}\n\nLive updates will stream here as the match progresses.`)}
+                      className="text-[9px] font-black uppercase tracking-widest px-3 py-1 h-auto border-amber-400/30 hover:border-amber-400 hover:text-amber-400"
+                    >
+                      📊 Track
+                    </Button>
                     <div className="w-24 text-right">
                       <Badge
                         className={`uppercase tracking-widest text-[9px] font-black px-2.5 py-1 ${
@@ -720,7 +728,7 @@ export function Sportsbook() {
                       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
                       <div className="w-full p-4 md:p-6 lg:p-8 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/[0.02]">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 flex-wrap">
                           <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 flex items-center gap-2">
                             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
                             <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">
@@ -730,6 +738,7 @@ export function Sportsbook() {
                           <span className="hidden md:block text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/30">
                             Match ID: {fixture.id.slice(0, 8)}
                           </span>
+                          {/* Live Score Display - will be populated from SSE stream */}
                         </div>
                         <Badge className="bg-primary/10 hover:bg-primary/20 text-primary border-primary/20 text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg">
                           Market Open
