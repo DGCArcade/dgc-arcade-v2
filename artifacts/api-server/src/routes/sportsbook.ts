@@ -6,26 +6,25 @@ import { eq, and, desc, sql, lt, lte } from "drizzle-orm";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 import { getCryptoPrice } from "../lib/price-service.js";
 import { logger } from "../lib/logger.js";
+import {
+  isSportsGameOddsConfigured,
+  CATEGORY_LEAGUES,
+  ALL_LEAGUE_IDS,
+  fetchLeagueEvents,
+  fetchCategoryEvents,
+  mapEventToFixture,
+} from "../lib/sportsgameodds.js";
 
 export const sportsbookRouter = Router();
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
- * The Odds API Configuration
+ * SportsGameOdds API Configuration
  *
- * Uses The Odds API direct (https://api.the-odds-api.com)
- *   - Set env var: THE_ODDS_API_KEY=your_key_here in Render dashboard
+ * Uses SportsGameOdds.com (https://sportsgameodds.com)
+ *   - Set env var: SPORTSGAMEODDS_API_KEY=your_key_here in Render dashboard
  * ─────────────────────────────────────────────────────────────────────────────
  */
-const THE_ODDS_API_KEY = process.env.THE_ODDS_API_KEY || "";
-const ODDS_API_BASE = "https://api.the-odds-api.com";
-
-function buildOddsUrl(path: string, extraParams: Record<string, string> = {}): string {
-  const url = new URL(`${ODDS_API_BASE}${path}`);
-  if (THE_ODDS_API_KEY) url.searchParams.set("apiKey", THE_ODDS_API_KEY);
-  for (const [k, v] of Object.entries(extraParams)) url.searchParams.set(k, v);
-  return url.toString();
-}
 
 /**
  * Compute correct payout multiplier from American odds.
@@ -41,27 +40,27 @@ function americanOddsToMultiplier(americanOdds: number): number {
 
 /**
  * GET /api/sportsbook/sports
- * Returns all available sports from The Odds API.
+ * Returns all available sport categories/leagues (SportsGameOdds-backed).
  */
 sportsbookRouter.get("/sports", async (req: Request, res: Response) => {
   try {
-    if (!THE_ODDS_API_KEY) {
+    if (!isSportsGameOddsConfigured()) {
       return res.status(503).json({
         error: "Sportsbook API key not configured",
-        setup: "Set THE_ODDS_API_KEY in your Render environment variables. Free key at https://the-odds-api.com",
+        setup: "Set SPORTSGAMEODDS_API_KEY in your Render environment variables. https://sportsgameodds.com",
       });
     }
 
-    const url = buildOddsUrl("/v4/sports", { all: "false" });
-    const response = await fetch(url, { method: "GET" });
+    const sports = Object.entries(CATEGORY_LEAGUES).flatMap(([category, leagueIDs]) =>
+      leagueIDs.map((leagueID) => ({
+        key: leagueID,
+        group: category,
+        title: leagueID,
+        description: `${category} — ${leagueID}`,
+        active: true,
+      }))
+    );
 
-    if (!response.ok) {
-      const body = await response.text();
-      logger.error({ status: response.status, body }, "[Sportsbook] /sports failed");
-      return res.status(response.status).json({ error: "Failed to fetch sports from The Odds API", details: body });
-    }
-
-    const sports = await response.json();
     return res.json(sports);
   } catch (error) {
     logger.error({ error }, "[Sportsbook] Error fetching sports");
@@ -71,96 +70,40 @@ sportsbookRouter.get("/sports", async (req: Request, res: Response) => {
 
 /**
  * GET /api/sports/feed
- * Premium global match feed for Football, Basketball, UFC, and Tennis.
+ * Premium global match feed for Football, Basketball, MMA, Boxing, Tennis, Golf, etc.
  * Loops real-time data into the DGC glassmorphic match card layout.
  * This is the primary feed endpoint referenced in the deployment spec.
  */
 sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
   try {
-    if (!THE_ODDS_API_KEY) {
+    if (!isSportsGameOddsConfigured()) {
       return res.status(503).json({
         error: "Sportsbook API key not configured",
-        setup: "Set THE_ODDS_API_KEY in your Render environment variables.",
+        setup: "Set SPORTSGAMEODDS_API_KEY in your Render environment variables.",
       });
     }
 
-    // Expanded sport keys — covers all major categories shown in the frontend
-    const TRACKED_SPORTS: Record<string, string[]> = {
-      Football: [
-        "americanfootball_nfl",
-        "americanfootball_ncaaf",
-        "soccer_epl",
-        "soccer_mls",
-        "soccer_uefa_champs_league",
-        "soccer_uefa_europa_league",
-        "soccer_spain_la_liga",
-        "soccer_germany_bundesliga",
-        "soccer_italy_serie_a",
-        "soccer_france_ligue_one",
-      ],
-      Basketball: [
-        "basketball_nba",
-        "basketball_ncaab",
-        "basketball_euroleague",
-        "basketball_wnba",
-      ],
-      Baseball: ["baseball_mlb"],
-      Hockey: ["icehockey_nhl", "icehockey_sweden_hockey_league"],
-      Tennis: [
-        "tennis_atp_wimbledon",
-        "tennis_wta_wimbledon",
-        "tennis_atp_us_open",
-        "tennis_wta_us_open",
-        "tennis_atp_aus_open",
-        "tennis_wta_aus_open",
-        "tennis_atp_french_open",
-        "tennis_wta_french_open",
-      ],
-      UFC: ["mma_mixed_martial_arts"],
-      Boxing: ["boxing_boxing"],
-      Golf: [
-        "golf_pga_championship",
-        "golf_the_masters_tournament",
-        "golf_us_open",
-        "golf_the_open_championship",
-      ],
-    };
+    const categories = Object.keys(CATEGORY_LEAGUES);
+    const feedResults: Record<string, any[]> = Object.fromEntries(categories.map((c) => [c, []]));
 
-    const feedResults: Record<string, any[]> = {
-      Football: [],
-      Basketball: [],
-      Baseball: [],
-      Hockey: [],
-      Tennis: [],
-      UFC: [],
-      Boxing: [],
-      Golf: [],
-    };
-
-    // Fetch fixtures for each category in parallel (live + upcoming merged)
     await Promise.all(
-      Object.entries(TRACKED_SPORTS).map(async ([category, sportKeys]) => {
-        for (const sportKey of sportKeys) {
+      categories.map(async (category) => {
+        const leagueIDs = CATEGORY_LEAGUES[category];
+        for (const leagueID of leagueIDs) {
           try {
-            // Fetch all odds (live and upcoming)
-            const url = buildOddsUrl(`/v4/sports/${sportKey}/odds`, {
-              regions: "us",
-              oddsFormat: "american",
-              markets: "h2h",
-            });
-            const resp = await fetch(url, { method: "GET" });
-            if (!resp.ok) continue;
-            const fixtures = await resp.json() as any[];
-            feedResults[category].push(
-              ...fixtures.map((f: any) => ({
-                ...f,
+            const events = await fetchLeagueEvents(leagueID, { finalized: "false" });
+            const fixtures = events.map((event) => {
+              const fixture = mapEventToFixture(event, leagueID);
+              return {
+                ...fixture,
                 _category: category,
-                _sportKey: sportKey,
-                _isLive: new Date(f.commence_time).getTime() <= Date.now() + 3600000,
-              }))
-            );
+                _sportKey: leagueID,
+                _isLive: new Date(fixture.commence_time).getTime() <= Date.now() + 3600000,
+              };
+            });
+            feedResults[category].push(...fixtures);
           } catch {
-            // Skip unavailable sport keys silently
+            // Skip unavailable leagues silently
           }
         }
       })
@@ -178,16 +121,6 @@ sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
       });
     }
 
-    // Log quota usage
-    const quotaUrl = buildOddsUrl("/v4/sports", { all: "false" });
-    const quotaResp = await fetch(quotaUrl).catch(() => null);
-    if (quotaResp) {
-      logger.info({
-        used: quotaResp.headers.get("x-requests-used"),
-        remaining: quotaResp.headers.get("x-requests-remaining"),
-      }, "[Sportsbook] Feed quota");
-    }
-
     return res.json({
       success: true,
       feed: feedResults,
@@ -202,21 +135,18 @@ sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
 
 /**
  * GET /api/sportsbook/quota
- * Returns remaining API quota (for monitoring in owner panel).
+ * Returns whether SportsGameOdds is configured (for monitoring in owner panel).
  */
 sportsbookRouter.get("/quota", async (_req: Request, res: Response) => {
   try {
-    if (!THE_ODDS_API_KEY) {
-      return res.json({ configured: false, message: "THE_ODDS_API_KEY not set" });
+    if (!isSportsGameOddsConfigured()) {
+      return res.json({ configured: false, message: "SPORTSGAMEODDS_API_KEY not set" });
     }
-    const url = buildOddsUrl("/v4/sports", { all: "false" });
-    const response = await fetch(url);
     return res.json({
       configured: true,
-      mode: "direct",
-      requestsUsed: response.headers.get("x-requests-used"),
-      requestsRemaining: response.headers.get("x-requests-remaining"),
-      requestsLast: response.headers.get("x-requests-last"),
+      mode: "sportsgameodds",
+      plan: "pro",
+      leagues: ALL_LEAGUE_IDS,
     });
   } catch (error) {
     return res.status(500).json({ error: "Failed to check quota" });
@@ -230,12 +160,13 @@ sportsbookRouter.get("/quota", async (_req: Request, res: Response) => {
  */
 sportsbookRouter.get("/live/:sport", async (req: Request, res: Response) => {
   try {
-    const { sport } = req.params;
+    const sportParam = req.params.sport;
+    const sport = Array.isArray(sportParam) ? sportParam[0] : sportParam;
 
-    if (!THE_ODDS_API_KEY) {
+    if (!isSportsGameOddsConfigured()) {
       return res.status(503).json({
         error: "Sportsbook API key not configured",
-        setup: "Set THE_ODDS_API_KEY in your Render environment variables.",
+        setup: "Set SPORTSGAMEODDS_API_KEY in your Render environment variables.",
       });
     }
 
@@ -248,36 +179,16 @@ sportsbookRouter.get("/live/:sport", async (req: Request, res: Response) => {
     // Send initial connection message
     res.write(`data: ${JSON.stringify({ type: "connected", sport, timestamp: new Date().toISOString() })}\n\n`);
 
-    // Fetch and stream live odds every 10 seconds
-    const interval = setInterval(async () => {
-      return; // Ensure path returns void for setInterval
-    }, 10000);
-
-    // Replace the above dummy with the real logic, ensuring return types are handled
     const realInterval = setInterval(async () => {
       try {
-        const url = buildOddsUrl(`/v4/sports/${sport}/odds`, {
-          regions: "us",
-          oddsFormat: "american",
-          markets: "h2h",
-        });
-        const response = await fetch(url, { method: "GET" });
+        const events = await fetchLeagueEvents(sport, { finalized: "false" });
+        const fixtures = events.slice(0, 20).map((event) => mapEventToFixture(event, sport));
 
-        if (!response.ok) {
-          logger.warn({ status: response.status, sport }, "[Sportsbook] Live odds fetch failed");
-          return;
-        }
-
-        const oddsData = await response.json() as any[];
-        const remaining = response.headers.get("x-requests-remaining");
-
-        // Stream the odds data
         res.write(
           `data: ${JSON.stringify({
             type: "odds_update",
             sport,
-            fixtures: oddsData.slice(0, 20), // Limit to 20 fixtures per update
-            quotaRemaining: remaining,
+            fixtures,
             timestamp: new Date().toISOString(),
           })}\n\n`
         );
@@ -288,7 +199,6 @@ sportsbookRouter.get("/live/:sport", async (req: Request, res: Response) => {
 
     // Clean up interval on client disconnect
     req.on("close", () => {
-      clearInterval(interval);
       clearInterval(realInterval);
       res.end();
     });
@@ -302,38 +212,25 @@ sportsbookRouter.get("/live/:sport", async (req: Request, res: Response) => {
 
 /**
  * GET /api/sportsbook/odds/:sport
- * Returns live odds for a given sport key. Always uses American odds format.
+ * Returns live odds for a given leagueID (SportsGameOdds), normalized to the
+ * fixture shape the frontend expects. Always uses American odds format.
  */
 sportsbookRouter.get("/odds/:sport", async (req: Request, res: Response) => {
   try {
-    const { sport } = req.params;
-    const regions = (req.query.regions as string) || "us";
-    const markets = (req.query.markets as string) || "h2h";
-    const oddsFormat = "american";
+    const sportParam = req.params.sport;
+    const sport = Array.isArray(sportParam) ? sportParam[0] : sportParam;
 
-    if (!THE_ODDS_API_KEY) {
+    if (!isSportsGameOddsConfigured()) {
       return res.status(503).json({
         error: "Sportsbook API key not configured",
-        setup: "Set THE_ODDS_API_KEY in your Render environment variables.",
+        setup: "Set SPORTSGAMEODDS_API_KEY in your Render environment variables.",
       });
     }
 
-    const url = buildOddsUrl(`/v4/sports/${sport}/odds`, { regions, oddsFormat, markets });
-    const response = await fetch(url, { method: "GET" });
+    const events = await fetchLeagueEvents(sport, { finalized: "false" });
+    const fixtures = events.map((event) => mapEventToFixture(event, sport));
 
-    if (!response.ok) {
-      const body = await response.text();
-      logger.error({ status: response.status, body, sport }, "[Sportsbook] /odds/:sport failed");
-      return res.status(response.status).json({ error: "Failed to fetch odds", details: body });
-    }
-
-    const odds = await response.json();
-
-    const remaining = response.headers.get("x-requests-remaining");
-    const used = response.headers.get("x-requests-used");
-    if (remaining) logger.info({ used, remaining }, "[Sportsbook] Odds API quota");
-
-    return res.json(odds);
+    return res.json(fixtures);
   } catch (error) {
     logger.error({ error }, "[Sportsbook] Error fetching odds");
     return res.status(500).json({ error: "Internal server error" });
@@ -417,7 +314,7 @@ sportsbookRouter.post("/bet", requireAuth, async (req: Request, res: Response) =
           potentialPayoutUsd: potentialPayoutUsd.toString(),
           potentialPayoutCrypto: potentialPayoutCrypto.toFixed(12),
           status: "pending",
-          bookmakerKey: "the-odds-api",
+          bookmakerKey: "sportsgameodds",
           ipAddress: Array.isArray(req.ip) ? req.ip[0] : (req.ip || "0.0.0.0"),
           userAgent: (req.get("user-agent") as string) || "unknown",
         })
@@ -598,23 +495,24 @@ sportsbookRouter.post("/auto-settle", async (req: Request, res: Response) => {
 
     for (const bet of pendingBets) {
       try {
-        if (!THE_ODDS_API_KEY) break;
+        if (!isSportsGameOddsConfigured()) break;
 
-        // Query scores for this sport
-        const scoresUrl = buildOddsUrl(`/v4/sports/${bet.sportKey}/scores`, {
-          daysFrom: "3",
-        });
-        const scoresResp = await fetch(scoresUrl);
-        if (!scoresResp.ok) continue;
+        // Query this specific event from SportsGameOdds
+        const events = await fetchLeagueEvents(bet.sportKey, { finalized: "true" });
+        const matchEvent = events.find((e) => e.eventID === bet.fixtureId);
 
-        const scores = await scoresResp.json() as any[];
-        const matchScore = scores.find((s: any) => s.id === bet.fixtureId);
+        // Only settle if the match is marked finalized/ended
+        if (!matchEvent || !(matchEvent.status?.finalized || matchEvent.status?.ended)) continue;
 
-        // Only settle if the match is marked completed
-        if (!matchScore || !matchScore.completed) continue;
+        const homeTeamName = matchEvent.teams?.home?.names?.long || matchEvent.teams?.home?.teamID;
+        const awayTeamName = matchEvent.teams?.away?.names?.long || matchEvent.teams?.away?.teamID;
 
-        const homeScore = matchScore.scores?.find((s: any) => s.name === matchScore.home_team)?.score;
-        const awayScore = matchScore.scores?.find((s: any) => s.name === matchScore.away_team)?.score;
+        // Pull final score from any h2h-moneyline oddID's "score" field
+        const oddsEntries = Object.values(matchEvent.odds ?? {});
+        const homeScoreEntry = oddsEntries.find((o) => o.oddID?.includes("-home-game-ml-home"));
+        const awayScoreEntry = oddsEntries.find((o) => o.oddID?.includes("-away-game-ml-away"));
+        const homeScore = homeScoreEntry?.score;
+        const awayScore = awayScoreEntry?.score;
 
         let won = false;
         if (homeScore !== undefined && awayScore !== undefined) {
@@ -622,8 +520,8 @@ sportsbookRouter.post("/auto-settle", async (req: Request, res: Response) => {
           const awayWon = parseFloat(awayScore) > parseFloat(homeScore);
           const isDraw = parseFloat(homeScore) === parseFloat(awayScore);
 
-          if (bet.selectedOutcome === matchScore.home_team) won = homeWon;
-          else if (bet.selectedOutcome === matchScore.away_team) won = awayWon;
+          if (bet.selectedOutcome === homeTeamName) won = homeWon;
+          else if (bet.selectedOutcome === awayTeamName) won = awayWon;
           else if (bet.selectedOutcome === "Draw") won = isDraw;
         }
 
