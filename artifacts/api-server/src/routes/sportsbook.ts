@@ -14,6 +14,7 @@ import {
   fetchCategoryEvents,
   mapEventToFixture,
 } from "../lib/sportsgameodds.js";
+import { cached } from "../lib/response-cache-v2.js";
 
 export const sportsbookRouter = Router();
 
@@ -73,6 +74,8 @@ sportsbookRouter.get("/sports", async (req: Request, res: Response) => {
  * Premium global match feed for Football, Basketball, MMA, Boxing, Tennis, Golf, etc.
  * Loops real-time data into the DGC glassmorphic match card layout.
  * This is the primary feed endpoint referenced in the deployment spec.
+ * 
+ * OPTIMIZED: Cached with 30-second TTL and stale-while-revalidate for instant loads.
  */
 sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
   try {
@@ -83,49 +86,63 @@ sportsbookRouter.get("/feed", async (req: Request, res: Response) => {
       });
     }
 
-    const categories = Object.keys(CATEGORY_LEAGUES);
-    const feedResults: Record<string, any[]> = Object.fromEntries(categories.map((c) => [c, []]));
+    // Fetch and cache the feed with 30-second TTL and 60-second stale window
+    const feedData = await cached(
+      "sportsbook:global-feed",
+      30_000, // 30 seconds
+      async () => {
+        const categories = Object.keys(CATEGORY_LEAGUES);
+        const feedResults: Record<string, any[]> = Object.fromEntries(categories.map((c) => [c, []]));
 
-    await Promise.all(
-      categories.map(async (category) => {
-        const leagueIDs = CATEGORY_LEAGUES[category];
-        for (const leagueID of leagueIDs) {
-          try {
-            const events = await fetchLeagueEvents(leagueID, { finalized: "false" });
-            const fixtures = events.map((event) => {
-              const fixture = mapEventToFixture(event, leagueID);
-              return {
-                ...fixture,
-                _category: category,
-                _sportKey: leagueID,
-                _isLive: new Date(fixture.commence_time).getTime() <= Date.now() + 3600000,
-              };
-            });
-            feedResults[category].push(...fixtures);
-          } catch {
-            // Skip unavailable leagues silently
-          }
+        await Promise.all(
+          categories.map(async (category) => {
+            const leagueIDs = CATEGORY_LEAGUES[category];
+            for (const leagueID of leagueIDs) {
+              try {
+                const events = await fetchLeagueEvents(leagueID, { finalized: "false" });
+                const fixtures = events.map((event) => {
+                  const fixture = mapEventToFixture(event, leagueID);
+                  return {
+                    ...fixture,
+                    _category: category,
+                    _sportKey: leagueID,
+                    _isLive: new Date(fixture.commence_time).getTime() <= Date.now() + 3600000,
+                  };
+                });
+                feedResults[category].push(...fixtures);
+              } catch {
+                // Skip unavailable leagues silently
+              }
+            }
+          })
+        );
+
+        // Sort by commence time (live games first, then upcoming)
+        for (const category of Object.keys(feedResults)) {
+          feedResults[category].sort((a: any, b: any) => {
+            const aIsLive = a._isLive ? 0 : 1;
+            const bIsLive = b._isLive ? 0 : 1;
+            if (aIsLive !== bIsLive) return aIsLive - bIsLive;
+            const aTime = new Date(a.commence_time).getTime();
+            const bTime = new Date(b.commence_time).getTime();
+            return aTime - bTime;
+          });
         }
-      })
-    );
 
-    // Sort by commence time (live games first, then upcoming)
-    for (const category of Object.keys(feedResults)) {
-      feedResults[category].sort((a: any, b: any) => {
-        const aIsLive = a._isLive ? 0 : 1;
-        const bIsLive = b._isLive ? 0 : 1;
-        if (aIsLive !== bIsLive) return aIsLive - bIsLive;
-        const aTime = new Date(a.commence_time).getTime();
-        const bTime = new Date(b.commence_time).getTime();
-        return aTime - bTime;
-      });
-    }
+        return feedResults;
+      },
+      {
+        staleTtlMs: 60_000, // 60 seconds stale window
+        staleWhileRevalidate: true,
+      }
+    );
 
     return res.json({
       success: true,
-      feed: feedResults,
-      totalFixtures: Object.values(feedResults).reduce((sum, arr) => sum + arr.length, 0),
+      feed: feedData,
+      totalFixtures: Object.values(feedData).reduce((sum, arr) => sum + arr.length, 0),
       fetchedAt: new Date().toISOString(),
+      cached: true,
     });
   } catch (error) {
     logger.error({ error }, "[Sportsbook] Error fetching global feed");

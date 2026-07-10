@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { CoinIcon } from "@/components/wallet/coin-icon";
 
 /* ─────────────────────────────────────────────────────────────
    Types
@@ -134,7 +135,7 @@ function isGameUpcoming(fixture: Fixture): boolean {
   const now = new Date();
   const commenceTime = new Date(fixture.commence_time);
   const timeDiff = (commenceTime.getTime() - now.getTime()) / (1000 * 60);
-  return timeDiff > 0 && timeDiff < 1440; // Next 24 hours
+  return timeDiff > 0 && timeDiff < 20160; // Next 14 days (2 weeks)
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -196,10 +197,13 @@ export function Sportsbook() {
     market: Market;
     outcome: Outcome;
     odds: number;
+    bookmaker?: string;
   } | null>(null);
   const [betAmount, setBetAmount] = useState<string>("");
   const [selectedCrypto, setSelectedCrypto] = useState<string>("BTC");
   const [showHistory, setShowHistory] = useState(false);
+  const [selectedBookmaker, setSelectedBookmaker] = useState<string>("best");
+  const [selectedBetDetail, setSelectedBetDetail] = useState<SportsBet | null>(null);
 
   const toastedBetIds = useRef<Set<number>>(new Set());
 
@@ -584,9 +588,16 @@ export function Sportsbook() {
           ) : (
             <div className="grid gap-3">
               {betHistory.map((bet) => (
-                <div
+                <button
                   key={bet.id}
-                  className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-white/10 transition-all"
+                  onClick={() => setSelectedBetDetail(bet)}
+                  className={`text-left bg-black/40 border rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all cursor-pointer ${
+                    bet.status === "won"
+                      ? "border-green-500/30 hover:border-green-500/60 hover:bg-green-500/5"
+                      : bet.status === "lost"
+                      ? "border-red-500/30 hover:border-red-500/60 hover:bg-red-500/5"
+                      : "border-white/5 hover:border-blue-500/60 hover:bg-blue-500/5"
+                  }`}
                 >
                   <div className="flex-1">
                     <p className="text-sm font-bold text-white">
@@ -604,16 +615,16 @@ export function Sportsbook() {
                     <Badge
                       className={`uppercase tracking-widest text-[9px] font-black px-2.5 py-1 ${
                         bet.status === "won"
-                          ? "bg-green-500 text-black"
+                          ? "bg-gradient-to-r from-green-500 to-emerald-500 text-black shadow-[0_0_15px_rgba(34,197,94,0.3)]"
                           : bet.status === "lost"
-                          ? "bg-red-500 text-white"
-                          : "bg-blue-600 text-white"
+                          ? "bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]"
+                          : "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-[0_0_15px_rgba(59,130,246,0.3)]"
                       }`}
                     >
-                      {bet.status}
+                      {bet.status === "pending" ? "⏳ Pending" : bet.status === "won" ? "🏆 Won" : "❌ Lost"}
                     </Badge>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -672,11 +683,69 @@ export function Sportsbook() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {searchResults.slice(0, 50).map((game) => {
-                  const h2hMarket = game.bookmakers[0]?.markets.find((m) => m.key === "h2h");
-                  const spreadsMarket = game.bookmakers[0]?.markets.find((m) => m.key === "spreads");
-                  const totalsMarket = game.bookmakers[0]?.markets.find((m) => m.key === "totals");
+              <>
+                {/* Bookmaker Selector */}
+                {searchResults.length > 0 && (
+                  <div className="flex gap-2 flex-wrap mb-4">
+                    <button
+                      onClick={() => setSelectedBookmaker("best")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                        selectedBookmaker === "best"
+                          ? "bg-primary/40 border-primary/60 border text-primary"
+                          : "bg-white/5 border border-white/10 text-gray-400 hover:text-white"
+                      }`}
+                    >
+                      Best Odds
+                    </button>
+                    {Array.from(
+                      new Set(
+                        searchResults
+                          .flatMap((g) => g.bookmakers.map((b) => b.key))
+                          .filter(Boolean)
+                      )
+                    )
+                      .slice(0, 8)
+                      .map((bookmakerKey) => (
+                        <button
+                          key={bookmakerKey}
+                          onClick={() => setSelectedBookmaker(bookmakerKey)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                            selectedBookmaker === bookmakerKey
+                              ? "bg-primary/40 border-primary/60 border text-primary"
+                              : "bg-white/5 border border-white/10 text-gray-400 hover:text-white"
+                          }`}
+                        >
+                          {bookmakerKey.replace(/_/g, " ").slice(0, 12)}
+                        </button>
+                      ))}
+                  </div>
+                )}
+                <div className="space-y-3">
+                  {searchResults.slice(0, 50).map((game) => {
+                  // Get best odds across all bookmakers
+                  const getBestOdds = (marketKey: string, outcomeName: string) => {
+                    let bestOdds = -Infinity;
+                    let bestBookmaker = null;
+                    for (const bm of game.bookmakers) {
+                      const market = bm.markets.find((m) => m.key === marketKey);
+                      const outcome = market?.outcomes.find((o) => o.name === outcomeName);
+                      if (outcome && outcome.price > bestOdds) {
+                        bestOdds = outcome.price;
+                        bestBookmaker = bm.key;
+                      }
+                    }
+                    return { odds: bestOdds === -Infinity ? null : bestOdds, bookmaker: bestBookmaker };
+                  };
+
+                  // Use selected bookmaker or find best odds
+                  let activeBookmakers = game.bookmakers;
+                  if (selectedBookmaker !== "best") {
+                    activeBookmakers = game.bookmakers.filter((b) => b.key === selectedBookmaker);
+                  }
+
+                  const h2hMarket = activeBookmakers[0]?.markets.find((m) => m.key === "h2h");
+                  const spreadsMarket = activeBookmakers[0]?.markets.find((m) => m.key === "spreads");
+                  const totalsMarket = activeBookmakers[0]?.markets.find((m) => m.key === "totals");
 
                   if (!h2hMarket) return null;
 
@@ -695,7 +764,7 @@ export function Sportsbook() {
                               </span>
                             )}
                             <span className="text-xs font-mono text-gray-400">
-                              {game.liveScore?.period || formatCommenceTime(game.commence_time)}
+                              {game.liveScore?.period || formatCommenceTime(game.commence_time, showTopSports)}
                             </span>
                           </div>
 
@@ -728,7 +797,12 @@ export function Sportsbook() {
                                   odds: outcome.price,
                                 })
                               }
-                              className="bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded-lg text-center transition-colors"
+                              className={`p-2 rounded-lg text-center transition-all ${
+                                selectedBet?.outcome.name === outcome.name &&
+                                selectedBet?.market.key === spreadsMarket.key
+                                  ? "bg-primary/40 border-primary/60 border-2 shadow-[0_0_15px_rgba(255,215,0,0.3)]"
+                                  : "bg-white/5 hover:bg-white/10 border border-white/10"
+                              }`}
                             >
                               <div className="text-[11px] text-gray-400">
                                 {outcome.point ? (outcome.point > 0 ? "+" : "") + outcome.point : "-"}
@@ -753,7 +827,12 @@ export function Sportsbook() {
                                   odds: outcome.price,
                                 })
                               }
-                              className="bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded-lg text-center transition-colors"
+                              className={`p-2 rounded-lg text-center transition-all ${
+                                selectedBet?.outcome.name === outcome.name &&
+                                selectedBet?.market.key === totalsMarket.key
+                                  ? "bg-primary/40 border-primary/60 border-2 shadow-[0_0_15px_rgba(255,215,0,0.3)]"
+                                  : "bg-white/5 hover:bg-white/10 border border-white/10"
+                              }`}
                             >
                               <div className="text-[11px] text-gray-400">
                                 {outcome.name} {outcome.point}
@@ -778,7 +857,12 @@ export function Sportsbook() {
                                   odds: outcome.price,
                                 })
                               }
-                              className="bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded-lg text-center transition-colors"
+                              className={`p-2 rounded-lg text-center transition-all ${
+                                selectedBet?.outcome.name === outcome.name &&
+                                selectedBet?.market.key === h2hMarket.key
+                                  ? "bg-primary/40 border-primary/60 border-2 shadow-[0_0_15px_rgba(255,215,0,0.3)]"
+                                  : "bg-white/5 hover:bg-white/10 border border-white/10"
+                              }`}
                             >
                               <div className="text-xs font-mono font-bold text-white">
                                 {formatOdds(outcome.price)}
@@ -806,6 +890,7 @@ export function Sportsbook() {
                   );
                 })}
               </div>
+              </>
             )}
           </main>
 
@@ -815,7 +900,7 @@ export function Sportsbook() {
               <div className="flex items-center justify-between">
                 <h3 className="font-black uppercase tracking-widest text-sm">Bet Slip</h3>
                 <div className="text-right">
-                  <p className="text-xs text-gray-500">Vault</p>
+                  <p className="text-xs text-gray-500">Balance</p>
                   <p className="text-lg font-black text-primary">
                     ${totalUsdBalance.toLocaleString(undefined, {
                       minimumFractionDigits: 2,
@@ -856,17 +941,26 @@ export function Sportsbook() {
 
                     <div>
                       <label className="text-xs text-gray-500 mb-2 block">Crypto</label>
-                      <select
-                        value={selectedCrypto}
-                        onChange={(e) => setSelectedCrypto(e.target.value)}
-                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
-                      >
-                        {cryptoBalances.map((bal) => (
-                          <option key={bal.currency} value={bal.currency.split("_")[0]}>
-                            {bal.currency.split("_")[0]} (${bal.usdValue.toFixed(2)})
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex gap-2 flex-wrap">
+                        {cryptoBalances.map((bal) => {
+                          const cryptoSymbol = bal.currency.split("_")[0];
+                          return (
+                            <button
+                              key={bal.currency}
+                              onClick={() => setSelectedCrypto(cryptoSymbol)}
+                              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                                selectedCrypto === cryptoSymbol
+                                  ? "bg-primary/40 border-primary/60 border text-primary shadow-[0_0_10px_rgba(255,215,0,0.2)]"
+                                  : "bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                              }`}
+                            >
+                              <CoinIcon currency={bal.currency} size={14} />
+                              <span>{cryptoSymbol}</span>
+                              <span className="text-xs text-gray-500">${bal.usdValue.toFixed(2)}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     <div className="bg-white/5 rounded-lg p-3 space-y-2">
@@ -906,6 +1000,82 @@ export function Sportsbook() {
               )}
             </div>
           </aside>
+        </div>
+      )}
+
+      {/* Bet Detail Modal */}
+      {selectedBetDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className={`bg-black/60 border rounded-2xl p-8 w-full max-w-md shadow-2xl space-y-6 ${
+            selectedBetDetail.status === "won"
+              ? "border-green-500/40 shadow-green-500/20"
+              : selectedBetDetail.status === "lost"
+              ? "border-red-500/40 shadow-red-500/20"
+              : "border-blue-500/40 shadow-blue-500/20"
+          }`}>
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider">Bet Details</p>
+                <h2 className="text-xl font-black text-white mt-1">{selectedBetDetail.homeTeam} vs {selectedBetDetail.awayTeam}</h2>
+              </div>
+              <button
+                onClick={() => setSelectedBetDetail(null)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Status */}
+            <div className="flex items-center gap-2">
+              <Badge
+                className={`uppercase tracking-widest text-sm font-black px-3 py-1.5 ${
+                  selectedBetDetail.status === "won"
+                    ? "bg-gradient-to-r from-green-500 to-emerald-500 text-black shadow-[0_0_20px_rgba(34,197,94,0.4)]"
+                    : selectedBetDetail.status === "lost"
+                    ? "bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)]"
+                    : "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-[0_0_20px_rgba(59,130,246,0.4)]"
+                }`}
+              >
+                {selectedBetDetail.status === "pending" ? "⏳ Pending" : selectedBetDetail.status === "won" ? "🏆 Won" : "❌ Lost"}
+              </Badge>
+            </div>
+
+            {/* Bet Info */}
+            <div className="space-y-3 bg-white/5 rounded-lg p-4">
+              <div className="flex justify-between">
+                <span className="text-gray-400 text-sm">Selection</span>
+                <span className="text-white font-bold">{selectedBetDetail.selectedOutcome}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 text-sm">Odds</span>
+                <span className="text-primary font-bold font-mono">{formatOdds(parseFloat(selectedBetDetail.odds))}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 text-sm">Wager</span>
+                <span className="text-white font-bold">${parseFloat(selectedBetDetail.betAmountUsd).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 text-sm">Potential Payout</span>
+                <span className="text-primary font-bold">${parseFloat(selectedBetDetail.potentialPayoutUsd).toFixed(2)}</span>
+              </div>
+              {selectedBetDetail.status !== "pending" && (
+                <div className="flex justify-between pt-2 border-t border-white/10">
+                  <span className="text-gray-400 text-sm">Settled</span>
+                  <span className="text-white font-bold">{new Date(selectedBetDetail.settledAt || "").toLocaleDateString()}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Close Button */}
+            <Button
+              onClick={() => setSelectedBetDetail(null)}
+              className="w-full bg-primary hover:bg-primary/90 text-black font-black uppercase"
+            >
+              Close
+            </Button>
+          </div>
         </div>
       )}
     </div>

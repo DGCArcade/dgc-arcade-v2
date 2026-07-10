@@ -111,7 +111,7 @@ export function Navbar() {
       {settings.leaderboardEnabled && (
         <Link href="/leaderboard" className={`group flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] transition-all duration-300 ${location === "/leaderboard" ? "text-primary scale-110" : "text-muted-foreground hover:text-foreground hover:scale-105"}`}>
           <TrendingUp className={`w-4 h-4 ${location === "/leaderboard" ? "animate-pulse" : "group-hover:animate-bounce"}`} />
-          <span>Ranks</span>
+          <span>Chicken</span>
         </Link>
       )}
 
@@ -128,7 +128,7 @@ export function Navbar() {
             ? "text-black bg-primary shadow-[0_0_30px_rgba(255,215,0,0.5)] scale-110"
             : "text-primary border border-primary/20 hover:border-primary/60 hover:bg-primary/5 hover:scale-105"
         }`}>
-          <Trophy className={`w-4 h-4 ${location === "/sportsbook" ? "animate-bounce" : "group-hover:animate-pulse"}`} />
+          <span className="text-lg">👑</span>
           <span>Sportsbook</span>
           {location !== "/sportsbook" && (
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-shimmer" />
