@@ -6,7 +6,6 @@ import pinoHttp from "pino-http";
 import { verifyToken, isOwnerUser } from "./middlewares/auth.js";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { startBackgroundTasks } from "./lib/background-tasks.js";
 import { logVisitor } from "./services/visitor-service.js";
 import { ensureSlotGamesSeeded, ensureCoreGamesSeeded, ensureRaceGameSeeded, ensureChickenRoadSeeded } from "./routes/games.js";
 import { pool } from "@workspace/db";
@@ -61,7 +60,7 @@ function siteOrigins(): string[] {
   return origins;
 }
 
-const ALLOWED_ORIGINS = [
+export const ALLOWED_ORIGINS = [
   ...STATIC_ORIGINS,
   ...siteOrigins(),
   ...(process.env.NODE_ENV !== "production"
@@ -275,9 +274,6 @@ app.use("/api/bets", betLimiter);
 app.use("/api/sportsbook/bet", betLimiter);
 app.use("/api/sports/bet", betLimiter);
 app.use("/api", router);
-
-// Start background tasks (cleanup, etc.)
-startBackgroundTasks();
 
 // Ensure the core game catalog + slot theme games are seeded in the games table.
 // Core games seed only when the table is empty; both are idempotent.

@@ -13,8 +13,8 @@ import {
   fetchLeagueEvents,
   fetchCategoryEvents,
   mapEventToFixture,
-  fetchAllLiveEvents,
 } from "../lib/sportsgameodds.js";
+import { readLiveOddsSnapshot } from "../lib/live-odds-cache.js";
 import { cached } from "../lib/response-cache-v2.js";
 
 export const sportsbookRouter = Router();
@@ -176,28 +176,24 @@ sportsbookRouter.get("/quota", async (_req: Request, res: Response) => {
  * Returns all events across every league where status.live === true RIGHT NOW.
  * Short 15-second cache so scores and odds stay fresh.
  */
-sportsbookRouter.get("/live-now", async (req: Request, res: Response) => {
+sportsbookRouter.get("/live-now", async (_req: Request, res: Response) => {
   try {
-    if (!isSportsGameOddsConfigured()) {
-      return res.status(503).json({ error: "Sportsbook API key not configured" });
-    }
-
-    const liveFixtures = await cached(
-      "sportsbook:live-now",
-      15_000, // 15-second TTL — live scores change fast
-      () => fetchAllLiveEvents(),
-      { staleTtlMs: 30_000, staleWhileRevalidate: true }
-    );
-
+    const snapshot = await readLiveOddsSnapshot(isSportsGameOddsConfigured());
+    res.setHeader("Cache-Control", "private, no-cache, no-store, must-revalidate");
     return res.json({
       success: true,
-      fixtures: liveFixtures,
-      count: liveFixtures.length,
-      fetchedAt: new Date().toISOString(),
+      ...snapshot,
+      count: snapshot.fixtures.length,
     });
   } catch (error) {
-    logger.error({ error }, "[Sportsbook] Error fetching live-now events");
-    return res.status(500).json({ error: "Internal server error" });
+    logger.error({ error }, "[Sportsbook] Error reading live-now snapshot");
+    return res.status(503).json({
+      success: false,
+      error: "Live sportsbook snapshot is temporarily unavailable",
+      fixtures: [],
+      stale: true,
+      configured: isSportsGameOddsConfigured(),
+    });
   }
 });
 
@@ -207,60 +203,44 @@ sportsbookRouter.get("/live-now", async (req: Request, res: Response) => {
  * Also sends all-sports live summary on each tick so the "Live Now" tab stays current.
  */
 sportsbookRouter.get("/live/:sport", async (req: Request, res: Response) => {
-  try {
-    const sportParam = req.params.sport;
-    const sport = Array.isArray(sportParam) ? sportParam[0] : sportParam;
+  const sportParam = req.params.sport;
+  const sport = (Array.isArray(sportParam) ? sportParam[0] : sportParam).toLowerCase();
 
-    if (!isSportsGameOddsConfigured()) {
-      return res.status(503).json({
-        error: "Sportsbook API key not configured",
-        setup: "Set SPORTSGAMEODDS_API_KEY in your Render environment variables.",
-      });
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-store");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const sendUpdate = async () => {
+    try {
+      const snapshot = await readLiveOddsSnapshot(isSportsGameOddsConfigured());
+      const fixtures = sport === "all"
+        ? snapshot.fixtures
+        : snapshot.fixtures.filter((fixture) =>
+            fixture.sport_key.toLowerCase() === sport ||
+            fixture.sport_title.toLowerCase() === sport,
+          );
+      res.write(`data: ${JSON.stringify({
+        type: "odds_update",
+        sport,
+        fixtures,
+        liveCount: fixtures.length,
+        updatedAt: snapshot.updatedAt,
+        sourceUpdatedAt: snapshot.sourceUpdatedAt,
+        version: snapshot.version,
+        stale: snapshot.stale,
+      })}\n\n`);
+    } catch (error) {
+      logger.warn({ error, sport }, "[Sportsbook] Live compatibility stream cache read failed");
     }
+  };
 
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("Access-Control-Allow-Origin", "*");
-
-    res.write(`data: ${JSON.stringify({ type: "connected", sport, timestamp: new Date().toISOString() })}\n\n`);
-
-    const sendUpdate = async () => {
-      try {
-        const events = await fetchLeagueEvents(sport, { finalized: "false" });
-        // Only emit events that are genuinely live or upcoming (not ended)
-        const fixtures = events
-          .filter((ev) => !ev.status?.ended && !ev.status?.finalized)
-          .map((ev) => mapEventToFixture(ev, sport));
-
-        res.write(
-          `data: ${JSON.stringify({
-            type: "odds_update",
-            sport,
-            fixtures,
-            liveCount: fixtures.filter((f) => f.live).length,
-            timestamp: new Date().toISOString(),
-          })}\n\n`
-        );
-      } catch (error) {
-        logger.error({ error, sport }, "[Sportsbook] Error in live stream tick");
-      }
-    };
-
-    // Send first update immediately, then every 15 s
-    await sendUpdate();
-    const interval = setInterval(sendUpdate, 15_000);
-
-    req.on("close", () => {
-      clearInterval(interval);
-      res.end();
-    });
-
-    return;
-  } catch (error) {
-    logger.error({ error }, "[Sportsbook] Error setting up live stream");
-    return res.status(500).json({ error: "Internal server error" });
-  }
+  await sendUpdate();
+  const interval = setInterval(() => void sendUpdate(), 30_000);
+  req.on("close", () => {
+    clearInterval(interval);
+    res.end();
+  });
 });
 
 /**

@@ -126,8 +126,20 @@ export interface SgoEvent {
 }
 
 interface SgoEventsResponse {
+  success?: boolean;
   data?: SgoEvent[];
+  error?: string;
   nextCursor?: string | null;
+}
+
+export class SportsGameOddsRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = "SportsGameOddsRequestError";
+  }
 }
 
 /**
@@ -360,38 +372,88 @@ export function mapEventToFixture(event: SgoEvent, sportKey: string) {
 }
 
 /**
- * Fetches all currently LIVE events across every configured league.
- * Uses a short cache (15 s) so the live tab stays fresh.
+ * Provider-level safety guard for the live sportsbook. SportsGameOdds exposes
+ * live state as booleans under `status`, not as a single status string.
  */
-export async function fetchAllLiveEvents(): Promise<ReturnType<typeof mapEventToFixture>[]> {
+export function isStrictlyLiveEvent(event: SgoEvent, now = new Date()): boolean {
+  const startsAt = event.status?.startsAt;
+  if (!startsAt) return false;
+
+  const startMs = Date.parse(startsAt);
+  return (
+    Number.isFinite(startMs) &&
+    startMs <= now.getTime() &&
+    event.status?.live === true &&
+    event.status?.started === true &&
+    event.status?.ended !== true &&
+    event.status?.finalized !== true &&
+    event.status?.cancelled !== true
+  );
+}
+
+async function fetchLiveEventsPage(cursor?: string): Promise<SgoEventsResponse> {
+  const url = new URL(`${SPORTSGAMEODDS_BASE}/events`);
+  url.searchParams.set("leagueID", ALL_LEAGUE_IDS.join(","));
+  url.searchParams.set("live", "true");
+  url.searchParams.set("oddsAvailable", "true");
+  url.searchParams.set("limit", "100");
+  if (cursor) url.searchParams.set("cursor", cursor);
+
+  let lastError: SportsGameOddsRequestError | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch(url.toString(), {
+        headers: { "x-api-key": SPORTSGAMEODDS_API_KEY },
+        signal: AbortSignal.timeout(12_000),
+      });
+      const body = (await response.json().catch(() => ({}))) as SgoEventsResponse;
+
+      if (response.ok && body.success !== false) return body;
+
+      lastError = new SportsGameOddsRequestError(
+        body.error || `SportsGameOdds request failed with status ${response.status}`,
+        response.status,
+      );
+
+      // The provider recommends one retry for transient server failures only.
+      if (response.status < 500 || attempt > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 750));
+    } catch (error) {
+      lastError = new SportsGameOddsRequestError(
+        error instanceof Error ? error.message : "SportsGameOdds request failed",
+      );
+      if (attempt > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 750));
+    }
+  }
+
+  throw lastError ?? new SportsGameOddsRequestError("SportsGameOdds request failed");
+}
+
+/**
+ * Fetches all genuinely live events in a small number of paginated requests.
+ * Filtering at the provider keeps the payload and API usage predictable.
+ */
+export async function fetchAllLiveEvents(
+  now = new Date(),
+  maxPages = 5,
+): Promise<ReturnType<typeof mapEventToFixture>[]> {
   if (!SPORTSGAMEODDS_API_KEY) return [];
 
-  const results = await Promise.all(
-    ALL_LEAGUE_IDS.map(async (leagueID) => {
-      try {
-        const url = new URL(`${SPORTSGAMEODDS_BASE}/events`);
-        url.searchParams.set("leagueID", leagueID);
-        url.searchParams.set("limit", "50");
-        url.searchParams.set("includeAltLines", "true");
-        // Only fetch events that have started (the API doesn't have a ?live= param,
-        // so we fetch started events and filter on status.live below)
-        url.searchParams.set("finalized", "false");
+  const events = new Map<string, SgoEvent>();
+  let cursor: string | undefined;
+  let page = 0;
 
-        const response = await fetch(url.toString(), {
-          headers: { "x-api-key": SPORTSGAMEODDS_API_KEY },
-          signal: AbortSignal.timeout(8000),
-        });
-        if (!response.ok) return [];
+  do {
+    const body = await fetchLiveEventsPage(cursor);
+    for (const event of body.data ?? []) {
+      if (isStrictlyLiveEvent(event, now)) events.set(event.eventID, event);
+    }
+    cursor = body.nextCursor ?? undefined;
+    page += 1;
+  } while (cursor && page < maxPages);
 
-        const body = (await response.json()) as SgoEventsResponse;
-        return (body.data ?? [])
-          .filter((ev) => ev.status?.live === true)
-          .map((ev) => mapEventToFixture(ev, leagueID));
-      } catch {
-        return [];
-      }
-    })
+  return Array.from(events.values()).map((event) =>
+    mapEventToFixture(event, event.leagueID || event.sportID || "Unknown"),
   );
-
-  return results.flat();
 }

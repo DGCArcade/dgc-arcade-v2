@@ -420,7 +420,7 @@ export async function syncPlisioDeposits() {
  * Start background tasks.
  * Call this once when the server starts.
  */
-export function startBackgroundTasks() {
+export function startBackgroundTasks(): () => void {
   // Initialize Dice round manager (starts its own internal cycle)
   diceRoundManager.getCurrentRound();
 
@@ -443,19 +443,16 @@ export function startBackgroundTasks() {
     });
   }, 5 * 60 * 1000);
 
-  process.on("SIGTERM", () => {
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
     clearInterval(cleanupInterval);
     clearInterval(syncInterval);
     clearInterval(sportsSettleInterval);
     diceRoundManager.destroy();
-  });
-
-  process.on("SIGINT", () => {
-    clearInterval(cleanupInterval);
-    clearInterval(syncInterval);
-    clearInterval(sportsSettleInterval);
-    diceRoundManager.destroy();
-  });
+  };
 
   logger.info("Background tasks started: cleanup (30m), Plisio sync (1m), sports settlement (5m)");
+  return stop;
 }

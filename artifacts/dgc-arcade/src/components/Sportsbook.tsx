@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { io } from "socket.io-client";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import {
@@ -58,6 +59,23 @@ interface LiveScore {
   period?: string;
 }
 
+interface LiveOddsSnapshot {
+  fixtures: Fixture[];
+  updatedAt: string | null;
+  sourceUpdatedAt: string | null;
+  version: number;
+  stale: boolean;
+  configured: boolean;
+}
+
+interface LiveWorkerStatus {
+  configured: boolean;
+  workerHealthy: boolean;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  message?: string;
+}
+
 interface Fixture {
   id: string;
   sport_key: string;
@@ -111,6 +129,16 @@ function americanOddsToMultiplier(americanOdds: number): number {
 
 function formatOdds(price: number): string {
   return price > 0 ? `+${price}` : `${price}`;
+}
+
+function getRealtimeOrigin(): string | undefined {
+  const configuredUrl = import.meta.env.VITE_API_URL?.trim();
+  if (!configuredUrl || typeof window === "undefined") return undefined;
+  try {
+    return new URL(configuredUrl, window.location.origin).origin;
+  } catch {
+    return undefined;
+  }
 }
 
 function getUserTimezone(): string {
@@ -323,6 +351,9 @@ export function Sportsbook() {
   const [selectedBookmaker, setSelectedBookmaker] = useState<string>("best");
   const [selectedBetDetail, setSelectedBetDetail] = useState<SportsBet | null>(null);
   const [showBetSlip, setShowBetSlip] = useState(true);
+  const [liveConnection, setLiveConnection] = useState<"connecting" | "connected" | "reconnecting" | "offline">("connecting");
+  const [liveSnapshot, setLiveSnapshot] = useState<LiveOddsSnapshot | null>(null);
+  const [liveWorkerStatus, setLiveWorkerStatus] = useState<LiveWorkerStatus | null>(null);
 
   /* ── Multi-Bet Slip ── */
   const [betSlip, setBetSlip] = useState<BetSlipEntry[]>([]);
@@ -450,31 +481,94 @@ export function Sportsbook() {
       return res.json();
     },
     enabled: !!(selectedSport || showLiveOnly || showTopSports),
-    // Live view: refetch every 15 s to match backend cache TTL
-    // Top sports: every 60 s; by sport: every 30 s
-    staleTime: showLiveOnly ? 0 : showTopSports ? 1000 * 60 : 1000 * 30,
-    refetchInterval: showLiveOnly ? 15_000 : showTopSports ? 60_000 : undefined,
+    // Socket.IO is primary for live changes. This slower request is a safety net
+    // for blocked WebSockets and gives reconnecting clients the last Neon snapshot.
+    staleTime: showLiveOnly ? 30_000 : showTopSports ? 1000 * 60 : 1000 * 30,
+    refetchInterval: showLiveOnly ? 60_000 : showTopSports ? 60_000 : undefined,
     retry: 1,
   });
 
-  /* ── Live SSE ── */
+  /* ── Realtime live odds ── */
   useEffect(() => {
-    if (!selectedSport || showLiveOnly || showTopSports) return;
-    const eventSource = new EventSource(`/api/sportsbook/live/${selectedSport}`);
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "odds_update" && data.fixtures) {
-          queryClient.setQueryData(
-            ["sportsbook-odds", selectedSport, showLiveOnly, showTopSports],
-            data.fixtures
-          );
-        }
-      } catch {}
+    const socket = io(getRealtimeOrigin(), {
+      path: "/socket.io",
+      transports: ["websocket", "polling"],
+      withCredentials: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1_000,
+      reconnectionDelayMax: 10_000,
+      timeout: 15_000,
+    });
+
+    socket.on("connect", () => {
+      setLiveConnection("connected");
+      socket.emit("sportsbook:subscribe");
+    });
+    socket.on("disconnect", () => setLiveConnection("reconnecting"));
+    socket.on("connect_error", () => setLiveConnection("offline"));
+    socket.io.on("reconnect_attempt", () => setLiveConnection("reconnecting"));
+    socket.on("sportsbook:odds:update", (snapshot: LiveOddsSnapshot) => {
+      setLiveSnapshot(snapshot);
+      setLiveConnection("connected");
+    });
+    socket.on("sportsbook:status", (status: LiveWorkerStatus) => {
+      setLiveWorkerStatus(status);
+    });
+
+    return () => {
+      socket.disconnect();
     };
-    eventSource.onerror = () => eventSource.close();
-    return () => eventSource.close();
-  }, [selectedSport, showLiveOnly, showTopSports, queryClient]);
+  }, []);
+
+  useEffect(() => {
+    if (!liveSnapshot) return;
+    const incoming = liveSnapshot.fixtures;
+    const relevantIncoming = showLiveOnly || showTopSports
+      ? incoming
+      : incoming.filter((fixture) =>
+          fixture.sport_key.toLowerCase() === selectedSport.toLowerCase() ||
+          fixture.sport_title.toLowerCase() === selectedSport.toLowerCase(),
+        );
+    const incomingById = new Map(relevantIncoming.map((fixture) => [fixture.id, fixture]));
+
+    queryClient.setQueryData<Fixture[]>(
+      ["sportsbook-odds", selectedSport, showLiveOnly, showTopSports],
+      (current = []) => {
+        if (showLiveOnly) return relevantIncoming;
+        const merged = current
+          .filter((fixture) => !fixture.live || incomingById.has(fixture.id))
+          .map((fixture) => incomingById.get(fixture.id) ?? fixture);
+        const existingIds = new Set(merged.map((fixture) => fixture.id));
+        for (const fixture of relevantIncoming) {
+          if (!existingIds.has(fixture.id)) merged.push(fixture);
+        }
+        return merged.sort((a, b) => {
+          if (a.live !== b.live) return a.live ? -1 : 1;
+          return new Date(a.commence_time).getTime() - new Date(b.commence_time).getTime();
+        });
+      },
+    );
+
+    setBetSlip((current) => current.map((entry) => {
+      const fixture = incoming.find((candidate) => candidate.id === entry.fixture.id);
+      if (!fixture) return entry;
+      const bookmaker = fixture.bookmakers.find((candidate) =>
+        candidate.key === entry.bookmaker || candidate.title === entry.bookmaker,
+      ) ?? fixture.bookmakers[0];
+      const market = bookmaker?.markets.find((candidate) => candidate.key === entry.market.key);
+      const outcome = market?.outcomes.find((candidate) => candidate.name === entry.outcome.name);
+      if (!market || !outcome) return { ...entry, fixture };
+      return {
+        ...entry,
+        fixture,
+        market,
+        outcome,
+        odds: outcome.price,
+        bookmaker: bookmaker.title,
+      };
+    }));
+  }, [liveSnapshot, queryClient, selectedSport, showLiveOnly, showTopSports]);
 
   /* ── Search ── */
   const searchResults = useMemo(() => {
@@ -683,10 +777,21 @@ export function Sportsbook() {
               )}
             </button>
           ))}
+          <div
+            className={`ml-auto flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider ${
+              liveConnection === "connected" && !liveSnapshot?.stale && liveWorkerStatus?.workerHealthy
+                ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
+                : "border-amber-500/25 bg-amber-500/10 text-amber-300"
+            }`}
+            title={liveWorkerStatus?.message || (liveSnapshot?.sourceUpdatedAt ? `Last provider update: ${new Date(liveSnapshot.sourceUpdatedAt).toLocaleString()}` : "Waiting for the first live odds snapshot")}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${liveConnection === "connected" ? "bg-current animate-pulse" : "bg-current"}`} />
+            {liveConnection === "connected" && !liveSnapshot?.stale && liveWorkerStatus?.workerHealthy ? "Live feed" : "Reconnecting"}
+          </div>
           {betSlip.length > 0 && (
             <button
               onClick={() => setShowBetSlip(!showBetSlip)}
-              className="px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30 transition-all flex items-center gap-1.5 ml-auto"
+              className="px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30 transition-all flex items-center gap-1.5"
             >
               🎯 Slip ({betSlip.length})
               {showBetSlip ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}

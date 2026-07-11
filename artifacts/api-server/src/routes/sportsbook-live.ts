@@ -1,53 +1,48 @@
-import { Router, Request, Response } from "express";
+import { Router, type Request, type Response } from "express";
 import { logger } from "../lib/logger.js";
-import {
-  isSportsGameOddsConfigured,
-  fetchLeagueEvents,
-  mapEventToFixture,
-} from "../lib/sportsgameodds.js";
+import { readLiveOddsSnapshot } from "../lib/live-odds-cache.js";
+import { isSportsGameOddsConfigured } from "../lib/sportsgameodds.js";
 
 export const sportsbookLiveRouter = Router();
 
 /**
  * GET /api/sportsbook/live/:sport
- * Fetches LIVE IN-PLAY games only from SportsGameOdds.
- * Filters for games that are currently in progress or started within the last 3 hours.
+ * Serves the last committed in-play snapshot. The background worker owns all
+ * provider traffic so browser count cannot multiply SportsGameOdds usage.
  */
 sportsbookLiveRouter.get("/:sport", async (req: Request, res: Response) => {
+  const sportParam = req.params.sport;
+  const sport = (Array.isArray(sportParam) ? sportParam[0] : sportParam).toLowerCase();
+
   try {
-    const sportParam = req.params.sport;
-    const sport = Array.isArray(sportParam) ? sportParam[0] : sportParam;
+    const snapshot = await readLiveOddsSnapshot(isSportsGameOddsConfigured());
+    const fixtures = sport === "all"
+      ? snapshot.fixtures
+      : snapshot.fixtures.filter((fixture) =>
+          fixture.sport_key.toLowerCase() === sport ||
+          fixture.sport_title.toLowerCase() === sport,
+        );
 
-    if (!isSportsGameOddsConfigured()) {
-      return res.status(503).json({
-        success: false,
-        error: "Sportsbook API key not configured",
-        fixtures: [],
-      });
-    }
-
-    logger.info({ sport }, "[SportsLive] Fetching live in-play games");
-
-    const events = await fetchLeagueEvents(sport, { finalized: "false" });
-    // Filter using the REAL status.live boolean from SportsGameOdds — never guess from time
-    const liveGames = events
-      .filter((event) => event.status?.live === true)
-      .map((event) => mapEventToFixture(event, sport));
-
-    logger.info({ count: liveGames.length, sport }, "[SportsLive] Fetched live games");
-
+    res.setHeader("Cache-Control", "private, no-cache, no-store, must-revalidate");
     return res.json({
       success: true,
-      fixtures: liveGames,
-      source: "sportsgameodds-live",
-      count: liveGames.length,
+      fixtures,
+      source: "sportsgameodds-neon-live",
+      count: fixtures.length,
+      updatedAt: snapshot.updatedAt,
+      sourceUpdatedAt: snapshot.sourceUpdatedAt,
+      version: snapshot.version,
+      stale: snapshot.stale,
+      configured: snapshot.configured,
     });
   } catch (error) {
-    logger.error({ error, sport: req.params.sport }, "[SportsLive] Error fetching live games");
-    return res.status(500).json({
+    logger.error({ error, sport }, "[SportsLive] Failed to read live snapshot");
+    return res.status(503).json({
       success: false,
-      error: "Internal server error",
+      error: "Live sportsbook snapshot is temporarily unavailable",
       fixtures: [],
+      stale: true,
+      configured: isSportsGameOddsConfigured(),
     });
   }
 });
