@@ -28,9 +28,9 @@ export function Navbar() {
   const authModal = useAuthModal();
   const [location, setLocation] = useLocation();
 
-  useEffect(() => {
-    rotateTheme();
-  }, [location]);
+  // useEffect(() => {
+  //   rotateTheme();
+  // }, [location]);
   const [walletOpen, setWalletOpen] = useState(false);
   const [bonusOpen, setBonusOpen] = useState(false);
   const [vipOpen, setVipOpen] = useState(false);

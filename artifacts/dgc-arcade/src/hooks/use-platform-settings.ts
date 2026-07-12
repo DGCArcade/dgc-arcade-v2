@@ -34,16 +34,21 @@ export function usePlatformSettings() {
   const { data, isLoading, error } = useQuery<PublicSettings>({
     queryKey: ["/api/games/settings"],
     queryFn: async () => {
-      const res = await fetch("/api/games/settings");
-      if (!res.ok) throw new Error("Failed to fetch settings");
-      return res.json();
+      try {
+        const res = await fetch("/api/games/settings");
+        if (!res.ok) return DEFAULTS;
+        return res.json();
+      } catch (e) {
+        return DEFAULTS;
+      }
     },
     staleTime: 60000,
+    retry: 1,
   });
 
   return {
     settings: data ?? DEFAULTS,
-    isLoading,
+    isLoading: isLoading && !data,
     error,
   };
 }

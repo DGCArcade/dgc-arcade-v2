@@ -141,7 +141,7 @@ function Router() {
   const { user } = useAuth();
   const isOwner = user ? ((user.username ?? "").toLowerCase() === (process.env.REACT_APP_OWNER_USERNAME || "owner") || (user as any).role === "owner") : false;
 
-  if (settingsLoading) return <PageLoader />;
+  // if (settingsLoading) return <PageLoader />;
   // Global Maintenance Mode lockout
   if (settings.maintenanceMode && !isOwner) {
     return (

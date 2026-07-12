@@ -175,6 +175,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
     didFetch.current = true;
 
     const session = sessionStorage.getItem(SESSION_KEY);
+    // If we have any session status, respect it immediately
     if (session === "accepted") {
       setState("accepted");
       return;
@@ -182,6 +183,16 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
     if (session === "declined") { setState("blocked_declined"); return; }
     if (session === "blocked_country") { setState("blocked_country"); return; }
     if (session === "blocked_state") { setState("blocked_state"); return; }
+
+    // Optimization: If user has a token, they've already been verified before.
+    // We can let them through and do a background check instead of blocking.
+    const hasToken = !!localStorage.getItem("dgc_token");
+    if (hasToken) {
+      setState("accepted");
+      // Still do the fetch in background to update info if needed
+      doGeoFetch();
+      return;
+    }
 
     setState("asking");
     doGeoFetch();
