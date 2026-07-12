@@ -552,39 +552,58 @@ sportsbookRouter.post("/auto-settle", async (req: Request, res: Response) => {
         const homeTeamName = matchEvent.teams?.home?.names?.long || matchEvent.teams?.home?.teamID;
         const awayTeamName = matchEvent.teams?.away?.names?.long || matchEvent.teams?.away?.teamID;
 
-        // Pull final score from any h2h-moneyline oddID's "score" field
-        const oddsEntries = Object.values(matchEvent.odds ?? {});
-        const homeScoreEntry = oddsEntries.find((o) => o.oddID?.includes("-home-game-ml-home"));
-        const awayScoreEntry = oddsEntries.find((o) => o.oddID?.includes("-away-game-ml-away"));
-        const homeScore = homeScoreEntry?.score;
-        const awayScore = awayScoreEntry?.score;
+        // Pro Plan: Use the unified results object for high-accuracy settlement
+        // fallback to odds-based scores only if results object is missing.
+        const results = matchEvent.results?.game || matchEvent.results?.reg;
+        let home: number | undefined;
+        let away: number | undefined;
+
+        if (results?.home?.points !== undefined && results?.away?.points !== undefined) {
+          home = parseFloat(String(results.home.points));
+          away = parseFloat(String(results.away.points));
+        } else {
+          const oddsEntries = Object.values(matchEvent.odds ?? {});
+          const hEntry = oddsEntries.find((o) => o.oddID?.includes("-home-game-ml-home"));
+          const aEntry = oddsEntries.find((o) => o.oddID?.includes("-away-game-ml-away"));
+          if (hEntry?.score && aEntry?.score) {
+            home = parseFloat(hEntry.score);
+            away = parseFloat(aEntry.score);
+          }
+        }
+
+        // Support for 1st Half / 1st Quarter markets
+        if (bet.marketKey.includes("1h")) {
+          const h1 = matchEvent.results?.["1h"];
+          if (h1?.home?.points !== undefined && h1?.away?.points !== undefined) {
+            home = parseFloat(String(h1.home.points));
+            away = parseFloat(String(h1.away.points));
+          }
+        } else if (bet.marketKey.includes("1q")) {
+          const q1 = matchEvent.results?.["1q"];
+          if (q1?.home?.points !== undefined && q1?.away?.points !== undefined) {
+            home = parseFloat(String(q1.home.points));
+            away = parseFloat(String(q1.away.points));
+          }
+        }
 
         let won = false;
-        if (homeScore !== undefined && awayScore !== undefined) {
-          const home = parseFloat(homeScore);
-          const away = parseFloat(awayScore);
+        if (home !== undefined && away !== undefined) {
           const homeWon = home > away;
           const awayWon = away > home;
           const isDraw = home === away;
 
-          if (bet.marketKey === "spreads") {
-            // Spread: team must win after applying the point spread stored in metadata
+          if (bet.marketKey.includes("spreads")) {
             const spread = parseFloat((bet.metadata as any)?.spread ?? "0");
             const isHomeSide = bet.selectedOutcome === homeTeamName;
             const adjustedHome = home + (isHomeSide ? spread : 0);
             const adjustedAway = away + (!isHomeSide ? spread : 0);
             won = isHomeSide ? adjustedHome > adjustedAway : adjustedAway > adjustedHome;
-          } else if (bet.marketKey === "totals") {
-            // Totals: Over/Under vs the line stored in metadata
+          } else if (bet.marketKey.includes("totals")) {
             const totalLine = parseFloat((bet.metadata as any)?.total ?? "0");
             const actualTotal = home + away;
-            if (actualTotal === totalLine) {
-              // Push — refund; skip (leave pending for manual resolution)
-              continue;
-            }
+            if (actualTotal === totalLine) continue; // Push
             won = bet.selectedOutcome === "Over" ? actualTotal > totalLine : actualTotal < totalLine;
           } else {
-            // H2H moneyline (default)
             if (bet.selectedOutcome === homeTeamName) won = homeWon;
             else if (bet.selectedOutcome === awayTeamName) won = awayWon;
             else if (bet.selectedOutcome === "Draw") won = isDraw;

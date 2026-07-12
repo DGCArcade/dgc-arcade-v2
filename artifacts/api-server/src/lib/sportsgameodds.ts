@@ -218,6 +218,16 @@ const MARKET_KEY_BY_BET_TYPE: Record<string, string> = {
   sp: "spreads",
   ou: "totals",
   prop: "props",
+  "1h-ml": "h2h_1st_half",
+  "2h-ml": "h2h_2nd_half",
+  "1h-sp": "spreads_1st_half",
+  "2h-sp": "spreads_2nd_half",
+  "1h-ou": "totals_1st_half",
+  "2h-ou": "totals_2nd_half",
+  "1q-ml": "h2h_1st_quarter",
+  "2q-ml": "h2h_2nd_quarter",
+  "3q-ml": "h2h_3rd_quarter",
+  "4q-ml": "h2h_4th_quarter",
 };
 
 /**
@@ -341,7 +351,8 @@ export function mapEventToFixture(event: SgoEvent, sportKey: string) {
     }
   }
 
-  // Ensure bookmakers are sorted by title for consistent UI
+  // Pro Plan: Ensure we include all 80+ bookmakers by not filtering any IDs
+  // and sorting them for consistent UI.
   const bookmakers = Object.values(bookmakerMap).sort((a, b) => a.title.localeCompare(b.title));
 
   return {
