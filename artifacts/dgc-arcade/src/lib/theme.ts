@@ -45,6 +45,6 @@ export function rotateTheme() {
 }
 
 export function initTheme() {
-  // Apply the stored theme on fresh load/reload
-  applyTheme(getTheme());
+  // Always rotate on fresh load/reload
+  rotateTheme();
 }
