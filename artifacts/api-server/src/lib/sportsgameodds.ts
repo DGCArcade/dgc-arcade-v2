@@ -393,7 +393,8 @@ export function isStrictlyLiveEvent(event: SgoEvent, now = new Date()): boolean 
 
 async function fetchLiveEventsPage(cursor?: string): Promise<SgoEventsResponse> {
   const url = new URL(`${SPORTSGAMEODDS_BASE}/events`);
-  url.searchParams.set("leagueID", ALL_LEAGUE_IDS.join(","));
+  // Pro plan supports global live feed; removing explicit leagueID join to avoid 400 Bad Request
+  // due to extremely long URL or provider-side validation on joined league IDs.
   url.searchParams.set("live", "true");
   url.searchParams.set("oddsAvailable", "true");
   url.searchParams.set("limit", "100");
