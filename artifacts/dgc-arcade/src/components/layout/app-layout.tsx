@@ -66,9 +66,15 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
                 <div className="col-span-2 md:col-span-1">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-display font-black text-primary-foreground text-lg">D</div>
-                    <span className="font-display font-bold text-lg uppercase tracking-widest">DGC Arcade</span>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center font-display font-black text-black text-lg relative overflow-hidden shadow-[0_0_15px_rgba(255,215,0,0.2)]"
+                         style={{ background: "linear-gradient(135deg, #FFD700 0%, #B8860B 100%)" }}>
+                      <span className="relative z-10">D</span>
+                    </div>
+                    <div className="flex flex-col leading-[0.85]">
+                      <span className="font-display font-black text-xl tracking-tighter text-glow-shift">DGC</span>
+                      <span className="font-display font-black text-[9px] text-muted-foreground tracking-[0.3em] ml-0.5">ARCADE</span>
+                    </div>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     High-stakes crypto gaming. Provably fair. Instant payouts.

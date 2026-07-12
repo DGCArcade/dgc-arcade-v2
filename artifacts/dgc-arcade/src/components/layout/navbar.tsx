@@ -173,13 +173,15 @@ export function Navbar() {
       <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="d-sports-logo w-10 h-10 rounded-xl flex items-center justify-center font-display font-black text-primary-foreground text-lg group-hover:scale-110 transition-transform duration-300 relative">
-                <span className="relative z-10">D</span>
+            <Link href="/" className="flex items-center gap-3 group">
+              <div className="logo-glow-shift w-11 h-11 rounded-xl flex items-center justify-center font-display font-black text-black text-xl group-hover:scale-110 transition-transform duration-300 relative overflow-hidden shadow-[0_0_20px_rgba(255,215,0,0.3)]"
+                   style={{ background: "linear-gradient(135deg, #FFD700 0%, #B8860B 100%)" }}>
+                <span className="relative z-10 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]">D</span>
+                <div className="absolute inset-0 bg-gradient-to-tr from-white/20 via-transparent to-transparent pointer-events-none" />
               </div>
-              <div className="hidden sm:flex flex-col leading-tight">
-                <span className="font-display font-black text-sm uppercase tracking-[0.3em] text-primary">D Sports</span>
-                <span className="font-mono text-[10px] text-muted-foreground tracking-widest">ARCADE</span>
+              <div className="hidden sm:flex flex-col leading-[0.85]">
+                <span className="font-display font-black text-2xl tracking-tighter text-glow-shift">DGC</span>
+                <span className="font-display font-black text-[10px] text-muted-foreground tracking-[0.4em] ml-0.5">ARCADE</span>
               </div>
             </Link>
             <div className="hidden md:flex items-center gap-6"><NavLinks /></div>

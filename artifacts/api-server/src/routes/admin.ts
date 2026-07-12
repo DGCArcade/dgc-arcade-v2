@@ -624,7 +624,7 @@ adminRouter.post("/create-user", async (req, res) => {
     res.status(400).json({ error: "Valid email is required" });
     return;
   }
-  if (username.toLowerCase() === (process.env.OWNER_USERNAME || "owner")) {
+  if (username.toLowerCase() === OWNER_USERNAME.toLowerCase()) {
     res.status(403).json({ error: "That username is reserved." });
     return;
   }
@@ -707,7 +707,7 @@ adminRouter.post("/create-specialty-creator", async (req, res) => {
     res.status(400).json({ error: "Valid email is required" });
     return;
   }
-  if (username.toLowerCase() === (process.env.OWNER_USERNAME || "owner")) {
+  if (username.toLowerCase() === OWNER_USERNAME.toLowerCase()) {
     res.status(403).json({ error: "That username is reserved." });
     return;
   }
