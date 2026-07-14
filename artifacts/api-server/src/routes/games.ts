@@ -234,6 +234,12 @@ gamesRouter.get("/:gameIdOrSlug", async (req, res) => {
 
   try {
     const settings = await getPlatformSettings();
+    
+    // If global games are disabled, only the owner can see them
+    if (!settings.gamesEnabled) {
+      res.status(404).json({ error: "Games are currently disabled for maintenance." });
+      return;
+    }
 
     const [game] = isNumericId
       ? await db
@@ -244,17 +250,19 @@ gamesRouter.get("/:gameIdOrSlug", async (req, res) => {
       : await db
           .select()
           .from(gamesTable)
-          .where(eq(gamesTable.slug, raw))
+          .where(eq(sql`LOWER(${gamesTable.slug})`, raw.toLowerCase()))
           .limit(1);
 
     if (!game) {
       res.status(404).json({ error: "Game not found" });
       return;
     }
+    
     if (!game.active || !isGameSlugEnabled(settings, game.slug)) {
-      res.status(404).json({ error: "Game not found" });
+      res.status(404).json({ error: "This game is currently disabled." });
       return;
     }
+    
     res.json(formatGame(game));
   } catch (err) {
     req.log.error({ err }, "Get game error");
