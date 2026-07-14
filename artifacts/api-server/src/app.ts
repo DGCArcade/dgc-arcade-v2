@@ -3,12 +3,18 @@ import cors from "cors";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
 import pinoHttp from "pino-http";
+import path from "path";
+import { fileURLToPath } from "url";
+import { existsSync } from "fs";
 import { verifyToken, isOwnerUser } from "./middlewares/auth.js";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { logVisitor } from "./services/visitor-service.js";
 import { ensureSlotGamesSeeded, ensureCoreGamesSeeded, ensureRaceGameSeeded, ensureChickenRoadSeeded } from "./routes/games.js";
 import { pool } from "@workspace/db";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const FRONTEND_BUILD_DIR = path.resolve(__dirname, "../../dgc-arcade/dist");
 
 const app: Express = express();
 const isProduction = process.env.NODE_ENV === "production";
@@ -275,6 +281,34 @@ app.use("/api/sportsbook/bet", betLimiter);
 app.use("/api/sports/bet", betLimiter);
 app.use("/api", router);
 
+// ── Serve frontend static files (SPA fallback) ──────────────────────────────────
+// Serve all static assets from the frontend build directory
+if (existsSync(FRONTEND_BUILD_DIR)) {
+  app.use(express.static(FRONTEND_BUILD_DIR, {
+    maxAge: "1d",
+    etag: false,
+  }));
+
+  // SPA fallback: for any non-API route that doesn't match a file, serve index.html
+  // This allows client-side routing to work on page reload
+  app.get("*", (req, res) => {
+    // Skip API routes (they're already handled above)
+    if (req.path.startsWith("/api/")) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    res.sendFile(path.join(FRONTEND_BUILD_DIR, "index.html"), (err) => {
+      if (err) {
+        logger.error({ err, path: req.path }, "Failed to serve index.html");
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+  });
+} else {
+  logger.warn({ dir: FRONTEND_BUILD_DIR }, "Frontend build directory not found. SPA routing will not work.");
+}
+
+// ── Game seeding ────────────────────────────────────────────────────────────────
 // Ensure the core game catalog + slot theme games are seeded in the games table.
 // Core games seed only when the table is empty; both are idempotent.
 ensureCoreGamesSeeded()
