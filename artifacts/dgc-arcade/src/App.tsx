@@ -118,7 +118,7 @@ function ScrollToTop() {
     if (!user) return;
     const reportActivity = async () => {
       try {
-        await fetch("/api/admin/report-activity", {
+        await fetch(getApiUrl("/api/admin/report-activity"), {
           method: "POST",
           headers: { 
             "Content-Type": "application/json",

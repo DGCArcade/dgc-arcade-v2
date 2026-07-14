@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { formatCurrency } from "@/lib/format";
 import { Zap, TrendingUp, Shield, ChevronRight, Trophy, Clock, Target } from "lucide-react";
+import { getApiUrl } from "@/lib/api-fetch";
 
 const FEATURES = [
   {
@@ -40,7 +41,7 @@ function LiveJackpotBanner() {
   const [vals, setVals] = useState<LiveJackpots>({ mini: 50, minor: 250, major: 1250, grand: 5000 });
   useEffect(() => {
     const fetch_ = () =>
-      fetch("/api/jackpot")
+      fetch(getApiUrl("/api/jackpot"))
         .then(r => r.ok ? r.json() : null)
         .then(d => { if (d) setVals(d); })
         .catch(() => {});
@@ -149,7 +150,7 @@ function getOnlineVisitorId(): string {
 
 async function sendOnlineHeartbeat() {
   const visitorId = getOnlineVisitorId();
-  await fetch("/api/stats/heartbeat", {
+  await fetch(getApiUrl("/api/stats/heartbeat"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -168,7 +169,7 @@ function LiveOnlineCount() {
     let mounted = true;
     const fetch_ = async () => {
       await sendOnlineHeartbeat().catch(() => {});
-      fetch("/api/stats/live")
+      fetch(getApiUrl("/api/stats/live"))
         .then(r => r.ok ? r.json() : null)
         .then(d => { if (d && mounted) setOnline(d.onlineNow); })
         .catch(() => {});
@@ -233,12 +234,12 @@ function TournamentPulse() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch("/api/tournaments");
+        const res = await fetch(getApiUrl("/api/tournaments"));
         const data = res.ok ? await res.json() as Tournament[] : [];
         setTournaments(Array.isArray(data) ? data : []);
         const active = Array.isArray(data) ? data.find(t => t.status === "active") : null;
         if (active) {
-          const lb = await fetch(`/api/tournaments/${active.id}/leaderboard`);
+          const lb = await fetch(getApiUrl(`/api/tournaments/${active.id}/leaderboard`));
           const lbData = lb.ok ? await lb.json() : null;
           setLeaders(Array.isArray(lbData?.leaderboard) ? lbData.leaderboard.slice(0, 3) : []);
         } else {

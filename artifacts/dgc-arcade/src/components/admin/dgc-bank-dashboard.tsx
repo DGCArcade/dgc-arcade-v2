@@ -8,22 +8,19 @@ import {
   RefreshCw, Users, Wallet, ChevronDown, ChevronUp, Activity,
   DollarSign, Crown
 } from "lucide-react";
+import { getApiUrl, authHeaders } from "@/lib/api-fetch";
 
-function getToken() {
-  return typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
-}
 function getBankSession() {
   return typeof sessionStorage !== "undefined" ? sessionStorage.getItem("dgcBankSession") : null;
 }
 
 async function bankFetch(path: string) {
-  const token = getToken();
   const bankSession = getBankSession();
-  const res = await fetch(`/api/admin${path}`, {
-    headers: {
-      Authorization: `Bearer ${token ?? ""}`,
+  const url = getApiUrl(`/api/admin${path}`);
+  const res = await fetch(url, {
+    headers: authHeaders({
       ...(bankSession ? { "x-bank-session": bankSession } : {}),
-    },
+    }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Request failed" }));

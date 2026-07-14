@@ -13,6 +13,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ownerStepUpHeaders } from "@/components/owner/owner-stepup-gate";
+import { getApiUrl } from "@/lib/api-fetch";
 import {
   Bot,
   Mic,
@@ -450,7 +451,7 @@ export function OwnerAiChat({ token }: OwnerAiChatProps) {
 
       abortControllerRef.current = new AbortController();
 
-      const response = await fetch("/api/admin/owner-ai/chat", {
+      const response = await fetch(getApiUrl("/api/admin/owner-ai/chat"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

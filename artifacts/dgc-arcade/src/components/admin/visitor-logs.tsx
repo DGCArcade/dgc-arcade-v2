@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Search, RefreshCw, Globe, Smartphone, MapPin, Shield, TrendingUp } from "lucide-react";
+import { getApiUrl } from "@/lib/api-fetch";
 
 interface VisitorLog {
   id: number;
@@ -54,7 +55,7 @@ export function VisitorLogs() {
     try {
       const token = localStorage.getItem("dgc_token");
       const res = await fetch(
-        `/api/admin/visitor-logs?search=${encodeURIComponent(searchQuery)}&limit=${limit}&offset=${pageOffset}`,
+        getApiUrl(`/api/admin/visitor-logs?search=${encodeURIComponent(searchQuery)}&limit=${limit}&offset=${pageOffset}`),
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await res.json();
@@ -72,7 +73,7 @@ export function VisitorLogs() {
   const fetchStats = async () => {
     try {
       const token = localStorage.getItem("dgc_token");
-      const res = await fetch("/api/admin/visitor-logs/stats", {
+      const res = await fetch(getApiUrl("/api/admin/visitor-logs/stats"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();

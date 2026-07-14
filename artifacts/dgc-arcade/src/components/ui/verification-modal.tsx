@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
+import { getApiUrl } from "@/lib/api-fetch";
 
 interface VerificationModalProps {
   open: boolean;
@@ -54,7 +55,7 @@ export function VerificationModal({ open, onClose, required = false }: Verificat
 
     try {
       const token = typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
-      const res = await fetch("/api/users/me/verify/code", {
+      const res = await fetch(getApiUrl("/api/users/me/verify/code"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -87,7 +88,7 @@ export function VerificationModal({ open, onClose, required = false }: Verificat
 
     try {
       const token = typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
-      const res = await fetch("/api/users/me/verify/resend", {
+      const res = await fetch(getApiUrl("/api/users/me/verify/resend"), {
         method: "POST",
         headers: { "Authorization": `Bearer ${token ?? ""}` }
       });

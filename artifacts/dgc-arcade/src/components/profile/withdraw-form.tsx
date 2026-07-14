@@ -15,6 +15,7 @@ import { RefreshCw, ShieldAlert, CheckCircle2, Mail } from "lucide-react";
 import { WithdrawalTracker } from "@/components/profile/withdrawal-tracker";
 import { useWagerRequirement } from "@/hooks/use-wager-requirement";
 import { WithdrawPolicyNotice } from "@/components/wallet/withdraw-policy-notice";
+import { getApiUrl } from "@/lib/api-fetch";
 
 const withdrawSchema = z.object({
   amount: z.coerce.number().min(1, "Minimum withdrawal is $1"),
@@ -69,7 +70,7 @@ export function WithdrawForm() {
     setSendingOtp(true);
     try {
       const token = localStorage.getItem("dgc_token");
-      const r = await fetch("/api/transactions/withdraw/otp", {
+      const r = await fetch(getApiUrl("/api/transactions/withdraw/otp"), {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -106,7 +107,7 @@ export function WithdrawForm() {
     setCoinBalancesLoading(true);
     try {
       const token = localStorage.getItem("dgc_token");
-      const r = await fetch("/api/transactions/coin-balances", {
+      const r = await fetch(getApiUrl("/api/transactions/coin-balances"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (r.ok) {

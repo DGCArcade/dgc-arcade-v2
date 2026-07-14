@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { getApiUrl } from "@/lib/api-fetch";
 
 /** Polls session limit and shows a toast when the user's session cap is reached. */
 export function useSessionLimit() {
@@ -17,7 +18,7 @@ export function useSessionLimit() {
     const check = async () => {
       try {
         const token = localStorage.getItem("dgc_token");
-        const res = await fetch("/api/users/me/limits", {
+        const res = await fetch(getApiUrl("/api/users/me/limits"), {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) return;

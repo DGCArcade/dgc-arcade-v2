@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Clock, Loader2, AlertTriangle, Circle } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
+import { getApiUrl } from "@/lib/api-fetch";
 
 export interface WithdrawalTrackerProps {
   transactionId: number;
@@ -45,7 +46,7 @@ export function WithdrawalTracker({
     const poll = async () => {
       try {
         const token = localStorage.getItem("dgc_token");
-        const res = await fetch(`/api/transactions/${transactionId}`, {
+        const res = await fetch(getApiUrl(`/api/transactions/${transactionId}`), {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) return;

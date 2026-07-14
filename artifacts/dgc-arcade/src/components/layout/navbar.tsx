@@ -21,6 +21,7 @@ import { VipModal, getVipProgress } from "@/components/vip/vip-modal";
 import { useState, useEffect } from "react";
 import { rotateTheme } from "@/lib/theme";
 import { usePlatformSettings } from "@/hooks/use-platform-settings";
+import { getApiUrl } from "@/lib/api-fetch";
 
 export function Navbar() {
   const { user, isAuthenticated, logout, cryptoBalances } = useAuth();
@@ -85,7 +86,7 @@ export function Navbar() {
   useEffect(() => {
     if (!isCreator || !isAuthenticated) return;
     const token = typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
-    const poll = () => fetch("/api/creator/messages/unread-count", { headers: { Authorization: `Bearer ${token}` } })
+    const poll = () => fetch(getApiUrl("/api/creator/messages/unread-count"), { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then(d => { if (typeof d.unread === "number") setCreatorUnread(d.unread); }).catch(() => {});
     poll();
     const id = setInterval(poll, 20000);
@@ -151,7 +152,7 @@ export function Navbar() {
     setBankPinError("");
     try {
       const token = typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
-      const res = await fetch("/api/admin/verify-bank-pin", {
+      const res = await fetch(getApiUrl("/api/admin/verify-bank-pin"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
         credentials: "include",

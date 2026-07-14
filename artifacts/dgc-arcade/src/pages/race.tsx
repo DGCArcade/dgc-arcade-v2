@@ -12,6 +12,7 @@ import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { formatCurrency } from "@/lib/format";
 import { ChevronLeft, Trophy, Zap, Video } from "lucide-react";
 import { ProvablyFairPanel } from "@/components/games/provably-fair-panel";
+import { getApiUrl } from "@/lib/api-fetch";
 import { startHorseGallopLoop, stopHorseGallopLoop, playRaceStartBugle, playRaceFinishCheer, playGateOpenClang, startCrowdAmbience, stopCrowdAmbience } from "@/lib/horse-gallop-sound";
 import { DerbyHorsePicker } from "@/components/games/derby/derby-horse-picker";
 import {
@@ -137,7 +138,7 @@ export default function RacePage() {
     const token = getToken();
     let res: RaceResult;
     try {
-      const r = await fetch("/api/race/run", {
+      const r = await fetch(getApiUrl("/api/race/run"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ betAmount: amt, racerId: selectedRacer }),

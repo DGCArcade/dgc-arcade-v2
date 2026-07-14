@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { formatCurrency } from "@/lib/format";
 import { Gift, Star, Flame, Zap } from "lucide-react";
+import { getApiUrl } from "@/lib/api-fetch";
 
 interface DailyBonusStatus {
   claimed: boolean;
@@ -49,7 +50,7 @@ export function DailyBonusModal({ open, onClose }: DailyBonusModalProps) {
 
   useEffect(() => {
     if (!open) return;
-    fetch("/api/daily-bonus/status", {
+    fetch(getApiUrl("/api/daily-bonus/status"), {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then(r => r.json())
@@ -60,7 +61,7 @@ export function DailyBonusModal({ open, onClose }: DailyBonusModalProps) {
   const handleClaim = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/daily-bonus/claim", {
+      const res = await fetch(getApiUrl("/api/daily-bonus/claim"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
       });

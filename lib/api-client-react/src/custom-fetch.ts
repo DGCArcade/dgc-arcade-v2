@@ -115,12 +115,15 @@ function isUrl(input: RequestInfo | URL): input is URL {
 }
 
 function applyBaseUrl(input: RequestInfo | URL): RequestInfo | URL {
-  if (!_baseUrl) return input;
+  // Use explicit _baseUrl if set, otherwise fallback to environment variable for production/local consistency
+  const baseUrl = _baseUrl || (typeof process !== 'undefined' ? process.env.VITE_API_URL : (import.meta as any).env?.VITE_API_URL) || "";
+  
+  if (!baseUrl) return input;
   const url = resolveUrl(input);
   // Only prepend to relative paths (starting with /)
   if (!url.startsWith("/")) return input;
 
-  const absolute = `${_baseUrl}${url}`;
+  const absolute = `${baseUrl.replace(/\/+$/, "")}${url}`;
   if (typeof input === "string") return absolute;
   if (isUrl(input)) return new URL(absolute);
   return new Request(absolute, input as Request);

@@ -11,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthModal } from "@/hooks/use-auth-modal";
+import { getApiUrl } from "@/lib/api-fetch";
 
 // Generate a stable device fingerprint from browser properties
 function getDeviceFingerprint(): string {
@@ -79,8 +80,7 @@ export function RegisterForm() {
     try {
       const fp = getDeviceFingerprint();
       const referralCode = localStorage.getItem("dgc_referral") || values.promoCode;
-      const apiUrl = (import.meta.env.VITE_API_URL ?? "") + "/api/auth/register";
-      const res = await fetch(apiUrl, {
+      const res = await fetch(getApiUrl("/api/auth/register"), {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-device-fingerprint": fp },
         body: JSON.stringify({ ...values, referralCode }),

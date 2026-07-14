@@ -7,6 +7,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { formatCurrency } from "@/lib/format";
 import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
 import { ProvablyFairPanel } from "./provably-fair-panel";
+import { getApiUrl } from "@/lib/api-fetch";
 
 interface Card { suit: string; rank: string }
 type Status = "idle" | "active" | "player_blackjack" | "player_wins" | "dealer_wins" | "push" | "player_bust" | "split_complete";
@@ -389,7 +390,7 @@ export function Blackjack({ game }: BlackjackProps) {
   const isDone = !["idle", "active"].includes(status);
   
   useEffect(() => {
-    fetch("/api/blackjack/current", { headers: authHeaders() })
+    fetch(getApiUrl("/api/blackjack/current"), { headers: authHeaders() })
       .then(r => r.json())
       .then(d => {
         if (d?.handId) {
@@ -465,7 +466,7 @@ export function Blackjack({ game }: BlackjackProps) {
       }
       setLoading(true); setAnimatingCards(true); setShowResult(false);
       try {
-        const r = await fetch("/api/blackjack/deal", {
+        const r = await fetch(getApiUrl("/api/blackjack/deal"), {
           method: "POST", headers: authHeaders(),
           body: JSON.stringify({ gameId: game.id, amount }),
         });
@@ -503,7 +504,7 @@ export function Blackjack({ game }: BlackjackProps) {
     if (!handId) return;
     setLoading(true); setShowResult(false);
     try {
-      const r = await fetch("/api/blackjack/action", {
+      const r = await fetch(getApiUrl("/api/blackjack/action"), {
         method: "POST", headers: authHeaders(),
         body: JSON.stringify({ handId, action: act }),
       });

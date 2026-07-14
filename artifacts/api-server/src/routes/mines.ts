@@ -4,7 +4,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 import { requireLocationVerified } from "../middlewares/location.js";
 import { v4 as uuidv4 } from "uuid";
-import { createHash } from "crypto";
+import { createHash, createHmac } from "crypto";
 import { recordTournamentWager } from "../lib/tournament-tracker.js";
 import { getUserBalance, deductBalance, creditBalance } from "../lib/balance-service.js";
 import { checkWagerLimits } from "../services/gambling-limits.js";
@@ -16,11 +16,24 @@ type GridSize = (typeof VALID_GRID_SIZES)[number];
 
 function genMines(serverSeed: string, clientSeed: string, nonce: number, count: number, total: GridSize): number[] {
   const positions: number[] = [];
-  for (let i = 0; positions.length < count; i++) {
-    const combined = `${serverSeed}:${clientSeed}:${nonce}:mines:${i}`;
-    const h = createHash("sha256").update(combined).digest("hex");
-    const pos = parseInt(h.slice(0, 8), 16) % total;
-    if (!positions.includes(pos)) positions.push(pos);
+  const message = `${clientSeed}:${nonce}:mines`;
+  
+  let hash = createHmac("sha512", serverSeed).update(message).digest("hex");
+  let hashIndex = 0;
+  let round = 0;
+
+  while (positions.length < count) {
+    if (hashIndex + 8 > hash.length) {
+      round += 1;
+      hash = createHmac("sha512", serverSeed).update(`${message}:r${round}`).digest("hex");
+      hashIndex = 0;
+    }
+    const segment = hash.substring(hashIndex, hashIndex + 8);
+    hashIndex += 8;
+    const pos = parseInt(segment, 16) % total;
+    if (!positions.includes(pos)) {
+      positions.push(pos);
+    }
   }
   return positions;
 }

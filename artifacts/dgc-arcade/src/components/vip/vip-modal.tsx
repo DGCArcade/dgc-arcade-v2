@@ -3,6 +3,7 @@ import { X, ChevronRight, Crown, Zap, Gift, Star, TrendingUp, MessageCircle, Loc
 import { formatCurrency } from "@/lib/format";
 import { useAuth } from "@/hooks/use-auth";
 import { DailyBonusModal } from "@/components/ui/daily-bonus-modal";
+import { getApiUrl } from "@/lib/api-fetch";
 
 export const VIP_TIERS = [
   { id: 0, name: "ROOKIE GRINDER",  shortName: "Rookie",  min: 0,         rakebackPct: 5,  color: "#cd7f32", icon: "🥉" },
@@ -45,7 +46,7 @@ export function VipModal({ open, onClose }: VipModalProps) {
     setClaiming(true); setClaimMsg(null);
     try {
       const token = localStorage.getItem("dgc_token");
-      const res = await fetch("/api/users/me/rakeback/claim", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(getApiUrl("/api/users/me/rakeback/claim"), { method: "POST", headers: { Authorization: `Bearer ${token}` } });
       const d = await res.json();
       if (!res.ok) { setClaimMsg(d.error ?? "Claim failed"); return; }
       setClaimMsg(`✅ Claimed ${formatCurrency(d.claimed)}!`);

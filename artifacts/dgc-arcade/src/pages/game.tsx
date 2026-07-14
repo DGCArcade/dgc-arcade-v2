@@ -18,6 +18,7 @@ import { ChevronLeft, Trophy, Timer, ChevronDown, ChevronUp } from "lucide-react
 import { useEffect, useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/use-auth";
+import { getApiUrl } from "@/lib/api-fetch";
 
 interface TournamentInfo {
   tournament: { id: number; name: string; description: string | null; prize: string; endAt: string };
@@ -32,7 +33,7 @@ function TournamentBanner({ compact = false }: { compact?: boolean }) {
 
   useEffect(() => {
     const token = localStorage.getItem("dgc_token");
-    fetch("/api/users/tournaments/active", {
+    fetch(getApiUrl("/api/users/tournaments/active"), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(r => r.ok ? r.json() : null)
@@ -156,7 +157,7 @@ export default function GamePage() {
     queryKey: ["/api/games", gameRef],
     enabled: gameRef.length > 0,
     queryFn: async () => {
-      const res = await fetch(`/api/games/${encodeURIComponent(gameRef)}`);
+      const res = await fetch(getApiUrl(`/api/games/${encodeURIComponent(gameRef)}`));
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error((body as { error?: string }).error ?? "Game not found");

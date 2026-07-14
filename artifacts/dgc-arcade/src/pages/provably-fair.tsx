@@ -13,7 +13,7 @@ export default function ProvablyFairPage() {
     {
       name: "Crash",
       algorithm: "SHA-256",
-      description: "Crash multiplier is determined by hashing combined seeds. The outcome is locked before the game starts.",
+      description: "Crash multiplier is determined by hashing combined seeds (serverSeed:clientSeed:nonce:crash). The outcome is locked before the game starts.",
       icon: TrendingUp,
       color: "from-orange-500/20 to-transparent"
     },
@@ -27,7 +27,7 @@ export default function ProvablyFairPage() {
     {
       name: "Mines",
       algorithm: "HMAC-SHA512",
-      description: "Mine positions are generated using HMAC-SHA512. Random byte stream determines which tiles contain mines before you start clicking.",
+      description: "Mine positions are generated using HMAC-SHA512 from Server Seed, Client Seed, and Nonce. Random byte stream determines which tiles contain mines before you start clicking.",
       icon: Cpu,
       color: "from-purple-500/20 to-transparent"
     },

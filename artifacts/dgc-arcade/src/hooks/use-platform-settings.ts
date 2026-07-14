@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { getApiUrl } from "@/lib/api-fetch";
 
 export interface PublicSettings {
   slotsEnabled: boolean;
@@ -35,7 +36,7 @@ export function usePlatformSettings() {
     queryKey: ["/api/games/settings"],
     queryFn: async () => {
       try {
-        const res = await fetch("/api/games/settings");
+        const res = await fetch(getApiUrl("/api/games/settings"));
         if (!res.ok) return DEFAULTS;
         return res.json();
       } catch (e) {

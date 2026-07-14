@@ -3,6 +3,7 @@ import { formatCurrency, formatNumber } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trophy, Medal, Crown, Swords, Clock } from "lucide-react";
+import { getApiUrl } from "@/lib/api-fetch";
 
 interface LeaderboardEntry {
   rank: number;
@@ -160,7 +161,7 @@ export default function Leaderboard() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/leaderboard?period=${period}&limit=50`)
+    fetch(getApiUrl(`/api/leaderboard?period=${period}&limit=50`))
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setEntries(d); })
       .catch(() => {})
@@ -168,7 +169,7 @@ export default function Leaderboard() {
   }, [period]);
 
   useEffect(() => {
-    fetch("/api/tournaments")
+    fetch(getApiUrl("/api/tournaments"))
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setTournaments(d); })
       .catch(() => {});
@@ -177,7 +178,7 @@ export default function Leaderboard() {
   useEffect(() => {
     if (!selectedTournament) return;
     setTLoading(true);
-    fetch(`/api/tournaments/${selectedTournament}/leaderboard`)
+    fetch(getApiUrl(`/api/tournaments/${selectedTournament}/leaderboard`))
       .then(r => r.json())
       .then(d => { if (d.tournament) setTournamentBoard(d); })
       .catch(() => {})

@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { VipModal, getVipProgress } from "@/components/vip/vip-modal";
 import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
 import { OwnerStepUpGate } from "@/components/owner/owner-stepup-gate";
+import { getApiUrl } from "@/lib/api-fetch";
 
 export default function Profile() {
   const { user, isAuthenticated, isLoading, cryptoBalances } = useAuth();
@@ -82,7 +83,7 @@ export default function Profile() {
   useEffect(() => {
     if (!isAuthenticated) return;
     const token = localStorage.getItem("dgc_token");
-    fetch("/api/users/me/vault", { headers: { Authorization: `Bearer ${token}` } })
+    fetch(getApiUrl("/api/users/me/vault"), { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then(d => setVaultBalance(parseFloat(d.vaultBalance ?? "0"))).catch(() => {});
   }, [isAuthenticated]);
 
@@ -90,7 +91,7 @@ export default function Profile() {
     setTelegramSaving(true); setTelegramMsg(null);
     try {
       const token = localStorage.getItem("dgc_token");
-      const res = await fetch("/api/users/me/profile", {
+      const res = await fetch(getApiUrl("/api/users/me/profile"), {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ telegramUsername: telegramInput.replace(/^@/, "").trim() }),
@@ -108,7 +109,7 @@ export default function Profile() {
     setVaultLoading(true); setVaultMsg(null);
     try {
       const token = localStorage.getItem("dgc_token");
-      const res = await fetch("/api/users/me/vault/deposit", {
+      const res = await fetch(getApiUrl("/api/users/me/vault/deposit"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ amount: amt }),
@@ -127,7 +128,7 @@ export default function Profile() {
     setVaultLoading(true); setVaultMsg(null);
     try {
       const token = localStorage.getItem("dgc_token");
-      const res = await fetch("/api/users/me/vault/withdraw", {
+      const res = await fetch(getApiUrl("/api/users/me/vault/withdraw"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ amount: amt, password: vaultPassword }),
@@ -145,7 +146,7 @@ export default function Profile() {
     setTipLoading(true);
     try {
       const token = localStorage.getItem("dgc_token");
-      await fetch("/api/users/tip", {
+      await fetch(getApiUrl("/api/users/tip"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ toUsername: tipUsername.trim(), amount: tipAmount }),
@@ -158,8 +159,7 @@ export default function Profile() {
     setPlisioLoading(true); setPlisioError(null);
     try {
       const token = localStorage.getItem("dgc_token");
-      const apiUrl = (import.meta.env.VITE_API_URL ?? "") + "/api/users/owner/plisio-balance";
-      const res = await fetch(apiUrl, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(getApiUrl("/api/users/owner/plisio-balance"), { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (!res.ok) { setPlisioError((data.error ?? "Failed to load")); return; }
       if (!data.balances || Object.keys(data.balances).length === 0) { setPlisioError("No balances returned."); return; }
@@ -180,7 +180,7 @@ export default function Profile() {
   useEffect(() => {
     if (!isAuthenticated) return;
     const token = localStorage.getItem('dgc_token');
-    fetch('/api/referrals/my-code', { headers: { Authorization: `Bearer ${token}` } })
+    fetch(getApiUrl('/api/referrals/my-code'), { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then(d => { if (d.code) setRefData(d); }).catch(() => {});
   }, [isAuthenticated]);
 
@@ -196,7 +196,7 @@ export default function Profile() {
     setDeviceHistoryLoading(true);
     try {
       const token = localStorage.getItem("dgc_token");
-      const res = await fetch("/api/users/me/device-history", { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(getApiUrl("/api/users/me/device-history"), { headers: { Authorization: `Bearer ${token}` } });
       const d = await res.json();
       setDeviceHistory(d.sessions ?? []);
     } catch { setDeviceHistory([]); }
@@ -208,7 +208,7 @@ export default function Profile() {
     setLogoutAllLoading(true);
     try {
       const token = localStorage.getItem("dgc_token");
-      await fetch("/api/users/me/logout-all-devices", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      await fetch(getApiUrl("/api/users/me/logout-all-devices"), { method: "POST", headers: { Authorization: `Bearer ${token}` } });
       localStorage.removeItem("dgc_token");
       setDeviceHistoryOpen(false);
       setLocation("/");
@@ -221,7 +221,7 @@ export default function Profile() {
     setTxAllLoading(true);
     try {
       const token = localStorage.getItem("dgc_token");
-      const res = await fetch("/api/transactions?limit=200", { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(getApiUrl("/api/transactions?limit=200"), { headers: { Authorization: `Bearer ${token}` } });
       const d = await res.json();
       setTxAll(Array.isArray(d) ? d : (d.transactions ?? []));
     } catch { setTxAll([]); }
@@ -737,13 +737,13 @@ export default function Profile() {
         <CardHeader>
           <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2">
             <Shield className="w-5 h-5 text-green-500" />
-            <span className="text-glow-shift">Provably Fair · SHA-256</span>
+            <span className="text-glow-shift">Provably Fair · SHA-512 / SHA-256</span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="bg-secondary/50 border border-green-500/20 rounded-lg p-4 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Every bet in DGC Arcade is mathematically verifiable using SHA-256 cryptography. After each game, you can verify that your outcome was not manipulated by the house.
+              Every bet in DGC Arcade is mathematically verifiable using SHA-512 or SHA-256 cryptography. After each game, you can verify that your outcome was not manipulated by the house.
             </p>
             <div className="space-y-2 text-xs font-mono">
               <div><span className="text-muted-foreground">How it works:</span></div>
@@ -751,7 +751,7 @@ export default function Profile() {
                 <li>Before each bet, a Server Seed Hash is generated and shown to you</li>
                 <li>You provide a Client Seed (or we generate one for you)</li>
                 <li>After the game, the unhashed Server Seed is revealed</li>
-                <li>You can verify: HMAC-SHA256(serverSeed, clientSeed:nonce:cardIndex) matches the hash</li>
+                <li>You can verify: HMAC-SHA512(serverSeed, clientSeed:nonce:gameSlug) or SHA-256(serverSeed:clientSeed:nonce) matches the outcome</li>
                 <li>If it matches, the outcome is 100% mathematically fair</li>
               </ol>
             </div>

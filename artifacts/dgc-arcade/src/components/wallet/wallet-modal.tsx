@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
 import { ExternalLink, Send, Wallet, ArrowDownToLine, ArrowUpFromLine, Lock, Unlock, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { CoinIcon, CURRENCIES } from "./coin-icon";
+import { getApiUrl } from "@/lib/api-fetch";
 import { useWagerRequirement } from "@/hooks/use-wager-requirement";
 import { WithdrawPolicyNotice } from "./withdraw-policy-notice";
 
@@ -73,7 +74,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
     setCoinBalancesLoading(true);
     try {
       const token = localStorage.getItem("dgc_token");
-      const r = await fetch("/api/transactions/coin-balances", {
+      const r = await fetch(getApiUrl("/api/transactions/coin-balances"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (r.ok) {
@@ -109,7 +110,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
     const token = localStorage.getItem("dgc_token");
     const poll = async () => {
       try {
-        const r = await fetch(`/api/transactions/deposit/status/${depositResult.orderId}`, {
+        const r = await fetch(getApiUrl(`/api/transactions/deposit/status/${depositResult.orderId}`), {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!r.ok) return;
@@ -138,7 +139,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   useEffect(() => {
     if (!open) return;
     const token = localStorage.getItem("dgc_token");
-    fetch("/api/users/me/vault", { headers: { Authorization: `Bearer ${token}` } })
+    fetch(getApiUrl("/api/users/me/vault"), { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.vaultBalance !== undefined) setVaultBalance(parseFloat(d.vaultBalance)); })
       .catch(() => {});
@@ -236,7 +237,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const handleTip = async () => {
     if (!tipUsername || tipAmount <= 0) return;
     const token = localStorage.getItem("dgc_token");
-    const res = await fetch("/api/users/tip", {
+    const res = await fetch(getApiUrl("/api/users/tip"), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ toUsername: tipUsername, amount: tipAmount }),
@@ -256,7 +257,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
     setVaultLoading(true);
     try {
       const token = localStorage.getItem("dgc_token");
-      const res = await fetch("/api/users/me/vault/deposit", {
+      const res = await fetch(getApiUrl("/api/users/me/vault/deposit"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ amount: vaultDepositAmt }),
@@ -279,7 +280,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
     setVaultLoading(true);
     try {
       const token = localStorage.getItem("dgc_token");
-      const res = await fetch("/api/users/me/vault/withdraw", {
+      const res = await fetch(getApiUrl("/api/users/me/vault/withdraw"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ amount: vaultWithdrawAmt, password: vaultPassword }),

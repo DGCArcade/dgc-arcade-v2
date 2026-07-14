@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { CoinIcon } from "@/components/wallet/coin-icon";
+import { getApiUrl } from "@/lib/api-fetch";
 
 /* ─────────────────────────────────────────────────────────────
    Types
@@ -426,7 +427,7 @@ export function Sportsbook() {
   const { data: sports = [] } = useQuery<Sport[]>({
     queryKey: ["sportsbook-sports"],
     queryFn: async () => {
-      const res = await fetch("/api/sportsbook/sports", {
+      const res = await fetch(getApiUrl("/api/sportsbook/sports"), {
         headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` },
       });
       if (!res.ok) throw new Error("Failed to fetch sports");
@@ -448,7 +449,7 @@ export function Sportsbook() {
 
       if (showLiveOnly) {
         // Dedicated live endpoint — only returns events where status.live === true
-        const res = await fetch("/api/sports/live-now", {
+        const res = await fetch(getApiUrl("/api/sports/live-now"), {
           headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` },
         });
         if (!res.ok) throw new Error("Failed to fetch live games");
@@ -457,7 +458,7 @@ export function Sportsbook() {
       }
 
       if (showTopSports) {
-        const res = await fetch("/api/sports/feed", {
+        const res = await fetch(getApiUrl("/api/sports/feed"), {
           headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` },
         });
         if (!res.ok) throw new Error("Failed to fetch sports feed");
@@ -485,7 +486,7 @@ export function Sportsbook() {
       }
 
       const res = await fetch(
-        `/api/sportsbook/odds/${selectedSport}?regions=us&oddsFormat=american`,
+        getApiUrl(`/api/sportsbook/odds/${selectedSport}?regions=us&oddsFormat=american`),
         { headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` } }
       );
       if (!res.ok) {
@@ -600,7 +601,7 @@ export function Sportsbook() {
   const { data: betHistory = [], isLoading: historyLoading } = useQuery<SportsBet[]>({
     queryKey: ["sportsbook-history", (user as any)?.id],
     queryFn: async () => {
-      const res = await fetch(`/api/sportsbook/bets/${(user as any).id}`, {
+      const res = await fetch(getApiUrl(`/api/sportsbook/bets/${(user as any).id}`), {
         headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` },
       });
       if (!res.ok) throw new Error("Failed to fetch bet history");
@@ -614,7 +615,7 @@ export function Sportsbook() {
     queryKey: ["sportsbook-pending-results", (user as any)?.id],
     queryFn: async () => {
       if (!(user as any)?.id) return [];
-      const res = await fetch(`/api/sportsbook/pending-results/${(user as any).id}`, {
+      const res = await fetch(getApiUrl(`/api/sportsbook/pending-results/${(user as any).id}`), {
         headers: { Authorization: `Bearer ${localStorage.getItem("dgc_token")}` },
       });
       if (!res.ok) return [];
@@ -656,7 +657,7 @@ export function Sportsbook() {
 
     for (const entry of betSlip) {
       try {
-        const res = await fetch("/api/sportsbook/bet", {
+        const res = await fetch(getApiUrl("/api/sportsbook/bet"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

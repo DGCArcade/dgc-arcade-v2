@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { getApiUrl } from "@/lib/api-fetch";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -167,8 +168,8 @@ export default function CreatorPage() {
     const token = getToken();
     try {
       const [dash, refs] = await Promise.all([
-        fetch("/api/creator/dashboard", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-        fetch("/api/referrals/my-referrals", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+        fetch(getApiUrl("/api/creator/dashboard"), { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+        fetch(getApiUrl("/api/referrals/my-referrals"), { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
       ]);
       if (!dash.error) {
         setDashboard(dash);
@@ -189,7 +190,7 @@ export default function CreatorPage() {
     if (!isAuthenticated) return;
     const token = getToken();
     try {
-      const res = await fetch("/api/creator/messages", { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(getApiUrl("/api/creator/messages"), { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (data.messages) {
         setMessages(data.messages);
@@ -202,7 +203,7 @@ export default function CreatorPage() {
   useEffect(() => {
     if (!isAuthenticated) return;
     const token = getToken();
-    const poll = () => fetch("/api/creator/messages/unread-count", { headers: { Authorization: `Bearer ${token}` } })
+    const poll = () => fetch(getApiUrl("/api/creator/messages/unread-count"), { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then(d => setUnreadCount(d.unread ?? 0)).catch(() => {});
     poll();
     const id = setInterval(poll, 20000);
@@ -311,7 +312,7 @@ function SpecialtyHub({
   const fetchAnalytics = async () => {
     setAnalyticsLoading(true);
     try {
-      const res = await fetch("/api/creator/analytics", {
+      const res = await fetch(getApiUrl("/api/creator/analytics"), {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       if (res.ok) setAnalytics(await res.json());
@@ -349,7 +350,7 @@ function SpecialtyHub({
     }
     setPayoutLoading(true);
     try {
-      const res = await fetch("/api/creator/request-payout", {
+      const res = await fetch(getApiUrl("/api/creator/request-payout"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify({ coin: selectedCoin, address: walletAddress, amount: dashboard.promoBalance }),
@@ -944,7 +945,7 @@ function RegularHub({
   const deployToWallet = async () => {
     setDeployLoading(true);
     try {
-      const res = await fetch("/api/creator/request-payout", {
+      const res = await fetch(getApiUrl("/api/creator/request-payout"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify({ coin: "platform", address: "wallet", amount: dashboard.totalCommissionEarned }),

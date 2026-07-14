@@ -9,8 +9,8 @@ import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, Check } from "lucide-react";
 import { ProvablyFairPanel } from "./provably-fair-panel";
+import { getApiUrl } from "@/lib/api-fetch";
 
 interface CrashGameLiveProps { game: Game }
 
@@ -133,7 +133,7 @@ export function CrashGameLive({ game }: CrashGameLiveProps) {
       setPlacing(true);
       try {
         const token = localStorage.getItem("dgc_token");
-        const res = await fetch("/api/crash/live/bet", {
+        const res = await fetch(getApiUrl("/api/crash/live/bet"), {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ amount, cashoutAt }),

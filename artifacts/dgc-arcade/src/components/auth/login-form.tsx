@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthModal } from "@/hooks/use-auth-modal";
 import { CheckCircle2, AlertTriangle, ArrowLeft } from "lucide-react";
+import { getApiUrl } from "@/lib/api-fetch";
 
 const loginSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
@@ -69,7 +70,7 @@ export function LoginForm() {
     setForgotLoading(true);
     setForgotStatus({ type: null, msg: "" });
     try {
-      const res = await fetch("/api/auth/forgot-password", {
+      const res = await fetch(getApiUrl("/api/auth/forgot-password"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier: forgotIdentifier.trim() }),

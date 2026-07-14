@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { MapPin, Globe, ShieldAlert, X, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { savePendingGeo } from "@/lib/geo-sync";
+import { getApiUrl } from "@/lib/api-fetch";
 import { gpsConsistentWithIpGeo } from "@/lib/geo-guard";
 
 // Uses sessionStorage — shows on every new browser session, not cached forever
@@ -333,7 +334,7 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
 
       const token = localStorage.getItem("dgc_token");
       if (token) {
-        fetch("/api/users/geo", {
+        fetch(getApiUrl("/api/users/geo"), {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify(payload),

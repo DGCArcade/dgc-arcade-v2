@@ -3,6 +3,7 @@ import { Shield, Mail, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { getApiUrl } from "@/lib/api-fetch";
 
 const STORAGE_KEY = "dgc_owner_stepup_token";
 
@@ -42,7 +43,7 @@ export function OwnerStepUpGate({ children }: OwnerStepUpGateProps) {
     setChecking(true);
     try {
       const stored = getOwnerStepUpToken();
-      const r = await fetch("/api/auth/owner/stepup/status", { headers: authHeaders() });
+      const r = await fetch(getApiUrl("/api/auth/owner/stepup/status"), { headers: authHeaders() });
       const data = await r.json().catch(() => ({}));
       if (data.disabled || data.verified) {
         setVerified(true);
@@ -69,7 +70,7 @@ export function OwnerStepUpGate({ children }: OwnerStepUpGateProps) {
   const sendCode = async () => {
     setSending(true);
     try {
-      const r = await fetch("/api/auth/owner/stepup/send", {
+      const r = await fetch(getApiUrl("/api/auth/owner/stepup/send"), {
         method: "POST",
         headers: authHeaders(),
       });
@@ -94,7 +95,7 @@ export function OwnerStepUpGate({ children }: OwnerStepUpGateProps) {
     if (code.length < 6) return;
     setVerifying(true);
     try {
-      const r = await fetch("/api/auth/owner/stepup/verify", {
+      const r = await fetch(getApiUrl("/api/auth/owner/stepup/verify"), {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ code }),

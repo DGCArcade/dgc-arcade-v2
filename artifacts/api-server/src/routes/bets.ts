@@ -5,7 +5,7 @@ import { BetBody, ListBetsQueryParams } from "@workspace/api-zod";
 import { requireAuth, optionalAuth } from "../middlewares/auth.js";
 import { requireLocationVerified } from "../middlewares/location.js";
 import { v4 as uuidv4 } from "uuid";
-import { createHash } from "crypto";
+import { createHash, createHmac } from "crypto";
 import { recordTournamentWager } from "../lib/tournament-tracker.js";
 import { contributeToJackpot, tryJackpotWin } from "./jackpot.js";
 import { recordLedgerStandalone } from "../services/ledger.js";
@@ -33,13 +33,18 @@ function generateServerSeed(): string {
 }
 
 /**
- * Standard SHA-256 Provably Fair Outcome Generator
- * Uses HMAC-SHA256(serverSeed, clientSeed:nonce:gameSlug)
+ * Standard HMAC-SHA512 Provably Fair Outcome Generator
+ * Uses HMAC-SHA512(serverSeed, clientSeed:nonce:gameSlug)
+ * This ensures high entropy and unbiased distribution.
  */
 function getOutcome(serverSeed: string, clientSeed: string, gameSlug: string, nonce: number): number {
   const message = `${clientSeed}:${nonce}:${gameSlug}`;
-  const hash = createHash("sha256").update(`${serverSeed}:${message}`).digest("hex");
+  const hmac = createHmac("sha512", serverSeed);
+  hmac.update(message);
+  const hash = hmac.digest("hex");
+  
   // Take first 8 chars (32 bits) and normalize to 0-1
+  // We use 8 chars to get a 32-bit integer for standard float precision
   const num = parseInt(hash.slice(0, 8), 16);
   return num / 0xffffffff;
 }

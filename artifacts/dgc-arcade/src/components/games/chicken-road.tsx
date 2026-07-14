@@ -11,6 +11,7 @@ import { ChickenRoadBoard, type CrossAnim, type HazardType } from "./chicken-roa
 import { ProvablyFairPanel } from "./provably-fair-panel";
 import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
 import { formatCurrency } from "@/lib/format";
+import { getApiUrl } from "@/lib/api-fetch";
 import {
   STAKE_TIERS,
   getStakeMultiplierTable,
@@ -98,7 +99,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
   const [laneMultipliers, setLaneMultipliers] = useState(() => getStakeMultiplierTable("medium"));
 
   useEffect(() => {
-    fetch("/api/chicken-road/config")
+    fetch(getApiUrl("/api/chicken-road/config"))
       .then(r => (r.ok ? r.json() : null))
       .then(data => {
         if (!data?.tiers) return;
@@ -114,7 +115,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
   useEffect(() => {
     setMaxLanes(STAKE_TIERS[tier].maxSteps);
     setLaneMultipliers(getStakeMultiplierTable(tier));
-    fetch("/api/chicken-road/config")
+    fetch(getApiUrl("/api/chicken-road/config"))
       .then(r => (r.ok ? r.json() : null))
       .then(data => {
         const tierData = data?.tiers?.find((t: { tier: string }) => t.tier === tier);
@@ -136,7 +137,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
   useEffect(() => {
     const token = getToken();
     if (!token) return;
-    fetch("/api/chicken-road/session", { headers: authHeaders() })
+    fetch(getApiUrl("/api/chicken-road/session"), { headers: authHeaders() })
       .then(r => (r.ok ? r.json() : null))
       .then(data => {
         if (!data?.session) return;
@@ -166,7 +167,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
       }
       setLoading(true);
       try {
-        const res = await fetch("/api/chicken-road/initialize", {
+        const res = await fetch(getApiUrl("/api/chicken-road/initialize"), {
           method: "POST",
           headers: authHeaders(),
           body: JSON.stringify({ gameId: game.id, amount, tier, clientSeed }),
@@ -214,7 +215,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
 
     try {
       const [data] = await Promise.all([
-        fetch("/api/chicken-road/progress", {
+        fetch(getApiUrl("/api/chicken-road/progress"), {
           method: "POST",
           headers: authHeaders(),
           body: JSON.stringify({ sessionId, laneIndex: lane }),
@@ -299,7 +300,7 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
     if (status !== "active" || currentLane === 0 || loading || !sessionId || animLock.current) return;
     setLoading(true);
     try {
-      const res = await fetch("/api/chicken-road/settle", {
+      const res = await fetch(getApiUrl("/api/chicken-road/settle"), {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ sessionId }),

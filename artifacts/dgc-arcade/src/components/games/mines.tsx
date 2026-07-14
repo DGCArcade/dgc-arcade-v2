@@ -8,6 +8,7 @@ import { formatCurrency } from "@/lib/format";
 import { THEMES, getTheme, type ThemeId } from "@/lib/theme";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ProvablyFairPanel } from "./provably-fair-panel";
+import { getApiUrl } from "@/lib/api-fetch";
 
 function getToken() { return localStorage.getItem("dgc_token"); }
 function authHeaders() { return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }; }
@@ -138,7 +139,7 @@ function MinesGame({ game }: MinesProps) {
 
   useEffect(() => {
     let mounted = true;
-    fetch("/api/mines/current", { headers: authHeaders() })
+    fetch(getApiUrl("/api/mines/current"), { headers: authHeaders() })
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (mounted && d?.sessionId) {
@@ -178,7 +179,7 @@ function MinesGame({ game }: MinesProps) {
       }
       setLoading(true); playSound("click");
       try {
-        const r = await fetch("/api/mines/start", {
+        const r = await fetch(getApiUrl("/api/mines/start"), {
           method: "POST", headers: authHeaders(),
           body: JSON.stringify({ gameId: game.id, amount, mineCount, gridSize }),
         });
@@ -204,7 +205,7 @@ function MinesGame({ game }: MinesProps) {
     if (status !== "active" || revealed.includes(cell) || !sessionId) return;
     setLoading(true); setLastCell(cell); playSound("click");
     try {
-      const r = await fetch("/api/mines/reveal", {
+      const r = await fetch(getApiUrl("/api/mines/reveal"), {
         method: "POST", headers: authHeaders(),
         body: JSON.stringify({ sessionId, cell }),
       });
@@ -225,7 +226,7 @@ function MinesGame({ game }: MinesProps) {
     if (!sessionId || status !== "active" || revealed.length === 0) return;
     setLoading(true); playSound("cashout");
     try {
-      const r = await fetch("/api/mines/cashout", {
+      const r = await fetch(getApiUrl("/api/mines/cashout"), {
         method: "POST", headers: authHeaders(),
         body: JSON.stringify({ sessionId }),
       });

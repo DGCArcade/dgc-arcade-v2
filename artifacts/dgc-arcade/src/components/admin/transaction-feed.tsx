@@ -7,6 +7,7 @@ import {
   ArrowDownLeft, ArrowUpRight, ExternalLink, RefreshCw, Copy, Check,
   Filter, ChevronDown, ChevronUp
 } from "lucide-react";
+import { getApiUrl } from "@/lib/api-fetch";
 
 function getToken() {
   return typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
@@ -18,7 +19,7 @@ function getBankSession() {
 async function bankFetch(path: string) {
   const token = getToken();
   const bankSession = getBankSession();
-  const res = await fetch(`/api/admin${path}`, {
+  const res = await fetch(getApiUrl(`/api/admin${path}`), {
     headers: {
       Authorization: `Bearer ${token ?? ""}`,
       ...(bankSession ? { "x-bank-session": bankSession } : {}),

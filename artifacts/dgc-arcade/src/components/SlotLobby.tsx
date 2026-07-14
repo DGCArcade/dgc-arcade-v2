@@ -11,6 +11,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
+import { getApiUrl } from "@/lib/api-fetch";
 import {
   Gamepad2,
   Search,
@@ -185,7 +186,7 @@ export function SlotLobby({ initialGameId, onGameSelect }: SlotLobbyProps) {
     queryKey: ["slot-games-aggregator"],
     queryFn: async () => {
       const token = localStorage.getItem("dgc_token");
-      const res = await fetch("/api/slots/aggregator/games", {
+      const res = await fetch(getApiUrl("/api/slots/aggregator/games"), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) {

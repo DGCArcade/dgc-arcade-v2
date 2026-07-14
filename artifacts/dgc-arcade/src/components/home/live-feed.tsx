@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Shield, ChevronDown, ChevronUp, ExternalLink, Info } from "lucide-react";
+import { getApiUrl } from "@/lib/api-fetch";
 
 function getToken() { return typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null; }
 
@@ -176,7 +177,7 @@ function HighRollersFeed() {
 
   useEffect(() => {
     const load = () => {
-      fetch("/api/bets/high-rollers")
+      fetch(getApiUrl("/api/bets/high-rollers"))
         .then(r => r.json())
         .then(d => { setBets(d); setLoading(false); })
         .catch(() => setLoading(false));
@@ -204,12 +205,12 @@ function RaceFeed() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/leaderboard?limit=10")
+    fetch(getApiUrl("/api/leaderboard?limit=10"))
       .then(r => r.json())
       .then(d => { setLeaderboard(d); setLoading(false); })
       .catch(() => setLoading(false));
     const iv = setInterval(() => {
-      fetch("/api/leaderboard?limit=10").then(r => r.json()).then(setLeaderboard).catch(()=>{});
+      fetch(getApiUrl("/api/leaderboard?limit=10")).then(r => r.json()).then(setLeaderboard).catch(()=>{});
     }, 15000);
     return () => clearInterval(iv);
   }, []);

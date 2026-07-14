@@ -3,6 +3,7 @@ import { useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, AlertTriangle, KeyRound } from "lucide-react";
+import { getApiUrl } from "@/lib/api-fetch";
 
 export default function ResetPasswordPage() {
   const search = useSearch();
@@ -24,7 +25,7 @@ export default function ResetPasswordPage() {
     setStatus({ type: null, msg: "" });
 
     try {
-      const res = await fetch("/api/auth/reset-password", {
+      const res = await fetch(getApiUrl("/api/auth/reset-password"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, newPassword: password }),

@@ -65,5 +65,9 @@ services:
           name: dgc-arcade-api
           type: web
           property: url
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
 
 

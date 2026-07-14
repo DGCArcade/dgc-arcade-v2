@@ -69,12 +69,9 @@ import { useToast } from "@/hooks/use-toast";
 import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
 import { DGCBankDashboard } from "@/components/admin/dgc-bank-dashboard";
 import { VisitorLogs } from "@/components/admin/visitor-logs";
+import { getApiUrl, authHeaders } from "@/lib/api-fetch";
 
 const API_BASE = "/api/admin";
-
-function getToken() {
-  return typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
-}
 
 function bankSessionValid(): boolean {
   if (typeof sessionStorage === "undefined") return false;
@@ -91,17 +88,16 @@ function clearBankSession() {
 }
 
 async function adminFetch(path: string, opts?: RequestInit) {
-  const token = getToken();
   const bankSession =
     typeof sessionStorage !== "undefined" ? sessionStorage.getItem("dgcBankSession") : null;
-  const res = await fetch(`${API_BASE}${path}`, {
+  
+  const url = getApiUrl(`${API_BASE}${path}`);
+  const res = await fetch(url, {
     ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token ?? ""}`,
+    headers: authHeaders({
       ...(bankSession ? { "x-bank-session": bankSession } : {}),
-      ...(opts?.headers ?? {}),
-    },
+      ...(opts?.headers as Record<string, string> ?? {}),
+    }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Request failed" }));
