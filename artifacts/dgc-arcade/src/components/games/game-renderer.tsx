@@ -21,7 +21,8 @@ export function GameRenderer({ game }: { game: Game }) {
       case "blackjack": return <Blackjack game={game} />;
       case "roulette": return <Roulette game={game} />;
       case "mines": return <Mines game={game} />;
-      case "hilo": return <HiLo game={game} />;
+      case "hilo":
+      case "hi-lo": return <HiLo game={game} />;
       case "keno": return <Keno game={game} />;
       case "dice": return <DiceGame game={game} />;
       case "chicken-road": return <ChickenRoad game={game} />;
