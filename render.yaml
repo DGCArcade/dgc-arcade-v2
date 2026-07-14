@@ -1,12 +1,10 @@
 services:
-  # ── Backend API + Frontend (Single Web Service) ────────────────────────────────────
-  # Both frontend and backend are served from this single Express service.
-  # This ensures proper SPA routing: non-API routes serve index.html for client-side routing.
+  # ── Backend API (Web Service) ────────────────────────────────────
   - type: web
     name: dgc-arcade-api
     runtime: node
     rootDir: .
-    buildCommand: npm install -g pnpm && pnpm install && cd artifacts/dgc-arcade && pnpm run build && cd ../api-server && pnpm run build
+    buildCommand: npm install -g pnpm && pnpm install && cd artifacts/api-server && pnpm run build
     startCommand: cd artifacts/api-server && node --enable-source-maps ./dist/index.mjs
     autoDeploy: true
     envVars:
@@ -54,5 +52,18 @@ services:
         sync: false
       - key: OWNER_USERNAME
         value: "fanodgc"
+
+  # ── Frontend (Static Site) ───────────────────────────────────────
+  - type: static_site
+    name: dgc-arcade-v2-frontend
+    buildCommand: npm install -g pnpm && pnpm install && cd artifacts/dgc-arcade && pnpm run build
+    staticPublishPath: artifacts/dgc-arcade/dist/public
+    autoDeploy: true
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: dgc-arcade-api
+          type: web
+          property: url
 
 
