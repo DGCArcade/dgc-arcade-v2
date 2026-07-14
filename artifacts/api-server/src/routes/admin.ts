@@ -52,12 +52,13 @@ adminRouter.use(requireAdmin);
 // ── Owner identity ──
 // There is exactly one platform owner, identified by username "fanodgc".
 // Centralized here so owner checks never drift between username/role again.
-const OWNER_USERNAME = process.env.OWNER_USERNAME || "fanodgc";
+const OWNER_USERNAME = (process.env.OWNER_USERNAME || "fanodgc").toLowerCase();
 async function callerIsOwner(req: { user?: { userId: number } }): Promise<boolean> {
+  if (!req.user?.userId) return false;
   const [caller] = await db
     .select({ username: usersTable.username, role: usersTable.role })
     .from(usersTable)
-    .where(eq(usersTable.id, req.user!.userId))
+    .where(eq(usersTable.id, req.user.userId))
     .limit(1);
   return (caller?.username ?? "").toLowerCase() === OWNER_USERNAME || caller?.role === "owner";
 }
@@ -95,11 +96,11 @@ async function requireBankSession(
 ): Promise<void> {
   // Owner bypass — no PIN ever required for fanodgc
   const [caller] = await db
-    .select({ username: usersTable.username })
+    .select({ username: usersTable.username, role: usersTable.role })
     .from(usersTable)
     .where(eq(usersTable.id, req.user!.userId))
     .limit(1);
-  if ((caller?.username ?? "").toLowerCase() === OWNER_USERNAME) {
+  if ((caller?.username ?? "").toLowerCase() === OWNER_USERNAME || caller?.role === "owner") {
     next();
     return;
   }
@@ -2258,8 +2259,8 @@ adminRouter.get("/bank/pending-withdrawals", requireBankSession, async (req, res
 
 // GET /api/admin/bank/settings — fanodgc only
 adminRouter.get("/bank/settings", requireBankSession, async (req, res) => {
-  const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  if (!user || user.username !== (process.env.OWNER_USERNAME || "owner")) {
+  const [user] = await db.select({ username: usersTable.username, role: usersTable.role }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+  if (!user || (user.username !== (process.env.OWNER_USERNAME || "fanodgc") && user.role !== "owner")) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
@@ -2274,8 +2275,8 @@ adminRouter.get("/bank/settings", requireBankSession, async (req, res) => {
 
 // PUT /api/admin/bank/settings — fanodgc only
 adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
-  const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  if (!user || user.username !== (process.env.OWNER_USERNAME || "owner")) {
+  const [user] = await db.select({ username: usersTable.username, role: usersTable.role }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+  if (!user || (user.username !== (process.env.OWNER_USERNAME || "fanodgc") && user.role !== "owner")) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
