@@ -73,6 +73,8 @@ import { getApiUrl, authHeaders } from "@/lib/api-fetch";
 
 const API_BASE = "/api/admin";
 
+const getToken = () => typeof localStorage !== "undefined" ? localStorage.getItem("dgc_token") : null;
+
 function bankSessionValid(): boolean {
   if (typeof sessionStorage === "undefined") return false;
   const tok = sessionStorage.getItem("dgcBankSession");

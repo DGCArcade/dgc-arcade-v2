@@ -8,6 +8,7 @@ import { useEffect, Suspense, lazy, useMemo, useRef, type ReactNode } from "reac
 import { useAuth } from "@/hooks/use-auth";
 import { usePlatformSettings } from "@/hooks/use-platform-settings";
 import { useSessionLimit } from "@/hooks/use-session-limit";
+import { getApiUrl } from "@/lib/api-fetch";
 
 // Lazy load heavy pages for better initial load
 const Home = lazy(() => import("@/pages/home"));

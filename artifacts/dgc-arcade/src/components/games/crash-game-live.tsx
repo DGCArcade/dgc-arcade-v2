@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Check, Copy } from "lucide-react";
 import { Game } from "@workspace/api-client-react";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCrashLiveRound } from "@/hooks/use-crash-live-round";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ProvablyFairPanel } from "./provably-fair-panel";

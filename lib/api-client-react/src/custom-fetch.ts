@@ -116,7 +116,7 @@ function isUrl(input: RequestInfo | URL): input is URL {
 
 function applyBaseUrl(input: RequestInfo | URL): RequestInfo | URL {
   // Use explicit _baseUrl if set, otherwise fallback to environment variable for production/local consistency
-  const baseUrl = _baseUrl || (typeof process !== 'undefined' ? process.env.VITE_API_URL : (import.meta as any).env?.VITE_API_URL) || "";
+  const baseUrl = _baseUrl || (typeof (globalThis as any).process !== 'undefined' ? (globalThis as any).process.env.VITE_API_URL : (import.meta as any).env?.VITE_API_URL) || "";
   
   if (!baseUrl) return input;
   const url = resolveUrl(input);
