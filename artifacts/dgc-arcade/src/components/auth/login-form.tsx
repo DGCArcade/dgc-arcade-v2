@@ -46,7 +46,7 @@ export function LoginForm() {
         void flushPendingGeo();
         toast({ title: "Welcome back", description: "You have successfully logged in." });
         authModal.close();
-        if (result.user.role === "admin" || result.user.role === "owner" || result.user.username.toLowerCase() === (process.env.REACT_APP_OWNER_USERNAME || "fanodgc")) {
+        if (result.user.role === "admin" || result.user.role === "owner") {
           setLocation("/admin");
         }
       },

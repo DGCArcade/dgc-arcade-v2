@@ -65,8 +65,13 @@ services:
     runtime: node
     rootDir: .
     buildCommand: npm install -g pnpm && pnpm install && cd artifacts/dgc-arcade && pnpm run build
-    startCommand: cd artifacts/dgc-arcade && pnpm run serve
+    startCommand: cd artifacts/dgc-arcade && node server.mjs
     autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
+      - key: VITE_API_URL
+        fromService:
+          name: dgc-arcade-api
+          type: web
+          property: hostport

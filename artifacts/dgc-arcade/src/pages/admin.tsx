@@ -575,7 +575,7 @@ export default function AdminDashboard() {
     }
   }, [toast]);
 
-  const isOwner = user ? ((user.username ?? "").toLowerCase() === (process.env.REACT_APP_OWNER_USERNAME || "fanodgc") || (user as any).role === "owner") : false;
+  const isOwner = user ? ((user as any).role === "owner") : false;
   const isAdmin = user ? (user.role === "admin" || user.role === "owner" || isOwner) : false;
 
   // Owner bypass: fanodgc never needs to enter a PIN — unlock the bank automatically
