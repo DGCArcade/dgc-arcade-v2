@@ -1,5 +1,5 @@
 services:
-  # ── Backend API ──────────────────────────────────────────────────
+  # ── Backend API (Web Service) ────────────────────────────────────
   - type: web
     name: dgc-arcade-api
     runtime: node
@@ -10,7 +10,6 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
-      # Optional Neon pooler URL — only if Neon gives you a separate pooled string
       - key: DATABASE_POOL_URL
         sync: false
       - key: PG_POOL_MAX
@@ -35,7 +34,6 @@ services:
         sync: false
       - key: NODE_ENV
         value: production
-      # ── DGC-AI1 ────────────────────────────────────────────────────
       - key: GROQ_API_KEY
         sync: false
       - key: OPENAI_API_KEY
@@ -50,28 +48,20 @@ services:
         sync: false
       - key: RENDER_DEPLOY_HOOK_URL
         sync: false
-      # ── Sports Betting (SportsGameOdds) ───────────────────────────
-      # Get your key at https://sportsgameodds.com
       - key: SPORTS_GAME_ODDS_API_KEY
         sync: false
-      # ── Owner Settings ─────────────────────────────────────────────
-      # Must match the owner's username in the database (default: fanodgc)
       - key: OWNER_USERNAME
         value: "fanodgc"
 
-  # ── Frontend ─────────────────────────────────────────────────────
-  - type: web
-    name: dgc-arcade-frontend
-    runtime: node
-    rootDir: .
+  # ── Frontend (Static Site) ───────────────────────────────────────
+  - type: static_site
+    name: dgc-arcade-v2-frontend
     buildCommand: npm install -g pnpm && pnpm install && cd artifacts/dgc-arcade && pnpm run build
-    startCommand: cd artifacts/dgc-arcade && node server.mjs
+    staticPublishPath: artifacts/dgc-arcade/dist
     autoDeploy: true
     envVars:
-      - key: NODE_ENV
-        value: production
       - key: VITE_API_URL
         fromService:
           name: dgc-arcade-api
           type: web
-          property: hostport
+          property: url

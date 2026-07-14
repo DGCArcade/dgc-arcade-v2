@@ -706,9 +706,7 @@ export function Sportsbook() {
   const betAmountNum = betAmount ? parseFloat(betAmount) : 0;
   const totalPotentialPayout =
     betAmountNum > 0 && betSlip.length > 0
-      ? betSlip
-          .reduce((sum, entry) => sum + betAmountNum * americanOddsToMultiplier(entry.odds), 0)
-          .toFixed(2)
+      ? (betAmountNum * combinedMultiplier).toFixed(2)
       : "0.00";
 
   /* ── Sidebar counts from current category ── */
