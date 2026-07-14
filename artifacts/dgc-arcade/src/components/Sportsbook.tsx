@@ -131,15 +131,18 @@ function formatOdds(price: number): string {
   return price > 0 ? `+${price}` : `${price}`;
 }
 
-function getRealtimeOrigin(): string | undefined {
-  const configuredUrl = import.meta.env.VITE_API_URL?.trim();
-  if (!configuredUrl || typeof window === "undefined") return undefined;
-  try {
-    return new URL(configuredUrl, window.location.origin).origin;
-  } catch {
-    return undefined;
+  function getRealtimeOrigin(): string | undefined {
+    // If VITE_API_URL is set, use it. Otherwise fallback to current origin.
+    const configuredUrl = import.meta.env.VITE_API_URL?.trim();
+    if (!configuredUrl) {
+      return typeof window !== "undefined" ? window.location.origin : undefined;
+    }
+    try {
+      return new URL(configuredUrl).origin;
+    } catch {
+      return configuredUrl;
+    }
   }
-}
 
 function getUserTimezone(): string {
   try {
@@ -312,7 +315,6 @@ function DSportsLogo() {
       <div>
         <h1 className="font-display font-black text-2xl md:text-5xl uppercase tracking-[0.12em] leading-none flex items-baseline gap-0">
           <span className="text-glow-shift-slow drop-shadow-[0_0_20px_rgba(255,215,0,0.6)]">D</span>
-          <span className="text-white/95">SPORTS</span>
         </h1>
         <div className="flex items-center gap-2 mt-1.5">
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20">
@@ -395,6 +397,18 @@ export function Sportsbook() {
     setBetSlip((prev) => {
       const exists = prev.find((b) => b.slipId === slipId);
       if (exists) return prev.filter((b) => b.slipId !== slipId);
+      
+      // PREVENT CONFLICTING BETS: Can't bet on the same fixture twice in one slip
+      const conflict = prev.find(b => b.fixture.id === fixture.id);
+      if (conflict) {
+        toast({ 
+          title: "Conflicting Bet", 
+          description: "You cannot bet on multiple outcomes for the same game in one slip.", 
+          variant: "destructive" 
+        });
+        return prev;
+      }
+
       // Max 12 selections
       if (prev.length >= 12) {
         toast({ title: "Bet slip full", description: "Max 12 selections at once.", variant: "destructive" });
