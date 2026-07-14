@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, gamesTable, slotThemesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getPlatformSettings, isGameSlugEnabled } from "../lib/platform-settings.js";
 export const gamesRouter = Router();
 
