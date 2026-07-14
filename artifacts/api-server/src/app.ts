@@ -74,12 +74,7 @@ export const ALLOWED_ORIGINS = [
 ];
 
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-    // Return false (not an Error) so browsers get a clean CORS denial, not a 500
-    callback(null, false);
-  },
+  origin: true, // Allow all origins to ensure the frontend can connect regardless of domain
   credentials: true,
 }));
 
