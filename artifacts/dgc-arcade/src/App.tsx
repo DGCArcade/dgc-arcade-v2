@@ -36,6 +36,7 @@ const CryptoNativePage = lazy(() => import("./pages/crypto-native"));
 const DebugSentryPage = lazy(() => import("@/pages/debug-sentry"));
 const DepositSuccessPage = lazy(() => import("@/pages/deposit-success"));
 const DepositFailedPage = lazy(() => import("@/pages/deposit-failed"));
+const DemoPage = lazy(() => import("@/pages/demo").then(m => ({ default: m.DemoPage })));
 
 function SessionLimitWatcher() {
   useSessionLimit();
@@ -205,7 +206,10 @@ function Router() {
           <Route path="/deposit/success" component={DepositSuccessPage} />
           <Route path="/deposit/failed" component={DepositFailedPage} />
 
-                    {/* Convenience redirect: /chicken-road → /games/chicken-road */}
+          {/* Demo Mode - completely isolated from real site */}
+          <Route path="/demo" component={DemoPage} />
+
+          {/* Convenience redirect: /chicken-road → /games/chicken-road */}
           <Route path="/chicken-road">
             <Redirect to="/games/chicken-road" />
           </Route>
