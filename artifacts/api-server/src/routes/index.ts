@@ -26,7 +26,6 @@ import { slotsCatalogRouter } from "./slots-catalog.js";
 import { slotsAggregatorRouter } from "./slots-aggregator.js";
 import { sportsbookRouter } from "./sportsbook.js";
 import { sportsbookLiveRouter } from "./sportsbook-live.js";
-import { demoRouter } from "./demo.js";
 
 const router: IRouter = Router();
 
@@ -60,8 +59,5 @@ router.use("/sportsbook/live", sportsbookLiveRouter);
 // Alias: /api/sports/feed → /api/sportsbook/feed (NODE_MIRROR deployment spec)
 router.use("/sports", sportsbookRouter);
 router.use("/sports/live", sportsbookLiveRouter);
-
-// Demo mode (fictitious gameplay with $1M balance)
-router.use("/demo", demoRouter);
 
 export default router;

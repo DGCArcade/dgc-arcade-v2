@@ -88,26 +88,6 @@ authRouter.post("/register", async (req, res) => {
       .where(or(ilike(usersTable.username, username), ilike(usersTable.email, email ?? "")))
       .limit(1);
     if (existing) { res.status(409).json({ error: "Username or email already exists" }); return; }
-    
-    // Device-based multi-account prevention (except for owner)
-    const fingerprint = typeof req.headers["x-device-fingerprint"] === "string"
-      ? req.headers["x-device-fingerprint"] : null;
-    
-    if (fingerprint) {
-      // Check if this device already has an account (owner bypass)
-      const [existingDeviceUser] = await db.select({ id: usersTable.id, username: usersTable.username, role: usersTable.role })
-        .from(usersTable)
-        .where(eq(usersTable.deviceFingerprint, fingerprint))
-        .limit(1);
-      
-      if (existingDeviceUser && existingDeviceUser.role !== "owner") {
-        res.status(409).json({ 
-          error: "This device already has an account. Please use that account or try a different device.",
-          existingUsername: existingDeviceUser.username 
-        });
-        return;
-      }
-    }
 
     const passwordHash = await bcrypt.hash(password, 12);
     const referralCode = crypto.randomBytes(6).toString("hex").toUpperCase();
@@ -142,10 +122,7 @@ authRouter.post("/register", async (req, res) => {
       emailVerified: !email,
     };
 
-    const [newUser] = await db.insert(usersTable).values({
-      ...user,
-      deviceFingerprint: fingerprint
-    }).returning();
+    const [newUser] = await db.insert(usersTable).values(user).returning();
     
     // Credit the signup bonus to the user's balance in a randomly selected crypto coin
     // This ensures the bonus is immediately available for gameplay
