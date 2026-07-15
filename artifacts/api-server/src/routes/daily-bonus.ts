@@ -94,6 +94,8 @@ dailyBonusRouter.post("/claim", requireAuth, async (req, res) => {
     const userId = req.user!.userId;
 
     const result = await db.transaction(async (txn) => {
+      // Lock the user record to prevent race conditions and ensure atomicity
+      // This prevents multiple simultaneous claims from the same user
       await txn.execute(sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`);
 
       const [user] = await txn
@@ -103,6 +105,7 @@ dailyBonusRouter.post("/claim", requireAuth, async (req, res) => {
         .limit(1);
       if (!user) throw new Error("USER_NOT_FOUND");
 
+      // Verify user hasn't already claimed today
       const existing = await txn
         .select({ id: dailyBonusClaimsTable.id })
         .from(dailyBonusClaimsTable)
@@ -110,16 +113,19 @@ dailyBonusRouter.post("/claim", requireAuth, async (req, res) => {
         .limit(1);
       if (existing.length > 0) throw new Error("ALREADY_CLAIMED");
 
+      // Get yesterday's claim to calculate streak (server-side only, cannot be manipulated from client)
       const [yesterdayClaim] = await txn
         .select({ streakDay: dailyBonusClaimsTable.streakDay })
         .from(dailyBonusClaimsTable)
         .where(and(eq(dailyBonusClaimsTable.userId, user.id), eq(dailyBonusClaimsTable.claimedDate, yesterday)))
         .limit(1);
 
+      // Calculate streak and bonus amount server-side (cannot be manipulated from client)
       const streakDay = yesterdayClaim ? yesterdayClaim.streakDay + 1 : 1;
       const base = getBaseBonusAmount(user.totalBets, parseFloat(user.totalWon));
       const bonusAmount = applyStreakMultiplier(base, streakDay);
 
+      // Record the claim in database
       await txn.insert(dailyBonusClaimsTable).values({
         userId: user.id,
         amount: String(bonusAmount),
@@ -127,7 +133,10 @@ dailyBonusRouter.post("/claim", requireAuth, async (req, res) => {
         streakDay,
       });
 
+      // Credit the bonus to user's balance (server-side transaction, cannot be manipulated from client)
       const newBalance = await creditBalance(user.id, bonusAmount, undefined, txn);
+      
+      // Update wager requirement (bonus must be wagered before withdrawal)
       await txn.update(usersTable)
         .set({ wagerRequirement: sql`coalesce(wager_requirement, 0) + ${bonusAmount}` })
         .where(eq(usersTable.id, user.id));

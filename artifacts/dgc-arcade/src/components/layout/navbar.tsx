@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/format";
 import {User, Wallet, LogOut, Menu, Shield, Gift, Settings, Building2, KeyRound, Star, X, ArrowLeftRight, MessageSquare, TrendingUp, TrendingDown, Trophy, Gamepad2, Zap} from "lucide-react";
+import { ChickenIcon, HorseIcon } from "@/components/games/game-icons";
 import { CoinIcon } from "@/components/wallet/coin-icon";
 import {
   DropdownMenu,
@@ -104,15 +105,22 @@ export function Navbar() {
 
       {settings.raceEnabled && (
         <Link href="/race" className={`group flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] transition-all duration-300 ${location === "/race" ? "text-primary scale-110" : "text-muted-foreground hover:text-foreground hover:scale-105"}`}>
-          <Zap className={`w-4 h-4 ${location === "/race" ? "animate-pulse" : "group-hover:animate-bounce"}`} />
-          <span>Race</span>
+          <HorseIcon className={`w-4 h-4 ${location === "/race" ? "animate-pulse" : "group-hover:animate-bounce"}`} />
+          <span>Horse Race</span>
+        </Link>
+      )}
+
+      {settings.gamesEnabled && (
+        <Link href="/game/chicken-road" className={`group flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] transition-all duration-300 ${location === "/game/chicken-road" ? "text-primary scale-110" : "text-muted-foreground hover:text-foreground hover:scale-105"}`}>
+          <ChickenIcon className={`w-4 h-4 ${location === "/game/chicken-road" ? "animate-pulse" : "group-hover:animate-bounce"}`} />
+          <span>Chicken Road</span>
         </Link>
       )}
 
       {settings.leaderboardEnabled && (
         <Link href="/leaderboard" className={`group flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] transition-all duration-300 ${location === "/leaderboard" ? "text-primary scale-110" : "text-muted-foreground hover:text-foreground hover:scale-105"}`}>
-          <TrendingUp className={`w-4 h-4 ${location === "/leaderboard" ? "animate-pulse" : "group-hover:animate-bounce"}`} />
-          <span>Chicken</span>
+          <Trophy className={`w-4 h-4 ${location === "/leaderboard" ? "animate-pulse" : "group-hover:animate-bounce"}`} />
+          <span>Leaderboard</span>
         </Link>
       )}
 

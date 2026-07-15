@@ -91,6 +91,12 @@ authRouter.post("/register", async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 12);
     const referralCode = crypto.randomBytes(6).toString("hex").toUpperCase();
+    
+    // Get platform settings to determine signup bonus amount
+    const { getPlatformSettings } = await import("../lib/platform-settings.js");
+    const settings = await getPlatformSettings();
+    const signupBonusAmount = settings.signupBonus || 100;
+    
     const user = {
       username,
       email: email || null,
@@ -105,14 +111,27 @@ authRouter.post("/register", async (req, res) => {
       isBanned: false,
       role: "player" as const,
       totalWageredAmount: "0",
-      wagerRequirement: "0",
+      wagerRequirement: String(signupBonusAmount),
       rakebackClaimed: "0",
-      signupBonus: "100",
+      signupBonus: String(signupBonusAmount),
       bonusWagered: "0",
       emailVerified: !email,
     };
 
     const [newUser] = await db.insert(usersTable).values(user).returning();
+    
+    // Credit the signup bonus to the user's balance as BTC (default crypto currency)
+    // This ensures the bonus is immediately available for gameplay
+    const { creditCryptoBalance } = await import("../lib/balance-service.js");
+    const { getCryptoPrice } = await import("../lib/price-service.js");
+    try {
+      const btcPrice = await getCryptoPrice("BTC");
+      const cryptoAmount = signupBonusAmount / btcPrice;
+      await creditCryptoBalance(newUser.id, "BTC", cryptoAmount);
+    } catch (cryptoErr) {
+      logger.warn({ cryptoErr }, "Failed to credit signup bonus as crypto, user can claim it later");
+    }
+    
     const token = signToken({ userId: newUser.id, username: newUser.username, role: newUser.role });
 
     if (user.email) {
@@ -127,6 +146,17 @@ authRouter.post("/register", async (req, res) => {
         void sendEmailVerificationEmail(newUser.email ?? "", newUser.username, verificationCode);
       } catch (mailErr) { logger.warn({ mailErr }, 'Verification email sending failed on registration'); }
     }
+    
+    // Log signup activity
+    const ctx = getRequestContext(req);
+    linkVisitorToUser(ctx, newUser.id, newUser.username).catch(() => {});
+    logActivity({
+      userId: newUser.id,
+      username: newUser.username,
+      action: "signup",
+      ctx,
+      metadata: { signupBonus: signupBonusAmount },
+    });
 
     res.status(201).json({ user: await formatUser(newUser), token });
   } catch (err) { req.log.error({ err }, "Register error"); res.status(500).json({ error: "Internal server error" }); }
