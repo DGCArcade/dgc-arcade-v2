@@ -284,46 +284,18 @@ const SPORT_CATEGORIES: { label: string; icon: string; keys: string[] }[] = [
 function DSportsLogo() {
   return (
     <div className="flex items-center gap-3 md:gap-4">
-      {/* D Icon */}
-      <div className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-black/50 border border-yellow-500/30 shadow-[0_0_30px_rgba(255,215,0,0.2)] flex items-center justify-center overflow-hidden flex-shrink-0">
-        <svg width="100%" height="100%" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="180" height="180" rx="32" fill="#080c18"/>
-          <defs>
-            <radialGradient id="dLogoGlow" cx="50%" cy="45%" r="55%">
-              <stop offset="0%" stopColor="#FFD700" stopOpacity="0.25"/>
-              <stop offset="100%" stopColor="#FF8800" stopOpacity="0"/>
-            </radialGradient>
-            <radialGradient id="dLogoLetter" cx="35%" cy="30%" r="70%">
-              <stop offset="0%" stopColor="#FFE55C"/>
-              <stop offset="60%" stopColor="#FFD700"/>
-              <stop offset="100%" stopColor="#CC9900"/>
-            </radialGradient>
-          </defs>
-          <rect width="180" height="180" rx="32" fill="url(#dLogoGlow)"/>
-          <text
-            x="89" y="134"
-            fontFamily="'Arial Black','Impact','Helvetica Neue',Arial,sans-serif"
-            fontWeight="900"
-            fontSize="118"
-            fill="url(#dLogoLetter)"
-            textAnchor="middle"
-          >D</text>
-          <rect x="1" y="1" width="178" height="88" rx="31" fill="white" fillOpacity="0.04"/>
-          <rect x="1" y="1" width="178" height="178" rx="31" stroke="#FFD700" strokeOpacity="0.2" strokeWidth="1.5" fill="none"/>
-        </svg>
-      </div>
       {/* Text */}
       <div>
-        <h1 className="font-display font-black text-2xl md:text-5xl uppercase tracking-[0.12em] leading-none flex items-baseline gap-0">
-          <span className="text-glow-shift-slow drop-shadow-[0_0_20px_rgba(255,215,0,0.6)]">D</span>
+        <h1 className="font-display font-black text-2xl md:text-4xl uppercase tracking-[0.12em] leading-none flex items-baseline gap-0">
+          <span className="text-glow-shift-slow drop-shadow-[0_0_20px_rgba(255,215,0,0.6)]">DGC SPORTSBOOK</span>
         </h1>
-        <div className="flex items-center gap-2 mt-1.5">
+        <div className="flex items-center gap-2 mt-2">
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping" />
             <span className="text-[9px] font-black uppercase tracking-widest text-green-400">Live Engine</span>
           </div>
           <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 hidden md:block">
-            82+ Bookmakers · Real-Time Odds
+            Pro Plan Enabled · Same Game Parlays
           </span>
         </div>
       </div>
@@ -399,15 +371,28 @@ export function Sportsbook() {
       const exists = prev.find((b) => b.slipId === slipId);
       if (exists) return prev.filter((b) => b.slipId !== slipId);
       
-      // PREVENT CONFLICTING BETS: Can't bet on the same fixture twice in one slip
-      const conflict = prev.find(b => b.fixture.id === fixture.id);
-      if (conflict) {
-        toast({ 
-          title: "Conflicting Bet", 
-          description: "You cannot bet on multiple outcomes for the same game in one slip.", 
-          variant: "destructive" 
-        });
-        return prev;
+      // Professional SGP Rule: Prevent conflicting selections
+      const sameGameBets = prev.filter((b) => b.fixture.id === fixture.id);
+      if (sameGameBets.length > 0) {
+        // Rule 1: No multiple moneyline (h2h) bets on the same game
+        if (market.key === 'h2h' && sameGameBets.some(b => b.market.key === 'h2h')) {
+          toast({ 
+            title: "Invalid Parlay", 
+            description: "You cannot bet on multiple moneyline outcomes for the same game.", 
+            variant: "destructive" 
+          });
+          return prev;
+        }
+        
+        // Rule 2: Prevent betting on the same market type twice (e.g. Over AND Under)
+        if (sameGameBets.some(b => b.market.key === market.key)) {
+          toast({ 
+            title: "Invalid Parlay", 
+            description: `You already have a selection for ${market.key} in this game.`, 
+            variant: "destructive" 
+          });
+          return prev;
+        }
       }
 
       // Max 12 selections
@@ -652,59 +637,62 @@ export function Sportsbook() {
     if (!betSlip.length || !betAmount || parseFloat(betAmount) <= 0) return;
     setIsPlacingAll(true);
 
-    const successIds: string[] = [];
-    let failCount = 0;
-
-    for (const entry of betSlip) {
-      try {
-        const res = await fetch(getApiUrl("/api/sportsbook/bet"), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("dgc_token")}`,
-          },
-          body: JSON.stringify({
-            fixtureId: entry.fixture.id,
-            sportKey: entry.fixture.sport_key,
-            leagueTitle: entry.fixture.sport_title || "Unknown",
-            homeTeam: entry.fixture.home_team,
-            awayTeam: entry.fixture.away_team,
-            commenceTime: entry.fixture.commence_time,
-            marketKey: entry.market.key,
-            selectedOutcome: entry.outcome.name,
-            odds: entry.odds,
-            betAmountUsd: parseFloat(betAmount),
-            cryptoType: selectedCrypto,
-            bookmakerKey: entry.bookmaker,
-            ...(entry.market.key === "spreads" && entry.outcome.point !== undefined && { spread: entry.outcome.point }),
-            ...(entry.market.key === "totals" && entry.outcome.point !== undefined && { total: entry.outcome.point }),
-          }),
-        });
-        if (res.ok) {
-          successIds.push(entry.slipId);
-        } else {
-          const err = await res.json();
-          failCount++;
-          toast({ title: `Bet Failed: ${entry.outcome.name}`, description: err.error || "Unknown error", variant: "destructive" });
+    try {
+      const amt = parseFloat(betAmount);
+      
+      // Professional Parlay System: Send one ticket payload
+      const legs = betSlip.map((entry) => ({
+        fixtureId: entry.fixture.id,
+        sportKey: entry.fixture.sport_key,
+        leagueTitle: entry.fixture.sport_title || "Unknown",
+        homeTeam: entry.fixture.home_team,
+        awayTeam: entry.fixture.away_team,
+        commenceTime: entry.fixture.commence_time,
+        marketKey: entry.market.key,
+        selectedOutcome: entry.outcome.name,
+        odds: entry.odds,
+        bookmakerKey: entry.bookmaker || "sportsgameodds",
+        metadata: {
+          ...(entry.market.key === "spreads" && entry.outcome.point !== undefined && { spread: entry.outcome.point }),
+          ...(entry.market.key === "totals" && entry.outcome.point !== undefined && { total: entry.outcome.point }),
         }
-      } catch {
-        failCount++;
-        toast({ title: "Network error", description: `Could not place bet on ${entry.outcome.name}`, variant: "destructive" });
-      }
-    }
+      }));
 
-    if (successIds.length > 0) {
-      // Only remove successfully placed bets from the slip
-      setBetSlip((prev) => prev.filter((b) => !successIds.includes(b.slipId)));
-      if (failCount === 0) setBetAmount("");
+      const res = await fetch(getApiUrl("/api/sportsbook/bet"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("dgc_token")}`,
+        },
+        body: JSON.stringify({
+          legs,
+          stakeUsd: amt,
+          cryptoType: selectedCrypto,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to place bet ticket");
+
+      // Success
+      setBetSlip([]);
+      setBetAmount("");
       toast({
-        title: `${successIds.length} Bet${successIds.length > 1 ? "s" : ""} Placed! 🎯`,
-        description: `${(parseFloat(betAmount) * successIds.length).toFixed(2)} wagered${failCount > 0 ? ` · ${failCount} failed (still in slip)` : ""}`,
+        title: betSlip.length > 1 ? "Parlay Ticket Placed! 🎯" : "Bet Placed! 🎯",
+        description: `$${amt.toFixed(2)} wagered successfully.`,
       });
       refreshUser();
       queryClient.invalidateQueries({ queryKey: ["sportsbook-history"] });
+
+    } catch (err: any) {
+      toast({ 
+        title: "Bet Failed", 
+        description: err.message || "Unknown error occurred.", 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsPlacingAll(false);
     }
-    setIsPlacingAll(false);
   };
 
   /* ── Derived values ── */

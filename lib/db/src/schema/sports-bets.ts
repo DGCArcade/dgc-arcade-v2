@@ -46,7 +46,9 @@ export const sportsBetsTable = pgTable("sports_bets", {
   // Metadata & Audit
   bookmakerKey: text("bookmaker_key"), // Which bookmaker's odds were used
   isParlay: boolean("is_parlay").default(false), // If this is part of a parlay
-  parlayId: text("parlay_id"), // Grouping ID for parlay legs
+  ticketId: text("ticket_id").notNull(), // UUID for the entire ticket
+  parlayStakeUsd: numeric("parlay_stake_usd", { precision: 12, scale: 2 }), // Total stake for the parlay
+  settlementPayoutUsd: numeric("settlement_payout_usd", { precision: 12, scale: 2 }), // Final payout amount
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
   metadata: jsonb("metadata"), // Any additional data (e.g., bet builder, parlay info)

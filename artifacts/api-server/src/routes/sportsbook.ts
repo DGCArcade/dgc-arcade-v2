@@ -16,6 +16,12 @@ import {
 } from "../lib/sportsgameodds.js";
 import { readLiveOddsSnapshot } from "../lib/live-odds-cache.js";
 import { cached } from "../lib/response-cache-v2.js";
+import { 
+  placeBetTicket, 
+  processCashOut, 
+  calculateCashOutValue,
+  getLiveOddsSWR 
+} from "../lib/sportsbook-advanced.js";
 
 export const sportsbookRouter = Router();
 
@@ -278,113 +284,64 @@ sportsbookRouter.get("/odds/:sport", async (req: Request, res: Response) => {
 sportsbookRouter.post("/bet", requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
-    if (!userId) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const {
-      fixtureId,
-      sportKey,
-      leagueTitle,
-      homeTeam,
-      awayTeam,
-      commenceTime,
-      marketKey,
-      selectedOutcome,
-      odds,
-      betAmountUsd,
-      cryptoType,
-      bookmakerKey,
-    } = req.body;
+    const { legs, stakeUsd, cryptoType, betAmountUsd } = req.body;
 
-    if (!fixtureId || !sportKey || !marketKey || !selectedOutcome || !odds || !betAmountUsd || !cryptoType) {
+    // Support both single leg (legacy) and multi-leg (parlay)
+    const normalizedLegs = Array.isArray(legs) ? legs : [req.body];
+    const normalizedStake = stakeUsd || betAmountUsd;
+    const normalizedCrypto = cryptoType || req.body.cryptoType;
+
+    if (!normalizedLegs.length || !normalizedStake || !normalizedCrypto) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const betAmountFloat = parseFloat(betAmountUsd);
-    if (isNaN(betAmountFloat) || betAmountFloat <= 0) {
-      return res.status(400).json({ error: "Invalid bet amount" });
-    }
+    const result = await placeBetTicket(
+      userId,
+      normalizedLegs,
+      parseFloat(String(normalizedStake)),
+      normalizedCrypto
+    );
 
-    // Correct American odds payout multiplier
-    const americanOdds = parseFloat((odds as any).toString());
-    const multiplier = americanOddsToMultiplier(americanOdds);
-    // Ensure potential payout is rounded to 2 decimal places for USD
-    const potentialPayoutUsd = Math.floor(betAmountFloat * multiplier * 100) / 100;
-
-    const betResult = await db.transaction(async (tx) => {
-      // Strict row lock on BOTH users and user_balances before any read/write
-      await tx.execute(sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`);
-      await tx.execute(sql`SELECT id FROM user_balances WHERE user_id = ${userId} FOR UPDATE`);
-
-      // Deduct balance INSIDE this transaction (passes tx so the lock is honoured)
-      const { newBalance, usedCurrency } = await deductBalance(
-        userId,
-        betAmountFloat,
-        cryptoType as string,
-        tx
-      );
-
-      const cryptoPrice = await getCryptoPrice(usedCurrency.split("_")[0]);
-      const betAmountCrypto = betAmountFloat / cryptoPrice;
-      const potentialPayoutCrypto = potentialPayoutUsd / cryptoPrice;
-
-      // Extract spread/total metadata for settlement
-      const metadata: any = {};
-      if (marketKey === "spreads" && req.body.spread !== undefined) {
-        metadata.spread = req.body.spread;
-      }
-      if (marketKey === "totals" && req.body.total !== undefined) {
-        metadata.total = req.body.total;
-      }
-
-      const [bet] = await tx
-        .insert(sportsBetsTable)
-        .values({
-          userId: userId as number,
-          fixtureId: fixtureId as string,
-          sportKey: sportKey as string,
-          leagueTitle: (leagueTitle as string) || "Unknown",
-          homeTeam: homeTeam as string,
-          awayTeam: awayTeam as string,
-          commenceTime: new Date(commenceTime),
-          marketKey: marketKey as string,
-          selectedOutcome: selectedOutcome as string,
-          odds: americanOdds.toString(),
-          betAmountUsd: betAmountFloat.toString(),
-          betAmountCrypto: betAmountCrypto.toFixed(12),
-          cryptoType: usedCurrency,
-          cryptoPriceAtBet: cryptoPrice.toString(),
-          potentialPayoutUsd: potentialPayoutUsd.toString(),
-          potentialPayoutCrypto: potentialPayoutCrypto.toFixed(12),
-          status: "pending",
-          bookmakerKey: bookmakerKey || "sportsgameodds",
-          ipAddress: Array.isArray(req.ip) ? req.ip[0] : (req.ip || "0.0.0.0"),
-          userAgent: (req.get("user-agent") as string) || "unknown",
-          metadata: Object.keys(metadata).length > 0 ? metadata : null,
-        })
-        .returning();
-
-      return { bet, newBalance };
-    });
-
-    const { bet, newBalance } = betResult;
-
-    return res.json({
-      success: true,
-      bet: {
-        id: bet.id,
-        status: bet.status,
-        betAmountUsd: bet.betAmountUsd,
-        potentialPayoutUsd: bet.potentialPayoutUsd,
-        newBalanceUsd: newBalance,
-      },
-    });
+    return res.json(result);
   } catch (error: any) {
     logger.error({ error }, "[Sportsbook] Error placing bet");
-    return res.status(error.message === "Insufficient balance" ? 400 : 500).json({
-      error: error.message || "Internal server error",
-    });
+    return res.status(400).json({ error: error.message || "Failed to place bet" });
+  }
+});
+
+/**
+ * POST /api/sportsbook/cashout
+ * Processes a cash out request for a specific ticket.
+ */
+sportsbookRouter.post("/cashout", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { ticketId } = req.body;
+    const userId = (req as any).user?.userId;
+
+    if (!ticketId) return res.status(400).json({ error: "Missing ticketId" });
+
+    const result = await processCashOut(ticketId, userId);
+    return res.json(result);
+  } catch (error: any) {
+    logger.error({ error, ticketId: req.body.ticketId }, "[Sportsbook] Cash out failed");
+    return res.status(400).json({ error: error.message || "Cash out failed" });
+  }
+});
+
+/**
+ * GET /api/sportsbook/cashout-value/:ticketId
+ * Returns the current real-time cash out value for a ticket.
+ */
+sportsbookRouter.get("/cashout-value/:ticketId", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { ticketId } = req.params;
+    const ticketIdStr = Array.isArray(ticketId) ? ticketId[0] : ticketId;
+    const value = await calculateCashOutValue(ticketIdStr);
+    return res.json({ cashOutValueUsd: value });
+  } catch (error) {
+    return res.status(400).json({ error: "Could not calculate cash out value" });
   }
 });
 
