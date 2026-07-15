@@ -215,7 +215,7 @@ export async function creditBalance(userId: number, amount: number, currency?: s
   return db.transaction(doCredit);
 }
 
-export async function creditCryptoBalance(userId: number, currency: string, cryptoAmount: number, txn?: any): Promise<void> {
+export async function creditCryptoBalance(userId: number, currency: string, cryptoAmount: number, txn?: any): Promise<number> {
   const database = txn || db;
   await database.insert(userBalancesTable)
     .values({
@@ -227,4 +227,8 @@ export async function creditCryptoBalance(userId: number, currency: string, cryp
       target: [userBalancesTable.userId, userBalancesTable.currency],
       set: { amount: sql`user_balances.amount + ${String(cryptoAmount)}` },
     });
+  
+  // Return the updated total balance
+  const { totalBalance } = await getUserBalance(userId);
+  return totalBalance;
 }

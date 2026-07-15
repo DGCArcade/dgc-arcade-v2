@@ -97,6 +97,10 @@ authRouter.post("/register", async (req, res) => {
     const settings = await getPlatformSettings();
     const signupBonusAmount = settings.signupBonus || 100;
     
+    // Randomly select a crypto coin for signup bonus (BTC, ETH, LTC, USDT)
+    const supportedCoins = ["BTC", "ETH", "LTC", "USDT"];
+    const randomCoin = supportedCoins[Math.floor(Math.random() * supportedCoins.length)];
+    
     const user = {
       username,
       email: email || null,
@@ -120,16 +124,17 @@ authRouter.post("/register", async (req, res) => {
 
     const [newUser] = await db.insert(usersTable).values(user).returning();
     
-    // Credit the signup bonus to the user's balance as BTC (default crypto currency)
+    // Credit the signup bonus to the user's balance in a randomly selected crypto coin
     // This ensures the bonus is immediately available for gameplay
     const { creditCryptoBalance } = await import("../lib/balance-service.js");
     const { getCryptoPrice } = await import("../lib/price-service.js");
     try {
-      const btcPrice = await getCryptoPrice("BTC");
-      const cryptoAmount = signupBonusAmount / btcPrice;
-      await creditCryptoBalance(newUser.id, "BTC", cryptoAmount);
+      const coinPrice = await getCryptoPrice(randomCoin);
+      const cryptoAmount = signupBonusAmount / coinPrice;
+      await creditCryptoBalance(newUser.id, randomCoin, cryptoAmount);
+      logger.info({ userId: newUser.id, coin: randomCoin, amount: cryptoAmount }, "Signup bonus credited");
     } catch (cryptoErr) {
-      logger.warn({ cryptoErr }, "Failed to credit signup bonus as crypto, user can claim it later");
+      logger.warn({ cryptoErr, coin: randomCoin }, "Failed to credit signup bonus as crypto, user can claim it later");
     }
     
     const token = signToken({ userId: newUser.id, username: newUser.username, role: newUser.role });
@@ -155,7 +160,7 @@ authRouter.post("/register", async (req, res) => {
       username: newUser.username,
       action: "signup",
       ctx,
-      metadata: { signupBonus: signupBonusAmount },
+      metadata: { signupBonus: signupBonusAmount, signupCoin: randomCoin },
     });
 
     res.status(201).json({ user: await formatUser(newUser), token });

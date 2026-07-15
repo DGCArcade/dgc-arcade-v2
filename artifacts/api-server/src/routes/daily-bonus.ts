@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { db, usersTable, dailyBonusClaimsTable } from "@workspace/db";
+import { db, usersTable, dailyBonusClaimsTable, userBalancesTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
-import { creditBalance } from "../lib/balance-service.js";
+import { creditCryptoBalance } from "../lib/balance-service.js";
 
 export const dailyBonusRouter = Router();
 
@@ -125,6 +125,26 @@ dailyBonusRouter.post("/claim", requireAuth, async (req, res) => {
       const base = getBaseBonusAmount(user.totalBets, parseFloat(user.totalWon));
       const bonusAmount = applyStreakMultiplier(base, streakDay);
 
+      // Get user's existing crypto balances to determine which coin to credit bonus to
+      const userBalances = await txn
+        .select({ currency: userBalancesTable.currency, amount: userBalancesTable.amount })
+        .from(userBalancesTable)
+        .where(eq(userBalancesTable.userId, user.id));
+
+      // Determine which coin to credit the bonus to
+      let targetCoin: string;
+      if (userBalances.length > 0) {
+        // User has existing balances: use the coin with the highest balance (even if just a penny)
+        const sortedBalances = userBalances.sort((a, b) => 
+          parseFloat(b.amount) - parseFloat(a.amount)
+        );
+        targetCoin = sortedBalances[0].currency;
+      } else {
+        // User has no existing balances: randomly select from supported coins
+        const supportedCoins = ["BTC", "ETH", "LTC", "USDT"];
+        targetCoin = supportedCoins[Math.floor(Math.random() * supportedCoins.length)];
+      }
+
       // Record the claim in database
       await txn.insert(dailyBonusClaimsTable).values({
         userId: user.id,
@@ -133,15 +153,30 @@ dailyBonusRouter.post("/claim", requireAuth, async (req, res) => {
         streakDay,
       });
 
-      // Credit the bonus to user's balance (server-side transaction, cannot be manipulated from client)
-      const newBalance = await creditBalance(user.id, bonusAmount, undefined, txn);
+      // Credit the bonus to user's crypto coin (server-side transaction, cannot be manipulated from client)
+      const { getCryptoPrice } = await import("../lib/price-service.js");
+      const coinPrice = await getCryptoPrice(targetCoin);
+      const cryptoAmount = bonusAmount / coinPrice;
+      
+      await creditCryptoBalance(user.id, targetCoin, cryptoAmount, txn);
       
       // Update wager requirement (bonus must be wagered before withdrawal)
       await txn.update(usersTable)
         .set({ wagerRequirement: sql`coalesce(wager_requirement, 0) + ${bonusAmount}` })
         .where(eq(usersTable.id, user.id));
 
-      return { bonusAmount, streakDay, newBalance };
+      // Get updated balance for response
+      const updatedBalances = await txn
+        .select({ currency: userBalancesTable.currency, amount: userBalancesTable.amount })
+        .from(userBalancesTable)
+        .where(eq(userBalancesTable.userId, user.id));
+
+      const totalCryptoValue = updatedBalances.reduce((sum, b) => {
+        const price = coinPrice; // Simplified for response
+        return sum + (parseFloat(b.amount) * price);
+      }, 0);
+
+      return { bonusAmount, streakDay, targetCoin, cryptoAmount, totalBalance: totalCryptoValue };
     });
 
     req.log.info({ userId, ...result }, "Daily bonus claimed");
