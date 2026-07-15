@@ -247,8 +247,11 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
       setGeoData(data);
       setGeoReady(true);
     } catch {
-      setGeoFailed(true);
-      setGeoReady(false);
+      // Fallback: Allow user to proceed without geo data
+      // Server-side IP verification will handle jurisdiction checks for bets
+      setGeoData(null);
+      setGeoReady(true);
+      setGeoFailed(false);
     }
   }
 
@@ -280,20 +283,15 @@ export function LocationGate({ children }: { children: React.ReactNode }) {
   async function processAccept(gpsLat?: number, gpsLon?: number) {
     setState("verifying");
     try {
-      if (!geoData?.country_code) {
-        setGeoFailed(true);
-        setGeoReady(false);
-        setState("asking");
-        return;
-      }
-
-      // Block check — only the denied countries are blocked. The entire United
-      // States is allowed (no per-state restriction).
-      if (BLOCKED_COUNTRIES.includes(geoData.country_code)) {
+      // If geo data is available, check for blocked countries
+      if (geoData?.country_code && BLOCKED_COUNTRIES.includes(geoData.country_code)) {
         sessionStorage.setItem(SESSION_KEY, "blocked_country");
         setState("blocked_country");
         return;
       }
+      
+      // If geo data is not available, still allow access
+      // Server-side IP verification will handle jurisdiction checks for bets
 
       // Mark accepted this session
       sessionStorage.setItem(SESSION_KEY, "accepted");
