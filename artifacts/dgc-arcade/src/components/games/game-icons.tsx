@@ -1,5 +1,9 @@
 import React from "react";
 
+/**
+ * Professional Horse icon - realistic horse head for Horse Race game
+ * Matches the mobile version style
+ */
 export function HorseIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg
@@ -8,11 +12,32 @@ export function HorseIcon({ className = "w-4 h-4" }: { className?: string }) {
       className={className}
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path d="M20 8c0-1.1-.9-2-2-2h-3V4c0-.55-.45-1-1-1s-1 .45-1 1v2h-2V4c0-.55-.45-1-1-1s-1 .45-1 1v2H7c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h1v2c0 .55.45 1 1 1s1-.45 1-1v-2h6v2c0 .55.45 1 1 1s1-.45 1-1v-2h1c1.1 0 2-.9 2-2V8zm-2 8H6V8h12v8z" />
+      {/* Horse head profile */}
+      <g>
+        {/* Muzzle */}
+        <path d="M8 12c0-1 .5-2 1-2.5l2-1.5v4l-3 .5z" />
+        {/* Nose */}
+        <circle cx="9" cy="12" r="0.5" />
+        {/* Head */}
+        <path d="M10 8c2 0 3.5 1 4 2.5v5c-.5 1.5-2 2.5-4 2.5-1.5 0-2.5-.8-3-2v-5c.5-1.5 1.5-2.5 3-2.5z" />
+        {/* Ear */}
+        <path d="M13 8.5c.5-.5 1-1 1.5-1.5v2l-1.5.5z" />
+        {/* Eye */}
+        <circle cx="12.5" cy="10.5" r="0.4" fill="white" />
+        <circle cx="12.5" cy="10.5" r="0.2" fill="black" />
+        {/* Mane */}
+        <path d="M13.5 7.5c.5-.5 1-1 1-1.5M13.5 8c.5-.3 1-.8 1-1.2M13.5 8.5c.5-.2 1-.6 1-1" stroke="currentColor" strokeWidth="0.5" fill="none" />
+        {/* Neck */}
+        <path d="M13 13.5c.5 1 .8 2 .8 3v2c0 .5-.2 1-.5 1.5" />
+      </g>
     </svg>
   );
 }
 
+/**
+ * Professional Chicken icon - realistic chicken for Chicken Road game
+ * Matches the mobile version style
+ */
 export function ChickenIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg
@@ -21,7 +46,30 @@ export function ChickenIcon({ className = "w-4 h-4" }: { className?: string }) {
       className={className}
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
+      {/* Chicken body and head */}
+      <g>
+        {/* Body */}
+        <ellipse cx="12" cy="14" rx="4" ry="5" />
+        {/* Head */}
+        <circle cx="12" cy="7" r="3" />
+        {/* Neck connection */}
+        <path d="M12 10c1 .5 1.5 1.5 1.5 2.5M12 10c-1 .5-1.5 1.5-1.5 2.5" />
+        {/* Beak */}
+        <path d="M14.5 7l2 .5l-2 1z" fill="currentColor" />
+        {/* Eye */}
+        <circle cx="13.5" cy="6" r="0.5" fill="white" />
+        <circle cx="13.5" cy="6" r="0.2" fill="black" />
+        {/* Comb on head */}
+        <path d="M12 4c.3-.5.5-1 .5-1.5M12.5 4.5c.3-.4.5-.9.5-1.4M11.5 4c-.3-.5-.5-1-.5-1.5" stroke="currentColor" strokeWidth="0.5" fill="none" />
+        {/* Wing */}
+        <path d="M10 13c-1.5 0-2.5.5-3 1.5" stroke="currentColor" strokeWidth="0.8" fill="none" />
+        {/* Tail feathers */}
+        <path d="M16 13c1 0 2 .5 2.5 1.5M16 14c1.2 .3 2.2 1 2.5 2M16 15c1 .5 1.8 1.5 2 2.5" stroke="currentColor" strokeWidth="0.6" fill="none" />
+        {/* Legs */}
+        <path d="M11 19v2M13 19v2" stroke="currentColor" strokeWidth="0.6" />
+        {/* Feet */}
+        <path d="M11 21l-0.5 0.3l0.5 0.2l0.5 0.3M13 21l-0.5 0.3l0.5 0.2l0.5 0.3" stroke="currentColor" strokeWidth="0.5" fill="none" />
+      </g>
     </svg>
   );
 }
