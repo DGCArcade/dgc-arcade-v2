@@ -11,12 +11,45 @@ export function sineOut(t: number): number {
   return Math.sin((t * Math.PI) / 2);
 }
 
-export function squishStretch(jumpProgress: number): { scaleX: number; scaleY: number } {
+/**
+ * Vertical hop arc: 0 at take-off and touchdown, 1 at the apex (t = 0.5).
+ * Slightly front-loaded so the jump feels punchy on take-off.
+ */
+export function hopArc(t: number): number {
+  const p = Math.min(1, Math.max(0, t));
+  return Math.sin(Math.PI * Math.pow(p, 0.88));
+}
+
+/**
+ * Squash & stretch while airborne:
+ * - 0.00-0.14  anticipation crouch (wide + short)
+ * - 0.14-0.55  take-off stretch (tall + narrow), peaking mid-air
+ * - 0.55-1.00  relax back toward neutral before touchdown
+ */
+export function hopSquish(jumpProgress: number): { scaleX: number; scaleY: number } {
   const p = Math.min(1, Math.max(0, jumpProgress));
-  return {
-    scaleY: 1.35 - p * 0.35,
-    scaleX: 0.75 + p * 0.25,
-  };
+  if (p < 0.14) {
+    const c = p / 0.14;
+    return { scaleX: 1 + 0.18 * c, scaleY: 1 - 0.2 * c };
+  }
+  if (p < 0.55) {
+    const c = (p - 0.14) / 0.41;
+    const s = Math.sin(c * Math.PI * 0.5);
+    return { scaleX: 1.18 - 0.3 * s, scaleY: 0.8 + 0.34 * s };
+  }
+  const c = (p - 0.55) / 0.45;
+  return { scaleX: 0.88 + 0.12 * c, scaleY: 1.14 - 0.14 * c };
+}
+
+/**
+ * Elastic landing squash right after touchdown: hard squash that springs
+ * back to neutral with a tiny overshoot.
+ */
+export function landingSquish(landProgress: number): { scaleX: number; scaleY: number } {
+  const p = Math.min(1, Math.max(0, landProgress));
+  // Damped bounce: strong initial squash decaying to zero.
+  const wave = Math.sin(p * Math.PI) * (1 - p * 0.55);
+  return { scaleX: 1 + 0.22 * wave, scaleY: 1 - 0.26 * wave };
 }
 
 export function idleBreath(nowMs: number): { scaleX: number; scaleY: number } {

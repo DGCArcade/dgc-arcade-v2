@@ -229,6 +229,13 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
 
       if (data.isDeath) {
         const hazard: HazardType = data.hazardType === "manhole" ? "manhole" : "car";
+        // The chicken hops INTO the deadly lane first — then gets hit there.
+        setCrossAnim(null);
+        setHopping(true);
+        setHopStripIndex(lane);
+        playChickenCluck();
+        await delay(CHICKEN_GLIDE_MS);
+        setHopping(false);
         if (hazard === "car") {
           setCrossAnim({ lane, phase: "car-impact", carDirection: carDir });
           playCarCrash();
@@ -288,10 +295,12 @@ function ChickenRoadGame({ game }: ChickenRoadProps) {
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
+      // Wait for glide + landing squash (170ms) to fully play out before
+      // flipping hopping off, so the touchdown animation is never cut short.
       setTimeout(() => {
         setHopping(false);
         setHopStripIndex(undefined);
-      }, CHICKEN_GLIDE_MS + 80);
+      }, CHICKEN_GLIDE_MS + 260);
       animLock.current = false;
     }
   }, [status, loading, sessionId, currentLane, maxLanes, toast, qc]);

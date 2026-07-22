@@ -7,7 +7,13 @@ import {
   getCarColor,
 } from "./chicken-road-sprites";
 import { AmbientLaneTraffic } from "./ambient-traffic";
-import { CarCrashEffect, BarrierDropEffect } from "./crash-effects";
+import {
+  CarCrashEffect,
+  CarBustAftermath,
+  ManholeFireEffect,
+  ManholeBustAftermath,
+  BarrierDropEffect,
+} from "./crash-effects";
 import { getSurvivalChancePercent, type StakeTier } from "@/lib/chicken-road-stake-math";
 import { useChickenMotor } from "./use-chicken-motor";
 import { useScreenShake } from "./use-screen-shake";
@@ -208,30 +214,6 @@ function LaneStrip({
         )}
 
         {showBarrier && <BarrierDropEffect size={42} />}
-
-        {showCarImpact && (
-          <CarCrashEffect laneIndex={laneIndex} direction={crossAnim.carDirection} />
-        )}
-
-        {showManholeBurst && (
-          <div className="absolute left-1/2 bottom-[20%] -translate-x-1/2 z-20">
-            <div className="cr-manhole-burst w-16 h-12 rounded-full" />
-            <div className="cr-manhole-burst-ring absolute inset-0 rounded-full" />
-          </div>
-        )}
-
-        {isBust && bustHazard === "car" && !showCarImpact && (
-          <div className="absolute left-1/2 top-[38%] -translate-x-1/2 z-20 cr-car-bust-shake">
-            <CarSprite color="#E74C3C" variant="sedan" size={44} direction="down" />
-          </div>
-        )}
-
-        {isBust && bustHazard === "manhole" && (
-          <div className="absolute left-1/2 bottom-[18%] -translate-x-1/2 z-20">
-            <div className="cr-manhole-burst w-20 h-14 rounded-full" />
-            <div className="cr-manhole-burst-ring absolute inset-0 rounded-full" />
-          </div>
-        )}
       </div>
 
       <div
@@ -248,6 +230,22 @@ function LaneStrip({
           onTap={isNextTarget && !crossLoading ? onManholeClick : undefined}
         />
       </div>
+
+      {/*
+        Death visuals live at the STRIP level (not inside the clipped road div)
+        so they play at the manhole row where the chicken actually stands.
+      */}
+      {showCarImpact && (
+        <CarCrashEffect laneIndex={laneIndex} direction={crossAnim.carDirection} />
+      )}
+
+      {showManholeBurst && <ManholeFireEffect />}
+
+      {isBust && bustHazard === "car" && !showCarImpact && (
+        <CarBustAftermath laneIndex={laneIndex} direction={laneIndex % 2 === 0 ? "down" : "up"} />
+      )}
+
+      {isBust && bustHazard === "manhole" && !showManholeBurst && <ManholeBustAftermath />}
     </div>
   );
 }
@@ -283,7 +281,8 @@ export function StakeChickenBoard({
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [burstId, setBurstId] = useState(0);
   const [burstOrigin, setBurstOrigin] = useState({ x: 200, y: 300 });
-  const [viewportWidth, setViewportWidth] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [lanesViewportW, setLanesViewportW] = useState(0);
 
   const onSidewalk = isActive && currentLane === 0 && !hopping;
 
@@ -300,17 +299,34 @@ export function StakeChickenBoard({
       ? chickenStripIndex
       : settledStripIndex;
 
-  // Track viewport width to enable screen-space fixed chicken positioning
+  // Track the live horizontal scroll offset of the lanes container. The chicken
+  // is positioned in world space (anchored to its sewer) and we subtract this
+  // offset at render time so it stays glued to its sewer as the lanes scroll.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    let raf = 0;
+    const sync = () => {
+      raf = 0;
+      setScrollLeft(el.scrollLeft);
+    };
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(sync);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    setScrollLeft(el.scrollLeft);
     const ro = new ResizeObserver(entries => {
-      if (entries[0]) setViewportWidth(entries[0].contentRect.width);
+      if (entries[0]) setLanesViewportW(entries[0].contentRect.width);
     });
     ro.observe(el);
-    setViewportWidth(el.clientWidth);
-    return () => ro.disconnect();
-  }, []);
+    setLanesViewportW(el.clientWidth);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [chickenVisible]);
 
   // useBoardLaneCenters is kept for its side-effect: it observes lane DOM elements
   // and triggers a remeasure after scroll settles.
@@ -323,32 +339,51 @@ export function StakeChickenBoard({
   );
 
   /**
-   * FIX: Decouple chicken from scroll.
-   * Instead of using world-space (SIDEWALK_W + index * LANE_W), we use screen-space.
-   * The chicken stays at a fixed screen coordinate (centered in the viewport).
-   * The board scrolls the lanes underneath the chicken.
-   * This prevents the chicken from "moving with the scroll" (thumb) and 
-   * prevents it from going off-screen.
+   * Anchor the chicken to its sewer in WORLD space (relative to the play row's
+   * left edge: sidewalk width + the sewer's center within the lanes content).
+   * The motor only glides between sewer world positions when the chicken hops.
+   * The live scroll offset is subtracted at render time (see chickenScreenLeft),
+   * so dragging the scrollbar / swiping scrolls the lanes and the chicken
+   * together — the chicken stays glued to its sewer and never drifts.
    */
-  const CHICKEN_VIEWPORT_X = viewportWidth > 0 ? viewportWidth / 2 : 140;
-  const targetLeft =
-    positionStripIndex < 0
-      ? SIDEWALK_W / 2
-      : SIDEWALK_W + CHICKEN_VIEWPORT_X;
+  const onSewer = positionStripIndex >= 0;
+  const targetLeft = onSewer
+    ? SIDEWALK_W + positionStripIndex * laneWidth + laneWidth / 2
+    : SIDEWALK_W / 2;
 
   const scrollTargetLane = positionStripIndex;
 
   const motor = useChickenMotor(targetLeft, hopping, laneWidth, chickenVisible);
+
+  // On the sidewalk the chicken sits in fixed play-row space (the sidewalk does
+  // not scroll). On a sewer, subtract the live scroll offset so it tracks its
+  // sewer as the lanes scroll underneath.
+  const chickenScreenLeft = onSewer ? motor.left - scrollLeft : motor.left;
+
+  // Fade the chicken out when the user scrolls its sewer out of the lanes
+  // viewport (behind the sidewalk on the left, or past the right edge).
+  const chickenOffscreen =
+    onSewer &&
+    lanesViewportW > 0 &&
+    (chickenScreenLeft < SIDEWALK_W - 6 || chickenScreenLeft > SIDEWALK_W + lanesViewportW + 6);
+
+  // While the death sequence plays (car slam / manhole fire) and after a bust,
+  // the crash effect owns the chicken visuals — hide the live chicken so there
+  // is never a second chicken standing around during its own funeral.
+  const deathAnimActive = crossAnim?.phase === "car-impact" || crossAnim?.phase === "manhole-fire";
+  const chickenHidden = deathAnimActive || status === "lost" || chickenOffscreen;
+
   const shakeIntensity = status === "lost" ? 25 : crossAnim?.phase === "car-impact" ? 16 : crossAnim?.phase === "manhole-fire" ? 12 : 0;
   const shake = useScreenShake(burstId, shakeIntensity);
 
   useEffect(() => {
     if (status !== "lost") return;
     const area = playAreaRef.current;
-    // For the lost burst, we use the world-coordinate so the explosion stays on the sewer
-    const worldX = positionStripIndex < 0 
-      ? SIDEWALK_W / 2 
-      : SIDEWALK_W + positionStripIndex * laneWidth + laneWidth / 2;
+    const scrolled = scrollRef.current?.scrollLeft ?? 0;
+    // Convert the sewer's world X to screen space so the burst lands on it.
+    const worldX = positionStripIndex < 0
+      ? SIDEWALK_W / 2
+      : SIDEWALK_W + positionStripIndex * laneWidth + laneWidth / 2 - scrolled;
     setBurstOrigin({ x: worldX, y: area ? area.clientHeight - 52 : 300 });
     setBurstId(id => id + 1);
   }, [status, positionStripIndex, laneWidth]);
@@ -356,7 +391,8 @@ export function StakeChickenBoard({
   useEffect(() => {
     if (crossAnim?.phase !== "car-impact" && crossAnim?.phase !== "manhole-fire") return;
     const area = playAreaRef.current;
-    const laneCenter = SIDEWALK_W + (crossAnim.lane * laneWidth) + laneWidth / 2;
+    const scrolled = scrollRef.current?.scrollLeft ?? 0;
+    const laneCenter = SIDEWALK_W + (crossAnim.lane * laneWidth) + laneWidth / 2 - scrolled;
     setBurstOrigin({
       x: laneCenter,
       y: area ? area.clientHeight * (crossAnim.phase === "manhole-fire" ? 0.72 : 0.42) : 300,
@@ -468,19 +504,29 @@ export function StakeChickenBoard({
           Chicken stays fixed on screen (relative to the sidewalk), 
           only moves when hopping to next sewer relative to the board's scroll.
         */}
-        {chickenVisible && (
+        {chickenVisible && !chickenHidden && (
           <div
             className="absolute z-30 pointer-events-none"
             style={{
-              left: `${motor.left}px`,
+              left: `${chickenScreenLeft}px`,
               bottom: `${28 + motor.liftY}px`,
-              transform: `translateX(-50%) scale(${motor.scaleX}, ${motor.scaleY})`,
+              transform: `translateX(-50%) rotate(${motor.rotate}deg) scale(${motor.scaleX}, ${motor.scaleY})`,
               transformOrigin: "center bottom",
               willChange: "left, bottom, transform",
             }}
           >
             <div className={`relative flex flex-col items-center`}>
-              <ChickenSprite hopping={hopping} running={hopping} size={48} />
+              {/* Airborne drop shadow detaches from the chicken as it jumps */}
+              <div
+                className="absolute left-1/2 -translate-x-1/2 rounded-full bg-black/35 blur-[2px]"
+                style={{
+                  bottom: `${-4 - motor.liftY}px`,
+                  width: `${Math.max(18, 40 - motor.liftY * 0.5)}px`,
+                  height: "7px",
+                  opacity: Math.max(0.15, 0.4 - motor.liftY * 0.008),
+                }}
+              />
+              <ChickenSprite hopping={hopping} running={hopping} size={48} shadow={false} />
               {hopping && (
                 <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-2 cr-chicken-dust rounded-full" />
               )}
