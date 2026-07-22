@@ -92,14 +92,15 @@ authRouter.post("/register", async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const referralCode = crypto.randomBytes(6).toString("hex").toUpperCase();
     
-    // Get platform settings to determine signup bonus amount
+    // Get platform settings to determine signup bonus amount.
+    // Use ?? (not ||) so an owner-configured bonus of 0 is respected.
     const { getPlatformSettings } = await import("../lib/platform-settings.js");
     const settings = await getPlatformSettings();
-    const signupBonusAmount = settings.signupBonus || 100;
-    
+    const signupBonusAmount = Number(settings.signupBonus ?? 100);
+
     // Randomly select a crypto coin for signup bonus (BTC, ETH, LTC, USDT)
     const supportedCoins = ["BTC", "ETH", "LTC", "USDT"];
-    const randomCoin = supportedCoins[Math.floor(Math.random() * supportedCoins.length)];
+    let bonusCoin = supportedCoins[Math.floor(Math.random() * supportedCoins.length)];
     
     const user = {
       username,
@@ -126,15 +127,33 @@ authRouter.post("/register", async (req, res) => {
     
     // Credit the signup bonus to the user's balance in a randomly selected crypto coin
     // This ensures the bonus is immediately available for gameplay
-    const { creditCryptoBalance } = await import("../lib/balance-service.js");
-    const { getCryptoPrice } = await import("../lib/price-service.js");
-    try {
-      const coinPrice = await getCryptoPrice(randomCoin);
-      const cryptoAmount = signupBonusAmount / coinPrice;
-      await creditCryptoBalance(newUser.id, randomCoin, cryptoAmount);
-      logger.info({ userId: newUser.id, coin: randomCoin, amount: cryptoAmount }, "Signup bonus credited");
-    } catch (cryptoErr) {
-      logger.warn({ cryptoErr, coin: randomCoin }, "Failed to credit signup bonus as crypto, user can claim it later");
+    if (signupBonusAmount > 0) {
+      const { creditCryptoBalance } = await import("../lib/balance-service.js");
+      const { getCryptoPrice } = await import("../lib/price-service.js");
+      try {
+        let coinPrice = await getCryptoPrice(bonusCoin);
+        if (!(coinPrice > 0)) {
+          // Price lookup failed for the chosen coin — fall back to USDT ($1)
+          // so the user ALWAYS receives the owner-configured bonus.
+          logger.warn({ coin: bonusCoin }, "Signup bonus price lookup failed, falling back to USDT");
+          bonusCoin = "USDT";
+          coinPrice = 1;
+        }
+        const cryptoAmount = signupBonusAmount / coinPrice;
+        if (!Number.isFinite(cryptoAmount) || cryptoAmount <= 0) {
+          throw new Error(`Invalid signup bonus crypto amount: ${cryptoAmount}`);
+        }
+        await creditCryptoBalance(newUser.id, bonusCoin, cryptoAmount);
+        logger.info({ userId: newUser.id, coin: bonusCoin, usd: signupBonusAmount, amount: cryptoAmount }, "Signup bonus credited");
+      } catch (cryptoErr) {
+        // Last-resort fallback: credit the bonus as USDT at $1 so no user misses it.
+        try {
+          await creditCryptoBalance(newUser.id, "USDT", signupBonusAmount);
+          logger.warn({ cryptoErr, userId: newUser.id }, "Signup bonus credited as USDT after primary coin failed");
+        } catch (fallbackErr) {
+          logger.error({ fallbackErr, userId: newUser.id }, "Failed to credit signup bonus");
+        }
+      }
     }
     
     const token = signToken({ userId: newUser.id, username: newUser.username, role: newUser.role });
@@ -160,7 +179,7 @@ authRouter.post("/register", async (req, res) => {
       username: newUser.username,
       action: "signup",
       ctx,
-      metadata: { signupBonus: signupBonusAmount, signupCoin: randomCoin },
+      metadata: { signupBonus: signupBonusAmount, signupCoin: bonusCoin },
     });
 
     res.status(201).json({ user: await formatUser(newUser), token });

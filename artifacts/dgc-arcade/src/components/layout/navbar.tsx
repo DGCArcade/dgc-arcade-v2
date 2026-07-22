@@ -111,8 +111,8 @@ export function Navbar() {
       )}
 
       {settings.gamesEnabled && (
-        <Link href="/game/chicken-road" className={`group flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] transition-all duration-300 ${location === "/game/chicken-road" ? "text-primary scale-110" : "text-muted-foreground hover:text-foreground hover:scale-105"}`}>
-          <ChickenIcon className={`w-4 h-4 ${location === "/game/chicken-road" ? "animate-pulse" : "group-hover:animate-bounce"}`} />
+        <Link href="/games/chicken-road" className={`group flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] transition-all duration-300 ${location === "/games/chicken-road" ? "text-primary scale-110" : "text-muted-foreground hover:text-foreground hover:scale-105"}`}>
+          <ChickenIcon className={`w-4 h-4 ${location === "/games/chicken-road" ? "animate-pulse" : "group-hover:animate-bounce"}`} />
           <span>Chicken Road</span>
         </Link>
       )}

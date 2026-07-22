@@ -4,17 +4,20 @@ export function ChickenSprite({
   running,
   size = 52,
   facing = "right",
+  shadow = true,
 }: {
   hopping?: boolean;
   running?: boolean;
   size?: number;
   facing?: "left" | "right";
+  /** Built-in ground shadow — disable when a detached shadow is drawn externally. */
+  shadow?: boolean;
 }) {
   const flip = facing === "left" ? "scaleX(-1)" : undefined;
   const animClass = running ? "cr-chicken-run" : ""; // Removed cr-chicken-hop as it conflicts with useChickenMotor.ts JS animation
   return (
     <svg viewBox="0 0 56 64" width={size} height={size * 1.14} className={animClass} style={{ transform: flip }}>
-      <ellipse cx="28" cy="58" rx="12" ry="3" fill="#000" opacity="0.25" />
+      {shadow && <ellipse cx="28" cy="58" rx="12" ry="3" fill="#000" opacity="0.25" />}
       {running ? (
         <>
           <g className="cr-chicken-leg-left">
@@ -37,6 +40,43 @@ export function ChickenSprite({
       <circle cx="23" cy="21" r="0.9" fill="#fff" />
       <circle cx="35" cy="21" r="0.9" fill="#fff" />
       <ellipse cx="40" cy="26" rx="5" ry="3" fill="#F04040" opacity="0.5" />
+    </svg>
+  );
+}
+
+/** Flattened post-crash chicken — X eyes, splayed wings, scattered feathers */
+export function DeadChickenSprite({ size = 52, charred = false }: { size?: number; charred?: boolean }) {
+  const body = charred ? "#5a5a52" : "#F8F8F2";
+  const bodyShade = charred ? "#4a4a44" : "#ECECE4";
+  const beak = charred ? "#8a6a30" : "#F6AD55";
+  return (
+    <svg viewBox="0 0 64 40" width={size * 1.15} height={size * 0.72}>
+      {/* Ground splat shadow */}
+      <ellipse cx="32" cy="34" rx="26" ry="5" fill="#000" opacity="0.3" />
+      {/* Flattened body */}
+      <ellipse cx="32" cy="26" rx="22" ry="9" fill={body} />
+      <ellipse cx="38" cy="25" rx="12" ry="6" fill={bodyShade} />
+      {/* Splayed wings */}
+      <ellipse cx="12" cy="24" rx="8" ry="4" fill={bodyShade} transform="rotate(-18 12 24)" />
+      <ellipse cx="52" cy="24" rx="8" ry="4" fill={bodyShade} transform="rotate(18 52 24)" />
+      {/* Flattened head */}
+      <ellipse cx="26" cy="17" rx="10" ry="7" fill={body} />
+      {/* Comb — droopy */}
+      <path d="M20 11 L22 7 L25 11 L27 6 L30 11" fill={charred ? "#7a2a24" : "#E53E3E"} stroke={charred ? "#5a1a16" : "#C53030"} strokeWidth="0.5" />
+      {/* Beak — open, tongue out */}
+      <path d="M26 20 L21 24 L27 22 Z" fill={beak} />
+      <path d="M24 22 Q23 25 25 26" stroke="#E53E3E" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+      {/* X eyes */}
+      <path d="M21 15 L25 19 M25 15 L21 19" stroke="#1A1A1A" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M29 15 L33 19 M33 15 L29 19" stroke="#1A1A1A" strokeWidth="1.6" strokeLinecap="round" />
+      {/* Legs sticking up */}
+      <path d="M44 18 L47 10 M47 10 L45 8 M47 10 L50 9" stroke="#E8A020" strokeWidth="2" strokeLinecap="round" fill="none" />
+      <path d="M50 21 L54 14 M54 14 L52 12 M54 14 L57 13" stroke="#E8A020" strokeWidth="2" strokeLinecap="round" fill="none" />
+      {/* Scattered feathers */}
+      <ellipse cx="8" cy="32" rx="3" ry="1.4" fill={body} opacity="0.85" transform="rotate(-24 8 32)" />
+      <ellipse cx="56" cy="31" rx="3" ry="1.4" fill={body} opacity="0.85" transform="rotate(30 56 31)" />
+      <ellipse cx="18" cy="35" rx="2.5" ry="1.2" fill={bodyShade} opacity="0.8" transform="rotate(12 18 35)" />
+      <ellipse cx="46" cy="35" rx="2.5" ry="1.2" fill={bodyShade} opacity="0.8" transform="rotate(-15 46 35)" />
     </svg>
   );
 }

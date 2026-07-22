@@ -11,7 +11,7 @@ const COINGECKO_ID_MAP: Record<string, string> = {
   DASH: "dash", TON: "the-open-network",
 };
 
-const STABLECOINS = new Set(["USDT_TRX", "USDT_TON", "USDC", "DAI"]);
+const STABLECOINS = new Set(["USDT", "USDT_TRX", "USDT_TON", "USDC", "DAI"]);
 
 // Live price cache — expires after CACHE_TTL to trigger fresh fetches
 const priceCache: Record<string, { price: number; timestamp: number }> = {};
