@@ -12,7 +12,6 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ownerStepUpHeaders } from "@/components/owner/owner-stepup-gate";
 import { getApiUrl } from "@/lib/api-fetch";
 import {
   Bot,
@@ -456,7 +455,6 @@ export function OwnerAiChat({ token }: OwnerAiChatProps) {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
-          ...ownerStepUpHeaders(),
         },
         body: JSON.stringify({ messages: history, stream: true }),
         signal: abortControllerRef.current.signal,

@@ -2,7 +2,7 @@ import { Shield, Coins } from "lucide-react";
 import { useWagerRequirement } from "@/hooks/use-wager-requirement";
 
 export function WithdrawPolicyNotice({ compact = false }: { compact?: boolean }) {
-  const { isWagerMet, wagerPercentage, formattedRemaining, formattedRequirement } = useWagerRequirement();
+  const { isWagerMet, wagerPercentage, formattedRemaining, formattedRequirement, formattedWagered } = useWagerRequirement();
 
   return (
     <div className={`rounded-xl border space-y-3 ${compact ? "p-3" : "p-4"} ${isWagerMet ? "border-green-500/30 bg-green-500/5" : "border-primary/25 bg-primary/5"}`}>
@@ -11,9 +11,9 @@ export function WithdrawPolicyNotice({ compact = false }: { compact?: boolean })
         <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
           <p className="font-bold uppercase tracking-wider text-foreground text-[10px]">Withdrawal policy</p>
           <p>
-            <strong className="text-foreground">Playthrough:</strong>{" "}
+            <strong className="text-foreground">Playthrough ({wagerPercentage}%):</strong>{" "}
             {isWagerMet
-              ? "You've met the 100% wagering requirement on deposits and bonus."
+              ? `You've met the 100% wagering requirement (${formattedWagered} wagered of ${formattedRequirement}).`
               : `Wager ${formattedRemaining} more (${wagerPercentage}% of ${formattedRequirement} done) before cashing out.`}
           </p>
           <p className="flex items-start gap-1.5">
@@ -25,10 +25,10 @@ export function WithdrawPolicyNotice({ compact = false }: { compact?: boolean })
           </p>
         </div>
       </div>
-      {!compact && !isWagerMet && (
+      {!compact && (
         <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden border border-white/5">
           <div
-            className="h-full bg-gradient-to-r from-primary/80 to-amber-400 transition-all duration-700"
+            className={`h-full transition-all duration-700 ${isWagerMet ? "bg-gradient-to-r from-green-500/80 to-emerald-400" : "bg-gradient-to-r from-primary/80 to-amber-400"}`}
             style={{ width: `${wagerPercentage}%` }}
           />
         </div>

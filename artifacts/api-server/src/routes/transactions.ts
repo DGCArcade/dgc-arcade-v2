@@ -89,6 +89,8 @@ transactionsRouter.get("/", requireAuth, async (req, res) => {
         status: t.status,
         txHash: t.txHash,
         address: t.address,
+        plisioTrackId: t.plisioTrackId,
+        orderId: t.orderId,
         createdAt: t.createdAt.toISOString(),
       }))
     );
@@ -834,13 +836,13 @@ transactionsRouter.post("/withdraw", requireAuth, requireLocationVerified, async
 
     // Must wager at least the greater of signup bonus or accumulated wager requirement (deposits).
     const totalWagered = parseFloat(String(user.totalWageredAmount ?? 0));
-    const signupBonus = parseFloat(String(user.signupBonus ?? 100));
+    const signupBonus = parseFloat(String(user.signupBonus ?? 0));
     const dbWagerReq = parseFloat(String(user.wagerRequirement ?? 0));
     const wagerRequirement = Math.max(signupBonus, dbWagerReq);
-    const wagerProgress = totalWagered / wagerRequirement;
-    const wagerPercentage = Math.min(100, Math.round(wagerProgress * 100));
 
-    if (totalWagered < wagerRequirement) {
+    if (wagerRequirement > 0 && totalWagered < wagerRequirement) {
+      const wagerProgress = totalWagered / wagerRequirement;
+      const wagerPercentage = Math.min(100, Math.round(wagerProgress * 100));
       const remaining = wagerRequirement - totalWagered;
       res.status(400).json({
         error: "Wagering requirement not met",
@@ -1077,6 +1079,9 @@ transactionsRouter.get("/:id", requireAuth, async (req, res) => {
       status: t.status,
       txHash: t.txHash,
       address: t.address,
+      plisioTrackId: t.plisioTrackId,
+      orderId: t.orderId,
+      metadata: t.metadata,
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString(),
     });

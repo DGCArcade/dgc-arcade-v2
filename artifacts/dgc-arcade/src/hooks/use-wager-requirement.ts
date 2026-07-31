@@ -1,16 +1,18 @@
 import { useAuth } from "@/hooks/use-auth";
 import { formatCurrency } from "@/lib/format";
+import type { ProfileUser } from "@/lib/profile-user";
 
 export function useWagerRequirement() {
   const { user } = useAuth();
-  const totalWagered = parseFloat(String((user as { totalWageredAmount?: number })?.totalWageredAmount ?? 0));
-  const signupBonus = parseFloat(String((user as { signupBonus?: number })?.signupBonus ?? 100));
-  const depositWagerReq = parseFloat(String((user as { wagerRequirement?: number })?.wagerRequirement ?? 0));
+  const profileUser = user as ProfileUser | null;
+  const totalWagered = parseFloat(String(profileUser?.totalWageredAmount ?? 0));
+  const signupBonus = parseFloat(String(profileUser?.signupBonus ?? 0));
+  const depositWagerReq = parseFloat(String(profileUser?.wagerRequirement ?? 0));
   const wagerRequirement = Math.max(signupBonus, depositWagerReq);
-  const wagerRemaining = Math.max(0, wagerRequirement - totalWagered);
+  const wagerRemaining = wagerRequirement > 0 ? Math.max(0, wagerRequirement - totalWagered) : 0;
   const wagerProgress = wagerRequirement > 0 ? totalWagered / wagerRequirement : 1;
-  const wagerPercentage = Math.min(100, Math.round(wagerProgress * 100));
-  const isWagerMet = wagerRemaining <= 0;
+  const wagerPercentage = wagerRequirement > 0 ? Math.min(100, Math.round(wagerProgress * 100)) : 100;
+  const isWagerMet = wagerRequirement <= 0 || wagerRemaining <= 0;
 
   return {
     totalWagered,
@@ -22,5 +24,6 @@ export function useWagerRequirement() {
     isWagerMet,
     formattedRemaining: formatCurrency(wagerRemaining),
     formattedRequirement: formatCurrency(wagerRequirement),
+    formattedWagered: formatCurrency(totalWagered),
   };
 }

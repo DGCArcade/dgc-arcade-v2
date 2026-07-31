@@ -32,8 +32,6 @@ export function getCurrencyMeta(value: string): CurrencyMeta {
   );
 }
 
-// "icon" set — just the coin logo/symbol on a transparent background,
-// colored in each coin's brand color. No disc or circle background.
 const CDN = "https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/svg/icon";
 
 const LOGO_URL: Record<string, string> = {
@@ -51,31 +49,64 @@ const LOGO_URL: Record<string, string> = {
   DASH:     `${CDN}/dash.svg`,
 };
 
+/** Network badge for multi-chain tokens (e.g. USDT on TRC-20 vs TON). */
+const NETWORK_BADGE: Record<string, { logo: string; label: string }> = {
+  USDT_TRX: { logo: `${CDN}/trx.svg`, label: "TRC-20" },
+  USDT_TON: { logo: `${CDN}/ton.svg`, label: "TON" },
+};
+
 export function CoinIcon({
   currency,
   size = 18,
   className,
+  showNetworkBadge = true,
 }: {
   currency: string;
   size?: number;
   className?: string;
+  showNetworkBadge?: boolean;
 }) {
   const c = getCurrencyMeta(currency);
   const src = LOGO_URL[currency] ?? LOGO_URL[currency.split("_")[0]];
+  const badge = showNetworkBadge ? NETWORK_BADGE[currency] : undefined;
   const [imgError, setImgError] = useState(false);
+  const [badgeError, setBadgeError] = useState(false);
+
+  const badgeSize = Math.max(8, Math.round(size * 0.42));
 
   if (src && !imgError) {
     return (
-      <img
-        src={src}
-        width={size}
-        height={size}
-        alt={c.name}
-        title={c.name}
-        onError={() => setImgError(true)}
-        style={{ flexShrink: 0, display: "inline-block" }}
+      <span
         className={className}
-      />
+        style={{ position: "relative", display: "inline-flex", flexShrink: 0, width: size, height: size }}
+        title={badge ? `${c.name} (${badge.label})` : c.name}
+      >
+        <img
+          src={src}
+          width={size}
+          height={size}
+          alt={c.name}
+          onError={() => setImgError(true)}
+          style={{ display: "block", borderRadius: "50%" }}
+        />
+        {badge && !badgeError && (
+          <img
+            src={badge.logo}
+            width={badgeSize}
+            height={badgeSize}
+            alt={badge.label}
+            onError={() => setBadgeError(true)}
+            style={{
+              position: "absolute",
+              right: -1,
+              bottom: -1,
+              borderRadius: "50%",
+              border: "1.5px solid var(--background, #0a0a0a)",
+              background: "var(--background, #0a0a0a)",
+            }}
+          />
+        )}
+      </span>
     );
   }
 

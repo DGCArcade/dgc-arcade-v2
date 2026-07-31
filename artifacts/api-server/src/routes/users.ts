@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { db, usersTable, userBalancesTable, transactionsTable } from "@workspace/db";
 import { eq, ilike, sql } from "drizzle-orm";
 import { getCryptoPrice } from "../lib/price-service.js";
-import { deductBalance, creditBalance, getUserBalance } from "../lib/balance-service.js";
+import { deductBalance, creditBalance, creditCryptoBalance, getUserBalance } from "../lib/balance-service.js";
 import { requireAuth, isOwnerUser, isProtectedAccount } from "../middlewares/auth.js";
 import { requireLocationVerified } from "../middlewares/location.js";
 import { evaluateIpAccess } from "../lib/geo-policy.js";
@@ -415,12 +415,40 @@ usersRouter.post("/me/rakeback/claim", requireAuth, async (req, res) => {
       if (available < 0.01) throw new Error("NO_RAKEBACK");
 
       const newClaimed = (claimed + available).toFixed(8);
+
+      // Credit rakeback to crypto balance (same pattern as daily bonus)
+      const userBalances = await txn
+        .select({ currency: userBalancesTable.currency, amount: userBalancesTable.amount })
+        .from(userBalancesTable)
+        .where(eq(userBalancesTable.userId, userId));
+
+      let targetCoin: string;
+      if (userBalances.length > 0) {
+        const sortedBalances = userBalances.sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount));
+        targetCoin = sortedBalances[0].currency;
+      } else {
+        const supportedCoins = ["BTC", "ETH", "LTC", "USDT_TRX"];
+        targetCoin = supportedCoins[Math.floor(Math.random() * supportedCoins.length)];
+      }
+
+      const coinPrice = await getCryptoPrice(targetCoin);
+      const cryptoAmount = available / coinPrice;
+      const balanceAfter = await creditCryptoBalance(userId, targetCoin, cryptoAmount, txn);
+
       await txn.update(usersTable).set({
-        balance: sql`balance + ${available.toFixed(8)}`,
         rakebackClaimed: newClaimed,
       }).where(eq(usersTable.id, userId));
 
-      return { claimedAmount: available, tier: tier.id };
+      recordLedgerStandalone({
+        userId,
+        amount: available,
+        balanceBefore: balanceAfter - available,
+        balanceAfter,
+        reason: "promo_credit",
+        note: `VIP rakeback claim (${tier.rakebackPct}%) credited as ${targetCoin}`,
+      }).catch(() => {});
+
+      return { claimedAmount: available, tier: tier.id, targetCoin, cryptoAmount };
     });
 
     res.json({ success: true, ...result });

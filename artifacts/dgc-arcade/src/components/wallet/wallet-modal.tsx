@@ -313,7 +313,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md w-full bg-card border-border/60 backdrop-blur-xl p-0 overflow-hidden max-h-[100dvh] sm:max-h-[90vh] mx-0 sm:mx-auto rounded-none sm:rounded-2xl flex flex-col">
+      <DialogContent hideClose className="max-w-md w-full bg-card border-border/60 backdrop-blur-xl p-0 overflow-hidden max-h-[100dvh] sm:max-h-[90vh] mx-0 sm:mx-auto rounded-none sm:rounded-2xl flex flex-col">
         {/* Header with Close Button */}
         <div className="p-4 sm:p-6 pb-0 border-b border-border/40 flex items-center justify-between">
           <DialogHeader>
@@ -404,8 +404,8 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                     }`}
                   >
                     <CoinIcon currency={c.value} size={16} />
-                    <span>{c.name === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
-                    {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground">{c.network}</span>}
+                    <span>{c.network ? `USDT` : c.value.split("_")[0]}</span>
+                    {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground font-bold">{c.network}</span>}
                   </button>
                 ))}
               </div>
@@ -558,7 +558,8 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                       }
                     >
                       <CoinIcon currency={c.value} size={16} />
-                      <span>{c.name === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
+                      <span>{c.network ? `USDT` : c.value.split("_")[0]}</span>
+                      {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground font-bold">{c.network}</span>}
                       {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground">{c.network}</span>}
                     </button>
                   );

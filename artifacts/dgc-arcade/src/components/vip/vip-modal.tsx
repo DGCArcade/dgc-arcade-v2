@@ -4,6 +4,10 @@ import { formatCurrency } from "@/lib/format";
 import { useAuth } from "@/hooks/use-auth";
 import { DailyBonusModal } from "@/components/ui/daily-bonus-modal";
 import { getApiUrl } from "@/lib/api-fetch";
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { getGetMeQueryKey } from "@workspace/api-client-react";
+import type { ProfileUser } from "@/lib/profile-user";
 
 export const VIP_TIERS = [
   { id: 0, name: "ROOKIE GRINDER",  shortName: "Rookie",  min: 0,         rakebackPct: 5,  color: "#cd7f32", icon: "🥉" },
@@ -31,14 +35,17 @@ export function getVipProgress(totalWagered: number) {
 interface VipModalProps { open: boolean; onClose: () => void; }
 
 export function VipModal({ open, onClose }: VipModalProps) {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [claiming, setClaiming] = useState(false);
   const [claimMsg, setClaimMsg] = useState<string | null>(null);
   const [tab, setTab] = useState<"overview" | "tiers">("overview");
   const [bonusOpen, setBonusOpen] = useState(false);
 
-  const wagered = (user as any)?.totalWageredAmount ?? 0;
-  const rakebackClaimed = (user as any)?.rakebackClaimed ?? 0;
+  const profileUser = user as ProfileUser | null;
+  const wagered = profileUser?.totalWageredAmount ?? 0;
+  const rakebackClaimed = profileUser?.rakebackClaimed ?? 0;
   const { tier, next, pct, remaining } = getVipProgress(wagered);
   const claimable = Math.max(0, wagered * (tier.rakebackPct / 100) - rakebackClaimed);
 
@@ -48,10 +55,24 @@ export function VipModal({ open, onClose }: VipModalProps) {
       const token = localStorage.getItem("dgc_token");
       const res = await fetch(getApiUrl("/api/users/me/rakeback/claim"), { method: "POST", headers: { Authorization: `Bearer ${token}` } });
       const d = await res.json();
-      if (!res.ok) { setClaimMsg(d.error ?? "Claim failed"); return; }
-      setClaimMsg(`✅ Claimed ${formatCurrency(d.claimed)}!`);
-      setTimeout(() => window.location.reload(), 1200);
-    } catch { setClaimMsg("Network error"); }
+      if (!res.ok) {
+        const errMsg = d.error ?? "Claim failed";
+        setClaimMsg(errMsg);
+        toast({ title: "Rakeback claim failed", description: errMsg, variant: "destructive" });
+        return;
+      }
+      const claimed = d.claimedAmount ?? d.claimed ?? 0;
+      setClaimMsg(`✅ Claimed ${formatCurrency(claimed)}!`);
+      queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      refreshUser();
+      toast({
+        title: "Rakeback claimed!",
+        description: `+${formatCurrency(claimed)} added to your balance.`,
+      });
+    } catch {
+      setClaimMsg("Network error");
+      toast({ title: "Network error", description: "Could not claim rakeback. Try again.", variant: "destructive" });
+    }
     finally { setClaiming(false); }
   }
 

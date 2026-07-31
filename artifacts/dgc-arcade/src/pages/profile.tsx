@@ -3,15 +3,15 @@ import { useListTransactions, getListTransactionsQueryKey } from "@workspace/api
 import { formatCurrency } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DepositForm } from "@/components/profile/deposit-form";
-import { WithdrawForm } from "@/components/profile/withdraw-form";
 import { useLocation } from "wouter";
-import { ArrowDownLeft, ArrowUpRight, Clock, CheckCircle2, XCircle, Landmark, RefreshCw, Users, Copy, CheckCheck, TrendingUp, Shield, Save, MessageCircle, Zap, Lock, Monitor, Smartphone, Tablet, Globe, LogOut, X, ChevronRight } from "lucide-react";
+import { Clock, CheckCircle2, Landmark, RefreshCw, Users, Copy, CheckCheck, TrendingUp, Shield, Save, MessageCircle, Zap, Lock, Monitor, Smartphone, Tablet, Globe, LogOut, X, ChevronRight } from "lucide-react";
 import { CoinIcon } from "@/components/wallet/coin-icon";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { VipModal, getVipProgress } from "@/components/vip/vip-modal";
 import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
-import { OwnerStepUpGate } from "@/components/owner/owner-stepup-gate";
+import { ProfileBankSection } from "@/components/profile/profile-bank-section";
+import { TransactionRow, TransactionDetailModal, type ProfileTransaction } from "@/components/profile/transaction-row";
+import { asProfileUser } from "@/lib/profile-user";
 import { getApiUrl } from "@/lib/api-fetch";
 
 export default function Profile() {
@@ -52,8 +52,9 @@ export default function Profile() {
   const [logoutAllLoading, setLogoutAllLoading] = useState(false);
   // ── View All Transactions modal ──
   const [txAllOpen, setTxAllOpen] = useState(false);
-  const [txAll, setTxAll] = useState<any[]>([]);
+  const [txAll, setTxAll] = useState<ProfileTransaction[]>([]);
   const [txAllLoading, setTxAllLoading] = useState(false);
+  const [selectedTx, setSelectedTx] = useState<ProfileTransaction | null>(null);
 
   // ── Provably Fair Verification Tool State ──
   const [vServerSeed, setVServerSeed] = useState("");
@@ -78,7 +79,7 @@ export default function Profile() {
     }
   }, [vServerSeed, vClientSeed, vNonce, vGameSlug]);
 
-  useEffect(() => { if (user) setTelegramInput((user as any).telegramUsername ?? ""); }, [user?.username]);
+  useEffect(() => { if (user) setTelegramInput(asProfileUser(user)?.telegramUsername ?? ""); }, [user?.username]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -230,51 +231,14 @@ export default function Profile() {
 
   if (isLoading || !user) return <div className="animate-pulse bg-secondary h-96 rounded-xl border border-border" />;
 
-  const wagered = (user as any)?.totalWageredAmount ?? 0;
-  const rakebackClaimed = (user as any)?.rakebackClaimed ?? 0;
+  const profileUser = asProfileUser(user)!;
+  const wagered = profileUser.totalWageredAmount ?? 0;
+  const rakebackClaimed = profileUser.rakebackClaimed ?? 0;
   const { tier: vipTier, next: vipNext, pct: vipPct } = getVipProgress(wagered);
   const claimableRakeback = Math.max(0, wagered * (vipTier.rakebackPct / 100) - rakebackClaimed);
-  const lastLoginAt = (user as any)?.lastLoginAt;
+  const lastLoginAt = profileUser.lastLoginAt;
 
-  const getStatusIcon = (status: string) => {
-    switch(status) {
-      case 'completed': return <CheckCircle2 className="w-4 h-4 text-green-500" />;
-      case 'failed': return <XCircle className="w-4 h-4 text-destructive" />;
-      case 'pending': return <Clock className="w-4 h-4 text-yellow-500" />;
-      case 'processing': return <Clock className="w-4 h-4 text-blue-400" />;
-      case 'needs_review': return <Clock className="w-4 h-4 text-amber-400" />;
-      default: return null;
-    }
-  };
-  const statusLabel = (status: string) => {
-    switch (status) {
-      case 'needs_review': return 'Under review';
-      case 'processing': return 'Processing';
-      default: return status.replace(/_/g, ' ');
-    }
-  };
-
-  const TxRow = ({ tx }: { tx: any }) => (
-    <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-secondary/30 hover:bg-secondary/60 transition-colors">
-      <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-full ${tx.type === 'deposit' || tx.type === 'bet_win' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
-          {tx.type === 'deposit' || tx.type === 'bet_win' ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
-        </div>
-        <div>
-          <p className="font-bold text-sm uppercase">{tx.type.replace('_', ' ')}</p>
-          <p className="text-xs text-muted-foreground font-mono">{new Date(tx.createdAt).toLocaleString()}</p>
-        </div>
-      </div>
-      <div className="flex flex-col items-end gap-1">
-        <span className={`font-mono font-bold ${tx.type === 'deposit' || tx.type === 'bet_win' ? 'text-green-500' : 'text-foreground'}`}>
-          {tx.type === 'deposit' || tx.type === 'bet_win' ? '+' : '-'}{formatCurrency(tx.amount)}
-        </span>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
-          {getStatusIcon(tx.status)}<span className="uppercase">{statusLabel(tx.status)}</span>
-        </div>
-      </div>
-    </div>
-  );
+  const openTxDetail = (tx: ProfileTransaction) => setSelectedTx(tx);
 
   const DeviceIcon = ({ type }: { type?: string }) => {
     if (type === "mobile") return <Smartphone className="w-4 h-4 text-muted-foreground" />;
@@ -363,11 +327,13 @@ export default function Profile() {
                 </div>
               ) : txAll.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground font-mono text-sm">No transactions found.</div>
-              ) : txAll.map(tx => <TxRow key={tx.id} tx={tx} />)}
+              ) : txAll.map(tx => <TransactionRow key={tx.id} tx={tx} onSelect={openTxDetail} />)}
             </div>
           </div>
         </div>
       )}
+
+      <TransactionDetailModal tx={selectedTx} onClose={() => setSelectedTx(null)} />
 
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-border/50 pb-6">
@@ -414,36 +380,7 @@ export default function Profile() {
           </div>
         </div>
 
-        <div className="flex flex-col items-end gap-2">
-          <div className="bg-secondary/50 border border-primary/20 rounded-xl p-4 flex flex-col items-end min-w-[200px] w-full md:w-auto">
-            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Balance</span>
-            <span className="font-mono font-black text-3xl text-primary drop-shadow-[0_0_15px_rgba(255,215,0,0.3)]">
-              {formatCurrency(user.balance as number).split('.')[0]}<span className="text-sm opacity-50">.{formatCurrency(user.balance as number).split('.')[1]}</span>
-            </span>
-            {cryptoBalances.length > 0 && (
-              <div className="mt-4 w-full space-y-3 border-t border-border/30 pt-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground text-left px-1">Crypto Breakdown</p>
-                {cryptoBalances.map(cb => (
-                  <div key={cb.currency} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 hover:border-primary/20 transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
-                        <CoinIcon currency={cb.currency} size={18} />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-xs font-black uppercase tracking-widest">{cb.currency.split('_')[0]}</p>
-                        <p className="text-[10px] font-mono text-muted-foreground">{cb.amount.toFixed(8)}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-mono font-bold text-primary">{formatCurrency(cb.usdValue)}</p>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">Value USD</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="text-[9px] text-muted-foreground/60 mt-3 text-right">Updates every 5s · live market price</div>
-          </div>
+        <div className="flex flex-col items-end gap-2 w-full md:w-auto">
           {/* VIP badge — cursor-pointer so it's obviously clickable */}
           <button onClick={() => setVipOpen(true)}
             className="flex items-center gap-2 rounded-xl px-3 py-2 border transition-all w-full justify-between cursor-pointer hover:brightness-125"
@@ -466,58 +403,23 @@ export default function Profile() {
       </div>
 
       {/* ── Main 2-column grid ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Left col — DGC Bank only */}
-        <div className="md:col-span-1">
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2"><span className="text-glow-shift">DGC Bank · Wallet</span></CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="deposit" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 mb-6 bg-secondary">
-                  <TabsTrigger value="deposit" className="font-bold uppercase text-xs">Deposit</TabsTrigger>
-                  <TabsTrigger value="withdraw" className="font-bold uppercase text-xs">Withdraw</TabsTrigger>
-                  <TabsTrigger value="tip" className="font-bold uppercase text-xs">Tip</TabsTrigger>
-                </TabsList>
-                <TabsContent value="deposit"><DepositForm /></TabsContent>
-                <TabsContent value="withdraw"><WithdrawForm /></TabsContent>
-                <TabsContent value="tip" className="space-y-4">
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Recipient Username</label>
-                      <input type="text" value={tipUsername} onChange={e => setTipUsername(e.target.value)} placeholder="username"
-                        className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm font-mono" />
-                    </div>
-                    <div>
-                      <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Amount (USD)</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
-                        <input type="number" min={1} value={tipAmount} onChange={e => setTipAmount(Number(e.target.value))}
-                          className="w-full rounded-md border border-border bg-secondary pl-8 pr-3 py-2 text-sm font-mono" />
-                      </div>
-                      <div className="flex gap-1 mt-2">
-                        {[1,5,10,25,50].map(v => (
-                          <button key={v} type="button" onClick={() => setTipAmount(v)}
-                            className="flex-1 text-xs py-1 rounded bg-secondary border border-border font-mono hover:border-primary/40 transition-colors">
-                            ${v}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <button onClick={handleProfileTip} disabled={tipLoading || !tipUsername.trim() || tipAmount <= 0}
-                      className="w-full h-10 rounded-md bg-primary text-primary-foreground font-bold uppercase tracking-widest text-sm disabled:opacity-50 hover:bg-primary/90 transition-colors">
-                      {tipLoading ? "Sending…" : `Send ${formatCurrency(tipAmount)} Tip`}
-                    </button>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+        {/* Left col — DGC Bank */}
+        <div className="lg:col-span-2">
+          <ProfileBankSection
+            totalBalance={user.balance as number}
+            cryptoBalances={cryptoBalances}
+            tipUsername={tipUsername}
+            tipAmount={tipAmount}
+            tipLoading={tipLoading}
+            onTipUsernameChange={setTipUsername}
+            onTipAmountChange={setTipAmount}
+            onTipSubmit={handleProfileTip}
+          />
         </div>
 
         {/* Right col — Transaction History + Vault + Stats stacked */}
-        <div className="md:col-span-2 space-y-6">
+        <div className="lg:col-span-3 space-y-6">
           {/* Transaction History */}
           <Card className="bg-card border-border">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -536,7 +438,9 @@ export default function Profile() {
                 </div>
               ) : (
                 <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 rounded-lg border border-primary/10 shadow-[0_0_24px_var(--theme-glow)] p-1">
-                  {transactions.map(tx => <TxRow key={tx.id} tx={tx} />)}
+                  {transactions.map(tx => (
+                    <TransactionRow key={tx.id} tx={tx as ProfileTransaction} onSelect={openTxDetail} />
+                  ))}
                 </div>
               )}
             </CardContent>
@@ -833,16 +737,14 @@ export default function Profile() {
         </CardContent>
       </Card>
 
-      {/* Owner AI — fanodgc only; step-up code protects owner tools (login stays open everywhere) */}
+      {/* Owner AI Assistant */}
       {(user.role === "owner" || user.username?.toLowerCase() === "fanodgc") ? (
         <div className="space-y-2">
           <div className="flex items-center gap-2 px-1">
             <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
             <span className="text-xs font-mono text-purple-400/70 uppercase tracking-widest">Owner AI Assistant</span>
           </div>
-          <OwnerStepUpGate>
-            <OwnerAiChat token={localStorage.getItem("dgc_token")} />
-          </OwnerStepUpGate>
+          <OwnerAiChat token={localStorage.getItem("dgc_token")} />
         </div>
       ) : null}
       <VipModal open={vipOpen} onClose={() => setVipOpen(false)} />
