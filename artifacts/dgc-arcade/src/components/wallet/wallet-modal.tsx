@@ -10,7 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
 import { ExternalLink, Send, Wallet, ArrowDownToLine, ArrowUpFromLine, Lock, Unlock, Eye, EyeOff, RefreshCw } from "lucide-react";
-import { CoinIcon, CURRENCIES } from "./coin-icon";
+import { CoinIcon, CURRENCIES, getCurrencyDisplayLabel } from "./coin-icon";
 import { getApiUrl } from "@/lib/api-fetch";
 import { useWagerRequirement } from "@/hooks/use-wager-requirement";
 import { WithdrawPolicyNotice } from "./withdraw-policy-notice";
@@ -312,9 +312,12 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const defaultTab = isCreator ? "vault" : "deposit";
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md w-full bg-card border-border/60 backdrop-blur-xl p-0 overflow-hidden max-h-[100dvh] sm:max-h-[90vh] mx-0 sm:mx-auto rounded-none sm:rounded-2xl flex flex-col">
-        {/* Header with Close Button */}
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        hideClose
+        className="max-w-md w-full bg-card border-border/60 backdrop-blur-xl p-0 overflow-hidden max-h-[100dvh] sm:max-h-[90vh] mx-0 sm:mx-auto rounded-none sm:rounded-2xl flex flex-col"
+      >
+        {/* Header with single Close Button */}
         <div className="p-4 sm:p-6 pb-0 border-b border-border/40 flex items-center justify-between">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-display font-black text-lg sm:text-xl uppercase tracking-widest">
@@ -404,7 +407,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                     }`}
                   >
                     <CoinIcon currency={c.value} size={16} />
-                    <span>{c.name === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
+                    <span>{c.network ? "USDT" : c.value.split("_")[0]}</span>
                     {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground">{c.network}</span>}
                   </button>
                 ))}
@@ -558,7 +561,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                       }
                     >
                       <CoinIcon currency={c.value} size={16} />
-                      <span>{c.name === "Tether USDT" ? "USDT" : c.value.split("_")[0]}</span>
+                      <span>{c.network ? "USDT" : c.value.split("_")[0]}</span>
                       {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground">{c.network}</span>}
                     </button>
                   );
@@ -568,7 +571,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
               {/* Max for selected coin */}
               {hasBalance && maxWithdrawForCoin > 0 && (
                 <div className="flex items-center justify-between text-xs text-muted-foreground bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
-                  <span>Max for {withdrawCurrency.split("_")[0]}:</span>
+                  <span>Max for {getCurrencyDisplayLabel(withdrawCurrency)}:</span>
                   <div className="text-right">
                     <span className="text-primary font-bold font-mono">{formatCurrency(maxWithdrawForCoin)}</span>
                     {hasCryptoBalances && coinData.cryptoAmounts[withdrawCurrency] && (

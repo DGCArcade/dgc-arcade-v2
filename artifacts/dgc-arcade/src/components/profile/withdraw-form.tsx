@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
-import { CoinIcon, CURRENCIES } from "@/components/wallet/coin-icon";
+import { CoinIcon, CURRENCIES, getCurrencyDisplayLabel } from "@/components/wallet/coin-icon";
 import { formatCurrency } from "@/lib/format";
 import { RefreshCw, ShieldAlert, CheckCircle2, Mail } from "lucide-react";
 import { WithdrawalTracker } from "@/components/profile/withdrawal-tracker";
@@ -327,9 +327,9 @@ export function WithdrawForm() {
                             : "border-border bg-secondary/50 hover:border-primary/40"
                         }`}
                       >
-                        <CoinIcon currency={c.value} className="w-5 h-5" />
+                        <CoinIcon currency={c.value} size={20} />
                         <div className="text-left">
-                          <div className="text-[10px] font-bold leading-none">{c.name}</div>
+                          <div className="text-[10px] font-bold leading-none">{getCurrencyDisplayLabel(c.value)}</div>
                           <div className="text-[9px] text-muted-foreground font-mono">
                             {formatCurrency(coinData.balances[c.value] ?? 0)}
                           </div>

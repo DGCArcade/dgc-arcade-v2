@@ -89,6 +89,7 @@ transactionsRouter.get("/", requireAuth, async (req, res) => {
         status: t.status,
         txHash: t.txHash,
         address: t.address,
+        plisioTrackId: t.plisioTrackId ?? null,
         createdAt: t.createdAt.toISOString(),
       }))
     );
@@ -834,9 +835,9 @@ transactionsRouter.post("/withdraw", requireAuth, requireLocationVerified, async
 
     // Must wager at least the greater of signup bonus or accumulated wager requirement (deposits).
     const totalWagered = parseFloat(String(user.totalWageredAmount ?? 0));
-    const signupBonus = parseFloat(String(user.signupBonus ?? 100));
+    const signupBonus = parseFloat(String(user.signupBonus ?? 0));
     const dbWagerReq = parseFloat(String(user.wagerRequirement ?? 0));
-    const wagerRequirement = Math.max(signupBonus, dbWagerReq);
+    const wagerRequirement = Math.max(signupBonus || 0, dbWagerReq || 0);
     const wagerProgress = totalWagered / wagerRequirement;
     const wagerPercentage = Math.min(100, Math.round(wagerProgress * 100));
 
@@ -1077,6 +1078,7 @@ transactionsRouter.get("/:id", requireAuth, async (req, res) => {
       status: t.status,
       txHash: t.txHash,
       address: t.address,
+      plisioTrackId: t.plisioTrackId ?? null,
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString(),
     });

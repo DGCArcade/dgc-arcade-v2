@@ -45,7 +45,7 @@ async function formatUser(user: typeof usersTable.$inferSelect) {
     lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
     telegramUsername: user.telegramUsername ?? null,
     rakebackClaimed: parseFloat(user.rakebackClaimed ?? "0"),
-    signupBonus: parseFloat(user.signupBonus ?? "100"),
+    signupBonus: parseFloat(user.signupBonus ?? "0"),
     bonusWagered: parseFloat(user.bonusWagered ?? "0"),
     email: user.email ?? null,
     emailVerified: user.emailVerified,

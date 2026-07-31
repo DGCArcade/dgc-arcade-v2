@@ -2,6 +2,7 @@ import { useState } from "react";
 import { X, ChevronRight, Crown, Zap, Gift, Star, TrendingUp, MessageCircle, Lock } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import { DailyBonusModal } from "@/components/ui/daily-bonus-modal";
 import { getApiUrl } from "@/lib/api-fetch";
 
@@ -31,14 +32,15 @@ export function getVipProgress(totalWagered: number) {
 interface VipModalProps { open: boolean; onClose: () => void; }
 
 export function VipModal({ open, onClose }: VipModalProps) {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const { toast } = useToast();
   const [claiming, setClaiming] = useState(false);
   const [claimMsg, setClaimMsg] = useState<string | null>(null);
   const [tab, setTab] = useState<"overview" | "tiers">("overview");
   const [bonusOpen, setBonusOpen] = useState(false);
 
-  const wagered = (user as any)?.totalWageredAmount ?? 0;
-  const rakebackClaimed = (user as any)?.rakebackClaimed ?? 0;
+  const wagered = Number((user as { totalWageredAmount?: number | string } | null)?.totalWageredAmount ?? 0);
+  const rakebackClaimed = Number((user as { rakebackClaimed?: number | string } | null)?.rakebackClaimed ?? 0);
   const { tier, next, pct, remaining } = getVipProgress(wagered);
   const claimable = Math.max(0, wagered * (tier.rakebackPct / 100) - rakebackClaimed);
 
@@ -47,10 +49,21 @@ export function VipModal({ open, onClose }: VipModalProps) {
     try {
       const token = localStorage.getItem("dgc_token");
       const res = await fetch(getApiUrl("/api/users/me/rakeback/claim"), { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-      const d = await res.json();
+      const d = await res.json() as { error?: string; claimedAmount?: number; claimed?: number; success?: boolean };
       if (!res.ok) { setClaimMsg(d.error ?? "Claim failed"); return; }
-      setClaimMsg(`✅ Claimed ${formatCurrency(d.claimed)}!`);
-      setTimeout(() => window.location.reload(), 1200);
+      // API returns claimedAmount (historical clients also sent claimed)
+      const claimed = Number(d.claimedAmount ?? d.claimed ?? 0);
+      const msg = `Claimed ${formatCurrency(claimed)}!`;
+      setClaimMsg(msg);
+      toast({
+        title: "Rakeback claimed",
+        description: `${formatCurrency(claimed)} was added to your balance.`,
+      });
+      refreshUser();
+      setTimeout(() => {
+        refreshUser();
+        onClose();
+      }, 1600);
     } catch { setClaimMsg("Network error"); }
     finally { setClaiming(false); }
   }

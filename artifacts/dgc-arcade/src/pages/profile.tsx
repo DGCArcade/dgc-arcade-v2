@@ -6,13 +6,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DepositForm } from "@/components/profile/deposit-form";
 import { WithdrawForm } from "@/components/profile/withdraw-form";
 import { useLocation } from "wouter";
-import { ArrowDownLeft, ArrowUpRight, Clock, CheckCircle2, XCircle, Landmark, RefreshCw, Users, Copy, CheckCheck, TrendingUp, Shield, Save, MessageCircle, Zap, Lock, Monitor, Smartphone, Tablet, Globe, LogOut, X, ChevronRight } from "lucide-react";
-import { CoinIcon } from "@/components/wallet/coin-icon";
+import { ArrowDownLeft, ArrowUpRight, Clock, CheckCircle2, XCircle, Landmark, RefreshCw, Users, Copy, CheckCheck, TrendingUp, Shield, Save, MessageCircle, Zap, Lock, Monitor, Smartphone, Tablet, Globe, LogOut, X, ChevronRight, ExternalLink, FileText, Wallet } from "lucide-react";
+import { CoinIcon, getCurrencyDisplayLabel, getCurrencyMeta } from "@/components/wallet/coin-icon";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { VipModal, getVipProgress } from "@/components/vip/vip-modal";
 import { OwnerAiChat } from "@/components/owner/owner-ai-chat";
-import { OwnerStepUpGate } from "@/components/owner/owner-stepup-gate";
+import { WithdrawPolicyNotice } from "@/components/wallet/withdraw-policy-notice";
 import { getApiUrl } from "@/lib/api-fetch";
+
+type TxFilter = "all" | "deposit" | "withdrawal" | "other";
+
+function plisioInvoiceUrl(trackId: string) {
+  return `https://plisio.net/invoice/${trackId}`;
+}
 
 export default function Profile() {
   const { user, isAuthenticated, isLoading, cryptoBalances } = useAuth();
@@ -54,6 +60,8 @@ export default function Profile() {
   const [txAllOpen, setTxAllOpen] = useState(false);
   const [txAll, setTxAll] = useState<any[]>([]);
   const [txAllLoading, setTxAllLoading] = useState(false);
+  const [txFilter, setTxFilter] = useState<TxFilter>("all");
+  const [txAllFilter, setTxAllFilter] = useState<TxFilter>("all");
 
   // ── Provably Fair Verification Tool State ──
   const [vServerSeed, setVServerSeed] = useState("");
@@ -254,27 +262,98 @@ export default function Profile() {
     }
   };
 
-  const TxRow = ({ tx }: { tx: any }) => (
-    <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-secondary/30 hover:bg-secondary/60 transition-colors">
-      <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-full ${tx.type === 'deposit' || tx.type === 'bet_win' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
-          {tx.type === 'deposit' || tx.type === 'bet_win' ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
-        </div>
-        <div>
-          <p className="font-bold text-sm uppercase">{tx.type.replace('_', ' ')}</p>
-          <p className="text-xs text-muted-foreground font-mono">{new Date(tx.createdAt).toLocaleString()}</p>
-        </div>
-      </div>
-      <div className="flex flex-col items-end gap-1">
-        <span className={`font-mono font-bold ${tx.type === 'deposit' || tx.type === 'bet_win' ? 'text-green-500' : 'text-foreground'}`}>
-          {tx.type === 'deposit' || tx.type === 'bet_win' ? '+' : '-'}{formatCurrency(tx.amount)}
-        </span>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
-          {getStatusIcon(tx.status)}<span className="uppercase">{statusLabel(tx.status)}</span>
-        </div>
-      </div>
+  const matchesTxFilter = (tx: { type?: string }, filter: TxFilter) => {
+    if (filter === "all") return true;
+    if (filter === "deposit") return tx.type === "deposit";
+    if (filter === "withdrawal") return tx.type === "withdrawal";
+    return tx.type !== "deposit" && tx.type !== "withdrawal";
+  };
+
+  const filteredTransactions = useMemo(
+    () => (transactions ?? []).filter((tx) => matchesTxFilter(tx, txFilter)),
+    [transactions, txFilter],
+  );
+
+  const filteredTxAll = useMemo(
+    () => txAll.filter((tx) => matchesTxFilter(tx, txAllFilter)),
+    [txAll, txAllFilter],
+  );
+
+  const TxFilterChips = ({
+    value,
+    onChange,
+  }: {
+    value: TxFilter;
+    onChange: (f: TxFilter) => void;
+  }) => (
+    <div className="flex flex-wrap gap-1.5">
+      {([
+        ["all", "All"],
+        ["deposit", "Deposits"],
+        ["withdrawal", "Withdrawals"],
+        ["other", "Other"],
+      ] as const).map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => onChange(id)}
+          className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border transition-colors ${
+            value === id
+              ? "border-primary bg-primary/15 text-primary"
+              : "border-border/50 bg-secondary/40 text-muted-foreground hover:border-primary/40"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   );
+
+  const TxRow = ({ tx }: { tx: any }) => {
+    const isCredit = tx.type === "deposit" || tx.type === "bet_win";
+    const invoiceId = tx.plisioTrackId as string | null | undefined;
+    const canOpenInvoice = !!invoiceId && (tx.type === "deposit" || tx.type === "withdrawal");
+    const currencyLabel = tx.currency ? getCurrencyDisplayLabel(String(tx.currency)) : null;
+
+    return (
+      <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border/50 bg-secondary/30 hover:bg-secondary/60 transition-colors">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={`p-2 rounded-full shrink-0 ${isCredit ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}`}>
+            {isCredit ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+          </div>
+          <div className="min-w-0">
+            <p className="font-bold text-sm uppercase truncate">{String(tx.type).replace(/_/g, " ")}</p>
+            <p className="text-xs text-muted-foreground font-mono">{new Date(tx.createdAt).toLocaleString()}</p>
+            {currencyLabel && (
+              <p className="text-[10px] text-muted-foreground/80 font-mono mt-0.5 flex items-center gap-1">
+                {tx.currency && <CoinIcon currency={String(tx.currency)} size={12} />}
+                {currencyLabel}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className={`font-mono font-bold ${isCredit ? "text-green-500" : "text-foreground"}`}>
+            {isCredit ? "+" : "-"}{formatCurrency(tx.amount)}
+          </span>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
+            {getStatusIcon(tx.status)}<span className="uppercase">{statusLabel(tx.status)}</span>
+          </div>
+          {canOpenInvoice && (
+            <button
+              type="button"
+              onClick={() => window.open(plisioInvoiceUrl(invoiceId!), "_blank", "noopener,noreferrer")}
+              className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-colors"
+            >
+              <FileText className="w-3 h-3" />
+              {tx.type === "withdrawal" ? "Payout invoice" : "View invoice"}
+              <ExternalLink className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const DeviceIcon = ({ type }: { type?: string }) => {
     if (type === "mobile") return <Smartphone className="w-4 h-4 text-muted-foreground" />;
@@ -350,9 +429,12 @@ export default function Profile() {
       {txAllOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setTxAllOpen(false)}>
           <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-border">
-              <h2 className="font-display font-black uppercase tracking-widest text-lg">Full Transaction History</h2>
-              <button onClick={() => setTxAllOpen(false)} className="p-2 rounded-lg hover:bg-secondary transition-colors">
+            <div className="flex items-center justify-between p-5 border-b border-border gap-3">
+              <div className="space-y-2 min-w-0">
+                <h2 className="font-display font-black uppercase tracking-widest text-lg">Full Transaction History</h2>
+                <TxFilterChips value={txAllFilter} onChange={setTxAllFilter} />
+              </div>
+              <button onClick={() => setTxAllOpen(false)} className="p-2 rounded-lg hover:bg-secondary transition-colors shrink-0">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -361,96 +443,73 @@ export default function Profile() {
                 <div className="space-y-2">
                   {[...Array(8)].map((_,i) => <div key={i} className="h-14 bg-secondary/50 rounded-lg animate-pulse" />)}
                 </div>
-              ) : txAll.length === 0 ? (
+              ) : filteredTxAll.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground font-mono text-sm">No transactions found.</div>
-              ) : txAll.map(tx => <TxRow key={tx.id} tx={tx} />)}
+              ) : filteredTxAll.map(tx => <TxRow key={tx.id} tx={tx} />)}
             </div>
           </div>
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-border/50 pb-6">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-secondary border-2 border-primary flex items-center justify-center font-display font-black text-3xl text-primary">
-            {user.username.charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <h1 className="font-display font-black text-3xl uppercase tracking-widest">{user.username}</h1>
-            <p className="text-muted-foreground font-mono text-sm">Joined {new Date(user.createdAt).toLocaleDateString()}</p>
-            {lastLoginAt ? (
-              <button
-                onClick={openDeviceHistory}
-                className="flex items-center gap-1 text-muted-foreground/70 hover:text-primary font-mono text-xs mt-0.5 transition-colors cursor-pointer group"
-              >
-                <Clock className="w-3 h-3 group-hover:text-primary transition-colors" />
-                Last login: {new Date(lastLoginAt).toLocaleString()}
-                <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
-            ) : (
-              <button onClick={openDeviceHistory} className="text-muted-foreground/50 font-mono text-xs mt-0.5 hover:text-primary transition-colors cursor-pointer">
-                View login history
-              </button>
-            )}
-            {/* Telegram field */}
-            <div className="flex items-center gap-2 mt-2">
-              <MessageCircle className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
-              <input
-                type="text" value={telegramInput}
-                onChange={e => setTelegramInput(e.target.value)}
-                placeholder="@telegram_username"
-                autoComplete="off"
-                name={`tg-${Math.random().toString(36).slice(2, 7)}`}
-                className="bg-transparent border-b border-border/50 focus:border-sky-400 outline-none font-mono text-xs text-muted-foreground focus:text-foreground transition-colors w-36 pb-0.5"
-              />
-              <button onClick={saveTelegram} disabled={telegramSaving}
-                className="p-1 rounded text-sky-400 hover:text-sky-300 transition-colors disabled:opacity-40" title="Save Telegram">
-                <Save className="w-3 h-3" />
-              </button>
-              {telegramMsg && (
-                <span className={`text-[10px] font-mono ${telegramMsg.ok ? "text-green-400" : "text-red-400"}`}>{telegramMsg.text}</span>
+      {/* Profile header */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-secondary/80 via-card to-background p-5 sm:p-6">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.07]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 12% 20%, var(--primary) 0%, transparent 42%), radial-gradient(circle at 88% 0%, #22d3ee 0%, transparent 36%)",
+          }}
+        />
+        <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-secondary border border-primary/40 flex items-center justify-center font-display font-black text-3xl text-primary shadow-[0_0_24px_rgba(255,215,0,0.12)]">
+              {user.username.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground mb-1">DGC Member Profile</p>
+              <h1 className="font-display font-black text-3xl uppercase tracking-widest">{user.username}</h1>
+              <p className="text-muted-foreground font-mono text-sm">Joined {new Date(user.createdAt).toLocaleDateString()}</p>
+              {lastLoginAt ? (
+                <button
+                  onClick={openDeviceHistory}
+                  className="flex items-center gap-1 text-muted-foreground/70 hover:text-primary font-mono text-xs mt-0.5 transition-colors cursor-pointer group"
+                >
+                  <Clock className="w-3 h-3 group-hover:text-primary transition-colors" />
+                  Last login: {new Date(lastLoginAt).toLocaleString()}
+                  <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              ) : (
+                <button onClick={openDeviceHistory} className="text-muted-foreground/50 font-mono text-xs mt-0.5 hover:text-primary transition-colors cursor-pointer">
+                  View login history
+                </button>
               )}
+              <div className="flex items-center gap-2 mt-2">
+                <MessageCircle className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+                <input
+                  type="text" value={telegramInput}
+                  onChange={e => setTelegramInput(e.target.value)}
+                  placeholder="@telegram_username"
+                  autoComplete="off"
+                  name={`tg-${Math.random().toString(36).slice(2, 7)}`}
+                  className="bg-transparent border-b border-border/50 focus:border-sky-400 outline-none font-mono text-xs text-muted-foreground focus:text-foreground transition-colors w-36 pb-0.5"
+                />
+                <button onClick={saveTelegram} disabled={telegramSaving}
+                  className="p-1 rounded text-sky-400 hover:text-sky-300 transition-colors disabled:opacity-40" title="Save Telegram">
+                  <Save className="w-3 h-3" />
+                </button>
+                {telegramMsg && (
+                  <span className={`text-[10px] font-mono ${telegramMsg.ok ? "text-green-400" : "text-red-400"}`}>{telegramMsg.text}</span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="flex flex-col items-end gap-2">
-          <div className="bg-secondary/50 border border-primary/20 rounded-xl p-4 flex flex-col items-end min-w-[200px] w-full md:w-auto">
-            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Balance</span>
-            <span className="font-mono font-black text-3xl text-primary drop-shadow-[0_0_15px_rgba(255,215,0,0.3)]">
-              {formatCurrency(user.balance as number).split('.')[0]}<span className="text-sm opacity-50">.{formatCurrency(user.balance as number).split('.')[1]}</span>
-            </span>
-            {cryptoBalances.length > 0 && (
-              <div className="mt-4 w-full space-y-3 border-t border-border/30 pt-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground text-left px-1">Crypto Breakdown</p>
-                {cryptoBalances.map(cb => (
-                  <div key={cb.currency} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 hover:border-primary/20 transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
-                        <CoinIcon currency={cb.currency} size={18} />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-xs font-black uppercase tracking-widest">{cb.currency.split('_')[0]}</p>
-                        <p className="text-[10px] font-mono text-muted-foreground">{cb.amount.toFixed(8)}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-mono font-bold text-primary">{formatCurrency(cb.usdValue)}</p>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">Value USD</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="text-[9px] text-muted-foreground/60 mt-3 text-right">Updates every 5s · live market price</div>
-          </div>
-          {/* VIP badge — cursor-pointer so it's obviously clickable */}
           <button onClick={() => setVipOpen(true)}
-            className="flex items-center gap-2 rounded-xl px-3 py-2 border transition-all w-full justify-between cursor-pointer hover:brightness-125"
-            style={{ borderColor: vipTier.color + "50", background: vipTier.color + "10" }}>
+            className="flex items-center gap-3 rounded-xl px-4 py-3 border transition-all w-full md:w-auto md:min-w-[240px] justify-between cursor-pointer hover:brightness-125"
+            style={{ borderColor: vipTier.color + "50", background: vipTier.color + "12" }}>
             <div className="flex items-center gap-2">
               <span className="text-lg">{vipTier.icon}</span>
-              <div>
+              <div className="text-left">
                 <div className="text-[10px] font-black uppercase tracking-widest" style={{ color: vipTier.color }}>{vipTier.name}</div>
                 <div className="text-[9px] text-muted-foreground font-mono">{vipTier.rakebackPct}% rakeback</div>
               </div>
@@ -465,17 +524,67 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* ── Main 2-column grid ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Left col — DGC Bank only */}
-        <div className="md:col-span-1">
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2"><span className="text-glow-shift">DGC Bank · Wallet</span></CardTitle>
-            </CardHeader>
-            <CardContent>
+      {/* ── DGC Bank (balance + crypto + actions) ── */}
+      <Card className="bg-card border-border overflow-hidden">
+        <div className="border-b border-border/50 bg-gradient-to-r from-primary/10 via-transparent to-cyan-500/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2">
+            <Wallet className="w-5 h-5 text-primary" />
+            <span className="text-glow-shift">DGC Bank · Wallet</span>
+          </CardTitle>
+          <div className="text-right">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Total Balance</div>
+            <div className="font-mono font-black text-3xl text-primary">
+              {formatCurrency(user.balance as number).split(".")[0]}
+              <span className="text-sm opacity-50">.{formatCurrency(user.balance as number).split(".")[1]}</span>
+            </div>
+          </div>
+        </div>
+        <CardContent className="p-5 space-y-5">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+            <div className="lg:col-span-2 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Crypto Breakdown</p>
+                <span className="text-[9px] text-muted-foreground/60 font-mono">Live market · auto refresh</span>
+              </div>
+              {cryptoBalances.length > 0 ? (
+                <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+                  {cryptoBalances.map((cb) => {
+                    const meta = getCurrencyMeta(cb.currency);
+                    return (
+                      <div key={cb.currency} className="flex items-center justify-between p-3 rounded-xl bg-secondary/40 border border-border/40 hover:border-primary/25 transition-all">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-lg bg-background/60 flex items-center justify-center border border-border/50">
+                            <CoinIcon currency={cb.currency} size={20} />
+                          </div>
+                          <div className="text-left min-w-0">
+                            <p className="text-xs font-black uppercase tracking-widest truncate">
+                              {getCurrencyDisplayLabel(cb.currency)}
+                            </p>
+                            <p className="text-[10px] font-mono text-muted-foreground">{cb.amount.toFixed(8)}</p>
+                            {meta.network && (
+                              <p className="text-[9px] text-muted-foreground/70 mt-0.5">Network: {meta.network}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-xs font-mono font-bold text-primary">{formatCurrency(cb.usdValue)}</p>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">USD</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border/60 bg-secondary/20 p-6 text-center text-sm text-muted-foreground font-mono">
+                  No crypto balances yet — deposit to fund your DGC Bank.
+                </div>
+              )}
+              <WithdrawPolicyNotice compact />
+            </div>
+
+            <div className="lg:col-span-3">
               <Tabs defaultValue="deposit" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 mb-6 bg-secondary">
+                <TabsList className="grid w-full grid-cols-3 mb-5 bg-secondary">
                   <TabsTrigger value="deposit" className="font-bold uppercase text-xs">Deposit</TabsTrigger>
                   <TabsTrigger value="withdraw" className="font-bold uppercase text-xs">Withdraw</TabsTrigger>
                   <TabsTrigger value="tip" className="font-bold uppercase text-xs">Tip</TabsTrigger>
@@ -512,124 +621,130 @@ export default function Profile() {
                   </div>
                 </TabsContent>
               </Tabs>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Right col — Transaction History + Vault + Stats stacked */}
-        <div className="md:col-span-2 space-y-6">
-          {/* Transaction History */}
-          <Card className="bg-card border-border">
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="font-display uppercase tracking-widest text-lg">Transaction History</CardTitle>
-              <button
-                onClick={openAllTransactions}
-                className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-bold uppercase tracking-wider transition-colors cursor-pointer"
-              >
-                View All <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </CardHeader>
-            <CardContent>
-              {!transactions?.length ? (
-                <div className="text-center py-10 text-muted-foreground font-mono text-sm border border-dashed border-border rounded-lg bg-secondary/20">
-                  No transactions found.
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 rounded-lg border border-primary/10 shadow-[0_0_24px_var(--theme-glow)] p-1">
-                  {transactions.map(tx => <TxRow key={tx.id} tx={tx} />)}
-                </div>
+      {/* Transaction History */}
+      <Card className="bg-card border-border">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3">
+          <CardTitle className="font-display uppercase tracking-widest text-lg">Transaction History</CardTitle>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <TxFilterChips value={txFilter} onChange={setTxFilter} />
+            <button
+              onClick={openAllTransactions}
+              className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-bold uppercase tracking-wider transition-colors cursor-pointer"
+            >
+              View All <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!transactions?.length ? (
+            <div className="text-center py-10 text-muted-foreground font-mono text-sm border border-dashed border-border rounded-lg bg-secondary/20">
+              No transactions found.
+            </div>
+          ) : filteredTransactions.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground font-mono text-sm border border-dashed border-border rounded-lg bg-secondary/20">
+              No {txFilter === "other" ? "other" : txFilter} transactions in this view.
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1 rounded-lg border border-primary/10 shadow-[0_0_24px_var(--theme-glow)] p-1">
+              {filteredTransactions.map(tx => <TxRow key={tx.id} tx={tx} />)}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Vault */}
+        <Card className="bg-card border-border border-cyan-500/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2">
+              <Shield className="w-5 h-5 text-cyan-400" />
+              <span className="text-cyan-400">Vault</span>
+              {vaultBalance !== null && (
+                <span className="ml-auto font-mono font-black text-base text-cyan-400">{formatCurrency(vaultBalance)}</span>
               )}
-            </CardContent>
-          </Card>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-xs text-muted-foreground">Lock funds for safekeeping. Withdrawal requires your account password.</p>
+            <Tabs defaultValue="deposit" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 bg-secondary mb-3">
+                <TabsTrigger value="deposit" className="font-bold uppercase text-xs">Deposit</TabsTrigger>
+                <TabsTrigger value="withdraw" className="font-bold uppercase text-xs">Withdraw</TabsTrigger>
+              </TabsList>
+              <TabsContent value="deposit" className="space-y-2">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
+                  <input type="number" min={0.01} step={0.01} value={vaultDepositAmt}
+                    onChange={e => setVaultDepositAmt(e.target.value)} placeholder="0.00"
+                    className="w-full rounded-md border border-border bg-secondary pl-8 pr-3 py-2 text-sm font-mono" />
+                </div>
+                <button onClick={handleVaultDeposit} disabled={vaultLoading || !vaultDepositAmt}
+                  className="w-full h-9 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white font-bold uppercase tracking-widest text-xs disabled:opacity-50 transition-colors">
+                  {vaultLoading ? "…" : "Lock in Vault"}
+                </button>
+              </TabsContent>
+              <TabsContent value="withdraw" className="space-y-2">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
+                  <input type="number" min={0.01} step={0.01} value={vaultWithdrawAmt}
+                    onChange={e => setVaultWithdrawAmt(e.target.value)} placeholder="0.00"
+                    className="w-full rounded-md border border-border bg-secondary pl-8 pr-3 py-2 text-sm font-mono" />
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <input type="password" value={vaultPassword} onChange={e => setVaultPassword(e.target.value)}
+                    placeholder="Account password"
+                    className="w-full rounded-md border border-border bg-secondary pl-9 pr-3 py-2 text-sm font-mono" />
+                </div>
+                <button onClick={handleVaultWithdraw} disabled={vaultLoading || !vaultWithdrawAmt || !vaultPassword}
+                  className="w-full h-9 rounded-md bg-secondary border border-cyan-500/40 text-cyan-400 font-bold uppercase tracking-widest text-xs disabled:opacity-50 hover:border-cyan-500 transition-colors">
+                  {vaultLoading ? "…" : "Release from Vault"}
+                </button>
+              </TabsContent>
+            </Tabs>
+            {vaultMsg && (
+              <p className={`text-xs font-mono ${vaultMsg.ok ? "text-green-400" : "text-red-400"}`}>{vaultMsg.text}</p>
+            )}
+          </CardContent>
+        </Card>
 
-          {/* Vault */}
-          <Card className="bg-card border-border border-cyan-500/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="font-display uppercase tracking-widest text-lg flex items-center gap-2">
-                <Shield className="w-5 h-5 text-cyan-400" />
-                <span className="text-cyan-400">Vault</span>
-                {vaultBalance !== null && (
-                  <span className="ml-auto font-mono font-black text-base text-cyan-400">{formatCurrency(vaultBalance)}</span>
+        {/* Stats */}
+        <Card className="bg-card border-border">
+          <CardHeader><CardTitle className="font-display uppercase tracking-widest text-lg">Stats</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between border-b border-border/50 pb-2">
+              <span className="text-muted-foreground text-sm font-medium">Total Bets</span>
+              <span className="font-mono font-bold">{user.totalBets || 0}</span>
+            </div>
+            <div className="flex justify-between border-b border-border/50 pb-2">
+              <span className="text-muted-foreground text-sm font-medium">Total Won</span>
+              <span className="font-mono font-bold text-primary">{formatCurrency(user.totalWon || 0)}</span>
+            </div>
+            <div className="flex justify-between border-b border-border/50 pb-2">
+              <span className="text-muted-foreground text-sm font-medium">Total Wagered</span>
+              <span className="font-mono font-bold">{formatCurrency(wagered)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground text-sm font-medium flex items-center gap-1">
+                <Zap className="w-3.5 h-3.5 text-primary" /> Rakeback
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-bold text-primary">{formatCurrency(claimableRakeback)}</span>
+                {claimableRakeback >= 0.01 && (
+                  <button onClick={() => setVipOpen(true)}
+                    className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full font-bold uppercase hover:bg-primary/30 transition-colors">
+                    Claim
+                  </button>
                 )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-xs text-muted-foreground">Lock funds for safekeeping. Withdrawal requires your account password.</p>
-              <Tabs defaultValue="deposit" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 bg-secondary mb-3">
-                  <TabsTrigger value="deposit" className="font-bold uppercase text-xs">Deposit</TabsTrigger>
-                  <TabsTrigger value="withdraw" className="font-bold uppercase text-xs">Withdraw</TabsTrigger>
-                </TabsList>
-                <TabsContent value="deposit" className="space-y-2">
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
-                    <input type="number" min={0.01} step={0.01} value={vaultDepositAmt}
-                      onChange={e => setVaultDepositAmt(e.target.value)} placeholder="0.00"
-                      className="w-full rounded-md border border-border bg-secondary pl-8 pr-3 py-2 text-sm font-mono" />
-                  </div>
-                  <button onClick={handleVaultDeposit} disabled={vaultLoading || !vaultDepositAmt}
-                    className="w-full h-9 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white font-bold uppercase tracking-widest text-xs disabled:opacity-50 transition-colors">
-                    {vaultLoading ? "…" : "Lock in Vault"}
-                  </button>
-                </TabsContent>
-                <TabsContent value="withdraw" className="space-y-2">
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
-                    <input type="number" min={0.01} step={0.01} value={vaultWithdrawAmt}
-                      onChange={e => setVaultWithdrawAmt(e.target.value)} placeholder="0.00"
-                      className="w-full rounded-md border border-border bg-secondary pl-8 pr-3 py-2 text-sm font-mono" />
-                  </div>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                    <input type="password" value={vaultPassword} onChange={e => setVaultPassword(e.target.value)}
-                      placeholder="Account password"
-                      className="w-full rounded-md border border-border bg-secondary pl-9 pr-3 py-2 text-sm font-mono" />
-                  </div>
-                  <button onClick={handleVaultWithdraw} disabled={vaultLoading || !vaultWithdrawAmt || !vaultPassword}
-                    className="w-full h-9 rounded-md bg-secondary border border-cyan-500/40 text-cyan-400 font-bold uppercase tracking-widest text-xs disabled:opacity-50 hover:border-cyan-500 transition-colors">
-                    {vaultLoading ? "…" : "Release from Vault"}
-                  </button>
-                </TabsContent>
-              </Tabs>
-              {vaultMsg && (
-                <p className={`text-xs font-mono ${vaultMsg.ok ? "text-green-400" : "text-red-400"}`}>{vaultMsg.text}</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Stats */}
-          <Card className="bg-card border-border">
-            <CardHeader><CardTitle className="font-display uppercase tracking-widest text-lg">Stats</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground text-sm font-medium">Total Bets</span>
-                <span className="font-mono font-bold">{user.totalBets || 0}</span>
               </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground text-sm font-medium">Total Won</span>
-                <span className="font-mono font-bold text-primary">{formatCurrency(user.totalWon || 0)}</span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground text-sm font-medium">Total Wagered</span>
-                <span className="font-mono font-bold">{formatCurrency(wagered)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground text-sm font-medium flex items-center gap-1">
-                  <Zap className="w-3.5 h-3.5 text-primary" /> Rakeback
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-primary">{formatCurrency(claimableRakeback)}</span>
-                  {claimableRakeback >= 0.01 && (
-                    <button onClick={() => setVipOpen(true)}
-                      className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full font-bold uppercase hover:bg-primary/30 transition-colors">
-                      Claim
-                    </button>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Referral Program Widget */}
@@ -833,16 +948,14 @@ export default function Profile() {
         </CardContent>
       </Card>
 
-      {/* Owner AI — fanodgc only; step-up code protects owner tools (login stays open everywhere) */}
+      {/* Owner AI — fanodgc / owner only (no email unlock gate) */}
       {(user.role === "owner" || user.username?.toLowerCase() === "fanodgc") ? (
         <div className="space-y-2">
           <div className="flex items-center gap-2 px-1">
             <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
             <span className="text-xs font-mono text-purple-400/70 uppercase tracking-widest">Owner AI Assistant</span>
           </div>
-          <OwnerStepUpGate>
-            <OwnerAiChat token={localStorage.getItem("dgc_token")} />
-          </OwnerStepUpGate>
+          <OwnerAiChat token={localStorage.getItem("dgc_token")} />
         </div>
       ) : null}
       <VipModal open={vipOpen} onClose={() => setVipOpen(false)} />

@@ -187,6 +187,8 @@ export interface Transaction {
   txHash?: string | null;
   /** @nullable */
   address?: string | null;
+  /** Plisio invoice / payout track id @nullable */
+  plisioTrackId?: string | null;
   createdAt: string;
 }
 

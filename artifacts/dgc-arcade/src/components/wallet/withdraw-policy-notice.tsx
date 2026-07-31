@@ -9,12 +9,17 @@ export function WithdrawPolicyNotice({ compact = false }: { compact?: boolean })
       <div className="flex items-start gap-2">
         <Shield className={`w-4 h-4 shrink-0 mt-0.5 ${isWagerMet ? "text-green-400" : "text-primary"}`} />
         <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
-          <p className="font-bold uppercase tracking-wider text-foreground text-[10px]">Withdrawal policy</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-bold uppercase tracking-wider text-foreground text-[10px]">Withdrawal policy</p>
+            <span className={`font-mono font-black text-sm ${isWagerMet ? "text-green-400" : "text-primary"}`}>
+              {wagerPercentage}%
+            </span>
+          </div>
           <p>
             <strong className="text-foreground">Playthrough:</strong>{" "}
             {isWagerMet
-              ? "You've met the 100% wagering requirement on deposits and bonus."
-              : `Wager ${formattedRemaining} more (${wagerPercentage}% of ${formattedRequirement} done) before cashing out.`}
+              ? `You've met the 100% wagering requirement (${wagerPercentage}% of ${formattedRequirement}).`
+              : `Wager ${formattedRemaining} more (${wagerPercentage}% of ${formattedRequirement} done) before cashing out. New deposits add to this requirement.`}
           </p>
           <p className="flex items-start gap-1.5">
             <Coins className="w-3.5 h-3.5 shrink-0 mt-0.5 text-primary" />
@@ -25,10 +30,10 @@ export function WithdrawPolicyNotice({ compact = false }: { compact?: boolean })
           </p>
         </div>
       </div>
-      {!compact && !isWagerMet && (
+      {!compact && (
         <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden border border-white/5">
           <div
-            className="h-full bg-gradient-to-r from-primary/80 to-amber-400 transition-all duration-700"
+            className={`h-full transition-all duration-700 ${isWagerMet ? "bg-green-400" : "bg-gradient-to-r from-primary/80 to-amber-400"}`}
             style={{ width: `${wagerPercentage}%` }}
           />
         </div>

@@ -2320,6 +2320,17 @@ adminRouter.put("/bank/settings", requireBankSession, async (req, res) => {
         .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value } });
     }
     invalidatePlatformSettingsCache();
+
+    // When owner changes signup bonus, sync every account so wager math matches settings
+    // (0 stays 0). Swap the bonus portion of wager_requirement while keeping deposit playthrough.
+    if (updates.signupBonus !== undefined) {
+      const newBonus = updates.signupBonus;
+      await db.update(usersTable).set({
+        wagerRequirement: sql`GREATEST(0, coalesce(wager_requirement, 0) - coalesce(signup_bonus, 0) + ${newBonus}::numeric)`,
+        signupBonus: newBonus,
+      });
+      req.log.info({ signupBonus: newBonus }, "Synced signupBonus + wagerRequirement for all users");
+    }
     
     // Also invalidate public games cache if disabledGameSlugs changed
     if (updates.disabledGameSlugs !== undefined) {

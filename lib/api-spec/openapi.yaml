@@ -665,6 +665,9 @@ components:
           type: ["string", "null"]
         address:
           type: ["string", "null"]
+        plisioTrackId:
+          type: ["string", "null"]
+          description: Plisio invoice / payout track id — open https://plisio.net/invoice/{id}
         createdAt:
           type: string
 

@@ -2924,7 +2924,7 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/20">
                     <div className="flex flex-col">
                       <span className="text-xs font-bold text-primary uppercase tracking-wider">New User Signup Bonus</span>
-                      <p className="text-[9px] text-muted-foreground">Credits given to every new account on registration.</p>
+                      <p className="text-[9px] text-muted-foreground">Applies to new signups and syncs to every account (0 = zero). Deposits still need 100% playthrough.</p>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-primary font-bold">$</span>
