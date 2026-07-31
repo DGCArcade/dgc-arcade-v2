@@ -313,27 +313,15 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent
-        hideClose
-        className="max-w-md w-full bg-card border-border/60 backdrop-blur-xl p-0 overflow-hidden max-h-[100dvh] sm:max-h-[90vh] mx-0 sm:mx-auto rounded-none sm:rounded-2xl flex flex-col"
-      >
-        {/* Header with single Close Button */}
-        <div className="p-4 sm:p-6 pb-0 border-b border-border/40 flex items-center justify-between">
+      <DialogContent className="max-w-md w-full bg-card border-border/60 backdrop-blur-xl p-0 overflow-hidden max-h-[100dvh] sm:max-h-[90vh] mx-0 sm:mx-auto rounded-none sm:rounded-2xl flex flex-col [&>button]:z-20">
+        {/* Header — DialogContent provides the single close control */}
+        <div className="p-4 sm:p-6 pb-0 pr-12 border-b border-border/40 flex items-center justify-between">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-display font-black text-lg sm:text-xl uppercase tracking-widest">
               <Wallet className="w-4 sm:w-5 h-4 sm:h-5 text-primary" />
               Wallet
             </DialogTitle>
           </DialogHeader>
-          <button
-            onClick={onClose}
-            className="ml-2 p-2 hover:bg-secondary rounded-lg transition-colors text-muted-foreground hover:text-foreground"
-            aria-label="Close wallet"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
         </div>
         {/* Balances */}
         <div className="mt-3 mb-3 space-y-2 px-4 sm:px-6">
@@ -400,13 +388,13 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                   <button
                     key={c.value}
                     onClick={() => { setCurrency(c.value); setDepositResult(null); setPaymentUrl(null); }}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all overflow-visible ${
                       currency === c.value
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-border/50 bg-secondary/40 text-muted-foreground hover:border-primary/40"
                     }`}
                   >
-                    <CoinIcon currency={c.value} size={16} />
+                    <CoinIcon currency={c.value} size={18} />
                     <span>{c.network ? "USDT" : c.value.split("_")[0]}</span>
                     {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground">{c.network}</span>}
                   </button>
@@ -545,7 +533,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                     <button key={c.value}
                       disabled={!isAvailable || coinBalancesLoading}
                       onClick={() => { if (isAvailable) setWithdrawCurrency(c.value); }}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all overflow-visible ${
                         !isAvailable
                           ? "border-border/20 bg-secondary/20 text-muted-foreground/30 opacity-40 cursor-not-allowed"
                           : withdrawCurrency === c.value
@@ -560,7 +548,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                           : "No balance in this coin"
                       }
                     >
-                      <CoinIcon currency={c.value} size={16} />
+                      <CoinIcon currency={c.value} size={18} />
                       <span>{c.network ? "USDT" : c.value.split("_")[0]}</span>
                       {c.network && <span className="text-[9px] px-1 py-0.5 rounded bg-black/20 text-muted-foreground">{c.network}</span>}
                     </button>

@@ -553,8 +553,8 @@ export default function Profile() {
                     return (
                       <div key={cb.currency} className="flex items-center justify-between p-3 rounded-xl bg-secondary/40 border border-border/40 hover:border-primary/25 transition-all">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-9 h-9 rounded-lg bg-background/60 flex items-center justify-center border border-border/50">
-                            <CoinIcon currency={cb.currency} size={20} />
+                          <div className="w-10 h-10 rounded-lg bg-background/60 flex items-center justify-center border border-border/50 overflow-visible">
+                            <CoinIcon currency={cb.currency} size={22} />
                           </div>
                           <div className="text-left min-w-0">
                             <p className="text-xs font-black uppercase tracking-widest truncate">
