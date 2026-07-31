@@ -6,11 +6,9 @@ export interface CurrencyMeta {
   symbol: string;
   color: string;
   network: string;
-  /** Short label shown next to USDT variants (TRC-20 / TON). */
   shortLabel?: string;
 }
 
-// Single source of truth for supported crypto currencies + their brand colors.
 // USDT uses the same Tether mark on every chain — network badges distinguish variants.
 export const CURRENCIES: CurrencyMeta[] = [
   { value: "BTC",      name: "Bitcoin",      symbol: "₿", color: "#F7931A", network: "" },
@@ -27,24 +25,10 @@ export const CURRENCIES: CurrencyMeta[] = [
   { value: "DASH",     name: "Dash",         symbol: "D", color: "#008CE7", network: "" },
 ];
 
-/**
- * Network overlays for USDT variants.
- * Official Tether uses one logo across chains; exchanges distinguish with
- * Tron (red) / TON (blue) network marks — those brand colors are real.
- */
-const NETWORK_BADGE: Record<string, { networkIcon: string; bg: string; title: string; fallback: string }> = {
-  USDT_TRX: {
-    networkIcon: "TRX",
-    bg: "#EF0027",
-    title: "USDT on Tron (TRC-20)",
-    fallback: "T",
-  },
-  USDT_TON: {
-    networkIcon: "TON",
-    bg: "#0098EA",
-    title: "USDT on TON",
-    fallback: "◆",
-  },
+/** Real brand colors: Tron red / TON blue. */
+const NETWORK_BADGE: Record<string, { bg: string; ring: string; title: string; kind: "trx" | "ton" }> = {
+  USDT_TRX: { bg: "#EF0027", ring: "#EF0027", title: "USDT on Tron (TRC-20)", kind: "trx" },
+  USDT_TON: { bg: "#0098EA", ring: "#0098EA", title: "USDT on TON", kind: "ton" },
 };
 
 export function getCurrencyMeta(value: string): CurrencyMeta {
@@ -73,11 +57,33 @@ const LOGO_URL: Record<string, string> = {
   SOL:      `${CDN}/sol.svg`,
   DOGE:     `${CDN}/doge.svg`,
   TRX:      `${CDN}/trx.svg`,
-  TON:      `${CDN}/ton.svg`,
+  // ton.svg is not in cryptocurrency-icons@0.18.1 — use glyph fallback
   BCH:      `${CDN}/bch.svg`,
   XMR:      `${CDN}/xmr.svg`,
   DASH:     `${CDN}/dash.svg`,
 };
+
+/** Inline network marks — always render (no CDN dependency). */
+function NetworkGlyph({ kind, size }: { kind: "trx" | "ton"; size: number }) {
+  if (kind === "trx") {
+    // Simplified Tron triangle mark
+    return (
+      <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden style={{ display: "block" }}>
+        <path
+          d="M8 2.2 L13.5 13.2 H2.5 Z M8 5.2 L5.2 11.2 h5.6 Z"
+          fill="#fff"
+          fillRule="evenodd"
+        />
+      </svg>
+    );
+  }
+  // TON diamond
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden style={{ display: "block" }}>
+      <path d="M8 1.6 L13.6 8 L8 14.4 L2.4 8 Z" fill="#fff" />
+    </svg>
+  );
+}
 
 function SymbolFallback({
   size,
@@ -125,17 +131,14 @@ export function CoinIcon({
   currency: string;
   size?: number;
   className?: string;
-  /** Corner badge for USDT TRC-20 (Tron) / USDT TON. Default on. */
   showNetworkBadge?: boolean;
 }) {
   const c = getCurrencyMeta(currency);
   const src = LOGO_URL[currency] ?? LOGO_URL[currency.split("_")[0]];
   const [imgError, setImgError] = useState(false);
-  const [badgeImgError, setBadgeImgError] = useState(false);
   const badge = showNetworkBadge ? NETWORK_BADGE[currency] ?? NETWORK_BADGE[c.value] : undefined;
-  // Keep badge large enough to read at small sizes (wallet chip icons are ~16px)
-  const badgeSize = Math.max(11, Math.round(size * 0.55));
-  const box = badge ? size + Math.ceil(badgeSize * 0.35) : size;
+  const badgeSize = Math.max(12, Math.round(size * 0.62));
+  const box = badge ? Math.ceil(size + badgeSize * 0.4) : size;
 
   const logo = src && !imgError ? (
     <img
@@ -145,10 +148,19 @@ export function CoinIcon({
       alt={badge?.title ?? c.name}
       title={badge?.title ?? c.name}
       onError={() => setImgError(true)}
-      style={{ flexShrink: 0, display: "block", width: size, height: size }}
+      style={{
+        flexShrink: 0,
+        display: "block",
+        width: size,
+        height: size,
+        borderRadius: "9999px",
+        boxShadow: badge ? `0 0 0 2px ${badge.ring}` : undefined,
+      }}
     />
   ) : (
-    <SymbolFallback size={size} color={c.color} symbol={c.symbol} label={badge?.title ?? c.name} />
+    <span style={{ boxShadow: badge ? `0 0 0 2px ${badge.ring}` : undefined, borderRadius: "9999px", display: "inline-flex" }}>
+      <SymbolFallback size={size} color={c.color} symbol={c.symbol} label={badge?.title ?? c.name} />
+    </span>
   );
 
   if (!badge) {
@@ -158,8 +170,6 @@ export function CoinIcon({
       </span>
     );
   }
-
-  const networkSrc = LOGO_URL[badge.networkIcon];
 
   return (
     <span
@@ -173,11 +183,12 @@ export function CoinIcon({
         height: box,
         lineHeight: 0,
         overflow: "visible",
+        verticalAlign: "middle",
       }}
     >
-      <span style={{ position: "absolute", left: 0, top: 0, width: size, height: size }}>{logo}</span>
+      <span style={{ position: "absolute", left: 0, top: 0 }}>{logo}</span>
       <span
-        aria-hidden
+        aria-label={badge.title}
         style={{
           position: "absolute",
           right: 0,
@@ -186,43 +197,15 @@ export function CoinIcon({
           height: badgeSize,
           borderRadius: "9999px",
           background: badge.bg,
-          color: "#fff",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          border: "1.5px solid rgba(10,10,14,0.85)",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.55)",
-          overflow: "hidden",
-          zIndex: 1,
+          border: "2px solid #0b0b10",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.65)",
+          zIndex: 2,
         }}
       >
-        {networkSrc && !badgeImgError ? (
-          <img
-            src={networkSrc}
-            alt=""
-            width={Math.round(badgeSize * 0.72)}
-            height={Math.round(badgeSize * 0.72)}
-            onError={() => setBadgeImgError(true)}
-            style={{
-              display: "block",
-              width: Math.round(badgeSize * 0.72),
-              height: Math.round(badgeSize * 0.72),
-              // Keep TRX/TON glyphs readable on solid brand badges
-              filter: "brightness(0) invert(1)",
-            }}
-          />
-        ) : (
-          <span
-            style={{
-              fontSize: Math.max(7, Math.round(badgeSize * 0.5)),
-              fontWeight: 800,
-              lineHeight: 1,
-              fontFamily: "ui-sans-serif, system-ui, sans-serif",
-            }}
-          >
-            {badge.fallback}
-          </span>
-        )}
+        <NetworkGlyph kind={badge.kind} size={Math.max(8, Math.round(badgeSize * 0.62))} />
       </span>
     </span>
   );
