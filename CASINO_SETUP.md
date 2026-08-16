@@ -195,7 +195,7 @@ Check: User is authenticated (has valid token)
 ## Security Notes
 
 - All balance updates use SELECT FOR UPDATE
-- Webhook signatures should be verified (TODO)
+- Casino callbacks require an HMAC-SHA256 `X-Casino-Signature` generated with `CASINO_SECRET_SIGN`; callbacks are rejected when the secret or signature is missing or invalid.
 - CORS restricted on iframe
 - Session tokens are single-use
 - All queries parameterized (SQL injection prevention)

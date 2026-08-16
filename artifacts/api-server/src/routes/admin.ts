@@ -225,10 +225,12 @@ adminRouter.get("/users", async (req, res) => {
       .where(search ? ilike(usersTable.username, `%${search}%`) : undefined);
 
     const usersWithLiveBalances = await Promise.all(rows.map(async (u) => {
-      const { totalBalance } = await getUserBalance(u.id);
+      const { totalBalance, cryptoBalances, staticBalance } = await getUserBalance(u.id);
       return {
         ...u,
         balance: totalBalance,
+        staticBalance,
+        cryptoBalances,
         totalWon: parseFloat(u.totalWon),
         createdAt: u.createdAt.toISOString(),
       };
@@ -530,6 +532,7 @@ adminRouter.get("/users/:id", async (req, res) => {
         id: user.id,
         username: user.username,
         balance: totalBalance,
+        staticBalance: user.accountType === "creator" ? parseFloat(user.balance ?? "0") : 0,
         cryptoBalances,
         role: user.role,
         isBanned: user.isBanned,
@@ -896,10 +899,13 @@ adminRouter.patch("/users/:id", async (req, res) => {
       }).catch(() => {});
     }
 
+    const liveBalance = await getUserBalance(userId);
     res.json({
       id: updatedUser.id,
       username: updatedUser.username,
-      balance: parseFloat(updatedUser.balance),
+      balance: liveBalance.totalBalance,
+      staticBalance: liveBalance.staticBalance,
+      cryptoBalances: liveBalance.cryptoBalances,
       role: updatedUser.role,
       isBanned: updatedUser.isBanned,
       totalBets: updatedUser.totalBets,
@@ -907,6 +913,96 @@ adminRouter.patch("/users/:id", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Admin update user error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// PATCH /api/admin/users/:id/balances/:currency — set a native crypto amount.
+adminRouter.patch("/users/:id/balances/:currency", async (req, res) => {
+  const userId = Number.parseInt(req.params.id, 10);
+  const currency = String(req.params.currency || "").trim().toUpperCase();
+  const amount = typeof req.body?.amount === "number" ? req.body.amount : Number(req.body?.amount);
+  const supported = new Set(["BTC", "ETH", "LTC", "DOGE", "SOL", "BCH", "TRX", "XMR", "DASH", "TON", "USDT", "USDT_TRX", "USDT_TON", "USDC", "DAI"]);
+
+  if (!Number.isInteger(userId) || userId <= 0 || !supported.has(currency)) {
+    res.status(400).json({ error: "Invalid user or cryptocurrency." });
+    return;
+  }
+  if (!Number.isFinite(amount) || amount < 0) {
+    res.status(400).json({ error: "Amount must be a finite non-negative number." });
+    return;
+  }
+  if (!(await callerIsOwner(req)) && userId !== req.user!.userId) {
+    res.status(403).json({ error: "Only the owner can set user balances directly." });
+    return;
+  }
+
+  try {
+    const [target] = await db.select({ id: usersTable.id, username: usersTable.username, role: usersTable.role })
+      .from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (!target) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    if (amount === 0) {
+      await db.delete(userBalancesTable).where(and(eq(userBalancesTable.userId, userId), eq(userBalancesTable.currency, currency)));
+    } else {
+      await db.insert(userBalancesTable).values({ userId, currency, amount: String(amount) }).onConflictDoUpdate({
+        target: [userBalancesTable.userId, userBalancesTable.currency],
+        set: { amount: String(amount) },
+      });
+    }
+
+    const liveBalance = await getUserBalance(userId);
+    await logAudit({
+      adminId: req.user!.userId,
+      adminUsername: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1))[0]?.username ?? "admin",
+      action: "admin_crypto_balance_set",
+      targetType: "user",
+      targetId: userId,
+      newValue: { currency, amount },
+      ip: req.ip,
+    });
+    res.json({ id: userId, username: target.username, currency, amount, ...liveBalance });
+  } catch (err) {
+    req.log.error({ err, userId, currency }, "Admin crypto balance update error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// DELETE /api/admin/users/:id/balances/:currency — remove one crypto holding.
+adminRouter.delete("/users/:id/balances/:currency", async (req, res) => {
+  const userId = Number.parseInt(req.params.id, 10);
+  const currency = String(req.params.currency || "").trim().toUpperCase();
+  if (!Number.isInteger(userId) || userId <= 0 || !currency) {
+    res.status(400).json({ error: "Invalid user or cryptocurrency." });
+    return;
+  }
+  if (!(await callerIsOwner(req))) {
+    res.status(403).json({ error: "Only the owner can delete user crypto balances." });
+    return;
+  }
+
+  try {
+    const deleted = await db.delete(userBalancesTable).where(and(eq(userBalancesTable.userId, userId), eq(userBalancesTable.currency, currency))).returning({ id: userBalancesTable.id });
+    if (deleted.length === 0) {
+      res.status(404).json({ error: "Crypto balance not found." });
+      return;
+    }
+    const liveBalance = await getUserBalance(userId);
+    await logAudit({
+      adminId: req.user!.userId,
+      adminUsername: (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1))[0]?.username ?? "admin",
+      action: "admin_crypto_balance_deleted",
+      targetType: "user",
+      targetId: userId,
+      newValue: { currency, amount: 0 },
+      ip: req.ip,
+    });
+    res.json({ userId, currency, ...liveBalance });
+  } catch (err) {
+    req.log.error({ err, userId, currency }, "Admin crypto balance delete error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

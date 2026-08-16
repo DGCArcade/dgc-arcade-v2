@@ -16,6 +16,8 @@ services:
         value: "25"
       - key: PG_POOL_MIN
         value: "3"
+      - key: PG_SSL_REJECT_UNAUTHORIZED
+        value: "true"
       - key: JWT_SECRET
         sync: false
       - key: PLISIO_SECRET_KEY

@@ -22,18 +22,12 @@ function verifyCasinoSignature(
 ): boolean {
   const secret = process.env.CASINO_SECRET_SIGN;
   if (!secret) {
-    logger.warn("CASINO_SECRET_SIGN not set — skipping signature verification");
-    return true;
+    logger.error("CASINO_SECRET_SIGN is not configured; rejecting casino callback");
+    return false;
   }
-  if (!signature) return false;
-  const expected = crypto
-    .createHmac("sha256", secret)
-    .update(rawBody)
-    .digest("hex");
-  return crypto.timingSafeEqual(
-    Buffer.from(expected, "hex"),
-    Buffer.from(signature, "hex")
-  );
+  if (!signature || !/^[a-f0-9]{64}$/i.test(signature)) return false;
+  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+  return crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(signature, "hex"));
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -52,10 +46,13 @@ casinoRouter.get("/launch", async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "game_id is required" });
     }
 
-    // Provider credentials — env vars take priority; fall back to sandbox defaults
-    const CASINO_PROVIDER_URL = (process.env.CASINO_PROVIDER_URL || "https://my.nexusggr.dev").replace(/\/$/, "");
-    const CASINO_API_KEY = process.env.CASINO_API_KEY || "test_demoxx";
-    const CASINO_MERCHANT_ID = process.env.CASINO_MERCHANT_ID || "test_demo";
+    const CASINO_PROVIDER_URL = process.env.CASINO_PROVIDER_URL?.trim().replace(/\/$/, "");
+    const CASINO_API_KEY = process.env.CASINO_API_KEY?.trim();
+    const CASINO_MERCHANT_ID = process.env.CASINO_MERCHANT_ID?.trim();
+    if (!CASINO_PROVIDER_URL || !CASINO_API_KEY || !CASINO_MERCHANT_ID) {
+      logger.error("Casino provider is not fully configured");
+      return res.status(503).json({ success: false, message: "Casino provider is not configured" });
+    }
 
     const userId = (req as any).user?.userId ?? "guest";
     const username = (req as any).user?.username ?? "guest";
@@ -125,6 +122,12 @@ casinoRouter.get("/launch", async (req: Request, res: Response) => {
 ───────────────────────────────────────────────────────────── */
 async function handleWebhook(req: Request, res: Response) {
   try {
+    const rawBody = (req as Request & { rawBody?: string }).rawBody;
+    if (!rawBody || !verifyCasinoSignature(rawBody, req.header("x-casino-signature"))) {
+      res.status(401).json({ success: false, message: "Invalid callback signature" });
+      return;
+    }
+
     const { user_id, transaction_id, action, amount, currency } = req.body;
 
     if (!user_id || !transaction_id || !action) {
@@ -133,16 +136,25 @@ async function handleWebhook(req: Request, res: Response) {
       return;
     }
 
-    const transactionAmount = parseFloat(amount || "0");
-    if (isNaN(transactionAmount)) {
-      logger.error({ body: req.body }, "Casino webhook: invalid amount");
+    const transactionAmount = Number(amount);
+    if (!Number.isFinite(transactionAmount) || transactionAmount <= 0) {
+      logger.error("Casino webhook: invalid amount");
       res.status(400).json({ success: false, message: "Invalid amount" });
+      return;
+    }
+    if (action !== "BET" && action !== "WIN" && action !== "REFUND") {
+      res.status(400).json({ success: false, message: "Invalid action" });
+      return;
+    }
+    const numericUserId = Number(user_id);
+    if (!Number.isInteger(numericUserId) || numericUserId <= 0) {
+      res.status(400).json({ success: false, message: "Invalid user_id" });
       return;
     }
 
     await db.transaction(async (tx) => {
       // Row-lock the user
-      await tx.execute(sql`SELECT id FROM users WHERE id = ${user_id} FOR UPDATE`);
+      await tx.execute(sql`SELECT id FROM users WHERE id = ${numericUserId} FOR UPDATE`);
 
       // Idempotency check
       const [existing] = await tx
@@ -161,20 +173,20 @@ async function handleWebhook(req: Request, res: Response) {
 
       if (action === "BET") {
         // Deduct balance
-        await deductBalance(user_id, transactionAmount, usedCurrency, tx);
+        await deductBalance(numericUserId, transactionAmount, usedCurrency, tx);
       } else if (action === "WIN") {
         // Credit balance
-        await creditBalance(user_id, transactionAmount, usedCurrency, tx);
+        await creditBalance(numericUserId, transactionAmount, usedCurrency, tx);
       }
 
       await tx.insert(casinoTransactionsTable).values({
-        userId: user_id,
+        userId: numericUserId,
         transactionId: transaction_id,
         type: action as "BET" | "WIN" | "REFUND",
         amount: transactionAmount.toString(),
       });
 
-      const { totalBalance: newBalanceUsd } = await getUserBalance(user_id);
+      const { totalBalance: newBalanceUsd } = await getUserBalance(numericUserId);
 
       res.json({
         success: true,
@@ -184,9 +196,11 @@ async function handleWebhook(req: Request, res: Response) {
         currency: usedCurrency,
       });
     });
+    return;
   } catch (error) {
-    logger.error({ error, body: req.body }, "Casino webhook error");
+    logger.error({ error }, "Casino webhook error");
     res.status(500).json({ success: false, message: "Internal server error" });
+    return;
   }
 }
 

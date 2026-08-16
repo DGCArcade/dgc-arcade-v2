@@ -139,6 +139,13 @@ interface AdminUser {
   id: number;
   username: string;
   balance: number;
+  staticBalance?: number;
+  cryptoBalances?: {
+    currency: string;
+    amount: number;
+    price: number;
+    usdValue: number;
+  }[];
   role: string;
   isBanned: boolean;
   totalBets: number;
@@ -269,7 +276,7 @@ export default function AdminDashboard() {
   const [adminPin, setAdminPin] = useState<string | null>(null);
   const [pinLoading, setPinLoading] = useState(false);
   const [pinRegenLoading, setPinRegenLoading] = useState(false);
-  const [balanceEdit, setBalanceEdit] = useState<{ userId: number; value: string; currency: string } | null>(null);
+  const [balanceEdit, setBalanceEdit] = useState<{ userId: number; value: string; currency: string; unit: "usd" | "crypto" } | null>(null);
   const [commissionEdit, setCommissionEdit] = useState<{ userId: number; value: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<AdminUser | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
@@ -976,26 +983,52 @@ export default function AdminDashboard() {
 
   async function handleBalanceSave(userId: number) {
     if (!balanceEdit) return;
-    const amount = parseFloat(balanceEdit.value);
-    if (isNaN(amount) || amount < 0) {
+    const amount = Number(balanceEdit.value);
+    if (!Number.isFinite(amount) || amount < 0) {
       toast({ title: "Invalid amount", variant: "destructive" });
       return;
     }
     setLoadingAction(`balance-${userId}`);
     try {
-      await adminFetch(`/users/${userId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ 
-          balance: amount,
-          currency: balanceEdit.currency 
-        }),
+      if (balanceEdit.unit === "crypto") {
+        await adminFetch(`/users/${userId}/balances/${encodeURIComponent(balanceEdit.currency)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ amount }),
+        });
+      } else {
+        await adminFetch(`/users/${userId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ balance: amount, currency: "USD" }),
+        });
+      }
+      toast({
+        title: "Balance updated",
+        description: balanceEdit.unit === "crypto"
+          ? `Set ${amount} ${balanceEdit.currency}`
+          : `Set ${formatCurrency(amount)} USD`,
       });
-      const currencyLabel = balanceEdit.currency === "USD" ? "USD" : `${balanceEdit.currency} (worth $${amount})`;
-      toast({ title: "Balance updated", description: `Set ${currencyLabel} with 100% wager requirement` });
       setBalanceEdit(null);
       loadUsers();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  async function handleCryptoBalanceDelete(userId: number, currency: string) {
+    if (!window.confirm(`Delete the entire ${currency} balance for this user?`)) return;
+    setLoadingAction(`balance-delete-${userId}-${currency}`);
+    try {
+      await adminFetch(`/users/${userId}/balances/${encodeURIComponent(currency)}`, { method: "DELETE" });
+      toast({ title: "Crypto balance deleted", description: `${currency} balance removed.` });
+      await loadUsers();
+      if (selectedUser?.user.id === userId) {
+        const refreshed = await adminFetch(`/users/${userId}`);
+        setSelectedUser(refreshed);
+      }
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
     } finally {
       setLoadingAction(null);
     }
@@ -1512,12 +1545,25 @@ export default function AdminDashboard() {
 
                       <TableCell>
                         {balanceEdit?.userId === u.id ? (
-                          <div className="flex flex-col gap-1.5 p-1 bg-secondary/40 rounded border border-primary/20">
+                          <div className="flex flex-col gap-1.5 p-1 bg-secondary/40 rounded border border-primary/20 min-w-[190px]">
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Editing {balanceEdit.currency} {balanceEdit.unit === "crypto" ? "native amount" : "USD balance"}
+                            </div>
                             <div className="flex items-center gap-1">
-                              <select 
+                              <select
+                                aria-label="Balance cryptocurrency"
                                 className="h-7 text-[10px] bg-background border border-border rounded px-1 uppercase font-bold text-primary outline-none"
                                 value={balanceEdit.currency}
-                                onChange={(e) => setBalanceEdit({ ...balanceEdit, currency: e.target.value })}
+                                onChange={(e) => {
+                                  const nextCurrency = e.target.value;
+                                  const holding = u.cryptoBalances?.find((b) => b.currency === nextCurrency);
+                                  setBalanceEdit({
+                                    ...balanceEdit,
+                                    currency: nextCurrency,
+                                    unit: nextCurrency === "USD" ? "usd" : "crypto",
+                                    value: nextCurrency === "USD" ? String(u.staticBalance ?? u.balance) : String(holding?.amount ?? 0),
+                                  });
+                                }}
                               >
                                 <option value="USD">USD</option>
                                 <option value="DOGE">DOGE</option>
@@ -1526,13 +1572,22 @@ export default function AdminDashboard() {
                                 <option value="ETH">ETH</option>
                                 <option value="SOL">SOL</option>
                                 <option value="USDT">USDT</option>
+                                <option value="USDT_TRX">USDT_TRX</option>
+                                <option value="USDT_TON">USDT_TON</option>
+                                <option value="USDC">USDC</option>
                                 <option value="TRX">TRX</option>
                                 <option value="XMR">XMR</option>
                                 <option value="DASH">DASH</option>
                                 <option value="BCH">BCH</option>
+                                <option value="TON">TON</option>
+                                <option value="DAI">DAI</option>
                               </select>
                               <Input
-                                className="w-20 h-7 text-xs bg-background border-primary/40 font-mono"
+                                type="number"
+                                min="0"
+                                step="any"
+                                aria-label={`Amount in ${balanceEdit.currency}`}
+                                className="w-24 h-7 text-xs bg-background border-primary/40 font-mono"
                                 value={balanceEdit.value}
                                 onChange={(e) => setBalanceEdit({ ...balanceEdit, value: e.target.value })}
                                 onKeyDown={(e) => {
@@ -1541,6 +1596,7 @@ export default function AdminDashboard() {
                                 }}
                                 autoFocus
                               />
+                              <span className="text-[10px] font-bold text-primary">{balanceEdit.currency}</span>
                             </div>
                             <div className="flex gap-1 justify-end">
                               <Button
@@ -1557,13 +1613,40 @@ export default function AdminDashboard() {
                             </div>
                           </div>
                         ) : (
-                          <button
-                            className="font-mono text-sm text-primary hover:text-primary/80 font-bold transition-colors"
-                            onClick={() => setBalanceEdit({ userId: u.id, value: String(u.balance), currency: "USD" })}
-                            title="Click to edit balance"
-                          >
-                            {formatCurrency(u.balance)}
-                          </button>
+                          <div className="space-y-1.5">
+                            <button
+                              className="font-mono text-sm text-primary hover:text-primary/80 font-bold transition-colors"
+                              onClick={() => setBalanceEdit({ userId: u.id, value: String(u.staticBalance ?? u.balance), currency: "USD", unit: "usd" })}
+                              title="Edit USD balance"
+                            >
+                              {formatCurrency(u.balance)} <span className="text-[10px] text-muted-foreground">USD total</span>
+                            </button>
+                            {u.cryptoBalances && u.cryptoBalances.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {u.cryptoBalances.map((holding) => (
+                                  <span key={`${u.id}-${holding.currency}`} className="inline-flex items-center gap-1 rounded border border-primary/20 bg-primary/5 px-1.5 py-0.5 text-[10px] font-mono">
+                                    <button
+                                      className="font-bold text-primary hover:underline"
+                                      onClick={() => setBalanceEdit({ userId: u.id, value: String(holding.amount), currency: holding.currency, unit: "crypto" })}
+                                      title={`Edit ${holding.currency} balance in native units`}
+                                    >
+                                      {holding.amount} {holding.currency}
+                                    </button>
+                                    <button
+                                      className="text-muted-foreground hover:text-red-400"
+                                      onClick={() => handleCryptoBalanceDelete(u.id, holding.currency)}
+                                      title={`Delete ${holding.currency} balance`}
+                                      aria-label={`Delete ${holding.currency} balance`}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">No crypto holdings</span>
+                            )}
+                          </div>
                         )}
                       </TableCell>
 
@@ -3312,6 +3395,45 @@ export default function AdminDashboard() {
                     <p className="font-mono font-bold">{String(s.value)}</p>
                   </div>
                 ))}
+              </div>
+
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold uppercase tracking-wider text-sm">Crypto Holdings</h4>
+                    <p className="text-xs text-muted-foreground">Native amounts are shown by denomination; click a holding to edit it.</p>
+                  </div>
+                  <Badge variant="outline">{selectedUser.user.cryptoBalances?.length ?? 0} coins</Badge>
+                </div>
+                {selectedUser.user.cryptoBalances && selectedUser.user.cryptoBalances.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {selectedUser.user.cryptoBalances.map((holding) => (
+                      <div key={`detail-${selectedUser.user.id}-${holding.currency}`} className="flex items-center justify-between rounded border border-border/30 bg-background/40 px-3 py-2">
+                        <button
+                          className="text-left font-mono hover:text-primary"
+                          onClick={() => {
+                            setSelectedUser(null);
+                            setBalanceEdit({ userId: selectedUser.user.id, value: String(holding.amount), currency: holding.currency, unit: "crypto" });
+                          }}
+                        >
+                          <div className="font-bold">{holding.amount} {holding.currency}</div>
+                          <div className="text-[10px] text-muted-foreground">≈ {formatCurrency(holding.usdValue)} USD</div>
+                        </button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-muted-foreground hover:text-red-400"
+                          onClick={() => handleCryptoBalanceDelete(selectedUser.user.id, holding.currency)}
+                          title={`Delete ${holding.currency} balance`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No crypto holdings recorded.</p>
+                )}
               </div>
 
               {/* ── Account / Compliance ── */}

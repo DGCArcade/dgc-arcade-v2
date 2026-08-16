@@ -74,7 +74,14 @@ export const ALLOWED_ORIGINS = [
 ];
 
 app.use(cors({
-  origin: true, // Allow all origins to ensure the frontend can connect regardless of domain
+  origin: (origin, callback) => {
+    // Non-browser requests have no Origin header; configured site origins are allowed.
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Origin is not allowed"));
+    }
+  },
   credentials: true,
 }));
 
@@ -236,8 +243,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// Body parser with size limits for performance
-app.use(express.json({ limit: "10kb" }));
+// Body parser with size limits for performance. Preserve the exact bytes used by
+// signed casino callbacks; JSON.stringify(req.body) is not signature-equivalent.
+app.use(express.json({
+  limit: "10kb",
+  verify: (req, _res, buffer) => {
+    (req as Request & { rawBody?: string }).rawBody = buffer.toString("utf8");
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 
 // ── Visitor Tracking Middleware ──────────────────────────────────────────────
